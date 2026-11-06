@@ -1,3 +1,5 @@
+mod library;
+
 use anyhow::Result;
 use gpui_kit::{
     AsyncApp, Context, IntoElement, ParentElement, Render, Styled, WeakEntity, Window,
@@ -12,7 +14,10 @@ use crate::{
     transport::Transport,
 };
 
-const LABELS: [&str; 2] = ["Session", "API check"];
+const LABELS: [&str; 3] = ["Session", "API check", "Library"];
+const SESSION: usize = 0;
+const API_CHECK: usize = 1;
+const LIBRARY: usize = 2;
 
 enum Status {
     Pending,
@@ -23,31 +28,37 @@ enum Status {
 
 pub struct Shell {
     transport: Result<Transport, String>,
-    vault: PathBuf,
-    steps: [Status; 2],
+    data_dir: PathBuf,
+    steps: [Status; 3],
 }
 
 impl Shell {
-    pub fn new(transport: Result<Transport>, vault: PathBuf, cx: &mut Context<Self>) -> Self {
+    pub fn new(transport: Result<Transport>, data_dir: PathBuf, cx: &mut Context<Self>) -> Self {
         let mut shell = Self {
             transport: transport.map_err(|e| format!("{e:#}")),
-            vault,
-            steps: [Status::Pending, Status::Pending],
+            data_dir,
+            steps: [Status::Pending, Status::Pending, Status::Pending],
         };
         shell.run(cx);
         shell
     }
 
     fn run(&mut self, cx: &mut Context<Self>) {
-        self.steps = [Status::Pending, Status::Pending];
+        self.steps = [Status::Pending, Status::Pending, Status::Running];
+        let dir = self.data_dir.clone();
+        cx.spawn(async move |this, cx| {
+            let scanned = blocking::unblock(move || library::scan(&dir)).await;
+            report(&this, cx, LIBRARY, scanned, Clone::clone);
+        })
+        .detach();
         match self.transport.clone() {
             Ok(t) => {
-                self.set(0, Status::Running, cx);
-                let vault = self.vault.clone();
+                self.set(SESSION, Status::Running, cx);
+                let vault = self.data_dir.join("session.bin");
                 cx.spawn(async move |this, cx| drive(this, cx, t, vault).await)
                     .detach();
             }
-            Err(e) => self.set(0, Status::Failed(e), cx),
+            Err(e) => self.set(SESSION, Status::Failed(e), cx),
         }
     }
 
@@ -62,7 +73,7 @@ impl Shell {
 
 async fn drive(this: WeakEntity<Shell>, cx: &mut AsyncApp, t: Transport, vault: PathBuf) {
     let connected = session::connect(&t, vault).await;
-    let Some((session, _)) = report(&this, cx, 0, connected, |(s, source)| {
+    let Some((session, _)) = report(&this, cx, SESSION, connected, |(s, source)| {
         let how = match source {
             Source::Restored => "restored",
             Source::Refreshed => "refreshed",
@@ -73,13 +84,13 @@ async fn drive(this: WeakEntity<Shell>, cx: &mut AsyncApp, t: Transport, vault: 
     }) else {
         return;
     };
+    let _ = this.update(cx, |shell, cx| shell.set(API_CHECK, Status::Running, cx));
     let trainers = session.check(&t).await;
-    report(&this, cx, 1, trainers, |n| {
+    report(&this, cx, API_CHECK, trainers, |n| {
         format!("Enshrouded trainers: {n}")
     });
 }
 
-// Records the step outcome and starts the next step on success.
 fn report<T>(
     this: &WeakEntity<Shell>,
     cx: &mut AsyncApp,
@@ -91,13 +102,7 @@ fn report<T>(
         Ok(v) => (Status::Ok(detail(&v)), Some(v)),
         Err(e) => (Status::Failed(format!("{e:#}")), None),
     };
-    let next = value.is_some() && step + 1 < LABELS.len();
-    let _ = this.update(cx, |shell, cx| {
-        shell.set(step, status, cx);
-        if next {
-            shell.set(step + 1, Status::Running, cx);
-        }
-    });
+    let _ = this.update(cx, |shell, cx| shell.set(step, status, cx));
     value
 }
 

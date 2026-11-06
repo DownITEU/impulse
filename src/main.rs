@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod catalog;
+mod library;
 mod session;
 mod shell;
 mod transport;
@@ -15,8 +17,7 @@ fn main() {
     let data_dir =
         PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows"))
             .join("Impulse");
-    let vault = data_dir.join("session.bin");
-    let transport = Transport::spawn(data_dir);
+    let transport = Transport::spawn(data_dir.clone());
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
         let options = WindowOptions {
@@ -32,7 +33,7 @@ fn main() {
             ..Default::default()
         };
         gpui_kit::open_window(options, cx, |_, cx| {
-            cx.new(|cx| Shell::new(transport, vault, cx))
+            cx.new(|cx| Shell::new(transport, data_dir, cx))
         })
         .expect("failed to open window");
         // gpui-pre-windows keeps running after the last window closes.

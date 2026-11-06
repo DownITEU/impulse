@@ -1,3 +1,4 @@
+pub mod cdn;
 mod webview;
 
 use std::{fs, path::PathBuf, sync::mpsc, thread};
