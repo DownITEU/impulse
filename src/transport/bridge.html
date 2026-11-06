@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<script>
+const post = (path, body) => fetch('http://impulse.localhost' + path, { method: 'POST', mode: 'no-cors', body });
+window.impulse = async ({ id, method, url, headers, body }) => {
+  let reply;
+  try {
+    const res = await fetch(url, { method, headers, body });
+    reply = { id, status: res.status, body: await res.text() };
+  } catch (e) {
+    reply = { id, error: String(e) };
+  }
+  post('/response', JSON.stringify(reply));
+};
+post('/ready', '');
+</script>
