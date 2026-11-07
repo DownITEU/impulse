@@ -5,13 +5,15 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-pub use cache::{Freshness, load};
+pub use cache::{cached, forget, refresh};
 
 #[derive(Deserialize)]
 pub struct Catalog {
     pub games: HashMap<String, Game>,
     pub titles: HashMap<String, Title>,
     pub platforms: Platforms,
+    #[serde(default)]
+    pub maps: Vec<Map>,
     #[serde(skip)]
     by_store_id: HashMap<String, Vec<String>>,
 }
@@ -33,11 +35,24 @@ pub struct Game {
 #[serde(rename_all = "camelCase")]
 pub struct Trainer {
     #[serde(default)]
+    pub cheat_count: u32,
+    #[serde(default)]
     pub supported_versions: Vec<u32>,
+    /// Changes whenever the trainer does, so stored metadata can be checked without the API.
+    pub updated_at: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct Title {
+    pub name: String,
+    /// CDN path with a `{size}` placeholder.
+    pub thumbnail: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Map {
+    pub title_id: String,
     pub name: String,
 }
 

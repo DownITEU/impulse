@@ -9,7 +9,7 @@ use gpui_kit::{
 use super::{
     Page,
     assets::Icon,
-    mock::{Game, MODS, Trainer},
+    library::Game,
     theme::*,
     widgets::{grid, icon, icon_button, mono, square, tracked},
 };
@@ -19,10 +19,6 @@ const MAP_WIDTH: f32 = 280.;
 const MAP_HEIGHT: f32 = (MAP_WIDTH - 2.) * 220. / 300.;
 
 impl Page {
-    pub(super) fn active(&self) -> usize {
-        MODS.iter().filter(|cheat| self.is_live(cheat)).count()
-    }
-
     pub(super) fn map_panel(&self, game: &Game, running: bool) -> impl IntoElement {
         let accent = rgb(self.accent);
         let bracket = || div().absolute().size(px(10.)).border_color(accent);
@@ -54,11 +50,11 @@ impl Page {
                             .text_color(rgb(MUTED))
                             .child(mono("MAP", 10.5))
                             .child(mono("/", 10.5).text_color(rgb(GHOST)))
-                            .child(mono(game.map.unwrap_or("-"), 10.5)),
+                            .child(mono(game.map.clone().unwrap_or("-".into()), 10.5)),
                     )
                     .child(icon_button("map", Icon::Expand, 26., 13.)),
             )
-            .child(match game.map {
+            .child(match &game.map {
                 Some(_) => div()
                     .relative()
                     .h(px(MAP_HEIGHT))
@@ -129,13 +125,11 @@ impl Page {
 
     pub(super) fn session_panel(&self, game: &Game, running: bool) -> impl IntoElement {
         let accent = rgb(self.accent);
-        let total = match game.trainer {
-            Trainer::None => 0,
-            _ => game.mods,
-        };
-        let active = match running {
-            true => format!("{:02}", self.active()),
-            false => "-".to_owned(),
+        let loaded = self.trainer(Some(&game.id));
+        let total = loaded.map_or(game.mods as usize, |loaded| loaded.cheats.len());
+        let active = match (running, loaded) {
+            (true, Some(loaded)) => format!("{:02}", loaded.active()),
+            _ => "-".to_owned(),
         };
         v_flex()
             .border_1()
@@ -144,21 +138,15 @@ impl Page {
             .px(px(16.))
             .pt(px(14.))
             .pb(px(6.))
-            .child(label(if running { "SESSION" } else { "LAST SESSION" }))
+            .child(label("SESSION"))
             .child(
-                mono(
-                    if running {
-                        "00:42:17"
-                    } else {
-                        game.last_session
-                    },
-                    42.,
-                )
-                .font_weight(FontWeight::BOLD)
-                .line_height(relative(1.15))
-                .mt(px(6.))
-                .mb(px(10.))
-                .text_color(rgb(if running { TEXT_BRIGHT } else { FAINT })),
+                // No clock until a real trainer session exists.
+                mono("00:00:00", 42.)
+                    .font_weight(FontWeight::BOLD)
+                    .line_height(relative(1.15))
+                    .mt(px(6.))
+                    .mb(px(10.))
+                    .text_color(rgb(if running { TEXT_BRIGHT } else { FAINT })),
             )
             .child(
                 stat("ACTIVE").child(

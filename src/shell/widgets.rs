@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    Bounds, Context, Div, Entity, FontWeight, Hsla, IntoElement, Rgba, SharedString, Stateful, Svg,
-    Task, canvas,
+    Bounds, Context, Div, ElementId, Entity, FontWeight, Hsla, IntoElement, Rgba, SharedString,
+    Stateful, Svg, Task, canvas,
     component::{
         h_flex,
         input::{Input, InputState},
+        v_flex,
     },
     div, fill, point,
     prelude::*,
@@ -52,7 +53,7 @@ pub fn square(side: f32, color: impl Into<Hsla>) -> Div {
     div().size(px(side)).flex_none().bg(color.into())
 }
 
-pub fn keycap(text: &'static str) -> Div {
+pub fn keycap(text: impl Into<SharedString>) -> Div {
     mono(text, 10.5)
         .px(px(6.))
         .py(px(3.))
@@ -90,10 +91,16 @@ pub fn toggle(on: bool, accent: u32) -> Div {
         .child(segment("ON", on.then_some(accent), on_color).w(px(34.)))
 }
 
-pub fn icon_button(id: &'static str, glyph: Icon, side: f32, glyph_size: f32) -> Stateful<Div> {
+pub fn icon_button(
+    id: impl Into<ElementId>,
+    glyph: Icon,
+    side: f32,
+    glyph_size: f32,
+) -> Stateful<Div> {
+    const GROUP: &str = "icon-button";
     div()
         .id(id)
-        .group(id)
+        .group(GROUP)
         .size(px(side))
         .flex_none()
         .flex()
@@ -102,7 +109,34 @@ pub fn icon_button(id: &'static str, glyph: Icon, side: f32, glyph_size: f32) ->
         .cursor_pointer()
         .hover(|style| style.bg(line(0.06)))
         .child(
-            icon(glyph, glyph_size, rgb(DIM)).group_hover(id, |style| style.text_color(rgb(TEXT))),
+            icon(glyph, glyph_size, rgb(DIM))
+                .group_hover(GROUP, |style| style.text_color(rgb(TEXT))),
+        )
+}
+
+/// A dashed card that stands in for content that is not there.
+pub fn notice(tag: &'static str, title: &str, text: &str) -> Div {
+    v_flex()
+        .items_center()
+        .gap(px(14.))
+        .px(px(24.))
+        .py(px(56.))
+        .border_1()
+        .border_dashed()
+        .border_color(line(0.2))
+        .bg(alpha(BG, 0.7))
+        .child(mono(tag, 11.).text_color(rgb(DIM)))
+        .child(
+            tracked(title, 22., 0.1)
+                .justify_center()
+                .font_weight(FontWeight::BOLD),
+        )
+        .child(
+            div()
+                .max_w(px(420.))
+                .text_center()
+                .text_color(rgb(MUTED))
+                .child(text.to_owned()),
         )
 }
 

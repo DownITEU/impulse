@@ -10,9 +10,8 @@ use gpui_kit::{
 
 use super::{
     Lead, Page, SIDEBAR_WIDTH,
-    art::steam_art,
     assets::Icon,
-    mock::{GAMES, Game, Trainer},
+    library::{Game, Support},
     theme::*,
     widgets::{filter, icon, icon_button, mono, square},
 };
@@ -20,10 +19,11 @@ use super::{
 impl Page {
     pub(super) fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.game_filter.read(cx).value().to_lowercase();
-        let rows: Vec<_> = GAMES
+        let games = self.games();
+        let rows: Vec<_> = games
             .iter()
             .enumerate()
-            .filter(|(_, game)| game.name.to_lowercase().contains(&query))
+            .filter(|(_, game)| game.search.contains(&query))
             .map(|(index, game)| self.game_row(index, game, cx).into_any_element())
             .collect();
         v_flex()
@@ -47,7 +47,7 @@ impl Page {
                             .gap(px(7.))
                             .child(mono("GAMES", 11.).text_color(rgb(DIM)))
                             .child(mono("/", 11.).text_color(rgb(GHOST)))
-                            .child(mono(GAMES.len().to_string(), 11.).text_color(rgb(TEXT_2))),
+                            .child(mono(games.len().to_string(), 11.).text_color(rgb(TEXT_2))),
                     )
                     .child(icon_button("sort", Icon::Sort, 30., 15.)),
             )
@@ -89,8 +89,8 @@ impl Page {
 
     fn game_row(&self, index: usize, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
-        let current = index == self.selected;
-        let no_trainer = game.trainer == Trainer::None;
+        let current = Some(&game.id) == self.selected.as_ref();
+        let no_trainer = game.support == Support::NoTrainer;
         let name_color = match (current, no_trainer) {
             (true, _) => accent,
             (false, true) => rgb(FAINT),
@@ -102,11 +102,18 @@ impl Page {
                 .flex_none()
                 .text_color(if current { accent } else { rgb(FAINT) })
                 .into_any_element(),
-            Lead::Thumbnail => img(steam_art(game.steam_app, "library_600x900.jpg"))
+            Lead::Thumbnail => div()
                 .size(px(22.))
                 .flex_none()
-                .object_fit(ObjectFit::Cover)
-                .grayscale(no_trainer)
+                .bg(rgb(AVATAR))
+                .when_some(game.thumbnail.clone(), |lead, url| {
+                    lead.child(
+                        img(url)
+                            .size_full()
+                            .object_fit(ObjectFit::Cover)
+                            .grayscale(no_trainer),
+                    )
+                })
                 .into_any_element(),
         };
         h_flex()
@@ -121,9 +128,9 @@ impl Page {
                 true => row.bg(rgb(ROW_SELECTED)),
                 false => row.hover(|style| style.bg(rgb(ROW_HOVER))),
             })
-            .on_click(cx.listener(move |page, _, _, cx| {
-                page.selected = index;
-                cx.notify();
+            .on_click(cx.listener({
+                let id = game.id.clone();
+                move |page, _, window, cx| page.select(id.clone(), window, cx)
             }))
             .child(
                 div()
@@ -140,10 +147,12 @@ impl Page {
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_size(px(13.))
                     .text_color(name_color)
-                    .child(game.name.to_uppercase()),
+                    .child(game.name.clone()),
             )
-            .when(self.running == Some(index), |row| row.child(self.live()))
-            .when(game.trainer == Trainer::UpdatePending, |row| {
+            .when(Some(&game.id) == self.running.as_ref(), |row| {
+                row.child(self.live())
+            })
+            .when(game.support == Support::UpdatePending, |row| {
                 row.child(icon(Icon::Warn, 14., rgb(WARN)))
             })
     }

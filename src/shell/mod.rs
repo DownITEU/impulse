@@ -1,5 +1,5 @@
-//! The combined page (`docs/design.md`). It renders mock data until the catalog,
-//! library and trainer are wired in.
+//! The combined page (`docs/design.md`): the installed games, the open game's trainer and its controls.
+//! Launching is a preview until the trainer host exists: controls change local state only.
 
 mod art;
 mod assets;
@@ -8,9 +8,10 @@ mod cheats;
 mod controls;
 mod header;
 mod hero;
+mod keys;
 mod library;
+mod loaded;
 mod log_view;
-mod mock;
 mod settings;
 mod side;
 mod sidebar;
@@ -19,11 +20,13 @@ mod widgets;
 
 use std::{
     collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
+use anyhow::Result;
 use gpui_kit::{
-    App, Context, Entity, IntoElement, Render, Task, Window,
+    AnyElement, App, Context, Entity, IntoElement, Render, Task, Window,
     component::{
         h_flex,
         input::{InputEvent, InputState},
@@ -36,21 +39,34 @@ use gpui_kit::{
 };
 
 pub use assets::Assets;
-pub use boot::run as boot;
+use library::{Game, Library};
+use loaded::Loaded;
 use log_view::{LogEvent, LogView};
-use mock::GAMES;
 use theme::*;
-use widgets::{grid, mono, square};
+use widgets::{grid, mono, notice, square};
+
+use crate::{
+    session::{Account, Session},
+    transport::Transport,
+};
 
 const SIDEBAR_WIDTH: f32 = 248.;
 // Below this pane width the map and session panels drop under the cheat list.
 const WIDE_PANE: f32 = 900.;
-const AMOUNT_DIGITS: usize = 6;
 
-pub fn init(cx: &mut App) {
+pub fn init(data_dir: &Path, cx: &mut App) {
     theme::init(cx);
-    cx.set_http_client(Arc::new(art::CdnClient));
+    cx.set_http_client(Arc::new(art::CdnClient {
+        cache: art::cache_dir(data_dir),
+    }));
     log_view::bind_keys(cx);
+}
+
+/// Something that arrives after the window opens.
+enum Load<T> {
+    Pending,
+    Ready(T),
+    Failed(String),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -59,27 +75,43 @@ enum Lead {
     Thumbnail,
 }
 
+/// The open dropdown.
+#[derive(Clone, Copy, PartialEq)]
+enum Menu {
+    Overlay,
+    Cheat(usize),
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Flash {
+    Cheat(usize),
+    Caches,
+}
+
 pub struct Page {
+    data_dir: PathBuf,
+    transport: Option<Transport>,
+    session: Load<Arc<Session>>,
+    account: Option<Account>,
+    library: Load<Library>,
+    // By game id, for the games opened in this run.
+    // `Pending` while a first download runs.
+    trainers: HashMap<Arc<str>, Load<Loaded>>,
+    // Games whose trainer is being read or downloaded right now.
+    loading: HashSet<Arc<str>>,
+    selected: Option<Arc<str>>,
+    // The game in preview.
+    running: Option<Arc<str>>,
+    favorites: HashSet<Arc<str>>,
     accent: u32,
     lead: Lead,
     reduce_motion: bool,
     settings: bool,
-    selected: usize,
-    running: Option<usize>,
-    favorites: HashSet<usize>,
-    enabled: HashSet<&'static str>,
-    pinned: HashSet<&'static str>,
-    // Folded sections, per game.
-    folded: HashSet<(usize, &'static str)>,
-    crit: i32,
-    levels: HashMap<&'static str, u8>,
-    choices: HashMap<&'static str, &'static str>,
-    overlay: &'static str,
-    // The open dropdown: "overlay" or a mod id.
-    menu: Option<&'static str>,
-    amount: Entity<InputState>,
-    // The press-only button showing its confirmation, by mod id.
-    flashed: Option<(&'static str, Task<()>)>,
+    // Index into `hero::OVERLAYS`.
+    overlay: usize,
+    menu: Option<Menu>,
+    // The press-only button showing its confirmation.
+    flashed: Option<(Flash, Task<()>)>,
     log: Entity<LogView>,
     log_open: bool,
     game_filter: Entity<InputState>,
@@ -87,7 +119,12 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        transport: Result<Transport>,
+        data_dir: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let log = cx.new(|cx| LogView::new(ACCENTS[0].1, window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
             if matches!(event, LogEvent::Close) {
@@ -106,40 +143,108 @@ impl Page {
             .detach();
             state
         };
-        Self {
-            log,
-            log_open: false,
-            game_filter: filter("filter"),
-            mod_filter: filter("filter mods"),
+        let (game_filter, mod_filter) = (filter("filter"), filter("filter mods"));
+        let (transport, session) = match transport {
+            Ok(transport) => (Some(transport), Load::Pending),
+            Err(e) => {
+                log::error!("Transport: {e:#}");
+                (None, Load::Failed(format!("{e:#}")))
+            }
+        };
+        let page = Self {
+            data_dir,
+            transport,
+            session,
+            account: None,
+            library: Load::Pending,
+            trainers: HashMap::new(),
+            loading: HashSet::new(),
+            selected: None,
+            running: None,
+            favorites: HashSet::new(),
             accent: ACCENTS[0].1,
             lead: Lead::Number,
             reduce_motion: false,
             settings: false,
-            selected: 0,
-            running: Some(0),
-            favorites: HashSet::from([0]),
-            enabled: HashSet::from(["hp", "st", "dur", "craft"]),
-            pinned: HashSet::from(["hp", "st"]),
-            folded: HashSet::from([(0, "COMBAT"), (0, "TELEPORT")]),
-            crit: 0,
-            levels: HashMap::new(),
-            choices: HashMap::new(),
-            overlay: hero::OVERLAYS[0],
+            overlay: 0,
             menu: None,
             flashed: None,
-            amount: cx.new(|cx| {
-                InputState::new(window, cx)
-                    .validate(|text, _| {
-                        text.len() <= AMOUNT_DIGITS && text.bytes().all(|b| b.is_ascii_digit())
-                    })
-                    .default_value("999")
-            }),
+            log,
+            log_open: false,
+            game_filter,
+            mod_filter,
+        };
+        page.boot(window, cx);
+        page
+    }
+
+    fn games(&self) -> &[Game] {
+        match &self.library {
+            Load::Ready(library) => &library.games,
+            _ => &[],
         }
     }
 
-    fn pane(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let game = &GAMES[self.selected];
-        let running = self.running == Some(self.selected);
+    fn game(&self) -> Option<&Game> {
+        let id = self.selected.as_ref()?;
+        self.games().iter().find(|game| game.id == *id)
+    }
+
+    fn trainer(&self, id: Option<&Arc<str>>) -> Option<&Loaded> {
+        match self.trainers.get(id?)? {
+            Load::Ready(loaded) => Some(loaded),
+            _ => None,
+        }
+    }
+
+    /// The open game's trainer.
+    fn loaded_mut(&mut self) -> Option<&mut Loaded> {
+        match self.trainers.get_mut(self.selected.as_ref()?)? {
+            Load::Ready(loaded) => Some(loaded),
+            _ => None,
+        }
+    }
+
+    fn is_running(&self) -> bool {
+        self.running.is_some() && self.running == self.selected
+    }
+
+    fn select(&mut self, id: Arc<str>, window: &mut Window, cx: &mut Context<Self>) {
+        self.selected = Some(id);
+        self.drop_cheat_state();
+        self.open_trainer(window, cx);
+        cx.notify();
+    }
+
+    /// The open menu and flash are keyed by cheat index, which means another cheat in another trainer.
+    fn drop_cheat_state(&mut self) {
+        if matches!(self.menu, Some(Menu::Cheat(_))) {
+            self.menu = None;
+        }
+        if matches!(self.flashed, Some((Flash::Cheat(_), _))) {
+            self.flashed = None;
+        }
+    }
+
+    fn flash(&mut self, button: Flash, cx: &mut Context<Self>) {
+        let timer = widgets::flash(cx, |page: &mut Self| page.flashed = None);
+        self.flashed = Some((button, timer));
+        cx.notify();
+    }
+
+    fn is_flashed(&self, button: Flash) -> bool {
+        self.flashed.as_ref().is_some_and(|(at, _)| *at == button)
+    }
+
+    fn pane(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+        let Some(game) = self.game() else {
+            return div()
+                .flex_1()
+                .p(px(24.))
+                .child(self.vacant())
+                .into_any_element();
+        };
+        let running = self.is_running();
         let wide = window.viewport_size().width >= px(SIDEBAR_WIDTH + WIDE_PANE);
         let side = match wide {
             true => v_flex().flex_none(),
@@ -172,6 +277,30 @@ impl Page {
                     ),
             )
             .overflow_y_scrollbar()
+            .into_any_element()
+    }
+
+    // The pane before there is a game to open.
+    fn vacant(&self) -> impl IntoElement {
+        match &self.library {
+            Load::Pending => notice(
+                "[ SCANNING ]",
+                "LOOKING FOR INSTALLED GAMES",
+                "Reading the game catalog and your launchers.",
+            ),
+            Load::Failed(why) => notice(
+                "[ NO CATALOG ]",
+                "THE GAME CATALOG IS UNAVAILABLE",
+                &format!(
+                    "It could not be downloaded: {why}. Impulse tries again on the next start."
+                ),
+            ),
+            Load::Ready(_) => notice(
+                "[ NO GAMES ]",
+                "NO INSTALLED GAMES FOUND",
+                "Impulse looks in Steam, Epic, GOG, Ubisoft, Xbox, Rockstar and EA for games from the Wand catalog.",
+            ),
+        }
     }
 
     fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -183,7 +312,10 @@ impl Page {
                 .child(mono(count.to_string(), 11.).text_color(rgb(color)))
         };
         let accent = rgb(self.accent);
-        let total = self.running.map_or(0, |index| GAMES[index].mods);
+        let running = self
+            .games()
+            .iter()
+            .find(|game| Some(&game.id) == self.running.as_ref());
         h_flex()
             .h(px(30.))
             .flex_none()
@@ -193,16 +325,20 @@ impl Page {
             .border_color(line(0.09))
             .bg(rgb(STATUSBAR))
             .text_color(rgb(DIM))
-            .map(|bar| match self.running {
-                Some(_) => bar
-                    .child(
+            .map(|bar| match running {
+                Some(game) => {
+                    let (active, total) = self
+                        .trainer(Some(&game.id))
+                        .map_or((0, 0), |loaded| (loaded.active(), loaded.cheats.len()));
+                    bar.child(
                         h_flex()
                             .gap(px(8.))
                             .child(square(7., accent))
-                            .child(mono("ATTACHED", 11.).text_color(accent)),
+                            .child(mono("PREVIEW", 11.).text_color(accent)),
                     )
-                    .child(mono("enshrouded.exe", 11.))
-                    .child(mono(format!("{}/{total} ACTIVE", self.active()), 11.)),
+                    .child(mono(game.name.clone(), 11.))
+                    .child(mono(format!("{active}/{total} ACTIVE"), 11.))
+                }
                 None => bar.child(mono("IDLE", 11.)),
             })
             .child(div().flex_1())

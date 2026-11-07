@@ -7,10 +7,10 @@ use gpui_kit::{
 };
 
 use super::{
-    Lead, Page,
+    Flash, Lead, Page,
     assets::Icon,
     theme::*,
-    widgets::{icon_button, mono, segment, segmented, square, toggle, tracked},
+    widgets::{flash_button, icon_button, mono, segment, segmented, square, toggle, tracked},
 };
 
 const TABS: [&str; 6] = [
@@ -164,18 +164,37 @@ impl Page {
                 ),
             )
             .child(
-                row("REDUCE MOTION", "no blinking LIVE, no transitions", 64.)
-                    .border_b_0()
-                    .child(
-                        div()
-                            .id("reduce-motion")
-                            .cursor_pointer()
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                page.reduce_motion = !page.reduce_motion;
-                                cx.notify();
-                            }))
-                            .child(toggle(self.reduce_motion, self.accent)),
-                    ),
+                row("REDUCE MOTION", "no blinking LIVE, no transitions", 64.).child(
+                    div()
+                        .id("reduce-motion")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            page.reduce_motion = !page.reduce_motion;
+                            cx.notify();
+                        }))
+                        .child(toggle(self.reduce_motion, self.accent)),
+                ),
+            )
+            .child(
+                row(
+                    "CACHES",
+                    "download the catalog, trainers and art again",
+                    64.,
+                )
+                .border_b_0()
+                .child(
+                    flash_button(
+                        "INVALIDATE",
+                        "DONE",
+                        self.is_flashed(Flash::Caches),
+                        self.accent,
+                    )
+                    .id("invalidate-caches")
+                    .on_click(cx.listener(|page, _, window, cx| {
+                        page.invalidate_caches(window, cx);
+                        page.flash(Flash::Caches, cx);
+                    })),
+                ),
             )
     }
 }

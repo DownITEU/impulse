@@ -1,10 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod catalog;
+mod disk;
 mod journal;
 mod library;
 mod session;
 mod shell;
+mod trainer;
 mod transport;
 mod wand;
 
@@ -24,7 +26,7 @@ fn main() {
         .with_assets(shell::Assets)
         .run(move |cx| {
             gpui_kit::init(cx);
-            shell::init(cx);
+            shell::init(&data_dir, cx);
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
@@ -39,9 +41,10 @@ fn main() {
                 window_min_size: Some(size(px(1024.), px(640.))),
                 ..Default::default()
             };
-            gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Page::new(window, cx)))
-                .expect("failed to open window");
-            shell::boot(transport, data_dir, cx);
+            gpui_kit::open_window(options, cx, |window, cx| {
+                cx.new(|cx| Page::new(transport, data_dir, window, cx))
+            })
+            .expect("failed to open window");
             // gpui-pre-windows keeps running after the last window closes.
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {

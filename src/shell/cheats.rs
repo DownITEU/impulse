@@ -1,5 +1,5 @@
 use gpui_kit::{
-    AnyElement, Context, FontWeight, IntoElement,
+    AnyElement, Context, FontWeight, IntoElement, SharedString,
     component::{h_flex, tooltip::Tooltip, v_flex},
     div,
     prelude::*,
@@ -7,33 +7,45 @@ use gpui_kit::{
 };
 
 use super::{
-    Page,
+    Load, Page,
     assets::Icon,
-    mock::{CATEGORIES, Control, Game, MODS, Mod, Trainer},
+    library::{Game, Support},
+    loaded::Loaded,
     theme::*,
-    widgets::{filter, icon, icon_button, keycap, mono, tracked},
+    widgets::{filter, icon, icon_button, keycap, mono, notice, tracked},
 };
 
 const PINNED: &str = "PINNED";
+const KEPT: &str = "It is kept on disk after the first download.";
 
 impl Page {
-    pub(super) fn is_live(&self, cheat: &Mod) -> bool {
-        match cheat.control {
-            Control::Toggle => self.enabled.contains(cheat.id),
-            Control::Slider(_) => self.level(cheat) > 0,
-            Control::Incremental => self.crit != 0,
-            _ => false,
-        }
-    }
-
     pub(super) fn cheats(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
-        let running = self.running == Some(self.selected);
+        let running = self.is_running();
         let column = v_flex().flex_1().min_w_0().gap(px(12.));
-        if game.trainer == Trainer::None {
-            return column.child(no_trainer(game));
+        if game.support == Support::NoTrainer {
+            return column.child(notice(
+                "[ NO TRAINER ]",
+                &format!("NO TRAINER FOR {} YET", game.name),
+                "Wand has no trainer for this game. Impulse will flag it in your library as soon as one ships.",
+            ));
         }
+        let loaded = match (self.trainers.get(&game.id), &self.session) {
+            (Some(Load::Ready(loaded)), _) => loaded,
+            (Some(Load::Failed(why)), _) | (None, Load::Failed(why)) => {
+                return column.child(notice(
+                    "[ NO DATA ]",
+                    "THE CHEAT LIST IS NOT DOWNLOADED",
+                    &format!("{why}. Impulse tries again when you open the game."),
+                ));
+            }
+            // The disk answers within a frame or two: a card would only flash.
+            (None, _) if self.loading.contains(&game.id) => return column,
+            _ => {
+                return column.child(notice("[ LOADING ]", "LOADING THE CHEAT LIST", KEPT));
+            }
+        };
         column
-            .when(game.trainer == Trainer::UpdatePending, |column| {
+            .when(game.support == Support::UpdatePending, |column| {
                 column.child(update_callout())
             })
             .when(!running, |column| {
@@ -41,40 +53,59 @@ impl Page {
                     mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),
                 )
             })
-            .child(self.cheat_list(running, cx))
+            .child(self.cheat_list(loaded, running, cx))
     }
 
-    fn cheat_list(&self, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    fn cheat_list(
+        &self,
+        loaded: &Loaded,
+        running: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let query = self.mod_filter.read(cx).value().to_lowercase();
+        // Pinned first, then categories in the trainer's own order.
+        let mut sections: Vec<(SharedString, Vec<usize>)> = vec![(PINNED.into(), Vec::new())];
+        for (index, row) in loaded.rows.iter().enumerate() {
+            let at = match loaded.pinned.contains(&index) {
+                true => 0,
+                false => sections
+                    .iter()
+                    .skip(1)
+                    .position(|(title, _)| *title == row.category)
+                    .map(|found| found + 1)
+                    .unwrap_or_else(|| {
+                        sections.push((row.category.clone(), Vec::new()));
+                        sections.len() - 1
+                    }),
+            };
+            sections[at].1.push(index);
+        }
         let mut number = 0;
         let mut shown = 0;
         let mut rows: Vec<AnyElement> = Vec::new();
-        for title in [PINNED].into_iter().chain(CATEGORIES) {
+        for (at, (title, cheats)) in sections.into_iter().enumerate() {
             // Numbers are assigned before filtering and folding, so they stay stable.
-            let cheats: Vec<_> = MODS
-                .iter()
-                .filter(|cheat| match self.pinned.contains(cheat.id) {
-                    true => title == PINNED,
-                    false => title == cheat.category,
-                })
-                .map(|cheat| {
+            let cheats: Vec<_> = cheats
+                .into_iter()
+                .map(|index| {
                     number += 1;
-                    (number, cheat)
+                    (number, index)
                 })
-                .filter(|(_, cheat)| cheat.name.to_lowercase().contains(&query))
+                .filter(|(_, index)| loaded.rows[*index].search.contains(&query))
                 .collect();
             if cheats.is_empty() {
                 continue;
             }
             shown += cheats.len();
-            let folded = self.folded.contains(&(self.selected, title));
+            let folded = loaded.folded.contains(&title);
+            let divided = !rows.is_empty();
             rows.push(
-                self.section(title, cheats.len(), folded, !rows.is_empty(), cx)
+                self.section(at, title, cheats.len(), folded, divided, cx)
                     .into_any_element(),
             );
             if !folded {
-                rows.extend(cheats.into_iter().map(|(number, cheat)| {
-                    self.cheat_row(number, cheat, running, cx)
+                rows.extend(cheats.into_iter().map(|(number, index)| {
+                    self.cheat_row(number, index, loaded, running, cx)
                         .into_any_element()
                 }));
             }
@@ -96,7 +127,8 @@ impl Page {
 
     fn section(
         &self,
-        title: &'static str,
+        at: usize,
+        title: SharedString,
         count: usize,
         folded: bool,
         divided: bool,
@@ -115,39 +147,43 @@ impl Page {
             .border_b_1()
             .when(divided, |header| header.border_t_1())
             .border_color(line(0.08))
-            .when(title == PINNED, |header| {
+            .when(at == 0, |header| {
                 header.child(icon(Icon::Pin, 13., rgb(self.accent)))
             })
-            .child(tracked(title, 13., 0.16).font_weight(FontWeight::BOLD))
+            .child(tracked(&title, 13., 0.16).font_weight(FontWeight::BOLD))
             .child(mono(format!("{count:02}"), 11.).text_color(rgb(FAINT)))
             .child(div().flex_1())
-            .child(icon_button(title, chevron, 26., 13.).on_click(cx.listener(
-                move |page, _, _, cx| {
-                    let section = (page.selected, title);
-                    if !page.folded.remove(&section) {
-                        page.folded.insert(section);
-                    }
-                    cx.notify();
-                },
-            )))
+            .child(
+                icon_button(("fold", at), chevron, 26., 13.).on_click(cx.listener(
+                    move |page, _, _, cx| {
+                        if let Some(loaded) = page.loaded_mut()
+                            && !loaded.folded.remove(&title)
+                        {
+                            loaded.folded.insert(title.clone());
+                        }
+                        cx.notify();
+                    },
+                )),
+            )
     }
 
     fn cheat_row(
         &self,
         number: usize,
-        cheat: &'static Mod,
+        index: usize,
+        loaded: &Loaded,
         running: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let accent = rgb(self.accent);
-        let live = running && self.is_live(cheat);
-        let pinned = self.pinned.contains(cheat.id);
+        let row = &loaded.rows[index];
+        let live = running && loaded.is_live(index);
+        let pinned = loaded.pinned.contains(&index);
         let name_color = match (live, running) {
             (true, _) => TEXT_BRIGHT,
             (false, true) => TEXT_2,
             (false, false) => DIM,
         };
-        let pin = ("pin", number);
         h_flex()
             .h(px(42.))
             .flex_none()
@@ -186,19 +222,21 @@ impl Page {
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_size(px(13.5))
                             .text_color(rgb(name_color))
-                            .child(cheat.name.to_uppercase()),
+                            .child(row.name.clone()),
                     )
-                    .when_some(cheat.instructions, |name, text| {
+                    .when_some(row.tip.clone(), |name, text| {
                         name.child(
                             div()
-                                .id(("info", number))
+                                .id(("info", index))
                                 .child(icon(Icon::Info, 13., rgb(FAINT)))
-                                .tooltip(move |window, cx| Tooltip::new(text).build(window, cx)),
+                                .tooltip(move |window, cx| {
+                                    Tooltip::new(text.clone()).build(window, cx)
+                                }),
                         )
                     })
                     .child(
                         div()
-                            .id(pin)
+                            .id(("pin", index))
                             .group("pin")
                             .size(px(22.))
                             .flex_none()
@@ -207,8 +245,10 @@ impl Page {
                             .justify_center()
                             .cursor_pointer()
                             .on_click(cx.listener(move |page, _, _, cx| {
-                                if !page.pinned.remove(cheat.id) {
-                                    page.pinned.insert(cheat.id);
+                                if let Some(loaded) = page.loaded_mut()
+                                    && !loaded.pinned.remove(&index)
+                                {
+                                    loaded.pinned.insert(index);
                                 }
                                 cx.notify();
                             }))
@@ -225,7 +265,7 @@ impl Page {
                     .flex_none()
                     .justify_end()
                     .gap(px(4.))
-                    .children(cheat.keys.iter().copied().map(keycap)),
+                    .children(row.keys.iter().cloned().map(keycap)),
             )
             .child(
                 h_flex()
@@ -234,7 +274,7 @@ impl Page {
                     .justify_end()
                     .gap(px(8.))
                     .opacity(if running { 1. } else { 0.4 })
-                    .child(self.control(number, cheat, running, live, cx)),
+                    .child(self.control(index, loaded, running, live, cx)),
             )
     }
 }
@@ -260,34 +300,5 @@ fn update_callout() -> impl IntoElement {
                 .child(div().text_size(px(13.5)).text_color(rgb(TEXT_2)).child(
                     "This build is newer than the trainer supports. Mods may not work until Wand ships an update.",
                 )),
-        )
-}
-
-fn no_trainer(game: &Game) -> impl IntoElement {
-    v_flex()
-        .items_center()
-        .gap(px(14.))
-        .px(px(24.))
-        .py(px(56.))
-        .border_1()
-        .border_dashed()
-        .border_color(line(0.2))
-        .bg(alpha(BG, 0.7))
-        .child(mono("[ NO TRAINER ]", 11.).text_color(rgb(DIM)))
-        .child(
-            tracked(
-                &format!("NO TRAINER FOR {} YET", game.name.to_uppercase()),
-                22.,
-                0.1,
-            )
-            .justify_center()
-            .font_weight(FontWeight::BOLD),
-        )
-        .child(
-            div()
-                .max_w(px(420.))
-                .text_center()
-                .text_color(rgb(MUTED))
-                .child("Wand has no trainer for this game. Impulse will flag it in your library as soon as one ships."),
         )
 }

@@ -4,7 +4,7 @@ use gpui_kit::{
 };
 
 use super::{
-    Page,
+    Load, Page,
     assets::Icon,
     theme::*,
     widgets::{icon_button, mono, square, tracked},
@@ -18,6 +18,18 @@ impl Page {
             Icon::WinRestore
         } else {
             Icon::WinMax
+        };
+        let search = match &self.library {
+            Load::Ready(library) => {
+                let count = library.trainers;
+                format!("search {},{:03} trainers", count / 1000, count % 1000)
+            }
+            _ => "search trainers".to_owned(),
+        };
+        let name = match (&self.account, &self.session) {
+            (Some(account), _) => account.username.clone(),
+            (None, Load::Failed(_)) => "NOT SIGNED IN".to_owned(),
+            (None, _) => String::new(),
         };
         h_flex()
             .h(px(52.))
@@ -55,11 +67,7 @@ impl Page {
                             .font_weight(FontWeight::BOLD)
                             .text_color(accent),
                     )
-                    .child(
-                        mono("search 3,634 trainers", 13.)
-                            .font_weight(FontWeight::NORMAL)
-                            .flex_1(),
-                    )
+                    .child(mono(search, 13.).font_weight(FontWeight::NORMAL).flex_1())
                     .child(
                         mono("CTRL K", 10.5)
                             .px(px(6.))
@@ -85,31 +93,15 @@ impl Page {
                             .id("account")
                             .occlude()
                             .h(px(34.))
-                            .pl(px(4.))
-                            .pr(px(10.))
-                            .gap(px(10.))
+                            .px(px(10.))
                             .cursor_pointer()
                             .hover(|style| style.bg(rgb(RAISED_HOVER)))
                             .on_click(cx.listener(Self::open_settings))
                             .child(
                                 div()
-                                    .size(px(26.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(px(2.))
-                                    .bg(rgb(AVATAR))
-                                    .border_1()
-                                    .border_color(line(0.14))
-                                    .text_size(px(12.))
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("W"),
-                            )
-                            .child(
-                                div()
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("[username]"),
+                                    .child(name),
                             ),
                     )
                     .child(

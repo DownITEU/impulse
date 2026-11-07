@@ -9,6 +9,7 @@ use windows_sys::Win32::{
 };
 
 use super::Session;
+use crate::disk;
 
 /// None when nothing is stored or the file is unreadable (corrupt, another Windows user).
 pub(super) fn load(path: &Path) -> Option<Session> {
@@ -22,9 +23,7 @@ pub(super) fn load(path: &Path) -> Option<Session> {
 
 pub(super) fn save(path: &Path, session: &Session) -> Result<()> {
     let sealed = dpapi(&serde_json::to_vec(session)?, true).context("encrypt session")?;
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, sealed).context("write session")?;
-    fs::rename(&tmp, path).context("write session")
+    disk::replace(path, &sealed)
 }
 
 // DPAPI user scope: only this Windows account can decrypt the file.

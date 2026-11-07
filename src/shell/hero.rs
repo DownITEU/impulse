@@ -1,13 +1,12 @@
 use gpui_kit::{
-    Context, Div, FontWeight, IntoElement, ObjectFit, Stateful, component::h_flex, div, img,
-    linear_color_stop, linear_gradient, prelude::*, px, relative, rgb,
+    Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex,
+    div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb,
 };
 
 use super::{
-    Page,
-    art::steam_art,
+    Menu, Page,
     assets::Icon,
-    mock::{Game, Trainer},
+    library::{Game, Support},
     theme::*,
     widgets::{icon, mono, square, tracked},
 };
@@ -16,8 +15,14 @@ pub(super) const OVERLAYS: [&str; 2] = ["STICKY", "IN-GAME"];
 
 impl Page {
     pub(super) fn hero(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
-        let has_trainer = game.trainer != Trainer::None;
+        let has_trainer = game.support != Support::NoTrainer;
         let cover = || div().absolute().top_0().left_0().size_full();
+        let art = move |url: String| {
+            img(url)
+                .size_full()
+                .object_fit(ObjectFit::Cover)
+                .grayscale(!has_trainer)
+        };
         div()
             .relative()
             .min_h(px(230.))
@@ -32,15 +37,16 @@ impl Page {
             .overflow_hidden()
             .border_b_1()
             .border_color(line(0.07))
-            .child(
-                img(steam_art(game.steam_app, "library_hero.jpg"))
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .object_fit(ObjectFit::Cover)
-                    .grayscale(!has_trainer),
-            )
+            .when_some(game.hero.clone(), |hero, url| {
+                // Not every Steam app has hero art; the title thumbnail always exists.
+                let spare = game.thumbnail.clone();
+                hero.child(
+                    cover().child(art(url).with_fallback(move || match spare.clone() {
+                        Some(url) => art(url).into_any_element(),
+                        None => div().into_any_element(),
+                    })),
+                )
+            })
             .child(cover().bg(linear_gradient(
                 90.,
                 linear_color_stop(alpha(BG, 0.94), 0.),
@@ -59,7 +65,7 @@ impl Page {
                     .flex_col()
                     .gap(px(10.))
                     .child(
-                        tracked(&game.name.to_uppercase(), 56., 0.04)
+                        tracked(&game.name, 56., 0.04)
                             .font_weight(FontWeight::BOLD)
                             .line_height(relative(0.95))
                             .text_color(rgb(if has_trainer { TEXT_BRIGHT } else { MUTED })),
@@ -70,9 +76,12 @@ impl Page {
 
     fn actions(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
-        let index = self.selected;
-        let running = self.running == Some(index);
-        let favorite = self.favorites.contains(&index);
+        let running = self.is_running();
+        let favorite = self.favorites.contains(&game.id);
+        // Nothing to preview before the cheat list is there.
+        let launchable = !running && self.trainer(Some(&game.id)).is_some();
+        let id = game.id.clone();
+        let overlays: Vec<SharedString> = OVERLAYS.into_iter().map(SharedString::from).collect();
         h_flex()
             .relative()
             .justify_end()
@@ -96,17 +105,20 @@ impl Page {
                             .pl(px(16.))
                             .pr(px(12.))
                             .child(tracked("OVERLAY", 12.5, 0.14))
-                            .child(tracked(self.overlay, 12.5, 0.14).text_color(rgb(FAINT)))
+                            .child(
+                                tracked(OVERLAYS[self.overlay], 12.5, 0.14).text_color(rgb(FAINT)),
+                            )
                             .child(icon(Icon::ChevronDown, 12., rgb(TEXT))),
-                        "overlay",
-                        &OVERLAYS,
+                        Menu::Overlay,
+                        overlays,
                         self.overlay,
                         cx,
                         |page, mode| page.overlay = mode,
                     ),
                 )
             })
-            .when(!running && game.trainer != Trainer::None, |bar| {
+            .when(launchable, |bar| {
+                let id = id.clone();
                 bar.child(
                     h_flex()
                         .id("launch")
@@ -120,7 +132,7 @@ impl Page {
                         .font_weight(FontWeight::BOLD)
                         .cursor_pointer()
                         .on_click(cx.listener(move |page, _, _, cx| {
-                            page.running = Some(index);
+                            page.running = Some(id.clone());
                             cx.notify();
                         }))
                         .child(icon(Icon::Play, 13., rgb(BG)))
@@ -140,8 +152,8 @@ impl Page {
                     .w(px(38.))
                     .justify_center()
                     .on_click(cx.listener(move |page, _, _, cx| {
-                        if !page.favorites.remove(&index) {
-                            page.favorites.insert(index);
+                        if !page.favorites.remove(&id) {
+                            page.favorites.insert(id.clone());
                         }
                         cx.notify();
                     }))
@@ -154,9 +166,19 @@ impl Page {
 
     fn meta(&self, game: &Game) -> impl IntoElement {
         let slash = || mono("/", 12.).text_color(rgb(GHOST));
-        let mods = match game.trainer {
-            Trainer::None => "NO TRAINER".to_owned(),
-            _ => format!("{} MODS", game.mods),
+        let mods = match game.support {
+            Support::NoTrainer => "NO TRAINER".to_owned(),
+            // The catalog count, until the trainer itself is there.
+            _ => {
+                let count = self
+                    .trainer(Some(&game.id))
+                    .map_or(game.mods as usize, |loaded| loaded.cheats.len());
+                format!("{count} MODS")
+            }
+        };
+        let version = match game.version {
+            Some(version) => format!("V{version}"),
+            None => "VERSION UNKNOWN".to_owned(),
         };
         h_flex()
             .flex_wrap()
@@ -168,18 +190,16 @@ impl Page {
             .child(
                 h_flex()
                     .gap(px(6.))
-                    .child(mono(format!("V{}", game.build), 12.))
-                    .when(game.trainer == Trainer::Ready, |version| {
+                    .child(mono(version, 12.))
+                    .when(game.support == Support::Ready, |version| {
                         version.child(icon(Icon::Check, 13., rgb(self.accent)))
                     })
-                    .when(game.trainer == Trainer::UpdatePending, |version| {
+                    .when(game.support == Support::UpdatePending, |version| {
                         version.child(mono("UPDATE PENDING", 12.).text_color(rgb(WARN)))
                     }),
             )
             .child(slash())
-            .child(mono(format!("{} PLAYED", game.played), 12.))
-            .child(slash())
-            .child(mono(format!("{} SESSIONS", game.sessions), 12.))
+            .child(mono(game.store.clone(), 12.))
     }
 }
 

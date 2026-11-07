@@ -1,4 +1,4 @@
-//! The control at the right of a cheat row, one per `Control` kind.
+//! The control at the right of a cheat row, one per cheat kind.
 
 use gpui_kit::{
     AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString,
@@ -10,52 +10,92 @@ use gpui_kit::{
 };
 
 use super::{
-    Page,
+    Flash, Menu, Page,
     assets::Icon,
-    mock::{Control, Mod},
+    loaded::{Loaded, number},
     theme::*,
-    widgets::{button, flash, flash_button, icon, mono, toggle},
+    widgets::{button, flash_button, icon, mono, toggle},
 };
+use crate::trainer::{Args, Kind};
 
-const TOP_LEVEL: u8 = 9;
+const TOP_TICK: u8 = 9;
+
+/// A slider's bounds; trainers may leave any of them out.
+#[derive(Clone, Copy)]
+struct Span {
+    min: f64,
+    max: f64,
+    step: f64,
+}
+
+impl Span {
+    fn of(args: &Args) -> Self {
+        let min = args.min.unwrap_or(0.);
+        Self {
+            min,
+            max: args.max.filter(|max| *max > min).unwrap_or(min + 100.),
+            step: args.step.filter(|step| *step > 0.).unwrap_or(1.),
+        }
+    }
+
+    fn tick(self, value: f64) -> u8 {
+        let share = (value - self.min) / (self.max - self.min);
+        (share * f64::from(TOP_TICK)).round() as u8
+    }
+
+    fn value(self, tick: u8) -> f64 {
+        self.snap(self.min + (self.max - self.min) * f64::from(tick) / f64::from(TOP_TICK))
+    }
+
+    /// A wheel notch: at least one step, so a coarse step never rounds back to where it was.
+    fn nudge(self, value: f64, up: bool) -> f64 {
+        let by = self.step.max((self.max - self.min) / f64::from(TOP_TICK));
+        self.snap(if up { value + by } else { value - by })
+    }
+
+    /// Steps count from `min`, not from zero.
+    fn snap(self, value: f64) -> f64 {
+        (self.min + ((value - self.min) / self.step).round() * self.step).clamp(self.min, self.max)
+    }
+}
 
 impl Page {
-    pub(super) fn level(&self, cheat: &Mod) -> u8 {
-        let initial = match cheat.control {
-            Control::Slider(level) => level,
-            _ => 0,
-        };
-        self.levels.get(cheat.id).copied().unwrap_or(initial)
+    fn set_value(&mut self, index: usize, value: f64, cx: &mut Context<Self>) {
+        if let Some(loaded) = self.loaded_mut() {
+            loaded.values[index] = value;
+        }
+        cx.notify();
     }
 
     pub(super) fn control(
         &self,
-        number: usize,
-        cheat: &'static Mod,
+        index: usize,
+        loaded: &Loaded,
         running: bool,
         live: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let cheat = &loaded.cheats[index];
+        let value = loaded.values[index];
         let value_color = if live { rgb(self.accent) } else { rgb(DIM) };
-        match cheat.control {
-            Control::Toggle => div()
-                .id(("toggle", number))
+        match cheat.kind {
+            Kind::Toggle => div()
+                .id(("toggle", index))
                 .cursor_pointer()
                 .on_click(cx.listener(move |page, _, _, cx| {
-                    if running && !page.enabled.remove(cheat.id) {
-                        page.enabled.insert(cheat.id);
+                    if running {
+                        page.set_value(index, if value == 0. { 1. } else { 0. }, cx);
                     }
-                    cx.notify();
                 }))
                 .child(toggle(live, self.accent))
                 .into_any_element(),
-            Control::Slider(_) => {
-                let level = if running { self.level(cheat) } else { 0 };
+            Kind::Slider | Kind::Scalar => {
+                let span = Span::of(&cheat.args);
                 h_flex()
                     .gap(px(5.))
-                    .child(self.ticks(cheat, level, running, live, cx))
+                    .child(self.ticks(index, span, value, running, live, cx))
                     .child(
-                        mono(format!("{:.1}×", 1. + 0.15 * f32::from(level)), 12.5)
+                        mono(number(value), 12.5)
                             .w(px(38.))
                             .flex()
                             .justify_end()
@@ -63,57 +103,60 @@ impl Page {
                     )
                     .into_any_element()
             }
-            Control::Incremental => {
-                let step = |id: &'static str, label: &'static str, delta: i32| {
+            Kind::Number if cheat.args.has_button() => h_flex()
+                .gap(px(8.))
+                .when_some(loaded.inputs.get(&index), |control, input| {
+                    control.child(
+                        value_box("").w(px(72.)).child(
+                            Input::new(input)
+                                .appearance(false)
+                                .disabled(!running)
+                                .px(px(8.))
+                                .text_center()
+                                .font_family(MONO)
+                                .text_size(px(12.5)),
+                        ),
+                    )
+                })
+                .child(self.press(index, "SET", "OK", running, cx))
+                .into_any_element(),
+            Kind::Number | Kind::Incremental => {
+                let step = cheat.args.step.unwrap_or(1.);
+                let nudge = |id: &'static str, label: &'static str, by: f64| {
                     button(label)
-                        .id(id)
+                        .id((id, index))
                         .w(px(26.))
                         .px_0()
                         .font_family(MONO)
                         .text_size(px(14.))
                         .on_click(cx.listener(move |page, _, _, cx| {
-                            if running {
-                                page.crit = (page.crit + delta).clamp(0, 100);
+                            if running && let Some(loaded) = page.loaded_mut() {
+                                loaded.values[index] = loaded.cheats[index].args.clamp(value + by);
+                                cx.notify();
                             }
-                            cx.notify();
                         }))
                 };
-                let crit = if running { self.crit } else { 0 };
                 h_flex()
                     .gap(px(8.))
-                    .child(step("decrease", "−", -5))
+                    .child(nudge("decrease", "−", -step))
                     .child(
-                        value_box(crit.to_string())
-                            .w(px(44.))
+                        value_box(number(value))
+                            .w(px(52.))
                             .justify_center()
                             .text_color(value_color),
                     )
-                    .child(step("increase", "+", 5))
+                    .child(nudge("increase", "+", step))
                     .into_any_element()
             }
-            Control::Number => h_flex()
-                .gap(px(8.))
-                .child(
-                    value_box("").w(px(72.)).child(
-                        Input::new(&self.amount)
-                            .appearance(false)
-                            .disabled(!running)
-                            .px(px(8.))
-                            .text_center()
-                            .font_family(MONO)
-                            .text_size(px(12.5)),
-                    ),
-                )
-                .child(self.press(number, cheat, running, cx))
-                .into_any_element(),
-            Control::Button => self
-                .press(number, cheat, running, cx)
+            Kind::Button => self
+                .press(index, "EXECUTE", "APPLIED", running, cx)
                 .px(px(14.))
                 .into_any_element(),
-            Control::Selection(options) => {
-                let current = self.choices.get(cheat.id).copied().unwrap_or(options[0]);
-                let trigger = value_box(current)
-                    .id(("select", number))
+            Kind::Selection => {
+                let options = loaded.rows[index].options.clone();
+                let current = value as usize;
+                let trigger = value_box(options.get(current).cloned().unwrap_or_default())
+                    .id(("select", index))
                     .w(px(112.))
                     .pl(px(10.))
                     .pr(px(8.))
@@ -127,91 +170,92 @@ impl Page {
                 }
                 self.dropdown(
                     trigger,
-                    cheat.id,
+                    Menu::Cheat(index),
                     options,
                     current,
                     cx,
                     move |page, option| {
-                        page.choices.insert(cheat.id, option);
+                        if let Some(loaded) = page.loaded_mut() {
+                            loaded.values[index] = option as f64;
+                        }
                     },
                 )
                 .into_any_element()
             }
+            Kind::Unknown => div().into_any_element(),
         }
     }
 
     /// A button with no state of its own: it confirms the press for a moment.
     fn press(
         &self,
-        number: usize,
-        cheat: &'static Mod,
+        index: usize,
+        label: &str,
+        done: &str,
         running: bool,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        // "OK" because the confirmation has to fit the width of "SET".
-        let (label, done) = match cheat.control {
-            Control::Number => ("SET", "OK"),
-            _ => ("EXECUTE", "APPLIED"),
-        };
-        let flashed = self.flashed.as_ref().is_some_and(|(id, _)| *id == cheat.id);
-        flash_button(label, done, flashed, self.accent)
-            .id(("press", number))
-            .on_click(cx.listener(move |page, _, _, cx| {
-                if running {
-                    let timer = flash(cx, |page: &mut Page| page.flashed = None);
-                    page.flashed = Some((cheat.id, timer));
-                    cx.notify();
-                }
-            }))
+        flash_button(
+            label,
+            done,
+            self.is_flashed(Flash::Cheat(index)),
+            self.accent,
+        )
+        .id(("press", index))
+        .on_click(cx.listener(move |page, _, _, cx| {
+            if !running {
+                return;
+            }
+            // A cheat with a text field takes its value from it.
+            let typed = page.trainer(page.selected.as_ref()).and_then(|loaded| {
+                let text = loaded.inputs.get(&index)?.read(cx).value();
+                Some(loaded.cheats[index].args.clamp(text.parse().ok()?))
+            });
+            if let Some(value) = typed {
+                page.set_value(index, value, cx);
+            }
+            page.flash(Flash::Cheat(index), cx);
+        }))
     }
 
     /// Ten ticks: click or drag across them, or use the wheel.
     fn ticks(
         &self,
-        cheat: &'static Mod,
-        level: u8,
+        index: usize,
+        span: Span,
+        value: f64,
         running: bool,
         live: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let lit = if live { self.accent } else { TICK_IDLE };
-        let set = move |page: &mut Page, level: u8, cx: &mut Context<Page>| {
-            page.levels.insert(cheat.id, level);
-            cx.notify();
-        };
+        let level = span.tick(value);
         h_flex()
             .when(running, |ticks| {
                 ticks.cursor_pointer().on_scroll(cx.listener(
                     move |page, event: &ScrollEvent, window, cx| {
                         let up = event.delta.pixel_delta(window.line_height()).y > px(0.);
-                        let level = page.level(cheat);
-                        set(
-                            page,
-                            if up {
-                                (level + 1).min(TOP_LEVEL)
-                            } else {
-                                level.saturating_sub(1)
-                            },
-                            cx,
-                        );
+                        page.set_value(index, span.nudge(value, up), cx);
                         // Keeps the pane from scrolling under the slider.
                         cx.stop_propagation();
                     },
                 ))
             })
-            .children((0..=TOP_LEVEL).map(|tick| {
+            .children((0..=TOP_TICK).map(|tick| {
                 // The 3 px gap belongs to the cell, so a drag never falls between ticks.
                 div()
                     .pr(px(3.))
                     .when(running, |cell| {
                         cell.on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(move |page, _, _, cx| set(page, tick, cx)),
+                            cx.listener(move |page, _, _, cx| {
+                                page.set_value(index, span.value(tick), cx);
+                            }),
                         )
                         .on_mouse_move(cx.listener(
                             move |page, event: &MouseMoveEvent, _, cx| {
                                 if event.pressed_button == Some(MouseButton::Left) {
-                                    set(page, tick, cx);
+                                    page.set_value(index, span.value(tick), cx);
                                 }
                             },
                         ))
@@ -228,26 +272,26 @@ impl Page {
     pub(super) fn dropdown(
         &self,
         trigger: Stateful<Div>,
-        id: &'static str,
-        options: &'static [&'static str],
-        current: &'static str,
+        menu: Menu,
+        options: Vec<SharedString>,
+        current: usize,
         cx: &mut Context<Self>,
-        pick: impl Fn(&mut Page, &'static str) + Copy + 'static,
+        pick: impl Fn(&mut Page, usize) + Copy + 'static,
     ) -> Stateful<Div> {
         let accent = rgb(self.accent);
         trigger
             .relative()
             .on_click(cx.listener(move |page, _, _, cx| {
-                page.menu = (page.menu != Some(id)).then_some(id);
+                page.menu = (page.menu != Some(menu)).then_some(menu);
                 cx.notify();
             }))
             .on_mouse_down_out(cx.listener(move |page, _, _, cx| {
-                if page.menu == Some(id) {
+                if page.menu == Some(menu) {
                     page.menu = None;
                     cx.notify();
                 }
             }))
-            .when(self.menu == Some(id), |trigger| {
+            .when(self.menu == Some(menu), |trigger| {
                 trigger.child(deferred(
                     v_flex()
                         .occlude()
@@ -261,19 +305,18 @@ impl Page {
                         .border_1()
                         .border_color(line(0.2))
                         .bg(rgb(PANEL))
-                        .children(options.iter().map(|&option| {
-                            let chosen = option == current;
+                        .children(options.into_iter().enumerate().map(|(at, option)| {
                             h_flex()
                                 .h(px(28.))
                                 .px(px(10.))
                                 .cursor_pointer()
-                                .text_color(if chosen { accent } else { rgb(TEXT_2) })
+                                .text_color(if at == current { accent } else { rgb(TEXT_2) })
                                 .hover(|style| style.bg(rgb(ROW_HOVER)))
                                 // Mouse down, not click: the outside-press close removes the list first.
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |page, _, _, cx| {
-                                        pick(page, option);
+                                        pick(page, at);
                                         page.menu = None;
                                         cx.notify();
                                     }),
@@ -293,4 +336,34 @@ fn value_box(value: impl Into<SharedString>) -> Div {
         .border_1()
         .border_color(line(0.14))
         .bg(rgb(SUNKEN))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Span;
+
+    #[test]
+    fn steps_count_from_min() {
+        let span = Span {
+            min: 3.,
+            max: 21.,
+            step: 2.,
+        };
+        assert_eq!(span.value(0), 3.);
+        assert_eq!(span.value(super::TOP_TICK), 21.);
+        assert!((0..=super::TOP_TICK).all(|tick| (span.value(tick) - 3.) % 2. == 0.));
+    }
+
+    #[test]
+    fn wheel_moves_a_coarse_step() {
+        let span = Span {
+            min: 0.,
+            max: 10.,
+            step: 5.,
+        };
+        assert_eq!(span.nudge(0., true), 5.);
+        assert_eq!(span.nudge(5., true), 10.);
+        assert_eq!(span.nudge(10., true), 10.);
+        assert_eq!(span.nudge(5., false), 0.);
+    }
 }

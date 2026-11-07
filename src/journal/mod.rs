@@ -115,8 +115,9 @@ pub fn subscribe() -> Receiver<()> {
 /// Call when the last window closes: GPUI logs invalid-handle errors while it tears
 /// the window down, and they would end every log with false alarms.
 pub fn closing() {
-    log::info!("closing");
+    // The flag first: another thread may already be logging the teardown.
     CLOSING.store(true, Ordering::Relaxed);
+    log::info!("closing");
 }
 
 pub fn dir() -> Option<&'static Path> {

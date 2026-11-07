@@ -1,3 +1,4 @@
+pub mod account;
 mod api;
 mod vault;
 
@@ -9,7 +10,9 @@ use std::{
 
 use anyhow::Result;
 use blocking::unblock;
-use serde::{Deserialize, Serialize, de::IgnoredAny};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+pub use account::Account;
 
 use crate::{
     transport::Transport,
@@ -129,18 +132,9 @@ impl Session {
         Ok(token.into())
     }
 
-    /// Enshrouded (82102) trainer count, proving the session works.
-    pub async fn check(&self, t: &Transport) -> Result<usize> {
-        let trainers: Vec<IgnoredAny> = api::call(
-            t,
-            "GET",
-            "/v3/games/82102/trainers",
-            Some(&self.access_token),
-            None,
-            200,
-        )
-        .await?;
-        Ok(trainers.len())
+    /// Authorized GET of a JSON resource.
+    pub async fn get<T: DeserializeOwned>(&self, t: &Transport, path: &str) -> Result<T> {
+        api::call(t, "GET", path, Some(&self.access_token), None, 200).await
     }
 }
 

@@ -1,66 +1,64 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, time::Duration};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 use super::Catalog;
-use crate::transport::cdn;
+use crate::{disk, transport::cdn};
 
 const URL: &str = "https://storage-cdn.wemod.com/catalog.json";
 const BODY: &str = "catalog.json";
 const ETAG: &str = "catalog.etag";
+// The catalog changes every few minutes (player counts), a trainer far less often.
+const MAX_AGE: Duration = Duration::from_secs(3600);
 
-pub enum Freshness {
-    Downloaded,
-    NotModified,
-    /// The CDN failed; the cached copy is used. Holds the reason.
-    Offline(String),
+/// The disk copy, without the network (blocking). An unparsable copy counts as none.
+pub fn cached(data_dir: &Path) -> Option<Catalog> {
+    Catalog::parse(&fs::read(data_dir.join(BODY)).ok()?).ok()
 }
 
-/// Revalidates the disk copy against the CDN (blocking).
-pub fn load(data_dir: &Path) -> Result<(Catalog, Freshness)> {
-    let cached = read(data_dir);
-    let etag = cached.as_ref().and_then(|(tag, _)| tag.as_deref());
-    // Ok(None) = not modified. A 200 that does not parse (captive portal, cut body) is a failure too.
-    let fetched = cdn::get(URL, etag).and_then(|r| match r.status {
+pub fn forget(data_dir: &Path) {
+    let _ = fs::remove_file(data_dir.join(ETAG));
+    let _ = fs::remove_file(data_dir.join(BODY));
+}
+
+/// Asks the CDN for a newer catalog (blocking); `None` means the disk copy is current.
+/// `have_copy` is false when `cached` found nothing usable, which makes the request unconditional.
+pub fn refresh(data_dir: &Path, have_copy: bool) -> Result<Option<Catalog>> {
+    let tag_file = data_dir.join(ETAG);
+    // The tag file's time is the last check: it is rewritten on every answer.
+    let checked = fs::metadata(&tag_file).and_then(|meta| meta.modified());
+    if have_copy && checked.is_ok_and(|at| at.elapsed().is_ok_and(|age| age < MAX_AGE)) {
+        return Ok(None);
+    }
+    let etag = have_copy
+        .then(|| fs::read_to_string(&tag_file).ok())
+        .flatten();
+    let response = cdn::get(URL, etag.as_deref())?;
+    match response.status {
+        // A 200 that does not parse (captive portal, cut body) is a failure too.
         200 => {
-            let catalog = Catalog::parse(&r.body)?;
-            if let Err(e) = write(data_dir, r.etag.as_deref(), &r.body) {
+            let catalog = Catalog::parse(&response.body)?;
+            if let Err(e) = write(data_dir, response.etag.as_deref(), &response.body) {
                 log::warn!("catalog not cached: {e:#}");
             }
             Ok(Some(catalog))
         }
-        304 => Ok(None),
+        304 if have_copy => {
+            if let Some(tag) = etag {
+                let _ = disk::replace(&tag_file, tag.as_bytes());
+            }
+            Ok(None)
+        }
         status => bail!("HTTP {status}"),
-    });
-    match (fetched, cached) {
-        (Ok(Some(catalog)), _) => Ok((catalog, Freshness::Downloaded)),
-        (Ok(None), Some((_, c))) => Ok((c, Freshness::NotModified)),
-        (Err(e), Some((_, c))) => Ok((c, Freshness::Offline(format!("{e:#}")))),
-        (Ok(None), None) => bail!("catalog: 304 without a cached copy"),
-        (Err(e), None) => Err(e.context("catalog")),
     }
-}
-
-// An unparsable copy counts as none, so the next request is unconditional.
-fn read(dir: &Path) -> Option<(Option<String>, Catalog)> {
-    let catalog = Catalog::parse(&fs::read(dir.join(BODY)).ok()?).ok()?;
-    let etag = fs::read_to_string(dir.join(ETAG)).ok();
-    Some((etag, catalog))
 }
 
 // The old tag goes first and the new one last, so a tag never vouches for another body.
 fn write(dir: &Path, etag: Option<&str>, body: &[u8]) -> Result<()> {
-    fs::create_dir_all(dir).context("create data dir")?;
     let _ = fs::remove_file(dir.join(ETAG));
-    replace(&dir.join(BODY), body)?;
+    disk::replace(&dir.join(BODY), body)?;
     if let Some(tag) = etag {
-        replace(&dir.join(ETAG), tag.as_bytes())?;
+        disk::replace(&dir.join(ETAG), tag.as_bytes())?;
     }
     Ok(())
-}
-
-fn replace(path: &Path, data: &[u8]) -> Result<()> {
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, data).with_context(|| format!("write {}", tmp.display()))?;
-    fs::rename(&tmp, path).with_context(|| format!("replace {}", path.display()))
 }
