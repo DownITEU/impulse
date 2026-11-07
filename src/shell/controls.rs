@@ -14,7 +14,7 @@ use super::{
     assets::Icon,
     mock::{Control, Mod},
     theme::*,
-    widgets::{button, icon, mono, toggle},
+    widgets::{button, flash, flash_button, icon, mono, toggle},
 };
 
 const TOP_LEVEL: u8 = 9;
@@ -104,9 +104,12 @@ impl Page {
                             .text_size(px(12.5)),
                     ),
                 )
-                .child(button("SET"))
+                .child(self.press(number, cheat, running, cx))
                 .into_any_element(),
-            Control::Button => button("EXECUTE").px(px(14.)).into_any_element(),
+            Control::Button => self
+                .press(number, cheat, running, cx)
+                .px(px(14.))
+                .into_any_element(),
             Control::Selection(options) => {
                 let current = self.choices.get(cheat.id).copied().unwrap_or(options[0]);
                 let trigger = value_box(current)
@@ -135,6 +138,31 @@ impl Page {
                 .into_any_element()
             }
         }
+    }
+
+    /// A button with no state of its own: it confirms the press for a moment.
+    fn press(
+        &self,
+        number: usize,
+        cheat: &'static Mod,
+        running: bool,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        // "OK" because the confirmation has to fit the width of "SET".
+        let (label, done) = match cheat.control {
+            Control::Number => ("SET", "OK"),
+            _ => ("EXECUTE", "APPLIED"),
+        };
+        let flashed = self.flashed.as_ref().is_some_and(|(id, _)| *id == cheat.id);
+        flash_button(label, done, flashed, self.accent)
+            .id(("press", number))
+            .on_click(cx.listener(move |page, _, _, cx| {
+                if running {
+                    let timer = flash(cx, |page: &mut Page| page.flashed = None);
+                    page.flashed = Some((cheat.id, timer));
+                    cx.notify();
+                }
+            }))
     }
 
     /// Ten ticks: click or drag across them, or use the wheel.

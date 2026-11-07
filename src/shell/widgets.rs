@@ -1,5 +1,8 @@
+use std::time::Duration;
+
 use gpui_kit::{
-    Bounds, Div, Entity, FontWeight, Hsla, IntoElement, Rgba, SharedString, Stateful, Svg, canvas,
+    Bounds, Context, Div, Entity, FontWeight, Hsla, IntoElement, Rgba, SharedString, Stateful, Svg,
+    Task, canvas,
     component::{
         h_flex,
         input::{Input, InputState},
@@ -10,6 +13,8 @@ use gpui_kit::{
 };
 
 use super::{assets::Icon, theme::*};
+
+const FLASH: Duration = Duration::from_millis(900);
 
 pub fn icon(icon: Icon, size: f32, color: impl Into<Hsla>) -> Svg {
     svg()
@@ -102,6 +107,37 @@ pub fn icon_button(id: &'static str, glyph: Icon, side: f32, glyph_size: f32) ->
 }
 
 pub fn button(label: &str) -> Div {
+    button_frame().child(tracked(label, 11., 0.12))
+}
+
+/// A press-only button's confirmation: `done` in the accent color while `flashed`.
+pub fn flash_button(label: &str, done: &str, flashed: bool, accent: u32) -> Div {
+    if !flashed {
+        return button(label);
+    }
+    let overlay = h_flex().absolute().top_0().left_0().size_full();
+    button_frame()
+        .relative()
+        .border_color(rgb(accent))
+        .text_color(rgb(accent))
+        // The hidden label keeps the button's width.
+        .child(tracked(label, 11., 0.12).invisible())
+        .child(overlay.justify_center().child(tracked(done, 11., 0.12)))
+}
+
+/// Runs `clear` once the confirmation has been shown; dropping the task cancels it.
+pub fn flash<T: 'static>(cx: &mut Context<T>, clear: impl FnOnce(&mut T) + 'static) -> Task<()> {
+    cx.spawn(async move |this, cx| {
+        cx.background_executor().timer(FLASH).await;
+        this.update(cx, |this, cx| {
+            clear(this);
+            cx.notify();
+        })
+        .ok();
+    })
+}
+
+fn button_frame() -> Div {
     h_flex()
         .h(px(26.))
         .px(px(12.))
@@ -114,7 +150,6 @@ pub fn button(label: &str) -> Div {
         .font_weight(FontWeight::BOLD)
         .cursor_pointer()
         .hover(|style| style.bg(rgb(RAISED_HOVER)))
-        .child(tracked(label, 11., 0.12))
 }
 
 /// `/ filter` field: the accent slash and a bare mono input.

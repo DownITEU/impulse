@@ -23,7 +23,7 @@ use std::{
 };
 
 use gpui_kit::{
-    App, Context, Entity, IntoElement, Render, Window,
+    App, Context, Entity, IntoElement, Render, Task, Window,
     component::{
         h_flex,
         input::{InputEvent, InputState},
@@ -78,6 +78,8 @@ pub struct Page {
     // The open dropdown: "overlay" or a mod id.
     menu: Option<&'static str>,
     amount: Entity<InputState>,
+    // The press-only button showing its confirmation, by mod id.
+    flashed: Option<(&'static str, Task<()>)>,
     log: Entity<LogView>,
     log_open: bool,
     game_filter: Entity<InputState>,
@@ -124,6 +126,7 @@ impl Page {
             choices: HashMap::new(),
             overlay: hero::OVERLAYS[0],
             menu: None,
+            flashed: None,
             amount: cx.new(|cx| {
                 InputState::new(window, cx)
                     .validate(|text, _| {

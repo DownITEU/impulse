@@ -24,7 +24,7 @@ use gpui_kit::{
 use super::{
     assets::Icon,
     theme::*,
-    widgets::{button, filter, icon_button, mono, square, tracked},
+    widgets::{button, filter, flash, flash_button, icon_button, mono, square, tracked},
 };
 use crate::journal::{self, Level, Record};
 
@@ -60,6 +60,8 @@ pub struct LogView {
     // The last clicked record: the shift-click origin and the detail strip's content.
     anchor: Option<u64>,
     follow: bool,
+    // Runs while the copy button shows its confirmation.
+    copied: Option<Task<()>>,
     filter: Entity<InputState>,
     scroll: UniformListScrollHandle,
     focus: FocusHandle,
@@ -115,6 +117,7 @@ impl LogView {
             selected: BTreeSet::new(),
             anchor: None,
             follow: true,
+            copied: None,
             filter,
             scroll: UniformListScrollHandle::new(),
             focus: cx.focus_handle(),
@@ -225,7 +228,24 @@ impl LogView {
             .filter(|row| self.selected.is_empty() || self.selected.contains(&row.seq))
             .map(|row| row.line())
             .collect();
+        // An empty copy would only wipe the clipboard.
+        if lines.is_empty() {
+            return;
+        }
         cx.write_to_clipboard(ClipboardItem::new_string(lines.join("\n")));
+        self.copied = Some(flash(cx, |view: &mut Self| view.copied = None));
+        cx.notify();
+    }
+
+    // Empties the view only: the file keeps every record.
+    fn clear(&mut self, cx: &mut Context<Self>) {
+        self.all.clear();
+        self.rows.clear();
+        self.counts = [0; LEVELS.len()];
+        self.selected.clear();
+        self.anchor = None;
+        cx.emit(LogEvent::Problems);
+        cx.notify();
     }
 
     fn toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -286,9 +306,14 @@ impl LogView {
                     })),
             )
             .child(
-                button(&copy)
+                flash_button(&copy, "COPIED", self.copied.is_some(), self.accent)
                     .id("copy")
                     .on_click(cx.listener(|view, _, _, cx| view.copy(cx))),
+            )
+            .child(
+                button("CLEAR")
+                    .id("clear")
+                    .on_click(cx.listener(|view, _, _, cx| view.clear(cx))),
             )
             .child(button("FOLDER").id("folder").on_click(|_, _, cx| {
                 if let Some(dir) = journal::dir() {
