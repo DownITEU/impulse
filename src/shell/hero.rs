@@ -12,6 +12,8 @@ use super::{
     widgets::{icon, mono, square, tracked},
 };
 
+pub(super) const OVERLAYS: [&str; 2] = ["STICKY", "IN-GAME"];
+
 impl Page {
     pub(super) fn hero(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let has_trainer = game.trainer != Trainer::None;
@@ -89,12 +91,19 @@ impl Page {
                         .child(tracked("STOP", 12.5, 0.14)),
                 )
                 .child(
-                    action("overlay")
-                        .pl(px(16.))
-                        .pr(px(12.))
-                        .child(tracked("OVERLAY", 12.5, 0.14))
-                        .child(tracked("STICKY", 12.5, 0.14).text_color(rgb(FAINT)))
-                        .child(icon(Icon::ChevronDown, 12., rgb(TEXT))),
+                    self.dropdown(
+                        action("overlay")
+                            .pl(px(16.))
+                            .pr(px(12.))
+                            .child(tracked("OVERLAY", 12.5, 0.14))
+                            .child(tracked(self.overlay, 12.5, 0.14).text_color(rgb(FAINT)))
+                            .child(icon(Icon::ChevronDown, 12., rgb(TEXT))),
+                        "overlay",
+                        &OVERLAYS,
+                        self.overlay,
+                        cx,
+                        |page, mode| page.overlay = mode,
+                    ),
                 )
             })
             .when(!running && game.trainer != Trainer::None, |bar| {

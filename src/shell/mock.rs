@@ -57,10 +57,12 @@ pub const GAMES: [Game; 12] = [
 pub enum Control {
     Toggle,
     Incremental,
-    Slider { value: &'static str, percent: u8 },
-    Number(&'static str),
+    /// Initial level, 0..=9.
+    Slider(u8),
+    Number,
     Button,
-    Selection(&'static str),
+    /// Options, the first is the default.
+    Selection(&'static [&'static str]),
 }
 
 pub struct Mod {
@@ -69,7 +71,7 @@ pub struct Mod {
     pub name: &'static str,
     pub control: Control,
     pub keys: &'static [&'static str],
-    pub instructions: bool,
+    pub instructions: Option<&'static str>,
 }
 
 const fn cheat(
@@ -78,7 +80,7 @@ const fn cheat(
     name: &'static str,
     control: Control,
     keys: &'static [&'static str],
-    instructions: bool,
+    instructions: Option<&'static str>,
 ) -> Mod {
     Mod {
         id,
@@ -94,30 +96,26 @@ pub const CATEGORIES: [&str; 5] = ["PLAYER", "INVENTORY", "WORLD", "COMBAT", "TE
 
 use Control::{Button, Incremental, Number, Selection, Slider, Toggle};
 
-const fn slider(value: &'static str, percent: u8) -> Control {
-    Slider { value, percent }
-}
-
 #[rustfmt::skip]
 pub const MODS: [Mod; 20] = [
-    cheat("hp", "PLAYER", "Unlimited Health", Toggle, &["SHIFT+F1"], false),
-    cheat("st", "PLAYER", "Unlimited Stamina", Toggle, &["SHIFT+F2"], false),
-    cheat("mp", "PLAYER", "Unlimited Mana", Toggle, &["SHIFT+F3"], false),
-    cheat("fall", "PLAYER", "No Fall Damage", Toggle, &["SHIFT+F4"], false),
-    cheat("crit", "PLAYER", "Edit Critical Chance", Incremental, &["↑ SHIFT+F6", "↓ ALT+F6"], true),
-    cheat("spd", "PLAYER", "Movement Speed", slider("1.6×", 40), &["SHIFT+F7"], false),
-    cheat("jump", "PLAYER", "Jump Height", slider("1.0×", 0), &["SHIFT+F8"], false),
-    cheat("dur", "INVENTORY", "Unlimited Durability", Toggle, &["SHIFT+F9"], false),
-    cheat("craft", "INVENTORY", "Free Crafting", Toggle, &["SHIFT+F10"], true),
-    cheat("amt", "INVENTORY", "Set Selected Item Amount", Number("999"), &["SHIFT+F11"], false),
-    cheat("refill", "INVENTORY", "Refill Consumables", Button, &["CTRL+F1"], false),
-    cheat("freeze", "WORLD", "Freeze Time of Day", Toggle, &["CTRL+F2"], false),
-    cheat("tod", "WORLD", "Time of Day", Selection("NOON"), &["CTRL+F3"], false),
-    cheat("gs", "WORLD", "Game Speed", slider("1.0×", 0), &["CTRL+F4"], false),
-    cheat("ohk", "COMBAT", "One-Hit Kills", Toggle, &["CTRL+F5"], false),
-    cheat("dmg", "COMBAT", "Damage Multiplier", slider("1.0×", 0), &["CTRL+F6"], false),
-    cheat("ammo", "COMBAT", "Unlimited Ammo", Toggle, &["CTRL+F7"], false),
-    cheat("tpw", "TELEPORT", "Teleport to Waypoint", Button, &["CTRL+F8"], false),
-    cheat("tps", "TELEPORT", "Save Position", Button, &["CTRL+F9"], false),
-    cheat("tpr", "TELEPORT", "Restore Position", Button, &["CTRL+F10"], false),
+    cheat("hp", "PLAYER", "Unlimited Health", Toggle, &["SHIFT+F1"], None),
+    cheat("st", "PLAYER", "Unlimited Stamina", Toggle, &["SHIFT+F2"], None),
+    cheat("mp", "PLAYER", "Unlimited Mana", Toggle, &["SHIFT+F3"], None),
+    cheat("fall", "PLAYER", "No Fall Damage", Toggle, &["SHIFT+F4"], None),
+    cheat("crit", "PLAYER", "Edit Critical Chance", Incremental, &["↑ SHIFT+F6", "↓ ALT+F6"], Some("Each step changes the chance by 5 %.")),
+    cheat("spd", "PLAYER", "Movement Speed", Slider(4), &["SHIFT+F7"], None),
+    cheat("jump", "PLAYER", "Jump Height", Slider(0), &["SHIFT+F8"], None),
+    cheat("dur", "INVENTORY", "Unlimited Durability", Toggle, &["SHIFT+F9"], None),
+    cheat("craft", "INVENTORY", "Free Crafting", Toggle, &["SHIFT+F10"], Some("Open the crafting menu once after enabling.")),
+    cheat("amt", "INVENTORY", "Set Selected Item Amount", Number, &["SHIFT+F11"], None),
+    cheat("refill", "INVENTORY", "Refill Consumables", Button, &["CTRL+F1"], None),
+    cheat("freeze", "WORLD", "Freeze Time of Day", Toggle, &["CTRL+F2"], None),
+    cheat("tod", "WORLD", "Time of Day", Selection(&["NOON", "DUSK", "NIGHT", "DAWN"]), &["CTRL+F3"], None),
+    cheat("gs", "WORLD", "Game Speed", Slider(0), &["CTRL+F4"], None),
+    cheat("ohk", "COMBAT", "One-Hit Kills", Toggle, &["CTRL+F5"], None),
+    cheat("dmg", "COMBAT", "Damage Multiplier", Slider(0), &["CTRL+F6"], None),
+    cheat("ammo", "COMBAT", "Unlimited Ammo", Toggle, &["CTRL+F7"], None),
+    cheat("tpw", "TELEPORT", "Teleport to Waypoint", Button, &["CTRL+F8"], None),
+    cheat("tps", "TELEPORT", "Save Position", Button, &["CTRL+F9"], None),
+    cheat("tpr", "TELEPORT", "Restore Position", Button, &["CTRL+F10"], None),
 ];

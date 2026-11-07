@@ -5,6 +5,7 @@ mod art;
 mod assets;
 mod boot;
 mod cheats;
+mod controls;
 mod header;
 mod hero;
 mod library;
@@ -15,7 +16,10 @@ mod sidebar;
 mod theme;
 mod widgets;
 
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use gpui_kit::{
     App, Context, Entity, IntoElement, Render, Window,
@@ -64,6 +68,12 @@ pub struct Page {
     // Folded sections, per game.
     folded: HashSet<(usize, &'static str)>,
     crit: i32,
+    levels: HashMap<&'static str, u8>,
+    choices: HashMap<&'static str, &'static str>,
+    overlay: &'static str,
+    // The open dropdown: "overlay" or a mod id.
+    menu: Option<&'static str>,
+    amount: Entity<InputState>,
     game_filter: Entity<InputState>,
     mod_filter: Entity<InputState>,
 }
@@ -94,6 +104,11 @@ impl Page {
             pinned: HashSet::from(["hp", "st"]),
             folded: HashSet::from([(0, "COMBAT"), (0, "TELEPORT")]),
             crit: 0,
+            levels: HashMap::new(),
+            choices: HashMap::new(),
+            overlay: hero::OVERLAYS[0],
+            menu: None,
+            amount: cx.new(|cx| InputState::new(window, cx).default_value("999")),
         }
     }
 

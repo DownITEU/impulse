@@ -80,6 +80,9 @@ pub fn init(cx: &mut App) {
     theme.foreground = rgb(TEXT).into();
     theme.muted_foreground = rgb(DIM).into();
     theme.caret = rgb(TEXT).into();
+    theme.popover = rgb(RAISED).into();
+    theme.popover_foreground = rgb(TEXT).into();
+    theme.border = line(0.2).into();
     theme.scrollbar = alpha(BG, 0.).into();
     theme.scrollbar_thumb = rgb(SCROLL_THUMB).into();
     theme.scrollbar_thumb_hover = rgb(GHOST).into();

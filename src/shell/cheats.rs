@@ -1,6 +1,6 @@
 use gpui_kit::{
-    AnyElement, Context, Div, FontWeight, IntoElement,
-    component::{h_flex, v_flex},
+    AnyElement, Context, FontWeight, IntoElement,
+    component::{h_flex, tooltip::Tooltip, v_flex},
     div,
     prelude::*,
     px, rgb,
@@ -11,7 +11,7 @@ use super::{
     assets::Icon,
     mock::{CATEGORIES, Control, Game, MODS, Mod, Trainer},
     theme::*,
-    widgets::{filter, icon, icon_button, keycap, mono, toggle, tracked},
+    widgets::{filter, icon, icon_button, keycap, mono, tracked},
 };
 
 const PINNED: &str = "PINNED";
@@ -20,7 +20,7 @@ impl Page {
     pub(super) fn is_live(&self, cheat: &Mod) -> bool {
         match cheat.control {
             Control::Toggle => self.enabled.contains(cheat.id),
-            Control::Slider { percent, .. } => percent > 0,
+            Control::Slider(_) => self.level(cheat) > 0,
             Control::Incremental => self.crit != 0,
             _ => false,
         }
@@ -188,8 +188,13 @@ impl Page {
                             .text_color(rgb(name_color))
                             .child(cheat.name.to_uppercase()),
                     )
-                    .when(cheat.instructions, |name| {
-                        name.child(icon(Icon::Info, 13., rgb(FAINT)))
+                    .when_some(cheat.instructions, |name, text| {
+                        name.child(
+                            div()
+                                .id(("info", number))
+                                .child(icon(Icon::Info, 13., rgb(FAINT)))
+                                .tooltip(move |window, cx| Tooltip::new(text).build(window, cx)),
+                        )
                     })
                     .child(
                         div()
@@ -232,118 +237,6 @@ impl Page {
                     .child(self.control(number, cheat, running, live, cx)),
             )
     }
-
-    fn control(
-        &self,
-        number: usize,
-        cheat: &'static Mod,
-        running: bool,
-        live: bool,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let value_color = if live { rgb(self.accent) } else { rgb(DIM) };
-        match cheat.control {
-            Control::Toggle => div()
-                .id(("toggle", number))
-                .cursor_pointer()
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    if running && !page.enabled.remove(cheat.id) {
-                        page.enabled.insert(cheat.id);
-                    }
-                    cx.notify();
-                }))
-                .child(toggle(live, self.accent))
-                .into_any_element(),
-            Control::Slider { value, percent } => {
-                let percent = if running { percent } else { 0 };
-                let filled = usize::from(percent).div_ceil(10) + 1;
-                let lit = if live { self.accent } else { TICK_IDLE };
-                h_flex()
-                    .gap(px(8.))
-                    .child(h_flex().gap(px(3.)).children((0..10).map(|tick| {
-                        div()
-                            .w(px(6.))
-                            .h(px(15.))
-                            .bg(rgb(if tick < filled { lit } else { TICK }))
-                    })))
-                    .child(
-                        mono(if running { value } else { "1.0×" }, 12.5)
-                            .w(px(38.))
-                            .flex()
-                            .justify_end()
-                            .text_color(value_color),
-                    )
-                    .into_any_element()
-            }
-            Control::Incremental => {
-                let step = |id: &'static str, label: &'static str, delta: i32| {
-                    small_button(label)
-                        .id(id)
-                        .w(px(26.))
-                        .px_0()
-                        .font_family(MONO)
-                        .text_size(px(14.))
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            if running {
-                                page.crit = (page.crit + delta).clamp(0, 100);
-                            }
-                            cx.notify();
-                        }))
-                };
-                let crit = if running { self.crit } else { 0 };
-                h_flex()
-                    .gap(px(8.))
-                    .child(step("decrease", "−", -5))
-                    .child(
-                        value_box(crit.to_string())
-                            .w(px(44.))
-                            .justify_center()
-                            .text_color(value_color),
-                    )
-                    .child(step("increase", "+", 5))
-                    .into_any_element()
-            }
-            Control::Number(value) => h_flex()
-                .gap(px(8.))
-                .child(value_box(value).w(px(72.)).px(px(8.)).justify_end())
-                .child(small_button("SET"))
-                .into_any_element(),
-            Control::Button => small_button("EXECUTE").px(px(14.)).into_any_element(),
-            Control::Selection(value) => value_box(value)
-                .w(px(112.))
-                .pl(px(10.))
-                .pr(px(8.))
-                .justify_between()
-                .border_color(line(0.2))
-                .text_size(px(12.))
-                .child(icon(Icon::ChevronDown, 11., rgb(DIM)))
-                .into_any_element(),
-        }
-    }
-}
-
-fn small_button(label: &'static str) -> Div {
-    h_flex()
-        .h(px(26.))
-        .px(px(12.))
-        .justify_center()
-        .border_1()
-        .border_color(line(0.2))
-        .bg(rgb(RAISED))
-        .font_weight(FontWeight::BOLD)
-        .cursor_pointer()
-        .hover(|style| style.bg(rgb(RAISED_HOVER)))
-        .child(tracked(label, 11., 0.12))
-}
-
-fn value_box(value: impl Into<gpui_kit::SharedString>) -> Div {
-    mono(value, 12.5)
-        .h(px(26.))
-        .flex()
-        .items_center()
-        .border_1()
-        .border_color(line(0.14))
-        .bg(rgb(SUNKEN))
 }
 
 fn update_callout() -> impl IntoElement {

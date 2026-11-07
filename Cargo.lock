@@ -3637,6 +3637,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e44b0a4eaa4c82f441d50a963f2d5f05a787240aeee097597033e72accfd22f"
 
 [[package]]
+name = "impulse"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "anyhow",
+ "blocking",
+ "cbc",
+ "form_urlencoded",
+ "futures",
+ "gpui-kit",
+ "rusty-leveldb",
+ "serde",
+ "serde_json",
+ "tao",
+ "ureq",
+ "url",
+ "webview2-com",
+ "windows-registry 0.6.1",
+ "windows-sys 0.61.2",
+ "wry",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9117,29 +9140,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d129932f4644ac2396cb456385cbf9e63b5b30c6e8dc4820bdca4eb082037a5"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "impulse"
-version = "0.1.0"
-dependencies = [
- "aes",
- "anyhow",
- "blocking",
- "cbc",
- "form_urlencoded",
- "futures",
- "gpui-kit",
- "rusty-leveldb",
- "serde",
- "serde_json",
- "tao",
- "ureq",
- "url",
- "webview2-com",
- "windows-registry 0.6.1",
- "windows-sys 0.61.2",
- "wry",
 ]
 
 [[package]]
