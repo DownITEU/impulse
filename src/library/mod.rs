@@ -9,7 +9,6 @@ mod standalone;
 mod steam;
 mod ubisoft;
 mod vdf;
-mod version;
 mod xbox;
 
 use std::{
@@ -17,7 +16,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::catalog::Catalog;
+use crate::{catalog::Catalog, pe};
 
 pub struct Installed {
     pub game_id: String,
@@ -58,7 +57,8 @@ pub fn scan(catalog: &Catalog) -> Vec<Installed> {
             let version = game
                 .version_path
                 .as_deref()
-                .and_then(|path| version::pe_timestamp(&app.location.join(path)));
+                .and_then(|path| pe::header(&app.location.join(path)))
+                .map(|header| header.timestamp);
             let supported = version
                 .zip(game.trainer.as_ref())
                 .map(|(v, trainer)| trainer.supported_versions.contains(&v));
