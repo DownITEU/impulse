@@ -7,7 +7,7 @@ use super::{
     Load, Page,
     assets::Icon,
     theme::*,
-    widgets::{icon_button, mono, square, tracked},
+    widgets::{icon, icon_button, mono, square, tracked},
 };
 
 impl Page {
@@ -84,25 +84,28 @@ impl Page {
                     .h_full()
                     .gap(px(14.))
                     .child(
-                        icon_button("settings", Icon::Settings, 34., 16.)
-                            .occlude()
-                            .on_click(cx.listener(Self::open_settings)),
-                    )
-                    .child(
                         h_flex()
-                            .id("account")
+                            .id("settings")
+                            .group("settings")
                             .occlude()
                             .h(px(34.))
-                            .px(px(10.))
+                            .px(px(9.))
+                            .gap(px(10.))
                             .cursor_pointer()
                             .hover(|style| style.bg(rgb(RAISED_HOVER)))
                             .on_click(cx.listener(Self::open_settings))
                             .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(name),
-                            ),
+                                icon(Icon::Settings, 16., rgb(DIM))
+                                    .group_hover("settings", |style| style.text_color(rgb(TEXT))),
+                            )
+                            .when(!name.is_empty(), |button| {
+                                button.child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child(name),
+                                )
+                            }),
                     )
                     .child(
                         h_flex()
