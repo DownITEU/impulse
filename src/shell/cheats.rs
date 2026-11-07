@@ -184,7 +184,9 @@ impl Page {
             (false, true) => TEXT_2,
             (false, false) => DIM,
         };
+        // GPUI repaints a hover style on its own only for an element with an id.
         h_flex()
+            .id(("cheat", index))
             .h(px(42.))
             .flex_none()
             .px(px(14.))
@@ -252,11 +254,13 @@ impl Page {
                                 }
                                 cx.notify();
                             }))
-                            .child(match pinned {
-                                true => icon(Icon::Pin, 12., accent),
-                                false => icon(Icon::Pin, 12., rgb(GHOST))
-                                    .group_hover("pin", |style| style.text_color(rgb(TEXT))),
-                            }),
+                            .child(
+                                icon(Icon::Pin, 12., if pinned { accent } else { rgb(GHOST) })
+                                    .id(("pin-icon", index))
+                                    .when(!pinned, |pin| {
+                                        pin.group_hover("pin", |style| style.text_color(rgb(TEXT)))
+                                    }),
+                            ),
                     ),
             )
             .child(

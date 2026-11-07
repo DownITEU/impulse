@@ -307,6 +307,7 @@ impl Page {
                         .bg(rgb(PANEL))
                         .children(options.into_iter().enumerate().map(|(at, option)| {
                             h_flex()
+                                .id(("option", at))
                                 .h(px(28.))
                                 .px(px(10.))
                                 .cursor_pointer()
