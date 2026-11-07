@@ -1,32 +1,17 @@
 //! Puts `tophat_service` into a running process and starts it, as Wand's auxiliary service does.
 //! x64 targets only: an x86 game needs the 32-bit service and its own `LoadLibraryW`.
 
-use std::{
-    ffi::c_void,
-    fs::OpenOptions,
-    io,
-    mem::transmute,
-    os::windows::{ffi::OsStrExt, fs::OpenOptionsExt},
-    path::{self, Path},
-    ptr, thread,
-    time::Duration,
-};
+use std::{ffi::c_void, io, mem::transmute, os::windows::ffi::OsStrExt, ptr};
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::Serialize;
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, ERROR_BAD_LENGTH, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0},
-    Storage::FileSystem::FILE_SHARE_READ,
+    Foundation::{CloseHandle, HANDLE, HMODULE, WAIT_OBJECT_0},
     System::{
-        Diagnostics::{
-            Debug::WriteProcessMemory,
-            ToolHelp::{
-                CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,
-                TH32CS_SNAPMODULE32,
-            },
-        },
+        Diagnostics::Debug::WriteProcessMemory,
         LibraryLoader::{GetModuleHandleW, GetProcAddress},
-        Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx},
+        Memory::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx},
+        ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_ALL},
         Threading::{
             CreateRemoteThread, IsWow64Process, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
             PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
@@ -34,12 +19,11 @@ use windows_sys::Win32::{
     },
 };
 
-use super::trust;
+use super::image::Image;
 use crate::pe;
 
 const START_EXPORT: &str = "StartTophatServiceThread";
 const LOAD_WITHIN_MS: u32 = 30_000;
-const SNAPSHOT_TRIES: u32 = 20;
 
 type ThreadStart = unsafe extern "system" fn(*mut c_void) -> u32;
 
@@ -54,35 +38,33 @@ pub struct Startup<'a> {
 
 /// Loads `service` into `pid` and starts its thread. Returns once the thread is running; the
 /// service registers with the server on its own. The DLL stays mapped for the game's lifetime.
-pub fn tophat(pid: u32, service: &Path, startup: &Startup) -> Result<()> {
-    // Absolute, so the target cannot resolve it against its own working directory.
-    let service = path::absolute(service)?;
-    // Held until the load is done: it denies writes and deletes, so the file checked is the file loaded.
-    let _locked = OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ)
-        .open(&service)
-        .with_context(|| format!("cannot open {}", service.display()))?;
-    trust::check(&service)?;
-    let image = pe::header(&service).context("the service is not a PE image")?;
-    ensure!(image.machine == pe::X64, "only the x64 service is supported");
-    let start = pe::export(&service, START_EXPORT).with_context(|| format!("the service has no {START_EXPORT}"))?;
-
+pub fn tophat(pid: u32, service: &Image, startup: &Startup) -> Result<()> {
+    let start = pe::export(service.path(), START_EXPORT).with_context(|| format!("the service has no {START_EXPORT}"))?;
     let process = open(pid)?;
     let mut wow = 0;
     // SAFETY: `process` is a live handle and `wow` outlives the call.
     ensure!(unsafe { IsWow64Process(process.0, &mut wow) } != 0, "cannot query process {pid}: {}", io::Error::last_os_error());
     ensure!(wow == 0, "process {pid} is 32-bit; only x64 games are supported");
 
-    let wide: Vec<u8> = service.as_os_str().encode_wide().chain([0]).flat_map(u16::to_le_bytes).collect();
-    wait(&spawn(&process, load_library()?, write(&process, &wide)?)?)?;
+    let wide: Vec<u8> = service.path().as_os_str().encode_wide().chain([0]).flat_map(u16::to_le_bytes).collect();
+    let path = write(&process, &wide)?;
+    let loader = spawn(&process, load_library()?, path.ptr)?;
+    if let Err(err) = wait(&loader) {
+        // The loader may yet read the path and open the file, so both must outlive this call.
+        path.leak();
+        service.keep_locked();
+        return Err(err);
+    }
+    drop(path);
     // The thread's exit code is only the low half of the module handle, so the module list decides.
-    let base = module_base(pid, &service)?;
+    let base = module_base(&process, pid, service)?;
 
     let mut json = serde_json::to_vec(startup)?;
     json.push(0);
-    // The thread reads this after we return, so the memory is never freed.
-    spawn(&process, start_address(base, start), write(&process, &json)?)?;
+    let arg = write(&process, &json)?;
+    spawn(&process, start_address(base, start), arg.ptr)?;
+    // The thread reads this after we return.
+    arg.leak();
     Ok(())
 }
 
@@ -96,6 +78,25 @@ impl Drop for Handle {
     }
 }
 
+/// Memory allocated in the target, released on drop unless `leak`ed.
+struct Remote<'a> {
+    process: &'a Handle,
+    ptr: *mut c_void,
+}
+
+impl Remote<'_> {
+    fn leak(self) {
+        std::mem::forget(self);
+    }
+}
+
+impl Drop for Remote<'_> {
+    fn drop(&mut self) {
+        // SAFETY: `ptr` came from `VirtualAllocEx` on this process and is released once.
+        unsafe { VirtualFreeEx(self.process.0, self.ptr, 0, MEM_RELEASE) };
+    }
+}
+
 fn open(pid: u32) -> Result<Handle> {
     let access = PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ;
     // SAFETY: plain Win32 call; the handle is owned by the returned guard.
@@ -105,16 +106,16 @@ fn open(pid: u32) -> Result<Handle> {
 }
 
 /// Copies `data` into fresh memory of the process.
-fn write(process: &Handle, data: &[u8]) -> Result<*mut c_void> {
-    // SAFETY: allocates in the target; the buffer is valid for `data.len()` bytes during the write.
-    unsafe {
-        let remote = VirtualAllocEx(process.0, ptr::null(), data.len(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-        let mut written = 0;
-        let copied = !remote.is_null()
-            && WriteProcessMemory(process.0, remote, data.as_ptr().cast(), data.len(), &mut written) != 0;
-        ensure!(copied && written == data.len(), "cannot write to the process: {}", io::Error::last_os_error());
-        Ok(remote)
-    }
+fn write<'a>(process: &'a Handle, data: &[u8]) -> Result<Remote<'a>> {
+    // SAFETY: plain Win32 call; a null result is checked below.
+    let ptr = unsafe { VirtualAllocEx(process.0, ptr::null(), data.len(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
+    ensure!(!ptr.is_null(), "cannot allocate in the process: {}", io::Error::last_os_error());
+    let remote = Remote { process, ptr };
+    let mut written = 0;
+    // SAFETY: the buffer is valid for `data.len()` bytes and the target block was sized for it.
+    let copied = unsafe { WriteProcessMemory(process.0, ptr, data.as_ptr().cast(), data.len(), &mut written) } != 0;
+    ensure!(copied && written == data.len(), "cannot write to the process: {}", io::Error::last_os_error());
+    Ok(remote)
 }
 
 /// Starts a thread at `start(arg)` in the process; it runs on if the handle is dropped.
@@ -148,41 +149,36 @@ fn start_address(base: usize, rva: u32) -> ThreadStart {
     unsafe { transmute::<usize, ThreadStart>(base + rva as usize) }
 }
 
-/// The load address of the module loaded from exactly `path`: another copy of the same
-/// file name from elsewhere is a different module.
-fn module_base(pid: u32, path: &Path) -> Result<usize> {
-    let snapshot = module_snapshot(pid)?;
-    let wanted = path.to_string_lossy();
-    let mut entry = MODULEENTRY32W {
-        dwSize: size_of::<MODULEENTRY32W>() as u32,
-        ..Default::default()
-    };
-    // SAFETY: `entry` is sized as the API requires and outlives the calls.
-    let mut more = unsafe { Module32FirstW(snapshot.0, &mut entry) };
-    while more != 0 {
-        let len = entry.szExePath.iter().position(|unit| *unit == 0).unwrap_or(entry.szExePath.len());
-        if String::from_utf16_lossy(&entry.szExePath[..len]).eq_ignore_ascii_case(&wanted) {
-            return Ok(entry.modBaseAddr as usize);
+/// The load address of the module loaded from exactly the image's path: another copy of the
+/// same file name from elsewhere is a different module. Not Toolhelp: its snapshot fails
+/// outright when any module of the target has a path beyond MAX_PATH.
+fn module_base(process: &Handle, pid: u32, image: &Image) -> Result<usize> {
+    let wanted = image.path().to_string_lossy();
+    let mut modules: Vec<HMODULE> = vec![ptr::null_mut(); 1024];
+    loop {
+        let mut needed = 0;
+        // SAFETY: `modules` is valid for the byte length passed and `needed` outlives the call.
+        let listed = unsafe {
+            EnumProcessModulesEx(process.0, modules.as_mut_ptr(), (modules.len() * size_of::<HMODULE>()) as u32, &mut needed, LIST_MODULES_ALL)
+        };
+        ensure!(listed != 0, "cannot list the modules of process {pid}: {}", io::Error::last_os_error());
+        let count = needed as usize / size_of::<HMODULE>();
+        if count <= modules.len() {
+            modules.truncate(count);
+            break;
         }
-        // SAFETY: as above.
-        more = unsafe { Module32NextW(snapshot.0, &mut entry) };
+        // More modules loaded since: the room needed, with some to spare.
+        modules.resize(count + 16, ptr::null_mut());
     }
-    bail!("{} did not load in process {pid}: a dependency may be missing", path.display())
-}
-
-fn module_snapshot(pid: u32) -> Result<Handle> {
-    for _ in 0..SNAPSHOT_TRIES {
-        // SAFETY: plain Win32 call; the handle is owned by the returned guard.
-        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) };
-        if snapshot != INVALID_HANDLE_VALUE {
-            return Ok(Handle(snapshot));
+    let mut name = vec![0u16; 32_768];
+    for module in modules {
+        // SAFETY: `name` is valid for the length passed.
+        let len = unsafe { GetModuleFileNameExW(process.0, module, name.as_mut_ptr(), name.len() as u32) } as usize;
+        if len != 0 && String::from_utf16_lossy(&name[..len]).eq_ignore_ascii_case(&wanted) {
+            return Ok(module as usize);
         }
-        let err = io::Error::last_os_error();
-        // The target loaded or unloaded a module while the list was copied; asking again works.
-        ensure!(err.raw_os_error() == Some(ERROR_BAD_LENGTH as i32), "cannot list the modules of process {pid}: {err}");
-        thread::sleep(Duration::from_millis(10));
     }
-    bail!("the modules of process {pid} kept changing")
+    bail!("{} did not load in process {pid}: a dependency may be missing", image.path().display())
 }
 
 #[cfg(test)]
@@ -196,7 +192,7 @@ mod tests {
     };
 
     use futures::{StreamExt, executor::block_on};
-    use tokio::runtime::Handle;
+    use tokio::runtime::Handle as Runtime;
 
     use super::{
         super::tophat::{Server, Session},
@@ -211,11 +207,11 @@ mod tests {
     }
 
     #[test]
-    fn an_unsigned_image_never_reaches_a_process() {
-        let dll = PathBuf::from(r"C:\Windows\System32\kernel32.dll");
-        // Microsoft's, not WeMod's. The pid is bogus: the gate must refuse before any process is opened.
-        let err = tophat(u32::MAX, &dll, &Startup { wand_port: 1, client_id: "c", trainer_session_id: "s" }).unwrap_err();
-        assert!(err.to_string().contains("not by WeMod LLC"), "{err}");
+    fn an_image_without_the_start_routine_is_refused_before_a_process_is_opened() {
+        let image = Image::unchecked(r"C:\Windows\System32\kernel32.dll");
+        let startup = Startup { wand_port: 1, client_id: "c", trainer_session_id: "s" };
+        // kernel32 exports no start routine, and the pid is bogus: only the first check can be what fails.
+        assert!(tophat(u32::MAX, &image, &startup).unwrap_err().to_string().contains(START_EXPORT));
     }
 
     fn installed_service() -> Option<PathBuf> {
@@ -227,7 +223,7 @@ mod tests {
     }
 
     /// Waits for `work` from this thread, with the timer on the runtime like the app's callers.
-    fn bounded<T: Send + 'static>(runtime: &Handle, secs: u64, work: impl Future<Output = T> + Send + 'static) -> Result<T> {
+    fn bounded<T: Send + 'static>(runtime: &Runtime, secs: u64, work: impl Future<Output = T> + Send + 'static) -> Result<T> {
         let timed = runtime.spawn(async move { tokio::time::timeout(Duration::from_secs(secs), work).await });
         block_on(timed)?.context("timed out")
     }
@@ -236,7 +232,7 @@ mod tests {
     #[test]
     #[ignore = "injects the installed tophat_service into a throwaway process"]
     fn the_injected_service_dials_in_and_the_session_ends_cleanly() {
-        let service = installed_service().expect("a Wand install with tophat_service_x64.dll");
+        let service = Image::open(&installed_service().expect("a Wand install with tophat_service_x64.dll")).unwrap();
         let server = Server::start().unwrap();
         let client_id = uuid::Uuid::new_v4().to_string();
         let waiting = server.expect(&client_id);

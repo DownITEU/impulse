@@ -42,6 +42,8 @@ const MAX_MESSAGE: usize = 16 << 20;
 const REGISTER_MAX: usize = 4 << 10;
 const REGISTER_WITHIN: Duration = Duration::from_secs(30);
 const MAX_STREAMS: u32 = 8;
+// A write blocked on the service's flow-control window cannot see the session close, so it is bounded.
+const WRITE_STALL: Duration = Duration::from_secs(30);
 
 const OK: u16 = 0;
 const CANCELLED: u16 = 1;
@@ -207,8 +209,10 @@ async fn read_loop(mut inbound: Inbound, to_consumer: UnboundedSender<Vec<u8>>) 
 
 async fn write_loop(send: &mut SendStream<Bytes>, mut from_consumer: UnboundedReceiver<Vec<u8>>) {
     while let Some(message) = from_consumer.next().await {
-        if let Err(err) = write(send, frame(&message)).await {
-            return log::debug!("tophat write: {err}");
+        match tokio::time::timeout(WRITE_STALL, write(send, frame(&message))).await {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => return log::debug!("tophat write: {err}"),
+            Err(_) => return log::debug!("tophat write: the service stopped reading"),
         }
     }
 }

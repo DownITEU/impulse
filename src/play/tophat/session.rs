@@ -4,11 +4,10 @@
 use std::{
     collections::HashMap,
     future::Future,
-    path::Path,
     pin::pin,
     sync::{
         Arc, Mutex, MutexGuard,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -21,6 +20,7 @@ use futures::{
         oneshot,
     },
     future::{self, Either},
+    lock::Mutex as AsyncMutex,
 };
 use serde_json::{Value, json};
 use tokio::{
@@ -33,6 +33,10 @@ use super::{
     proto::{self, Event, Incoming},
     server::Channel,
 };
+use crate::play::image::Image;
+
+#[cfg(test)]
+mod tests;
 
 const PLUGIN: &str = "trainerlib";
 // The service gets Wand's timings: a beat every 5 s, 120 s to answer the first, 60 s after.
@@ -67,7 +71,7 @@ pub enum Outcome {
 pub struct Run<'a> {
     pub process_id: u32,
     pub game_version: u32,
-    pub trainer: &'a Path,
+    pub trainer: Image,
     pub variables: &'a [String],
 }
 
@@ -76,6 +80,12 @@ pub struct Session {
     runtime: Handle,
     phase: watch::Receiver<Phase>,
     plugin: Mutex<Option<u64>>,
+    started: AtomicBool,
+    // The DLLs handed to the service stay locked for the session's life, so a cancelled or
+    // timed-out `start` cannot unlock a file the service is still opening.
+    held: Mutex<Vec<Image>>,
+    // One teardown at a time: a second `stop` must not close the stream under the first.
+    teardown: AsyncMutex<()>,
 }
 
 #[derive(Default)]
@@ -116,6 +126,9 @@ impl Session {
             runtime,
             phase: watching,
             plugin: Mutex::new(None),
+            started: AtomicBool::new(false),
+            held: Mutex::default(),
+            teardown: AsyncMutex::new(()),
         };
         (session, events)
     }
@@ -124,20 +137,38 @@ impl Session {
         *self.phase.borrow()
     }
 
-    /// Loads the trainer plugin, runs the mod and waits until the trainer reports ready.
-    pub async fn start(&self, plugin: &Path, run: &Run<'_>) -> Result<()> {
-        let path = plugin.to_str().ok_or_else(|| anyhow!("plugin path is not UTF-8"))?;
-        let trainer = run.trainer.to_str().ok_or_else(|| anyhow!("trainer path is not UTF-8"))?;
-        let reply = self
-            .call("LoadPlugin", &proto::load_plugin(PLUGIN, path), LOAD_PLUGIN_WITHIN)
-            .await?;
-        *self.plugin.lock().unwrap() = Some(proto::plugin_handle(&reply).map_err(|err| anyhow!("LoadPlugin: {err}"))?);
+    /// Loads the trainer plugin, runs the mod and waits until the trainer reports ready. Once per
+    /// session: a failure rolls the session back and closes it, so a retry needs a new one. To
+    /// cancel, drop the session; the service tears down by itself when its stream closes.
+    pub async fn start(&self, plugin: Image, run: Run<'_>) -> Result<()> {
+        let plugin_path = plugin.path().to_str().ok_or_else(|| anyhow!("plugin path is not UTF-8"))?.to_owned();
+        let trainer = run.trainer.path().to_str().ok_or_else(|| anyhow!("trainer path is not UTF-8"))?;
         let params = json!({
             "processId": run.process_id,
             "gameVersion": run.game_version,
             "trainerDllPath": trainer,
             "initialVars": run.variables,
         });
+        ensure!(!self.started.swap(true, Ordering::Relaxed), "the session was already started");
+        // Before the first await, so cancelling this future cannot drop them.
+        self.held.lock().unwrap().extend([plugin, run.trainer]);
+        let started = self.load_and_run(&plugin_path, params).await;
+        if started.is_err() {
+            if self.plugin.lock().unwrap().is_some() {
+                let _ = self.stop().await;
+            } else {
+                // Nothing known to unload, so there is no teardown to ask for.
+                self.shared.close();
+            }
+        }
+        started
+    }
+
+    async fn load_and_run(&self, plugin_path: &str, params: Value) -> Result<()> {
+        let reply = self
+            .call("LoadPlugin", &proto::load_plugin(PLUGIN, plugin_path), LOAD_PLUGIN_WITHIN)
+            .await?;
+        *self.plugin.lock().unwrap() = Some(proto::plugin_handle(&reply).map_err(|err| anyhow!("LoadPlugin: {err}"))?);
         self.execute("trainer_run_mod_json", Some(params), COMMAND_WITHIN).await?;
         let mut phase = self.phase.clone();
         let Some(settled) = self.within(READY_WITHIN, phase.wait_for(|phase| *phase != Phase::Starting)).await
@@ -170,8 +201,14 @@ impl Session {
     }
 
     /// Wand's order: stop the mod, unload the plugin, say goodbye, then drop the stream. Every
-    /// step runs even if an earlier one failed; the first error is returned.
+    /// step runs even if an earlier one failed; the first error is returned. Cancelling it
+    /// closes the session, so the service tears down by itself.
     pub async fn stop(&self) -> Result<()> {
+        let _turn = self.teardown.lock().await;
+        if self.phase() == Phase::Closed {
+            return Ok(());
+        }
+        let _close = Forget(|| self.shared.close());
         let stopped = self.execute("trainer_stop_mod", None, STOP_WITHIN).await;
         let handle = self.plugin.lock().unwrap().take();
         let unloaded = match handle {
@@ -184,7 +221,6 @@ impl Session {
         };
         // The service's answer to this one is not needed.
         let _ = self.call("Disconnect", &proto::disconnect(), TEARDOWN_WITHIN).await;
-        self.shared.close();
         stopped.and(unloaded)
     }
 
@@ -359,303 +395,3 @@ async fn drive(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use futures::{channel::mpsc::unbounded, executor::block_on};
-
-    use super::{
-        super::{
-            Server,
-            proto::from_service,
-            wire::{Field, Table, table},
-        },
-        *,
-    };
-
-    // Generous: the paused-clock tests wait through a heartbeat interval.
-    async fn soon<T>(work: impl Future<Output = T>) -> T {
-        tokio::time::timeout(Duration::from_secs(30), work).await.expect("timed out")
-    }
-
-    /// The service's end of a session.
-    struct Fake {
-        to_session: UnboundedSender<Vec<u8>>,
-        from_session: UnboundedReceiver<Vec<u8>>,
-    }
-
-    struct Request {
-        kind: String,
-        seq: u64,
-        payload: Vec<u8>,
-    }
-
-    fn link() -> (Channel, Fake) {
-        let (to_session, incoming) = unbounded();
-        let (outgoing, from_session) = unbounded();
-        (Channel { incoming, outgoing }, Fake { to_session, from_session })
-    }
-
-    impl Fake {
-        async fn request(&mut self) -> Request {
-            let raw = soon(self.from_session.next()).await.expect("session closed");
-            let message = Table::root(&raw).unwrap();
-            assert_eq!((message.text(4), message.bool(5)), ("server".to_owned(), true));
-            Request {
-                kind: message.text(0),
-                seq: message.u64(2),
-                payload: message.bytes(1).to_vec(),
-            }
-        }
-
-        /// A command request: its name and JSON parameters.
-        async fn command(&mut self) -> (u64, String, Value) {
-            let request = self.request().await;
-            assert_eq!(request.kind, "ExecuteCommand");
-            let command = Table::root(&request.payload).unwrap();
-            let json = command.bytes(1);
-            let params = match json.split_last() {
-                Some((0, json)) => serde_json::from_slice(json).unwrap(),
-                _ => Value::Null,
-            };
-            (request.seq, command.text(0), params)
-        }
-
-        fn reply(&self, seq: u64, payload: Vec<u8>) {
-            self.to_session.unbounded_send(from_service("command_response", &payload, seq)).unwrap();
-        }
-
-        fn ok(&self, seq: u64) {
-            self.reply(seq, table(&[(0, Field::Bool(true)), (6, Field::U8(0))]));
-        }
-
-        fn event(&self, kind: &str, payload: &[u8]) {
-            self.to_session.unbounded_send(from_service(kind, payload, 0)).unwrap();
-        }
-    }
-
-    const PLUGIN_DLL: &str = r"C:\wand\Plugin.dll";
-    const TRAINER_DLL: &str = r"C:\t\Trainer_1.dll";
-
-    async fn started() -> (Session, Fake, Receiver<Event>) {
-        let (channel, mut fake) = link();
-        let (session, events) = Session::open(Handle::current(), channel, "cid");
-        let variables = ["hp".to_owned()];
-        let run = Run { process_id: 1, game_version: 2, trainer: Path::new(TRAINER_DLL), variables: &variables };
-        let service = async {
-            let load = fake.request().await;
-            fake.reply(load.seq, table(&[(0, Field::Bool(true)), (2, Field::U64(7))]));
-            let (seq, ..) = fake.command().await;
-            fake.ok(seq);
-            fake.event("trainer_ready", &[]);
-        };
-        let (started, ()) = tokio::join!(session.start(Path::new(PLUGIN_DLL), &run), service);
-        started.unwrap();
-        (session, fake, events)
-    }
-
-    #[tokio::test]
-    async fn start_loads_the_plugin_runs_the_mod_and_waits_for_ready() {
-        let (channel, mut fake) = link();
-        let (session, _events) = Session::open(Handle::current(), channel, "cid");
-        let variables = ["hp".to_owned(), "mp".to_owned()];
-        let run = Run { process_id: 4242, game_version: 7, trainer: Path::new(TRAINER_DLL), variables: &variables };
-        let service = async {
-            let load = fake.request().await;
-            assert_eq!(load.kind, "LoadPlugin");
-            let load_args = Table::root(&load.payload).unwrap();
-            assert_eq!((load_args.text(0), load_args.text(1)), ("trainerlib".to_owned(), PLUGIN_DLL.to_owned()));
-            fake.reply(load.seq, table(&[(0, Field::Bool(true)), (2, Field::U64(7))]));
-
-            let (seq, name, params) = fake.command().await;
-            assert_eq!(name, "trainer_run_mod_json");
-            let expected = json!({"processId": 4242, "gameVersion": 7, "trainerDllPath": TRAINER_DLL, "initialVars": ["hp", "mp"]});
-            assert_eq!(params, expected);
-            fake.ok(seq);
-            fake.event("trainer_ready", &[]);
-        };
-        let (started, ()) = tokio::join!(session.start(Path::new(PLUGIN_DLL), &run), service);
-        started.unwrap();
-        assert_eq!(session.phase(), Phase::Ready);
-    }
-
-    #[tokio::test]
-    async fn a_refused_plugin_reports_the_services_error() {
-        let (channel, mut fake) = link();
-        let (session, _events) = Session::open(Handle::current(), channel, "cid");
-        let run = Run { process_id: 1, game_version: 2, trainer: Path::new(TRAINER_DLL), variables: &[] };
-        let service = async {
-            let load = fake.request().await;
-            fake.reply(load.seq, table(&[(0, Field::Bool(false)), (1, Field::Str("no such plugin"))]));
-        };
-        let (started, ()) = tokio::join!(session.start(Path::new(PLUGIN_DLL), &run), service);
-        assert!(started.unwrap_err().to_string().contains("no such plugin"));
-    }
-
-    #[tokio::test]
-    async fn set_value_returns_the_trainers_verdict() {
-        let (session, mut fake, _events) = started().await;
-        let service = async {
-            let (seq, name, params) = fake.command().await;
-            assert_eq!(name, "trainer_push_client_req_from_json");
-            assert_eq!((&params["name"], &params["value"]), (&json!("hp"), &json!(1.0)));
-            fake.ok(seq);
-            let mut verdict = vec![0u8; 24];
-            verdict[8..16].copy_from_slice(&params["requestId"].as_u64().unwrap().to_le_bytes());
-            verdict[16..].copy_from_slice(&1u64.to_le_bytes());
-            fake.event("trainer_value_response", &verdict);
-        };
-        let (outcome, ()) = tokio::join!(session.set_value("hp", 1.0), service);
-        assert_eq!(outcome.unwrap(), Outcome::Changed);
-    }
-
-    #[tokio::test]
-    async fn the_services_events_reach_the_consumer() {
-        let (channel, fake) = link();
-        let (_session, mut events) = Session::open(Handle::current(), channel, "cid");
-        fake.event("trainer_status", b"loading\0");
-        fake.event("trainer_initializing", &[]);
-        fake.event("trainer_log", b"hello");
-        fake.event("something_new", &[]);
-        let mut seen = Vec::new();
-        for _ in 0..3 {
-            seen.push(soon(events.next()).await.unwrap());
-        }
-        assert_eq!(seen, [Event::Status("loading".into()), Event::Initializing, Event::Log("hello".into())]);
-    }
-
-    #[tokio::test]
-    async fn a_vanishing_service_fails_pending_calls_and_ends_events() {
-        let (channel, mut fake) = link();
-        let (session, mut events) = Session::open(Handle::current(), channel, "cid");
-        let service = async {
-            fake.request().await;
-            drop(fake);
-        };
-        let (outcome, ()) = tokio::join!(session.set_value("hp", 1.0), service);
-        assert!(outcome.unwrap_err().to_string().contains("closed"));
-        assert!(soon(events.next()).await.is_none());
-        assert_eq!(session.phase(), Phase::Closed);
-        assert!(session.set_value("hp", 1.0).await.is_err());
-    }
-
-    #[tokio::test]
-    async fn stop_follows_wands_order_and_closes_the_stream() {
-        let (session, mut fake, _events) = started().await;
-        let service = async {
-            let (seq, name, _) = fake.command().await;
-            assert_eq!(name, "trainer_stop_mod");
-            fake.ok(seq);
-            let unload = fake.request().await;
-            assert_eq!(unload.kind, "UnloadPlugin");
-            assert_eq!(Table::root(&unload.payload).unwrap().u64(0), 7);
-            fake.reply(unload.seq, table(&[(0, Field::Bool(true))]));
-            let goodbye = fake.request().await;
-            assert_eq!(goodbye.kind, "Disconnect");
-            fake.reply(goodbye.seq, table(&[]));
-            assert!(soon(fake.from_session.next()).await.is_none());
-        };
-        let (stopped, ()) = tokio::join!(session.stop(), service);
-        stopped.unwrap();
-        assert_eq!(session.phase(), Phase::Closed);
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn answered_heartbeats_keep_the_session_and_silence_ends_it() {
-        let (channel, mut fake) = link();
-        let (session, mut events) = Session::open(Handle::current(), channel, "cid");
-        for _ in 0..2 {
-            let beat = fake.request().await;
-            assert_eq!(beat.kind, "Heartbeat");
-            assert!(Table::root(&beat.payload).unwrap().u64(0) > 0);
-            fake.reply(beat.seq, table(&[(0, Field::Bool(true))]));
-        }
-        assert_eq!(session.phase(), Phase::Starting);
-        assert_eq!(fake.request().await.kind, "Heartbeat");
-        // Unanswered: the next ticks pass the 60 s limit and the session closes.
-        assert!(events.next().await.is_none());
-        assert_eq!(session.phase(), Phase::Closed);
-    }
-
-    #[tokio::test]
-    async fn a_cancelled_call_leaves_no_waiter_behind() {
-        let (channel, mut fake) = link();
-        let (session, _events) = Session::open(Handle::current(), channel, "cid");
-        {
-            let mut set = pin!(session.set_value("hp", 1.0));
-            tokio::select! {
-                _ = &mut set => panic!("finished without a reply"),
-                _ = fake.command() => {}
-            }
-            assert!(!session.shared.waiting().replies.is_empty());
-        }
-        let waiting = session.shared.waiting();
-        assert!(waiting.replies.is_empty() && waiting.verdicts.is_empty());
-    }
-
-    #[tokio::test]
-    async fn a_consumer_that_falls_behind_loses_events_instead_of_growing_memory() {
-        let (channel, fake) = link();
-        let (session, mut events) = Session::open(Handle::current(), channel, "cid");
-        for _ in 0..EVENT_BACKLOG * 2 {
-            fake.event("trainer_log", b"noise");
-        }
-        fake.event("trainer_ready", &[]);
-        // Ready comes last, so everything before it has been dispatched.
-        soon(async {
-            while session.phase() != Phase::Ready {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await;
-        let mut kept = 0;
-        while events.try_recv().is_ok() {
-            kept += 1;
-        }
-        assert!(kept > 0 && kept <= EVENT_BACKLOG + 1, "kept {kept}");
-    }
-
-    // The runtime is the server's, so calls come from threads (GPUI's) that have none.
-    #[test]
-    fn calls_work_from_a_thread_without_a_runtime() {
-        let server = Server::start().unwrap();
-        let (channel, mut fake) = link();
-        let (session, _events) = Session::open(server.runtime.clone(), channel, "cid");
-        let runtime = server.runtime.clone();
-        let service = std::thread::spawn(move || {
-            let _enter = runtime.enter();
-            let (seq, _, params) = block_on(fake.command());
-            fake.ok(seq);
-            let mut verdict = vec![0u8; 24];
-            verdict[8..16].copy_from_slice(&params["requestId"].as_u64().unwrap().to_le_bytes());
-            fake.event("trainer_value_response", &verdict);
-        });
-        assert_eq!(block_on(session.set_value("hp", 1.0)).unwrap(), Outcome::Set);
-        service.join().unwrap();
-    }
-
-    #[test]
-    fn dropping_the_server_closes_its_sessions() {
-        let server = Server::start().unwrap();
-        let (channel, _fake) = link();
-        let (session, _events) = Session::open(server.runtime.clone(), channel, "cid");
-        assert_eq!(session.phase(), Phase::Starting);
-        drop(server);
-        for _ in 0..100 {
-            if session.phase() == Phase::Closed {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        panic!("the session still reports {:?}", session.phase());
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn the_first_heartbeat_has_longer_to_be_answered() {
-        let (channel, mut fake) = link();
-        let (session, mut events) = Session::open(Handle::current(), channel, "cid");
-        assert_eq!(fake.request().await.kind, "Heartbeat");
-        tokio::time::sleep(Duration::from_secs(100)).await;
-        assert_eq!(session.phase(), Phase::Starting);
-        assert!(events.next().await.is_none());
-    }
-}
