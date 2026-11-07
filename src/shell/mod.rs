@@ -43,6 +43,7 @@ use widgets::{grid, mono, square};
 const SIDEBAR_WIDTH: f32 = 248.;
 // Below this pane width the map and session panels drop under the cheat list.
 const WIDE_PANE: f32 = 900.;
+const AMOUNT_DIGITS: usize = 6;
 
 pub fn init(cx: &mut App) {
     theme::init(cx);
@@ -108,7 +109,13 @@ impl Page {
             choices: HashMap::new(),
             overlay: hero::OVERLAYS[0],
             menu: None,
-            amount: cx.new(|cx| InputState::new(window, cx).default_value("999")),
+            amount: cx.new(|cx| {
+                InputState::new(window, cx)
+                    .validate(|text, _| {
+                        text.len() <= AMOUNT_DIGITS && text.bytes().all(|b| b.is_ascii_digit())
+                    })
+                    .default_value("999")
+            }),
         }
     }
 

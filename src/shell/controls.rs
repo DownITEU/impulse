@@ -99,6 +99,7 @@ impl Page {
                             .appearance(false)
                             .disabled(!running)
                             .px(px(8.))
+                            .text_center()
                             .font_family(MONO)
                             .text_size(px(12.5)),
                     ),
@@ -224,9 +225,10 @@ impl Page {
                         .occlude()
                         .absolute()
                         .top(relative(1.))
+                        // Spans the trigger, borders included.
+                        .left(px(-1.))
                         .right(px(-1.))
                         .mt(px(3.))
-                        .min_w(px(112.))
                         .py(px(4.))
                         .border_1()
                         .border_color(line(0.2))
