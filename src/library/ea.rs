@@ -41,7 +41,10 @@ fn match_folders(catalog: &Catalog, folders: &[PathBuf]) -> Vec<App> {
         .games
         .values()
         .filter_map(|game| {
-            let id = game.correlation_ids.iter().find(|id| id.starts_with("origin:"))?;
+            let id = game
+                .correlation_ids
+                .iter()
+                .find(|id| id.starts_with("origin:"))?;
             Some((id.as_str(), game.version_path.as_deref()?))
         })
         .collect();

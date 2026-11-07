@@ -36,7 +36,11 @@ mod tests {
         let exe = dir.join("game.exe");
         std::fs::write(&exe, &image).unwrap();
         assert_eq!(pe_timestamp(&exe), Some(1_793_791_052));
-        std::fs::write(&exe, b"not an image at all, just text padding to 64 bytes......").unwrap();
+        std::fs::write(
+            &exe,
+            b"not an image at all, just text padding to 64 bytes......",
+        )
+        .unwrap();
         assert_eq!(pe_timestamp(&exe), None);
         assert_eq!(pe_timestamp(&dir.join("missing.exe")), None);
         std::fs::remove_dir_all(&dir).unwrap();

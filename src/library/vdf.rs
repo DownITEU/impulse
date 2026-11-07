@@ -129,7 +129,11 @@ mod tests {
         let lf = r#""libraryfolders" { "0" { "path" "C:\\Program Files (x86)\\Steam" "apps" { "1203620" "123" } } "1" { "path" "D:\\Games" } }"#;
         let folders = parse(lf).unwrap();
         let folders = folders.get("libraryfolders").unwrap();
-        let paths: Vec<_> = folders.entries().iter().filter_map(|(_, f)| f.str("path")).collect();
+        let paths: Vec<_> = folders
+            .entries()
+            .iter()
+            .filter_map(|(_, f)| f.str("path"))
+            .collect();
         assert_eq!(paths, [r"C:\Program Files (x86)\Steam", r"D:\Games"]);
     }
 

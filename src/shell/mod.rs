@@ -1,148 +1,189 @@
+//! The combined page (`docs/design.md`). It renders mock data until the catalog,
+//! library and trainer are wired in.
+
+mod art;
+mod assets;
+mod boot;
+mod cheats;
+mod header;
+mod hero;
 mod library;
+mod mock;
+mod settings;
+mod side;
+mod sidebar;
+mod theme;
+mod widgets;
 
-use anyhow::Result;
+use std::{collections::HashSet, sync::Arc};
+
 use gpui_kit::{
-    AsyncApp, Context, IntoElement, ParentElement, Render, Styled, WeakEntity, Window,
-    component::{ActiveTheme, Disableable, button::Button, h_flex, v_flex},
-    div, px,
+    App, Context, Entity, IntoElement, Render, Window,
+    component::{
+        h_flex,
+        input::{InputEvent, InputState},
+        scroll::ScrollableElement,
+        v_flex,
+    },
+    div,
+    prelude::*,
+    px, rgb,
 };
 
-use std::path::PathBuf;
+pub use assets::Assets;
+pub use boot::run as boot;
+use mock::GAMES;
+use theme::*;
+use widgets::{grid, mono, square};
 
-use crate::{
-    session::{self, Source},
-    transport::Transport,
-};
+const SIDEBAR_WIDTH: f32 = 248.;
+// Below this pane width the map and session panels drop under the cheat list.
+const WIDE_PANE: f32 = 900.;
 
-const LABELS: [&str; 3] = ["Session", "API check", "Library"];
-const SESSION: usize = 0;
-const API_CHECK: usize = 1;
-const LIBRARY: usize = 2;
-
-enum Status {
-    Pending,
-    Running,
-    Ok(String),
-    Failed(String),
+pub fn init(cx: &mut App) {
+    theme::init(cx);
+    cx.set_http_client(Arc::new(art::CdnClient));
 }
 
-pub struct Shell {
-    transport: Result<Transport, String>,
-    data_dir: PathBuf,
-    steps: [Status; 3],
+#[derive(Clone, Copy, PartialEq)]
+enum Lead {
+    Number,
+    Thumbnail,
 }
 
-impl Shell {
-    pub fn new(transport: Result<Transport>, data_dir: PathBuf, cx: &mut Context<Self>) -> Self {
-        let mut shell = Self {
-            transport: transport.map_err(|e| format!("{e:#}")),
-            data_dir,
-            steps: [Status::Pending, Status::Pending, Status::Pending],
+pub struct Page {
+    accent: u32,
+    lead: Lead,
+    reduce_motion: bool,
+    settings: bool,
+    selected: usize,
+    running: Option<usize>,
+    favorites: HashSet<usize>,
+    enabled: HashSet<&'static str>,
+    pinned: HashSet<&'static str>,
+    // Folded sections, per game.
+    folded: HashSet<(usize, &'static str)>,
+    crit: i32,
+    game_filter: Entity<InputState>,
+    mod_filter: Entity<InputState>,
+}
+
+impl Page {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let mut filter = |placeholder: &'static str| {
+            let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+            cx.subscribe(&state, |_, _, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            })
+            .detach();
+            state
         };
-        shell.run(cx);
-        shell
-    }
-
-    fn run(&mut self, cx: &mut Context<Self>) {
-        self.steps = [Status::Pending, Status::Pending, Status::Running];
-        let dir = self.data_dir.clone();
-        cx.spawn(async move |this, cx| {
-            let scanned = blocking::unblock(move || library::scan(&dir)).await;
-            report(&this, cx, LIBRARY, scanned, Clone::clone);
-        })
-        .detach();
-        match self.transport.clone() {
-            Ok(t) => {
-                self.set(SESSION, Status::Running, cx);
-                let vault = self.data_dir.join("session.bin");
-                cx.spawn(async move |this, cx| drive(this, cx, t, vault).await)
-                    .detach();
-            }
-            Err(e) => self.set(SESSION, Status::Failed(e), cx),
+        Self {
+            game_filter: filter("filter"),
+            mod_filter: filter("filter mods"),
+            accent: ACCENTS[0].1,
+            lead: Lead::Number,
+            reduce_motion: false,
+            settings: false,
+            selected: 0,
+            running: Some(0),
+            favorites: HashSet::from([0]),
+            enabled: HashSet::from(["hp", "st", "dur", "craft"]),
+            pinned: HashSet::from(["hp", "st"]),
+            folded: HashSet::from([(0, "COMBAT"), (0, "TELEPORT")]),
+            crit: 0,
         }
     }
 
-    fn set(&mut self, step: usize, status: Status, cx: &mut Context<Self>) {
-        if let Status::Ok(text) | Status::Failed(text) = &status {
-            eprintln!("{}: {text}", LABELS[step]);
-        }
-        self.steps[step] = status;
-        cx.notify();
-    }
-}
-
-async fn drive(this: WeakEntity<Shell>, cx: &mut AsyncApp, t: Transport, vault: PathBuf) {
-    let connected = session::connect(&t, vault).await;
-    let Some((session, _)) = report(&this, cx, SESSION, connected, |(s, source)| {
-        let how = match source {
-            Source::Restored => "restored",
-            Source::Refreshed => "refreshed",
-            Source::Wand => "new from Wand",
+    fn pane(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let game = &GAMES[self.selected];
+        let running = self.running == Some(self.selected);
+        let wide = window.viewport_size().width >= px(SIDEBAR_WIDTH + WIDE_PANE);
+        let side = match wide {
+            true => v_flex().flex_none(),
+            false => h_flex().items_start(),
         };
-        let days = (s.expires_in().as_secs() + 43_200) / 86_400;
-        format!("{how}, expires in {days} d")
-    }) else {
-        return;
-    };
-    let _ = this.update(cx, |shell, cx| shell.set(API_CHECK, Status::Running, cx));
-    let trainers = session.check(&t).await;
-    report(&this, cx, API_CHECK, trainers, |n| {
-        format!("Enshrouded trainers: {n}")
-    });
-}
-
-fn report<T>(
-    this: &WeakEntity<Shell>,
-    cx: &mut AsyncApp,
-    step: usize,
-    result: Result<T>,
-    detail: impl FnOnce(&T) -> String,
-) -> Option<T> {
-    let (status, value) = match result {
-        Ok(v) => (Status::Ok(detail(&v)), Some(v)),
-        Err(e) => (Status::Failed(format!("{e:#}")), None),
-    };
-    let _ = this.update(cx, |shell, cx| shell.set(step, status, cx));
-    value
-}
-
-impl Render for Shell {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (bg, fg, muted, ok, bad) = (
-            theme.background,
-            theme.foreground,
-            theme.muted_foreground,
-            theme.success,
-            theme.danger,
-        );
-        let failed = self.steps.iter().any(|s| matches!(s, Status::Failed(_)));
         v_flex()
-            .size_full()
-            .p_4()
-            .gap_3()
-            .bg(bg)
-            .text_color(fg)
-            .children(LABELS.iter().zip(&self.steps).map(|(label, status)| {
-                let (text, color) = match status {
-                    Status::Pending => ("pending", muted),
-                    Status::Running => ("running", fg),
-                    Status::Ok(text) => (text.as_str(), ok),
-                    Status::Failed(text) => (text.as_str(), bad),
-                };
-                h_flex()
-                    .gap_3()
-                    .items_start()
-                    .child(div().w(px(150.)).flex_none().child(*label))
-                    .child(div().flex_1().text_color(color).child(text.to_owned()))
-            }))
+            .id("pane")
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .child(self.hero(game, cx))
             .child(
-                div().child(
-                    Button::new("retry")
-                        .label("Retry")
-                        .disabled(!failed)
-                        .on_click(cx.listener(|shell, _, _, cx| shell.run(cx))),
-                ),
+                div()
+                    .flex()
+                    .when(!wide, |body| body.flex_col())
+                    .when(wide, |body| body.items_start())
+                    .gap(px(20.))
+                    .px(px(24.))
+                    .pt(px(20.))
+                    .pb(px(28.))
+                    .child(self.cheats(game, cx))
+                    .child(
+                        side.gap(px(16.))
+                            .child(self.map_panel(game, running))
+                            .child(
+                                div()
+                                    .when(!wide, |panel| panel.flex_1())
+                                    .child(self.session_panel(game, running)),
+                            ),
+                    ),
             )
+            .overflow_y_scrollbar()
+    }
+
+    fn status_bar(&self) -> impl IntoElement {
+        let accent = rgb(self.accent);
+        let total = self.running.map_or(0, |index| GAMES[index].mods);
+        h_flex()
+            .h(px(30.))
+            .flex_none()
+            .px(px(20.))
+            .gap(px(22.))
+            .border_t_1()
+            .border_color(line(0.09))
+            .bg(rgb(STATUSBAR))
+            .text_color(rgb(DIM))
+            .map(|bar| match self.running {
+                Some(_) => bar
+                    .child(
+                        h_flex()
+                            .gap(px(8.))
+                            .child(square(7., accent))
+                            .child(mono("ATTACHED", 11.).text_color(accent)),
+                    )
+                    .child(mono("enshrouded.exe", 11.))
+                    .child(mono(format!("{}/{total} ACTIVE", self.active()), 11.)),
+                None => bar.child(mono("IDLE", 11.)),
+            })
+            .child(div().flex_1())
+            .child(mono("HOTKEYS ON", 11.))
+            .child(mono("IMPULSE 0.1", 11.).text_color(rgb(GHOST)))
+    }
+}
+
+impl Render for Page {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .relative()
+            .size_full()
+            .bg(rgb(BG))
+            .text_color(rgb(TEXT))
+            .font_family(UI)
+            .text_size(px(14.))
+            .child(grid(32., line(0.025)))
+            .child(self.header(window, cx))
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_h_0()
+                    .items_start()
+                    .child(self.sidebar(cx))
+                    .child(self.pane(window, cx)),
+            )
+            .child(self.status_bar())
+            .when(self.settings, |page| page.child(self.settings_modal(cx)))
     }
 }

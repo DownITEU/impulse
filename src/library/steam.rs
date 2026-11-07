@@ -28,8 +28,20 @@ pub fn apps() -> Vec<App> {
 fn install_dir() -> Option<PathBuf> {
     let program_files = env::var_os("ProgramFiles(x86)").map(|p| Path::new(&p).join("Steam"));
     [
-        value(LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath", View::Wow32).map(PathBuf::from),
-        value(CURRENT_USER, r"Software\Valve\Steam", "SteamPath", View::Wow64).map(PathBuf::from),
+        value(
+            LOCAL_MACHINE,
+            r"SOFTWARE\Valve\Steam",
+            "InstallPath",
+            View::Wow32,
+        )
+        .map(PathBuf::from),
+        value(
+            CURRENT_USER,
+            r"Software\Valve\Steam",
+            "SteamPath",
+            View::Wow64,
+        )
+        .map(PathBuf::from),
         program_files,
     ]
     .into_iter()

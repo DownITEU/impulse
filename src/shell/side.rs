@@ -1,0 +1,197 @@
+use gpui_kit::{
+    Div, FontWeight, IntoElement,
+    component::{h_flex, v_flex},
+    div,
+    prelude::*,
+    px, relative, rgb,
+};
+
+use super::{
+    Page,
+    assets::Icon,
+    mock::{Game, MODS, Trainer},
+    theme::*,
+    widgets::{grid, icon, icon_button, mono, square, tracked},
+};
+
+const MAP_WIDTH: f32 = 280.;
+// The preview keeps the mockup's 300:220 ratio inside the 1 px borders.
+const MAP_HEIGHT: f32 = (MAP_WIDTH - 2.) * 220. / 300.;
+
+impl Page {
+    pub(super) fn active(&self) -> usize {
+        MODS.iter().filter(|cheat| self.is_live(cheat)).count()
+    }
+
+    pub(super) fn map_panel(&self, game: &Game, running: bool) -> impl IntoElement {
+        let accent = rgb(self.accent);
+        let bracket = || div().absolute().size(px(10.)).border_color(accent);
+        let layer = |glyph: Icon, color| {
+            icon(glyph, 0., color)
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+        };
+        v_flex()
+            .relative()
+            .w(px(MAP_WIDTH))
+            .flex_none()
+            .border_1()
+            .border_color(line(0.1))
+            .bg(rgb(PANEL))
+            .child(
+                h_flex()
+                    .h(px(34.))
+                    .pl(px(12.))
+                    .pr(px(6.))
+                    .justify_between()
+                    .border_b_1()
+                    .border_color(line(0.07))
+                    .child(
+                        h_flex()
+                            .gap(px(6.))
+                            .text_color(rgb(MUTED))
+                            .child(mono("MAP", 10.5))
+                            .child(mono("/", 10.5).text_color(rgb(GHOST)))
+                            .child(mono(game.map.unwrap_or("-"), 10.5)),
+                    )
+                    .child(icon_button("map", Icon::Expand, 26., 13.)),
+            )
+            .child(match game.map {
+                Some(_) => div()
+                    .relative()
+                    .h(px(MAP_HEIGHT))
+                    .child(grid(20., line(0.035)))
+                    .child(layer(Icon::MapTerrain, rgb(TEXT)))
+                    .child(layer(Icon::MapPins, accent))
+                    .when(running, |map| {
+                        map.child(
+                            icon(Icon::Player, 34., accent)
+                                .absolute()
+                                .left(relative(0.32))
+                                .top(relative(0.69))
+                                .ml(px(-17.))
+                                .mt(px(-17.)),
+                        )
+                        .child(
+                            mono("X 1204 · Y 388", 10.5)
+                                .absolute()
+                                .left(px(10.))
+                                .bottom(px(10.))
+                                .px(px(7.))
+                                .py(px(3.))
+                                .border_1()
+                                .border_color(alpha(self.accent, 0.4))
+                                .bg(alpha(BG, 0.85))
+                                .text_color(accent),
+                        )
+                    }),
+                None => div()
+                    .h(px(MAP_HEIGHT))
+                    .p(px(16.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_center()
+                    .text_color(rgb(FAINT))
+                    .child(mono("NO INTERACTIVE MAP FOR THIS GAME", 11.)),
+            })
+            .child(
+                bracket()
+                    .left(px(-1.))
+                    .top(px(-1.))
+                    .border_l_2()
+                    .border_t_2(),
+            )
+            .child(
+                bracket()
+                    .right(px(-1.))
+                    .top(px(-1.))
+                    .border_r_2()
+                    .border_t_2(),
+            )
+            .child(
+                bracket()
+                    .left(px(-1.))
+                    .bottom(px(-1.))
+                    .border_l_2()
+                    .border_b_2(),
+            )
+            .child(
+                bracket()
+                    .right(px(-1.))
+                    .bottom(px(-1.))
+                    .border_r_2()
+                    .border_b_2(),
+            )
+    }
+
+    pub(super) fn session_panel(&self, game: &Game, running: bool) -> impl IntoElement {
+        let accent = rgb(self.accent);
+        let total = match game.trainer {
+            Trainer::None => 0,
+            _ => game.mods,
+        };
+        let active = match running {
+            true => format!("{:02}", self.active()),
+            false => "-".to_owned(),
+        };
+        v_flex()
+            .border_1()
+            .border_color(line(0.1))
+            .bg(rgb(PANEL))
+            .px(px(16.))
+            .pt(px(14.))
+            .pb(px(6.))
+            .child(label(if running { "SESSION" } else { "LAST SESSION" }))
+            .child(
+                mono(
+                    if running {
+                        "00:42:17"
+                    } else {
+                        game.last_session
+                    },
+                    42.,
+                )
+                .font_weight(FontWeight::BOLD)
+                .line_height(relative(1.15))
+                .mt(px(6.))
+                .mb(px(10.))
+                .text_color(rgb(if running { TEXT_BRIGHT } else { FAINT })),
+            )
+            .child(
+                stat("ACTIVE").child(
+                    h_flex()
+                        .gap(px(8.))
+                        .child(mono(active, 13.).text_color(if running {
+                            accent
+                        } else {
+                            rgb(FAINT)
+                        }))
+                        .child(mono(format!("/ {total}"), 13.).text_color(rgb(FAINT))),
+                ),
+            )
+            .child(
+                stat("HOTKEYS").child(
+                    h_flex()
+                        .gap(px(8.))
+                        .child(square(7., accent))
+                        .child(tracked("GLOBAL", 12., 0.12).font_weight(FontWeight::BOLD)),
+                ),
+            )
+    }
+}
+
+fn label(text: &'static str) -> Div {
+    mono(text, 10.5).text_color(rgb(DIM))
+}
+
+fn stat(name: &'static str) -> Div {
+    h_flex()
+        .h(px(40.))
+        .justify_between()
+        .border_t_1()
+        .border_color(line(0.07))
+        .child(label(name))
+}

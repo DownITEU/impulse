@@ -23,7 +23,11 @@ pub fn scan(data_dir: &Path) -> Result<String> {
             Some(false) => "UPDATE PENDING",
             None => "-",
         };
-        eprintln!("  {title} [{}] v{version} {state} @ {}", game.store_id, game.location.display());
+        eprintln!(
+            "  {title} [{}] v{version} {state} @ {}",
+            game.store_id,
+            game.location.display()
+        );
     }
     let stores: Vec<String> = per_store.iter().map(|(s, n)| format!("{s} {n}")).collect();
     let catalog_state = match freshness {
