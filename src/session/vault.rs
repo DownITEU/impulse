@@ -12,8 +12,12 @@ use super::Session;
 
 /// None when nothing is stored or the file is unreadable (corrupt, another Windows user).
 pub(super) fn load(path: &Path) -> Option<Session> {
-    let plain = dpapi(&fs::read(path).ok()?, false)?;
-    serde_json::from_slice(&plain).ok()
+    let sealed = fs::read(path).ok()?;
+    let session = dpapi(&sealed, false).and_then(|plain| serde_json::from_slice(&plain).ok());
+    if session.is_none() {
+        log::warn!("stored session is unreadable");
+    }
+    session
 }
 
 pub(super) fn save(path: &Path, session: &Session) -> Result<()> {

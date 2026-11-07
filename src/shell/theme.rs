@@ -29,6 +29,7 @@ pub const DIM: u32 = 0x8F978A;
 pub const FAINT: u32 = 0x7C8476;
 pub const GHOST: u32 = 0x4A5046;
 pub const WARN: u32 = 0xFFB547;
+pub const DANGER: u32 = 0xFF6B5A;
 
 pub const SEGMENT_OFF: u32 = 0x262A24;
 pub const SEGMENT_IDLE: u32 = 0x6E7569;

@@ -101,6 +101,22 @@ pub fn icon_button(id: &'static str, glyph: Icon, side: f32, glyph_size: f32) ->
         )
 }
 
+pub fn button(label: &str) -> Div {
+    h_flex()
+        .h(px(26.))
+        .px(px(12.))
+        .gap(px(8.))
+        .flex_none()
+        .justify_center()
+        .border_1()
+        .border_color(line(0.2))
+        .bg(rgb(RAISED))
+        .font_weight(FontWeight::BOLD)
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(RAISED_HOVER)))
+        .child(tracked(label, 11., 0.12))
+}
+
 /// `/ filter` field: the accent slash and a bare mono input.
 pub fn filter(state: &Entity<InputState>, accent: u32) -> Div {
     h_flex()

@@ -84,7 +84,7 @@ pub async fn connect(t: &Transport, vault: PathBuf) -> Result<(Session, Source)>
     })
     .await;
     if let Err(e) = saved {
-        eprintln!("session not saved: {e:#}");
+        log::warn!("session not saved: {e:#}");
     }
     Ok((session, source))
 }

@@ -25,7 +25,7 @@ pub fn load(data_dir: &Path) -> Result<(Catalog, Freshness)> {
         200 => {
             let catalog = Catalog::parse(&r.body)?;
             if let Err(e) = write(data_dir, r.etag.as_deref(), &r.body) {
-                eprintln!("catalog not cached: {e:#}");
+                log::warn!("catalog not cached: {e:#}");
             }
             Ok(Some(catalog))
         }

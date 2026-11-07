@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod catalog;
+mod journal;
 mod library;
 mod session;
 mod shell;
@@ -17,6 +18,7 @@ fn main() {
     let data_dir =
         PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows"))
             .join("Impulse");
+    journal::init(&data_dir);
     let transport = Transport::spawn(data_dir.clone());
     gpui_kit::application()
         .with_assets(shell::Assets)
@@ -43,6 +45,7 @@ fn main() {
             // gpui-pre-windows keeps running after the last window closes.
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {
+                    journal::closing();
                     cx.quit();
                 }
             })

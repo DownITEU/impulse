@@ -9,6 +9,7 @@ mod controls;
 mod header;
 mod hero;
 mod library;
+mod log_view;
 mod mock;
 mod settings;
 mod side;
@@ -36,6 +37,7 @@ use gpui_kit::{
 
 pub use assets::Assets;
 pub use boot::run as boot;
+use log_view::{LogEvent, LogView};
 use mock::GAMES;
 use theme::*;
 use widgets::{grid, mono, square};
@@ -48,6 +50,7 @@ const AMOUNT_DIGITS: usize = 6;
 pub fn init(cx: &mut App) {
     theme::init(cx);
     cx.set_http_client(Arc::new(art::CdnClient));
+    log_view::bind_keys(cx);
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -75,12 +78,22 @@ pub struct Page {
     // The open dropdown: "overlay" or a mod id.
     menu: Option<&'static str>,
     amount: Entity<InputState>,
+    log: Entity<LogView>,
+    log_open: bool,
     game_filter: Entity<InputState>,
     mod_filter: Entity<InputState>,
 }
 
 impl Page {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let log = cx.new(|cx| LogView::new(ACCENTS[0].1, window, cx));
+        cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
+            if matches!(event, LogEvent::Close) {
+                page.log_open = false;
+            }
+            cx.notify();
+        })
+        .detach();
         let mut filter = |placeholder: &'static str| {
             let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
             cx.subscribe(&state, |_, _, event: &InputEvent, cx| {
@@ -92,6 +105,8 @@ impl Page {
             state
         };
         Self {
+            log,
+            log_open: false,
             game_filter: filter("filter"),
             mod_filter: filter("filter mods"),
             accent: ACCENTS[0].1,
@@ -156,7 +171,14 @@ impl Page {
             .overflow_y_scrollbar()
     }
 
-    fn status_bar(&self) -> impl IntoElement {
+    fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (errors, warnings) = self.log.read(cx).problems();
+        let problem = |count: usize, color: u32| {
+            h_flex()
+                .gap(px(6.))
+                .child(square(7., rgb(color)))
+                .child(mono(count.to_string(), 11.).text_color(rgb(color)))
+        };
         let accent = rgb(self.accent);
         let total = self.running.map_or(0, |index| GAMES[index].mods);
         h_flex()
@@ -181,6 +203,25 @@ impl Page {
                 None => bar.child(mono("IDLE", 11.)),
             })
             .child(div().flex_1())
+            .child(
+                h_flex()
+                    .id("log")
+                    .h_full()
+                    .gap(px(10.))
+                    .cursor_pointer()
+                    .hover(|style| style.text_color(rgb(TEXT)))
+                    .when(self.log_open, |item| item.text_color(rgb(TEXT)))
+                    .on_click(cx.listener(|page, _, window, cx| {
+                        page.log_open = !page.log_open;
+                        if page.log_open {
+                            page.log.update(cx, |log, cx| log.focus(window, cx));
+                        }
+                        cx.notify();
+                    }))
+                    .child(mono("LOG", 11.))
+                    .when(errors > 0, |item| item.child(problem(errors, DANGER)))
+                    .when(warnings > 0, |item| item.child(problem(warnings, WARN))),
+            )
             .child(mono("HOTKEYS ON", 11.))
             .child(mono("IMPULSE 0.1", 11.).text_color(rgb(GHOST)))
     }
@@ -203,9 +244,20 @@ impl Render for Page {
                     .min_h_0()
                     .items_start()
                     .child(self.sidebar(cx))
-                    .child(self.pane(window, cx)),
+                    .child(self.pane(window, cx))
+                    .when(self.log_open, |body| {
+                        body.child(
+                            div()
+                                .occlude()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size_full()
+                                .child(self.log.clone()),
+                        )
+                    }),
             )
-            .child(self.status_bar())
+            .child(self.status_bar(cx))
             .when(self.settings, |page| page.child(self.settings_modal(cx)))
     }
 }

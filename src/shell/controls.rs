@@ -1,8 +1,8 @@
 //! The control at the right of a cheat row, one per `Control` kind.
 
 use gpui_kit::{
-    AnyElement, Context, Div, FontWeight, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent,
-    SharedString, Stateful,
+    AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString,
+    Stateful,
     component::{h_flex, input::Input, v_flex},
     deferred, div,
     prelude::*,
@@ -14,7 +14,7 @@ use super::{
     assets::Icon,
     mock::{Control, Mod},
     theme::*,
-    widgets::{icon, mono, toggle, tracked},
+    widgets::{button, icon, mono, toggle},
 };
 
 const TOP_LEVEL: u8 = 9;
@@ -65,7 +65,7 @@ impl Page {
             }
             Control::Incremental => {
                 let step = |id: &'static str, label: &'static str, delta: i32| {
-                    small_button(label)
+                    button(label)
                         .id(id)
                         .w(px(26.))
                         .px_0()
@@ -104,9 +104,9 @@ impl Page {
                             .text_size(px(12.5)),
                     ),
                 )
-                .child(small_button("SET"))
+                .child(button("SET"))
                 .into_any_element(),
-            Control::Button => small_button("EXECUTE").px(px(14.)).into_any_element(),
+            Control::Button => button("EXECUTE").px(px(14.)).into_any_element(),
             Control::Selection(options) => {
                 let current = self.choices.get(cheat.id).copied().unwrap_or(options[0]);
                 let trigger = value_box(current)
@@ -255,20 +255,6 @@ impl Page {
                 ))
             })
     }
-}
-
-fn small_button(label: &'static str) -> Div {
-    h_flex()
-        .h(px(26.))
-        .px(px(12.))
-        .justify_center()
-        .border_1()
-        .border_color(line(0.2))
-        .bg(rgb(RAISED))
-        .font_weight(FontWeight::BOLD)
-        .cursor_pointer()
-        .hover(|style| style.bg(rgb(RAISED_HOVER)))
-        .child(tracked(label, 11., 0.12))
 }
 
 fn value_box(value: impl Into<SharedString>) -> Div {

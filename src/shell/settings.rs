@@ -112,6 +112,10 @@ impl Page {
                 .cursor_pointer()
                 .on_click(cx.listener(move |page, _, _, cx| {
                     page.accent = color;
+                    page.log.update(cx, |log, cx| {
+                        log.accent = color;
+                        cx.notify();
+                    });
                     cx.notify();
                 }))
                 .child(

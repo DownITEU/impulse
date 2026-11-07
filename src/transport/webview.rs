@@ -93,15 +93,26 @@ fn build_retrying(
 ) -> Result<(Window, WebContext, WebView)> {
     const ERROR_BUSY: i32 = 0x800700AA_u32 as i32;
     let deadline = Instant::now() + Duration::from_secs(90);
+    let mut busy = false;
     loop {
         match build(data_dir, event_loop, proxy.clone(), pending.clone()) {
             Err(e)
                 if Instant::now() < deadline
                     && matches!(e.downcast_ref(), Some(wry::Error::WebView2Error(WindowsError(w))) if w.code().0 == ERROR_BUSY) =>
             {
+                if !busy {
+                    log::warn!("WebView2 profile is busy, retrying for up to 90 s");
+                    busy = true;
+                }
                 thread::sleep(Duration::from_secs(1));
             }
-            built => return built,
+            built => {
+                match &built {
+                    Ok(_) => log::debug!("WebView2 started"),
+                    Err(e) => log::error!("WebView2 failed to start: {e:#}"),
+                }
+                return built;
+            }
         }
     }
 }

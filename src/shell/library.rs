@@ -23,8 +23,8 @@ pub fn scan(data_dir: &Path) -> Result<String> {
             Some(false) => "UPDATE PENDING",
             None => "-",
         };
-        eprintln!(
-            "  {title} [{}] v{version} {state} @ {}",
+        log::debug!(
+            "{title} [{}] v{version} {state} @ {}",
             game.store_id,
             game.location.display()
         );
