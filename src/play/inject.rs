@@ -184,9 +184,7 @@ fn module_base(process: &Handle, pid: u32, image: &Image) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use std::{
-        fs,
         future::Future,
-        path::PathBuf,
         process::{Command, Stdio},
         time::Duration,
     };
@@ -214,14 +212,6 @@ mod tests {
         assert!(tophat(u32::MAX, &image, &startup).unwrap_err().to_string().contains(START_EXPORT));
     }
 
-    fn installed_service() -> Option<PathBuf> {
-        let wand = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("Wand");
-        let mut apps: Vec<_> = fs::read_dir(wand).ok()?.flatten().filter(|entry| entry.file_name().to_string_lossy().starts_with("app-")).collect();
-        apps.sort_by_key(|entry| entry.file_name());
-        let service = apps.pop()?.path().join(r"resources\app.asar.unpacked\static\unpacked\trainerlib\tophat_service_x64.dll");
-        service.is_file().then_some(service)
-    }
-
     /// Waits for `work` from this thread, with the timer on the runtime like the app's callers.
     fn bounded<T: Send + 'static>(runtime: &Runtime, secs: u64, work: impl Future<Output = T> + Send + 'static) -> Result<T> {
         let timed = runtime.spawn(async move { tokio::time::timeout(Duration::from_secs(secs), work).await });
@@ -232,7 +222,8 @@ mod tests {
     #[test]
     #[ignore = "injects the installed tophat_service into a throwaway process"]
     fn the_injected_service_dials_in_and_the_session_ends_cleanly() {
-        let service = Image::open(&installed_service().expect("a Wand install with tophat_service_x64.dll")).unwrap();
+        let service = crate::wand::install::installs().first().expect("a Wand install").trainerlib().join(crate::wand::install::SERVICE);
+        let service = Image::open(&service).unwrap();
         let server = Server::start().unwrap();
         let client_id = uuid::Uuid::new_v4().to_string();
         let waiting = server.expect(&client_id);

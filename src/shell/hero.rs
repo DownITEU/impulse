@@ -113,7 +113,7 @@ impl Page {
                         overlays,
                         self.overlay,
                         cx,
-                        |page, mode| page.overlay = mode,
+                        |page, mode, _, _| page.overlay = mode,
                     ),
                 )
             })

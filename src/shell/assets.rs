@@ -39,6 +39,7 @@ icons! {
     WinMax = "win-max",
     WinRestore = "win-restore",
     Close = "close",
+    Folder = "folder",
     MapTerrain = "map-terrain",
     MapPins = "map-pins",
     Player = "player",

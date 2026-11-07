@@ -16,6 +16,7 @@ mod settings;
 mod side;
 mod sidebar;
 mod theme;
+mod wand_dir;
 mod widgets;
 
 use std::{
@@ -42,10 +43,13 @@ pub use assets::Assets;
 use library::{Game, Library};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
+use settings::Tab;
 use theme::*;
+use wand_dir::WandDir;
 use widgets::{grid, mono, notice, square};
 
 use crate::{
+    preferences::{self, Preferences},
     session::{Account, Session},
     transport::Transport,
 };
@@ -80,6 +84,7 @@ enum Lead {
 enum Menu {
     Overlay,
     Cheat(usize),
+    WandVersions,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -107,6 +112,9 @@ pub struct Page {
     lead: Lead,
     reduce_motion: bool,
     settings: bool,
+    settings_tab: Tab,
+    preferences: Preferences,
+    wand: WandDir,
     // Index into `hero::OVERLAYS`.
     overlay: usize,
     menu: Option<Menu>,
@@ -152,6 +160,9 @@ impl Page {
             }
         };
         let page = Self {
+            // A few bytes from the local data directory: not worth a loading state.
+            preferences: preferences::load(&data_dir),
+            wand: WandDir::new(window, cx),
             data_dir,
             transport,
             session,
@@ -166,6 +177,7 @@ impl Page {
             lead: Lead::Number,
             reduce_motion: false,
             settings: false,
+            settings_tab: Tab::Appearance,
             overlay: 0,
             menu: None,
             flashed: None,
@@ -175,6 +187,7 @@ impl Page {
             mod_filter,
         };
         page.boot(window, cx);
+        page.scan_wand(window, cx);
         page
     }
 

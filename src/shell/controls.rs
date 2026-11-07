@@ -2,7 +2,7 @@
 
 use gpui_kit::{
     AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString,
-    Stateful,
+    Stateful, Window,
     component::{h_flex, input::Input, v_flex},
     deferred, div,
     prelude::*,
@@ -174,7 +174,7 @@ impl Page {
                     options,
                     current,
                     cx,
-                    move |page, option| {
+                    move |page, option, _, _| {
                         if let Some(loaded) = page.loaded_mut() {
                             loaded.values[index] = option as f64;
                         }
@@ -276,7 +276,7 @@ impl Page {
         options: Vec<SharedString>,
         current: usize,
         cx: &mut Context<Self>,
-        pick: impl Fn(&mut Page, usize) + Copy + 'static,
+        pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
     ) -> Stateful<Div> {
         let accent = rgb(self.accent);
         trigger
@@ -291,7 +291,7 @@ impl Page {
                     cx.notify();
                 }
             }))
-            .when(self.menu == Some(menu), |trigger| {
+            .when(self.menu == Some(menu) && !options.is_empty(), |trigger| {
                 trigger.child(deferred(
                     v_flex()
                         .occlude()
@@ -316,8 +316,8 @@ impl Page {
                                 // Mouse down, not click: the outside-press close removes the list first.
                                 .on_mouse_down(
                                     MouseButton::Left,
-                                    cx.listener(move |page, _, _, cx| {
-                                        pick(page, at);
+                                    cx.listener(move |page, _, window, cx| {
+                                        pick(page, at, window, cx);
                                         page.menu = None;
                                         cx.notify();
                                     }),

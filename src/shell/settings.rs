@@ -1,5 +1,5 @@
 use gpui_kit::{
-    AnyElement, ClickEvent, Context, Div, FontWeight, IntoElement, Window,
+    ClickEvent, Context, Div, FontWeight, IntoElement, Window,
     component::{h_flex, v_flex},
     div,
     prelude::*,
@@ -13,15 +13,21 @@ use super::{
     widgets::{flash_button, icon_button, mono, segment, segmented, square, toggle, tracked},
 };
 
-const TABS: [&str; 6] = [
-    "ACCOUNT",
-    "APPEARANCE",
-    "OVERLAY",
-    "HOTKEYS",
-    "APP",
-    "ABOUT",
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Tab {
+    Appearance,
+    App,
+}
+
+// The tabs without a page yet are shown but not clickable.
+const TABS: [(&str, Option<Tab>); 6] = [
+    ("ACCOUNT", None),
+    ("APPEARANCE", Some(Tab::Appearance)),
+    ("OVERLAY", None),
+    ("HOTKEYS", None),
+    ("APP", Some(Tab::App)),
+    ("ABOUT", None),
 ];
-const CURRENT_TAB: &str = "APPEARANCE";
 
 impl Page {
     pub(super) fn settings_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -64,8 +70,11 @@ impl Page {
                         h_flex()
                             .items_start()
                             .min_h(px(300.))
-                            .child(self.tabs())
-                            .child(self.appearance(cx)),
+                            .child(self.tabs(cx))
+                            .child(match self.settings_tab {
+                                Tab::Appearance => self.appearance(cx).into_any_element(),
+                                Tab::App => self.app(cx).into_any_element(),
+                            }),
                     ),
             )
     }
@@ -75,7 +84,7 @@ impl Page {
         cx.notify();
     }
 
-    fn tabs(&self) -> impl IntoElement {
+    fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .w(px(168.))
             .flex_none()
@@ -84,15 +93,23 @@ impl Page {
             .border_r_1()
             .border_color(line(0.07))
             .bg(rgb(SUNKEN))
-            .children(TABS.map(|name| {
-                let current = name == CURRENT_TAB;
+            .children(TABS.map(|(name, tab)| {
+                let current = tab == Some(self.settings_tab);
                 h_flex()
+                    .id(name)
                     .h(px(34.))
                     .px(px(14.))
                     .gap(px(10.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(rgb(if current { TEXT_BRIGHT } else { DIM }))
                     .when(current, |tab| tab.bg(rgb(ROW_SELECTED)))
+                    .when_some(tab, |item, tab| {
+                        item.cursor_pointer()
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                page.settings_tab = tab;
+                                cx.notify();
+                            }))
+                    })
                     .child(
                         div()
                             .w(px(6.))
@@ -100,6 +117,15 @@ impl Page {
                     )
                     .child(tracked(name, 12., 0.12))
             }))
+    }
+
+    fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .flex_1()
+            .min_w_0()
+            .px(px(18.))
+            .py(px(6.))
+            .child(self.wand_dir_row(cx))
     }
 
     fn appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -199,8 +225,9 @@ impl Page {
     }
 }
 
-fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
-    let text: AnyElement = v_flex()
+/// A setting's name with what it does under it.
+pub(super) fn label(title: &'static str, hint: &'static str) -> Div {
+    v_flex()
         .gap(px(4.))
         .child(tracked(title, 13., 0.1).font_weight(FontWeight::SEMIBOLD))
         .child(
@@ -208,11 +235,13 @@ fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
                 .font_weight(FontWeight::NORMAL)
                 .text_color(rgb(FAINT)),
         )
-        .into_any_element();
+}
+
+fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
     h_flex()
         .min_h(px(height))
         .justify_between()
         .border_b_1()
         .border_color(line(0.07))
-        .child(text)
+        .child(label(title, hint))
 }

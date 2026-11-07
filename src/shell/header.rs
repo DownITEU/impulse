@@ -121,6 +121,8 @@ impl Page {
         // A focused filter would keep taking keys behind the modal.
         window.blur(cx);
         self.settings = true;
+        // An update may have installed a newer version since the last look.
+        self.scan_wand(window, cx);
         cx.notify();
     }
 }
