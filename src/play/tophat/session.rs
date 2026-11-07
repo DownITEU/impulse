@@ -246,11 +246,11 @@ impl Session {
     async fn within<T>(&self, limit: Duration, work: impl Future<Output = T>) -> Option<T> {
         // Built inside the task: `sleep` panics on a caller with no runtime, like GPUI's threads.
         let timer = self.runtime.spawn(async move { tokio::time::sleep(limit).await });
+        // Also stops the timer when the caller cancels this future instead of letting it run out.
+        let abort = timer.abort_handle();
+        let _abort = Forget(move || abort.abort());
         match future::select(pin!(work), timer).await {
-            Either::Left((value, timer)) => {
-                timer.abort();
-                Some(value)
-            }
+            Either::Left((value, _)) => Some(value),
             Either::Right(_) => None,
         }
     }
