@@ -80,6 +80,7 @@ fn put_u32(buf: &mut [u8], at: usize, value: usize) {
 }
 
 /// A root table read back; a missing or out-of-bounds field reads as its default.
+#[derive(Debug)]
 pub struct Table<'a> {
     buf: &'a [u8],
     start: usize,
@@ -143,7 +144,8 @@ impl<'a> Table<'a> {
     }
 }
 
-fn read<const N: usize>(buf: &[u8], at: usize) -> Option<[u8; N]> {
+/// `N` bytes at `at`, or `None` past the end.
+pub fn read<const N: usize>(buf: &[u8], at: usize) -> Option<[u8; N]> {
     buf.get(at..at.checked_add(N)?)?.try_into().ok()
 }
 

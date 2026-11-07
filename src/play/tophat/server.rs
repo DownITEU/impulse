@@ -23,7 +23,10 @@ use h2::{
     server::{self, SendResponse},
 };
 use http::{HeaderMap, Request, Response};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    runtime::Handle,
+};
 
 use super::wire::Table;
 
@@ -58,6 +61,8 @@ type Waiters = Arc<Mutex<HashMap<String, oneshot::Sender<Channel>>>>;
 /// Dropping the server stops it and drops every stream.
 pub struct Server {
     pub port: u16,
+    /// The runtime the server's tasks and sessions' timers run on.
+    pub runtime: Handle,
     waiters: Waiters,
     _stop: oneshot::Sender<()>,
 }
@@ -70,6 +75,7 @@ impl Server {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
+        let handle = runtime.handle().clone();
         let waiters = Waiters::default();
         let (stop, stopped) = oneshot::channel();
         let shared = waiters.clone();
@@ -85,6 +91,7 @@ impl Server {
             })?;
         Ok(Self {
             port,
+            runtime: handle,
             waiters,
             _stop: stop,
         })
