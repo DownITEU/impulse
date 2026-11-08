@@ -1,3 +1,5 @@
+use crate::mouse;
+
 /// Modifier bits in byte 0, up to seven other keys above it, the newest in byte 1.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Chord(u64);
@@ -55,6 +57,11 @@ impl Chord {
     /// The same keys in any press order: `Matcher` cannot tell such chords apart.
     pub fn same_keys(self, other: Chord) -> bool {
         self.vks().count() == other.vks().count() && self.vks().all(|vk| other.contains(vk))
+    }
+
+    /// It needs the mouse hook.
+    pub fn uses_mouse(self) -> bool {
+        self.keys().any(mouse::is_mouse)
     }
 
     /// Its virtual-key codes, modifiers first: `from_vks` reads them back to the same chord.

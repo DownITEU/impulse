@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::Chord;
+use crate::{Chord, mouse};
 
 /// `CTRL+SHIFT+F6`: the modifiers first, then the keys in press order.
 impl fmt::Display for Chord {
@@ -19,6 +19,9 @@ impl fmt::Display for Chord {
 }
 
 fn name(vk: u8) -> Cow<'static, str> {
+    if let Some(name) = mouse::name(vk) {
+        return name.into();
+    }
     let fixed = match vk {
         0x08 => "BKSP",
         0x09 => "TAB",
@@ -75,6 +78,8 @@ mod tests {
         assert_eq!(named(&[18, 98]), "ALT+NUM 2");
         assert_eq!(named(&[0x41]), "A");
         assert_eq!(named(&[7]), "VK7");
+        assert_eq!(named(&[17, 2]), "CTRL+RMB");
+        assert_eq!(named(&[6, 11]), "MB5+WHEEL DN");
     }
 
     #[test]

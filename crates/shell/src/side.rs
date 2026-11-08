@@ -160,19 +160,29 @@ impl Page {
                         .child(mono(format!("/ {total}"), 13.).text_color(rgb(FAINT))),
                 ),
             )
+            .child(stat("HOTKEYS").child(self.hotkeys_scope(cx)))
+    }
+
+    /// Switches where hotkeys fire; while they are off, Settings turns them on.
+    fn hotkeys_scope(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (enabled, game_only) = (self.bindings.enabled(), self.bindings.game_only());
+        let scope = match (enabled, game_only) {
+            (false, _) => "OFF",
+            (true, true) => "IN GAME",
+            (true, false) => "GLOBAL",
+        };
+        h_flex()
+            .id("hotkeys-scope")
+            .gap(px(8.))
+            .when(enabled, |stat| {
+                stat.cursor_pointer()
+                    .on_click(cx.listener(move |page, _, window, cx| page.set_game_only(!game_only, window, cx)))
+            })
+            .child(square(7., rgb(if enabled { self.accent } else { GHOST })))
             .child(
-                stat("HOTKEYS").child(
-                    h_flex()
-                        .id("hotkeys-scope")
-                        .gap(px(8.))
-                        .cursor_pointer()
-                        .on_click(cx.listener(|page, _, window, cx| page.toggle_game_only(window, cx)))
-                        .child(square(7., accent))
-                        .child(
-                            tracked(if self.bindings.game_only() { "IN GAME" } else { "GLOBAL" }, 12., 0.12)
-                                .font_weight(FontWeight::BOLD),
-                        ),
-                ),
+                tracked(scope, 12., 0.12)
+                    .font_weight(FontWeight::BOLD)
+                    .when(!enabled, |text| text.text_color(rgb(GHOST))),
             )
     }
 }

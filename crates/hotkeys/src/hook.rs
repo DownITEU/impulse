@@ -1,4 +1,5 @@
-//! The keyboard on a thread of its own: `WH_KEYBOARD_LL` and the message loop that runs it.
+//! The keyboard and mouse on a thread of their own: `WH_KEYBOARD_LL`, `WH_MOUSE_LL` and the message
+//! loop that runs them.
 
 use std::{
     cell::RefCell,
@@ -11,10 +12,13 @@ use windows_sys::Win32::{
     Foundation::{LPARAM, LRESULT, WPARAM},
     System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
     UI::WindowsAndMessaging::{
-        CallNextHookEx, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, HC_ACTION, KBDLLHOOKSTRUCT, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW,
-        SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN, WM_QUIT, WM_SYSKEYDOWN, WM_USER,
+        CallNextHookEx, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, HC_ACTION, HHOOK, HOOKPROC, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE,
+        PeekMessageW, PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WINDOWS_HOOK_ID, WM_KEYDOWN, WM_MOUSEMOVE, WM_QUIT,
+        WM_SYSKEYDOWN, WM_USER,
     },
 };
+
+use crate::mouse;
 
 type Handler = Box<dyn FnMut(u8, bool) -> bool>;
 
@@ -33,8 +37,10 @@ pub struct Hook {
 impl Hook {
     /// `handler(vk, down)` runs on the hook thread for every change, never for a repeat or the release of
     /// a key pressed before the hook. Returning true on a down hides that key, and its repeats, from every
-    /// other app. It must return at once (Windows times it out): forward to a channel.
-    pub fn start(handler: impl FnMut(u8, bool) -> bool + Send + 'static) -> io::Result<Self> {
+    /// other app. It must return at once (Windows times it out): forward to a channel. With `mouse`, the
+    /// buttons and wheel notches come too, in `mouse`'s codes; that hook runs on every move, so only
+    /// when a binding needs it.
+    pub fn start(mouse: bool, handler: impl FnMut(u8, bool) -> bool + Send + 'static) -> io::Result<Self> {
         let (ready, started) = mpsc::sync_channel(1);
         let join = thread::Builder::new().name("hotkeys".into()).spawn(move || {
             KEYS.set(Some(Keys { handler: Box::new(handler), state: [State::Up; 256] }));
@@ -43,14 +49,24 @@ impl Hook {
                 let mut msg: MSG = mem::zeroed();
                 // Creates the queue `Drop` posts to.
                 PeekMessageW(&mut msg, ptr::null_mut(), WM_USER, WM_USER, PM_NOREMOVE);
-                let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), GetModuleHandleW(ptr::null()), 0);
-                if hook.is_null() {
-                    let _ = ready.send(Err(io::Error::last_os_error()));
-                    return;
+                let procs: [(WINDOWS_HOOK_ID, HOOKPROC); 2] = [(WH_KEYBOARD_LL, Some(keyboard)), (WH_MOUSE_LL, Some(pointer))];
+                let wanted = &procs[..1 + usize::from(mouse)];
+                let mut hooks: Vec<HHOOK> = Vec::new();
+                for &(id, proc) in wanted {
+                    let hook = SetWindowsHookExW(id, proc, GetModuleHandleW(ptr::null()), 0);
+                    if hook.is_null() {
+                        let _ = ready.send(Err(io::Error::last_os_error()));
+                        break;
+                    }
+                    hooks.push(hook);
                 }
-                let _ = ready.send(Ok(GetCurrentThreadId()));
-                while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {}
-                UnhookWindowsHookEx(hook);
+                if hooks.len() == wanted.len() {
+                    let _ = ready.send(Ok(GetCurrentThreadId()));
+                    while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {}
+                }
+                for hook in hooks {
+                    UnhookWindowsHookEx(hook);
+                }
             }
         })?;
         let thread = started.recv().map_err(|_| io::Error::other("the hook thread ended"))??;
@@ -83,13 +99,36 @@ unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) ->
         let down = matches!(wparam as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
         // Injected input can put anything in `vkCode`.
         if let Ok(vk @ 1..) = u8::try_from(info.vkCode)
-            && KEYS.with_borrow_mut(|keys| keys.as_mut().is_some_and(|keys| keys.key(vk, down)))
+            && feed(vk, down)
         {
             return 1;
         }
     }
     // SAFETY: passes the event on unchanged.
     unsafe { CallNextHookEx(ptr::null_mut(), code, wparam, lparam) }
+}
+
+unsafe extern "system" fn pointer(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // Moves are most of the traffic: they leave first.
+    if code == HC_ACTION as i32 && wparam as u32 != WM_MOUSEMOVE {
+        // SAFETY: for HC_ACTION, `lparam` points to the event.
+        let info = unsafe { &*(lparam as *const MSLLHOOKSTRUCT) };
+        if let Some((vk, down)) = mouse::input(wparam as u32, info.mouseData) {
+            let hide = feed(vk, down);
+            if mouse::is_notch(vk) {
+                feed(vk, false);
+            }
+            if hide {
+                return 1;
+            }
+        }
+    }
+    // SAFETY: passes the event on unchanged.
+    unsafe { CallNextHookEx(ptr::null_mut(), code, wparam, lparam) }
+}
+
+fn feed(vk: u8, down: bool) -> bool {
+    KEYS.with_borrow_mut(|keys| keys.as_mut().is_some_and(|keys| keys.key(vk, down)))
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -150,32 +189,36 @@ mod tests {
 
     #[test]
     fn the_hook_starts_and_stops() {
-        drop(Hook::start(|_, _| false).unwrap());
+        drop(Hook::start(true, |_, _| false).unwrap());
     }
 
-    /// Injects F24; the hook hides the press, and the lone release reaches nothing bound to it.
-    /// Run with `cargo test -p hotkeys -- --ignored`.
+    /// Injects F24 and a wheel notch up; the hook hides the press and the notch, and the lone F24 release
+    /// reaches nothing bound to it. Run with `cargo test -p hotkeys -- --ignored`.
     #[test]
     #[ignore = "injects input"]
-    fn the_hook_sees_injected_keys() {
+    fn the_hook_sees_injected_keys_and_notches() {
         use std::time::Duration;
-        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VK_F24};
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput, VK_F24,
+        };
 
+        const OURS: [u8; 2] = [VK_F24 as u8, 0x0A];
         let (tx, seen) = mpsc::channel();
-        let hook = Hook::start(move |vk, down| {
-            let ours = vk == VK_F24 as u8;
+        let hook = Hook::start(true, move |vk, down| {
+            let ours = OURS.contains(&vk);
             if ours {
-                let _ = tx.send(down);
+                let _ = tx.send((vk, down));
             }
             ours
         })
         .unwrap();
         let key = |flags| INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VK_F24, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } } };
-        let inputs = [key(0), key(KEYEVENTF_KEYUP)];
+        let notch = MOUSEINPUT { dx: 0, dy: 0, mouseData: 120, dwFlags: MOUSEEVENTF_WHEEL, time: 0, dwExtraInfo: 0 };
+        let inputs = [key(0), key(KEYEVENTF_KEYUP), INPUT { r#type: INPUT_MOUSE, Anonymous: INPUT_0 { mi: notch } }];
         // SAFETY: a valid array of `INPUT`.
-        assert_eq!(unsafe { SendInput(2, inputs.as_ptr(), mem::size_of::<INPUT>() as i32) }, 2);
-        let wait = || seen.recv_timeout(Duration::from_secs(2));
-        assert_eq!((wait(), wait()), (Ok(true), Ok(false)));
+        assert_eq!(unsafe { SendInput(3, inputs.as_ptr(), mem::size_of::<INPUT>() as i32) }, 3);
+        let seen: Vec<_> = (0..4).map_while(|_| seen.recv_timeout(Duration::from_secs(2)).ok()).collect();
+        assert_eq!(seen, [(OURS[0], true), (OURS[0], false), (OURS[1], true), (OURS[1], false)]);
         drop(hook);
     }
 }

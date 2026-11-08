@@ -1,4 +1,4 @@
-//! `hotkeys.json`: the user's own hotkey choices over the provider's, and where hotkeys fire.
+//! `hotkeys.json`: the user's own hotkey choices over the provider's, and whether and where hotkeys fire.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -23,13 +23,21 @@ pub enum Choice {
     Default,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(default)]
 struct Saved {
+    /// Hotkeys fire during a run.
+    enabled: bool,
     /// Hotkeys fire only while the game owns the foreground window.
     game_only: bool,
     /// By game id, then cheat id.
     games: HashMap<String, HashMap<String, Slots>>,
+}
+
+impl Default for Saved {
+    fn default() -> Self {
+        Self { enabled: true, game_only: false, games: HashMap::new() }
+    }
 }
 
 pub struct Store {
@@ -44,6 +52,15 @@ impl Store {
         let file = data_dir.join(FILE);
         let saved = fs::read(&file).ok().and_then(|raw| serde_json::from_slice(&raw).ok()).unwrap_or_default();
         Self { file, saved }
+    }
+
+    pub fn enabled(&self) -> bool {
+        self.saved.enabled
+    }
+
+    pub fn set_enabled(&mut self, on: bool) {
+        self.saved.enabled = on;
+        self.save();
     }
 
     pub fn game_only(&self) -> bool {
@@ -124,13 +141,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("impulse-hotkeys-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let mut store = Store::load(&dir);
+        assert!(store.enabled());
         assert_eq!(store.slots("g", &cheat()), [Chord::from_vks(&[112]), None]);
         store.choose("g", "a", 0, Choice::Unbound);
         store.choose("g", "a", 1, Choice::Bound(Chord::from_vks(&[17, 113]).unwrap()));
         store.set_game_only(true);
+        store.set_enabled(false);
         let reloaded = Store::load(&dir);
         assert_eq!(reloaded.slots("g", &cheat()), [None, Chord::from_vks(&[17, 113])]);
-        assert!(reloaded.game_only());
+        assert!(reloaded.game_only() && !reloaded.enabled());
         store.choose("g", "a", 0, Choice::Default);
         store.choose("g", "a", 1, Choice::Default);
         assert!(Store::load(&dir).saved.games.is_empty());

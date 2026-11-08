@@ -10,12 +10,13 @@ use super::{
     Flash, Lead, Page,
     assets::Icon,
     theme::*,
-    widgets::{flash_button, icon_button, mono, segment, segmented, square, toggle, tracked},
+    widgets::{choice, flash_button, icon_button, mono, segmented, square, toggle, tracked},
 };
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum Tab {
     Appearance,
+    Hotkeys,
     App,
 }
 
@@ -24,7 +25,7 @@ const TABS: [(&str, Option<Tab>); 6] = [
     ("ACCOUNT", None),
     ("APPEARANCE", Some(Tab::Appearance)),
     ("OVERLAY", None),
-    ("HOTKEYS", None),
+    ("HOTKEYS", Some(Tab::Hotkeys)),
     ("APP", Some(Tab::App)),
     ("ABOUT", None),
 ];
@@ -73,6 +74,7 @@ impl Page {
                             .child(self.tabs(cx))
                             .child(match self.settings_tab {
                                 Tab::Appearance => self.appearance(cx).into_any_element(),
+                                Tab::Hotkeys => self.hotkey_settings(cx).into_any_element(),
                                 Tab::App => self.app(cx).into_any_element(),
                             }),
                     ),
@@ -155,23 +157,10 @@ impl Page {
                 .child(mono(name, 9.5).text_color(rgb(if current { TEXT } else { FAINT })))
         });
         let lead = |id: &'static str, label: &'static str, lead: Lead| {
-            let current = self.lead == lead;
-            div()
-                .id(id)
-                .h_full()
-                .cursor_pointer()
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    page.lead = lead;
-                    cx.notify();
-                }))
-                .child(
-                    segment(
-                        label,
-                        current.then_some(self.accent),
-                        if current { BG } else { SEGMENT_IDLE },
-                    )
-                    .px(px(12.)),
-                )
+            choice(id, label, self.lead == lead, self.accent).on_click(cx.listener(move |page, _, _, cx| {
+                page.lead = lead;
+                cx.notify();
+            }))
         };
         v_flex()
             .flex_1()
@@ -237,7 +226,7 @@ pub(super) fn label(title: &'static str, hint: &'static str) -> Div {
         )
 }
 
-fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
+pub(super) fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
     h_flex()
         .min_h(px(height))
         .justify_between()

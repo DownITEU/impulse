@@ -1,6 +1,10 @@
 //! Recording a chord for rebinding, after Easymic's `HotkeyCapture`.
 
-use crate::{Chord, chord::Held};
+use crate::{
+    Chord,
+    chord::Held,
+    mouse::{LBUTTON, RBUTTON},
+};
 
 const ESC: u8 = 0x1B;
 const BACKSPACE: u8 = 0x08;
@@ -24,7 +28,8 @@ pub enum Outcome {
     Unbound,
 }
 
-/// Fed key changes without repeats; its hook should hide every down, so neither the app nor the game acts on it.
+/// Fed key changes without repeats; its hook should hide every down it returns a step for, so neither
+/// the app nor the game acts on it.
 #[derive(Default)]
 pub struct Capture {
     held: Held,
@@ -33,13 +38,18 @@ pub struct Capture {
 
 impl Capture {
     /// Ends at the first release once a key besides modifiers is held, with the chord held just before
-    /// it; modifiers alone come and go. `None` for a release it never saw pressed and after `Done`.
+    /// it; modifiers alone come and go. `None` for a release it never saw pressed, a click with nothing
+    /// held and after `Done`.
     pub fn key(&mut self, vk: u8, down: bool) -> Option<Step> {
         if self.done {
             return None;
         }
         if down {
             let alone = self.held.chord().is_none();
+            // A click alone is the user's way out of binding, not a binding.
+            if alone && matches!(vk, LBUTTON | RBUTTON) {
+                return None;
+            }
             if let Some(outcome) = alone.then(|| command(vk)).flatten() {
                 self.done = true;
                 return Some(Step::Done(outcome));
@@ -104,6 +114,15 @@ mod tests {
         assert_eq!(feed(&[(DELETE, true)]), [Some(Step::Done(Outcome::Unbound))]);
         let steps = feed(&[(LCTRL, true), (DELETE, true), (DELETE, false)]);
         assert_eq!(steps[2], Some(Step::Done(Outcome::Bound(chord(&[0x11, 0x2E]).unwrap()))));
+    }
+
+    #[test]
+    fn a_click_binds_only_with_something_held_and_a_notch_binds_at_once() {
+        assert_eq!(feed(&[(LBUTTON, true), (LBUTTON, false)]), [None, None]);
+        let ctrl_click = feed(&[(LCTRL, true), (RBUTTON, true), (RBUTTON, false)]);
+        assert_eq!(ctrl_click[2], Some(Step::Done(Outcome::Bound(chord(&[0x11, 0x02]).unwrap()))));
+        let notch = feed(&[(0x0A, true), (0x0A, false)]);
+        assert_eq!(notch[1], Some(Step::Done(Outcome::Bound(chord(&[0x0A]).unwrap()))));
     }
 
     #[test]

@@ -100,6 +100,15 @@ pub fn segmented() -> Div {
     h_flex().flex_none().border_1().border_color(line(0.16))
 }
 
+/// One option of a `segmented` choice; the caller adds the click.
+pub fn choice(id: &'static str, label: &'static str, current: bool, accent: u32) -> Stateful<Div> {
+    div()
+        .id(id)
+        .h_full()
+        .cursor_pointer()
+        .child(segment(label, current.then_some(accent), if current { BG } else { SEGMENT_IDLE }).px(px(12.)))
+}
+
 pub fn toggle(on: bool, accent: u32) -> Div {
     let (off_color, on_color) = if on {
         (SEGMENT_IDLE, BG)

@@ -1,7 +1,9 @@
-//! Trainer hotkeys: the live run's keyboard hook, rebinding a slot by pressing its keys, and the
-//! saved choices. Every hook is global: a capture's runs first and hides the keys from every app.
+//! Trainer hotkeys: the live run's hook, rebinding a slot by pressing its keys or buttons, the saved
+//! choices and the Settings tab. Every hook is global: a capture's runs first and hides what it takes
+//! from every app.
 
 mod caps;
+mod settings;
 mod store;
 
 use std::{path::Path, sync::Arc};
@@ -41,6 +43,10 @@ impl Bindings {
         cheats.iter().map(|cheat| self.store.slots(game, cheat)).collect()
     }
 
+    pub fn enabled(&self) -> bool {
+        self.store.enabled()
+    }
+
     pub fn game_only(&self) -> bool {
         self.store.game_only()
     }
@@ -62,10 +68,13 @@ impl Bindings {
 }
 
 impl Page {
-    /// Hooks the live run's hotkeys, or stops them when no run is live.
+    /// Hooks the live run's hotkeys, or stops them when no run is live or they are off.
     pub(super) fn arm_hotkeys(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.bindings.armed = None;
         let Play::Live { game, pid, .. } = &self.play else { return };
+        if !self.bindings.enabled() {
+            return cx.notify();
+        }
         let (game, pid) = (game.clone(), *pid);
         // A newer hook sees keys first, so it must not get ahead of a capture.
         self.cancel_capture(cx);
@@ -78,9 +87,10 @@ impl Page {
                 }
             }
         }
+        let mouse = loaded.hotkeys.iter().flatten().flatten().any(|chord| chord.uses_mouse());
         let (tx, mut presses) = mpsc::unbounded();
         let game_only = self.bindings.game_only();
-        let hook = Hook::start(move |vk, down| {
+        let hook = Hook::start(mouse, move |vk, down| {
             matcher.key(vk, down, |fired| {
                 if let Fired::Press(action) = fired
                     && (!game_only || hotkeys::foreground_pid() == pid)
@@ -104,8 +114,13 @@ impl Page {
         cx.notify();
     }
 
-    pub(super) fn toggle_game_only(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let on = !self.bindings.game_only();
+    pub(super) fn set_hotkeys_enabled(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.bindings.store.set_enabled(on);
+        self.arm_hotkeys(window, cx);
+        cx.notify();
+    }
+
+    pub(super) fn set_game_only(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.bindings.store.set_game_only(on);
         self.arm_hotkeys(window, cx);
         cx.notify();
@@ -123,11 +138,13 @@ impl Page {
         }
         let (tx, mut steps) = mpsc::unbounded();
         let mut capture = Capture::default();
-        let hook = Hook::start(move |vk, down| {
-            if let Some(step) = capture.key(vk, down) {
+        let hook = Hook::start(true, move |vk, down| {
+            let step = capture.key(vk, down);
+            if let Some(step) = step {
                 let _ = tx.unbounded_send(step);
             }
-            down
+            // A click it passes on still reaches the window and ends the capture there.
+            down && step.is_some()
         });
         let hook = match hook {
             Ok(hook) => hook,
