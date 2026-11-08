@@ -52,7 +52,7 @@ pub async fn run(server: &Server, request: Request, mut stage: impl FnMut(Stage)
     };
 
     stage(Stage::Attaching);
-    let game = Game { process: &process, trainer: &trainer, variables: &request.variables };
+    let game = Game { process: &process, trainer: &trainer, trainer_hash: &request.binary_hash, variables: &request.variables };
     attach(server, &request.trainerlib, game).await
 }
 

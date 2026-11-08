@@ -1,7 +1,7 @@
 //! The trainer DLL on disk: fetched once from the public CDN and named by its hash.
 
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -26,7 +26,7 @@ pub fn ensure(data_dir: &Path, url: &str, hash: &str) -> Result<PathBuf> {
     let hash = hash.to_ascii_lowercase();
     let path = data_dir.join(DIR).join(format!("{hash}.dll"));
     // Hashed again on every use: cheap next to the injection, and a damaged copy is fetched anew.
-    if fs::read(&path).is_ok_and(|bytes| sha256(&bytes) == hash) {
+    if hash_of(&path).is_ok_and(|found| found == hash) {
         return Ok(path);
     }
     let response = cdn::get(url, None)?;
@@ -34,6 +34,11 @@ pub fn ensure(data_dir: &Path, url: &str, hash: &str) -> Result<PathBuf> {
     ensure!(sha256(&response.body) == hash, "the downloaded trainer does not match its hash");
     disk::replace(&path, &response.body)?;
     Ok(path)
+}
+
+/// Lowercase hex SHA-256 of a file.
+pub fn hash_of(path: &Path) -> io::Result<String> {
+    fs::read(path).map(|bytes| sha256(&bytes))
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -73,8 +78,10 @@ mod tests {
         // The URL cannot resolve: a download would fail.
         assert_eq!(ensure(&dir, "https://x.invalid/t", &hash).unwrap(), path);
 
+        assert_eq!(hash_of(&path).unwrap(), hash.to_lowercase());
         fs::write(&path, b"tampered").unwrap();
         assert!(ensure(&dir, "https://x.invalid/t", &hash).is_err());
+        assert_ne!(hash_of(&path).unwrap(), hash.to_lowercase());
         fs::remove_dir_all(&dir).unwrap();
     }
 }

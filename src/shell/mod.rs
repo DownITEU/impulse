@@ -107,6 +107,8 @@ pub struct Page {
     trainers: HashMap<Arc<str>, Load<Loaded>>,
     // Games whose trainer is being read or downloaded right now.
     loading: HashSet<Arc<str>>,
+    // A newer copy of the running game's trainer: installed when the run ends.
+    deferred: Option<(Arc<str>, Loaded)>,
     selected: Option<Arc<str>>,
     play: Play,
     // Started with the first run.
@@ -174,6 +176,7 @@ impl Page {
             library: Load::Pending,
             trainers: HashMap::new(),
             loading: HashSet::new(),
+            deferred: None,
             selected: None,
             play: Play::Idle,
             tophat: None,

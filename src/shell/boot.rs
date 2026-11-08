@@ -126,6 +126,7 @@ impl Page {
             page.update_in(cx, |page, window, cx| {
                 page.library = Load::Pending;
                 page.trainers.clear();
+                page.deferred = None;
                 page.stop_run(cx);
                 page.boot(window, cx);
                 cx.notify();
@@ -231,15 +232,22 @@ impl Page {
 
     // A newer copy may order the cheats differently.
     fn install(&mut self, id: Arc<str>, loaded: Loaded) {
-        // A run in place keeps the cheat list it started with: its variables and values belong to
-        // it. The newer copy is on disk and is read when the game is opened again.
-        if self.play.is_active() && self.play.game() == Some(&id) {
+        // A run keeps the cheat list it started with: its variables and values belong to it.
+        if self.play.holds(&id) {
+            self.deferred = Some((id, loaded));
             return;
         }
         if self.selected.as_ref() == Some(&id) {
             self.drop_cheat_state();
         }
         self.trainers.insert(id, Load::Ready(loaded));
+    }
+
+    /// For when a run lets go of its cheat list.
+    pub(super) fn install_deferred(&mut self) {
+        if let Some((id, loaded)) = self.deferred.take() {
+            self.install(id, loaded);
+        }
     }
 }
 

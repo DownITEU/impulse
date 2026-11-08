@@ -55,6 +55,11 @@ impl Play {
         }
     }
 
+    /// The run's variables came from its cheat list, so that list must stay as it is.
+    pub fn holds(&self, id: &Arc<str>) -> bool {
+        matches!(self, Self::Busy { game, .. } | Self::Live { game, .. } if game == id)
+    }
+
     /// A run is under way, in place or ending: another cannot start.
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Busy { .. } | Self::Live { .. } | Self::Stopping { .. })
@@ -153,6 +158,7 @@ impl Page {
             let game = game.clone();
             self.play = Play::Idle;
             self.reset_values(&game);
+            self.install_deferred();
             cx.notify();
         }
     }
@@ -160,6 +166,7 @@ impl Page {
     fn fail_run(&mut self, id: Arc<str>, error: anyhow::Error, cx: &mut Context<Self>) {
         log::warn!("run failed: {error:#}");
         self.play = Play::Failed { game: id, error: format!("{error:#}") };
+        self.install_deferred();
         cx.notify();
     }
 
@@ -186,6 +193,7 @@ impl Page {
                 }
             }
         }
+        self.install_deferred();
         cx.notify();
     }
 

@@ -2,12 +2,13 @@
 
 use std::{path::Path, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use blocking::unblock;
 use futures::channel::mpsc::Receiver;
 use uuid::Uuid;
 
 use super::{
+    binary,
     image::Image,
     inject::{self, Startup},
     process::Process,
@@ -24,6 +25,8 @@ pub struct Game<'a> {
     /// As found: injection refuses a process that is no longer this one.
     pub process: &'a Process,
     pub trainer: &'a Path,
+    /// SHA-256 the trainer must have: checked on the locked file, not on the download.
+    pub trainer_hash: &'a str,
     pub variables: &'a [String],
 }
 
@@ -34,7 +37,15 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     let version = pe::header(exe).with_context(|| format!("{} is not a PE image", exe.display()))?.timestamp;
     let (service, plugin, trainer) = {
         let (service, plugin, trainer) = (trainerlib.join(SERVICE), trainerlib.join(PLUGIN), game.trainer.to_owned());
-        unblock(move || Ok::<_, anyhow::Error>((Image::open(&service)?, Image::open(&plugin)?, Image::open(&trainer)?))).await?
+        let hash = game.trainer_hash.to_owned();
+        unblock(move || {
+            let trainer = Image::open(&trainer)?;
+            // The download was checked earlier; the file may have been swapped before it was locked.
+            let found = binary::hash_of(trainer.path()).context("cannot read the trainer")?;
+            ensure!(found.eq_ignore_ascii_case(&hash), "the trainer on disk does not match its hash");
+            Ok::<_, anyhow::Error>((Image::open(&service)?, Image::open(&plugin)?, trainer))
+        })
+        .await?
     };
 
     let client_id = Uuid::new_v4().to_string();
@@ -93,7 +104,8 @@ mod tests {
 
         let server = Server::start().unwrap();
         let trainerlib = crate::wand::install::installs().first().expect("a Wand install").trainerlib();
-        let game = Game { process: &process, trainer: &trainer, variables: &variables };
+        let hash = binary::hash_of(&trainer).unwrap();
+        let game = Game { process: &process, trainer: &trainer, trainer_hash: &hash, variables: &variables };
         let (session, mut events) = block_on(attach(&server, &trainerlib, game)).unwrap();
         println!("attached, phase {:?}", session.phase());
 
