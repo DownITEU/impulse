@@ -9,8 +9,6 @@ use anyhow::{Result, bail};
 use futures::future::BoxFuture;
 use gpui_kit::http_client::{AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
 
-const WEMOD_CDN: &str = "https://api-cdn.wemod.com";
-
 /// Lets `img(url)` load public art through the disk cache and the native CDN client.
 pub struct CdnClient {
     pub cache: PathBuf,
@@ -87,9 +85,4 @@ fn file(cache: &Path, url: &str) -> PathBuf {
 
 pub fn steam_hero(app: u32) -> String {
     format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero.jpg")
-}
-
-/// `path` is a catalog thumbnail path with a `{size}` placeholder.
-pub fn thumbnail(path: &str, size: u32) -> String {
-    format!("{WEMOD_CDN}{}", path.replace("{size}", &size.to_string()))
 }

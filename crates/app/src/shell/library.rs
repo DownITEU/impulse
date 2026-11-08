@@ -1,4 +1,4 @@
-//! The page's game list: every installed catalog game with what the page shows about it.
+//! The page's game list: every installed game with what the page shows about it.
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -7,10 +7,11 @@ use std::{
 };
 
 use gpui_kit::SharedString;
-use wand::{catalog::Catalog, trainer::Stamp};
+use model::Installation;
+use wand::trainer::Stamp;
 
 use super::art;
-use crate::library::{self, Installed};
+use crate::library;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Support {
@@ -43,35 +44,37 @@ pub struct Game {
 
 pub struct Library {
     pub games: Vec<Game>,
-    /// Titles with a trainer in the whole catalog.
+    /// Titles with a trainer among all the provider's games.
     pub trainers: usize,
 }
 
-/// Scans the launchers and joins the result with the catalog (blocking).
-pub fn scan(catalog: &Catalog, art_cache: &Path) -> Library {
+/// Scans the launchers and joins the result with `all` (blocking).
+pub fn scan(all: &[model::Game], art_cache: &Path) -> Library {
     // Steam art also serves an Epic or GOG install when the title has a Steam release.
     let mut steam_apps = HashMap::<&str, u32>::new();
     let mut with_trainer = HashSet::<&str>::new();
-    for game in catalog.games.values() {
+    let mut by_id = HashMap::<&str, &model::Game>::new();
+    for game in all {
         if game.trainer.is_some() {
             with_trainer.insert(&game.title_id);
         }
-        if let Some(app) = game.correlation_ids.iter().find_map(|id| steam_app(id)) {
+        if let Some(app) = game.store_ids.iter().find_map(|id| steam_app(id)) {
             steam_apps.entry(&game.title_id).or_insert(app);
         }
+        by_id.insert(&game.id, game);
     }
-    let installed = library::scan(catalog);
+    let installed = library::scan(all);
     let mut per_store = BTreeMap::<&str, usize>::new();
     let mut games: Vec<Game> = installed
         .iter()
         .map(|found| {
-            let game = game(catalog, found, &steam_apps, art_cache);
+            let game = game(by_id[found.game_id.as_str()], found, &steam_apps, art_cache);
             *per_store.entry(store(&found.store_id)).or_default() += 1;
             log::debug!(
                 "{} [{}] v{} @ {}",
                 game.name,
                 found.store_id,
-                found.version.map_or("?".to_owned(), |v| v.to_string()),
+                found.build.map_or("?".to_owned(), |v| v.to_string()),
                 found.location.display()
             );
             game
@@ -87,52 +90,40 @@ pub fn scan(catalog: &Catalog, art_cache: &Path) -> Library {
 }
 
 fn game(
-    catalog: &Catalog,
-    found: &Installed,
+    entry: &model::Game,
+    found: &Installation,
     steam_apps: &HashMap<&str, u32>,
     art_cache: &Path,
 ) -> Game {
-    let entry = &catalog.games[&found.game_id];
-    let title = &catalog.titles[&entry.title_id];
-    let thumbnail = |size| {
-        title
-            .thumbnail
-            .as_deref()
-            .map(|path| art::thumbnail(path, size))
-    };
     let app =
         steam_app(&found.store_id).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
-    let support = match (found.supported, &entry.trainer) {
-        (_, None) => Support::NoTrainer,
-        (Some(true), _) => Support::Ready,
-        (Some(false), _) => Support::UpdatePending,
-        (None, _) => Support::Unverified,
+    let support = match (&entry.trainer, found.build) {
+        (None, _) => Support::NoTrainer,
+        (Some(offer), Some(build)) if offer.builds.contains(&build) => Support::Ready,
+        (Some(_), Some(_)) => Support::UpdatePending,
+        (Some(_), None) => Support::Unverified,
     };
     Game {
         id: found.game_id.as_str().into(),
-        name: title.name.to_uppercase().into(),
-        search: title.name.to_lowercase(),
+        name: entry.name.to_uppercase().into(),
+        search: entry.name.to_lowercase(),
         store: store(&found.store_id).to_uppercase(),
         store_id: found.store_id.clone(),
         location: found.location.clone(),
-        version: found.version,
+        version: found.build,
         support,
-        mods: entry.trainer.as_ref().map_or(0, |t| t.cheat_count),
+        mods: entry.trainer.as_ref().map_or(0, |offer| offer.cheats),
         stamp: Stamp {
-            updated_at: entry.trainer.as_ref().and_then(|t| t.updated_at.clone()),
-            version: found.version,
+            updated_at: entry.trainer.as_ref().and_then(|offer| offer.revision.clone()),
+            version: found.build,
         },
         // Not every Steam app has hero art.
         hero: app
             .map(art::steam_hero)
             .filter(|url| !art::known_missing(art_cache, url))
-            .or_else(|| thumbnail(460)),
-        thumbnail: thumbnail(100),
-        map: catalog
-            .maps
-            .iter()
-            .find(|map| map.title_id == entry.title_id)
-            .map(|map| map.name.to_uppercase().into()),
+            .or_else(|| entry.cover.clone()),
+        thumbnail: entry.thumbnail.clone(),
+        map: entry.map.as_ref().map(|name| name.to_uppercase().into()),
     }
 }
 

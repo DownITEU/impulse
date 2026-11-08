@@ -1,6 +1,6 @@
-use std::{env, path::PathBuf};
+use std::{collections::HashSet, env, path::PathBuf};
 
-use wand::catalog::{Catalog, Locator, LocatorKind};
+use model::{Game, Locator};
 
 use super::{
     App,
@@ -9,13 +9,14 @@ use super::{
 
 const UNINSTALL: &str = r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 
-/// Games outside any store; the catalog says where to look.
-pub fn apps(catalog: &Catalog) -> Vec<App> {
-    catalog
-        .platforms
-        .standalone
-        .apps
+/// Games outside any store; the game says where to look.
+pub fn apps(games: &[Game]) -> Vec<App> {
+    // Editions can share one.
+    let mut seen = HashSet::new();
+    games
         .iter()
+        .filter_map(|game| game.standalone.as_ref())
+        .filter(|app| seen.insert(app.store_id.to_ascii_lowercase()))
         .filter_map(|app| {
             let location = app
                 .locators
@@ -23,7 +24,7 @@ pub fn apps(catalog: &Catalog) -> Vec<App> {
                 .filter_map(locate)
                 .find(|dir| dir.join(&app.launcher).is_file())?;
             Some(App {
-                store_id: format!("standalone:{}", app.id),
+                store_id: app.store_id.clone(),
                 location,
             })
         })
@@ -31,13 +32,10 @@ pub fn apps(catalog: &Catalog) -> Vec<App> {
 }
 
 fn locate(locator: &Locator) -> Option<PathBuf> {
-    let raw = match locator.kind {
-        LocatorKind::Directory => locator.value.clone(),
-        LocatorKind::RegistryValue => registry_value(&locator.value)?,
-        LocatorKind::UninstallKey => {
-            registry_value(&format!(r"{UNINSTALL}\{}\InstallLocation", locator.value))?
-        }
-        LocatorKind::Unknown => return None,
+    let raw = match locator {
+        Locator::Directory(dir) => dir.clone(),
+        Locator::RegistryValue(value) => registry_value(value)?,
+        Locator::UninstallKey(key) => registry_value(&format!(r"{UNINSTALL}\{key}\InstallLocation"))?,
     };
     // Values can be quoted or carry an icon index: "C:\Game\game.exe",0
     let raw = raw.split(',').next()?.replace('"', "");

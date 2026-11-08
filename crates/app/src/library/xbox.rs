@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use wand::catalog::Catalog;
 
 use super::{
     App,
@@ -11,7 +10,7 @@ const PACKAGES: &str =
     r"Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages";
 
 /// Xbox and Microsoft Store games, keyed `uwp:<package family name>`.
-pub fn apps(catalog: &Catalog) -> Vec<App> {
+pub fn apps(known: impl Fn(&str) -> bool) -> Vec<App> {
     let Some(packages) = registry::open(CLASSES_ROOT, PACKAGES, View::Wow64) else {
         return Vec::new();
     };
@@ -26,7 +25,7 @@ pub fn apps(catalog: &Catalog) -> Vec<App> {
         };
         let store_id = format!("uwp:{family}");
         let rank = (resource.is_empty(), arch == "x64");
-        if catalog.games_for(&store_id).is_empty()
+        if !known(&store_id)
             || found.get(&store_id).is_some_and(|(had, _)| *had >= rank)
         {
             continue;

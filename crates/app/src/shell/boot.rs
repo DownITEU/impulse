@@ -4,9 +4,9 @@ use std::{path::PathBuf, sync::Arc};
 
 use blocking::unblock;
 use gpui_kit::{AsyncWindowContext, Context, WeakEntity, Window};
+use model::Game;
 use wand::{
-    binary,
-    catalog::{self, Catalog},
+    binary, catalog,
     session::{self, Source, account},
     trainer,
 };
@@ -27,13 +27,13 @@ impl Page {
             };
             let have_copy = cached.is_some();
             let art = art::cache_dir(&dir);
-            if let Some(catalog) = cached {
-                rescan(&page, catalog, art.clone(), cx).await;
+            if let Some(games) = cached {
+                rescan(&page, games, art.clone(), cx).await;
             }
             match unblock(move || catalog::refresh(&dir, have_copy)).await {
-                Ok(Some(catalog)) => {
+                Ok(Some(games)) => {
                     log::info!("catalog updated");
-                    rescan(&page, catalog, art, cx).await;
+                    rescan(&page, games, art, cx).await;
                 }
                 Ok(None) => log::debug!("catalog is up to date"),
                 Err(e) => {
@@ -253,11 +253,11 @@ impl Page {
 
 async fn rescan(
     page: &WeakEntity<Page>,
-    catalog: Catalog,
+    games: Vec<Game>,
     art: PathBuf,
     cx: &mut AsyncWindowContext,
 ) {
-    let library = unblock(move || library::scan(&catalog, &art)).await;
+    let library = unblock(move || library::scan(&games, &art)).await;
     page.update_in(cx, |page, window, cx| page.set_library(library, window, cx))
         .ok();
 }

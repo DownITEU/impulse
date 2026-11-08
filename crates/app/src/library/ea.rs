@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use wand::catalog::Catalog;
+use model::Game;
 
 use super::{
     App,
@@ -11,8 +11,8 @@ const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 
 /// EA app games. Its local records carry no offer ids the catalog knows,
 /// so a game is recognised by its `versionPath` inside an EA install folder.
-pub fn apps(catalog: &Catalog) -> Vec<App> {
-    match_folders(catalog, &install_folders())
+pub fn apps(games: &[Game]) -> Vec<App> {
+    match_folders(games, &install_folders())
 }
 
 // EA's installer leaves `__Installer\installerdata.xml` in every game it installs.
@@ -37,16 +37,12 @@ fn install_folders() -> Vec<PathBuf> {
     folders
 }
 
-fn match_folders(catalog: &Catalog, folders: &[PathBuf]) -> Vec<App> {
-    let games: Vec<(&str, &str)> = catalog
-        .games
-        .values()
+fn match_folders(games: &[Game], folders: &[PathBuf]) -> Vec<App> {
+    let games: Vec<(&str, &str)> = games
+        .iter()
         .filter_map(|game| {
-            let id = game
-                .correlation_ids
-                .iter()
-                .find(|id| id.starts_with("origin:"))?;
-            Some((id.as_str(), game.version_path.as_deref()?))
+            let id = game.store_ids.iter().find(|id| id.starts_with("origin:"))?;
+            Some((id.as_str(), game.exe.as_deref()?))
         })
         .collect();
     folders
@@ -69,18 +65,20 @@ mod tests {
 
     #[test]
     fn matches_origin_games_by_version_path() {
-        let catalog = Catalog::parse(
-            br#"{"games":{
-                "1":{"id":"1","titleId":"1","correlationIds":["origin:Origin.OFR.50.0000001"],"versionPath":"bin\\game.exe"},
-                "2":{"id":"2","titleId":"2","correlationIds":["steam:1"],"versionPath":"bin\\game.exe"},
-                "3":{"id":"3","titleId":"3","correlationIds":["origin:Origin.OFR.50.0000003"],"versionPath":"other.exe"}},
-              "titles":{},"platforms":{"standalone":{"apps":[]}}}"#,
-        )
-        .unwrap();
+        let game = |store_id: &str, exe: &str| Game {
+            store_ids: vec![store_id.to_owned()],
+            exe: Some(exe.to_owned()),
+            ..Game::default()
+        };
+        let games = [
+            game("origin:Origin.OFR.50.0000001", r"bin\game.exe"),
+            game("steam:1", r"bin\game.exe"),
+            game("origin:Origin.OFR.50.0000003", "other.exe"),
+        ];
         let dir = std::env::temp_dir().join(format!("impulse-ea-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("bin")).unwrap();
         std::fs::write(dir.join(r"bin\game.exe"), b"").unwrap();
-        let found = match_folders(&catalog, std::slice::from_ref(&dir));
+        let found = match_folders(&games, std::slice::from_ref(&dir));
         std::fs::remove_dir_all(&dir).unwrap();
         let ids: Vec<_> = found.iter().map(|a| a.store_id.as_str()).collect();
         assert_eq!(ids, ["origin:Origin.OFR.50.0000001"]);
