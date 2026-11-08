@@ -55,13 +55,19 @@ impl Store {
         self.save();
     }
 
-    /// The cheat's slots: the provider's bindings with the user's choices laid over them.
+    /// The cheat's slots: the provider's bindings with the user's choices laid over them. A default
+    /// holding the keys of a choice is dropped: a newer cheat list may bring it after the choice.
     pub fn slots(&self, game: &str, cheat: &Cheat) -> Vec<Option<Chord>> {
         let chosen = self.saved.games.get(game).and_then(|cheats| cheats.get(&cheat.id));
-        (0..cheat.kind.slots())
-            .map(|slot| match chosen.and_then(|slots| slots.get(&slot)) {
-                Some(vks) => vks.as_deref().and_then(Chord::from_vks),
-                None => cheat.hotkeys.get(slot).copied().flatten(),
+        let choice = |slot: usize| chosen.and_then(|slots| slots.get(&slot)).map(|vks| vks.as_deref().and_then(Chord::from_vks));
+        let choices: Vec<_> = (0..cheat.kind.slots()).map(choice).collect();
+        let chosen_keys = |chord: Chord| choices.iter().flatten().flatten().any(|other| other.same_keys(chord));
+        choices
+            .iter()
+            .enumerate()
+            .map(|(slot, choice)| match choice {
+                Some(chord) => *chord,
+                None => cheat.hotkeys.get(slot).copied().flatten().filter(|chord| !chosen_keys(*chord)),
             })
             .collect()
     }
@@ -128,6 +134,8 @@ mod tests {
         store.choose("g", "a", 0, Choice::Default);
         store.choose("g", "a", 1, Choice::Default);
         assert!(Store::load(&dir).saved.games.is_empty());
+        store.choose("g", "a", 1, Choice::Bound(Chord::from_vks(&[112]).unwrap()));
+        assert_eq!(store.slots("g", &cheat()), [None, Chord::from_vks(&[112])]);
         fs::remove_dir_all(&dir).unwrap();
     }
 }

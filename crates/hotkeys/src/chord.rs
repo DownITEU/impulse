@@ -52,6 +52,11 @@ impl Chord {
         }
     }
 
+    /// The same keys in any press order: `Matcher` cannot tell such chords apart.
+    pub fn same_keys(self, other: Chord) -> bool {
+        self.vks().count() == other.vks().count() && self.vks().all(|vk| other.contains(vk))
+    }
+
     /// Its virtual-key codes, modifiers first: `from_vks` reads them back to the same chord.
     pub fn vks(self) -> impl Iterator<Item = u8> {
         self.modifiers().map(|modifier| modifier.vk).chain(self.keys())
@@ -123,6 +128,14 @@ mod tests {
             assert_eq!(Chord::from_vks(vks), None, "{vks:?}");
         }
         assert!(Chord::from_vks(&[0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]).is_some());
+    }
+
+    #[test]
+    fn same_keys_ignore_press_order_but_not_sides() {
+        let chord = |vks: &[u16]| Chord::from_vks(vks).unwrap();
+        assert!(chord(&[0x70, 0x71]).same_keys(chord(&[0x71, 0x70])));
+        assert!(!chord(&[0xA2, 0x70]).same_keys(chord(&[0xA3, 0x70])));
+        assert!(!chord(&[0x70]).same_keys(chord(&[0x70, 0x71])));
     }
 
     #[test]

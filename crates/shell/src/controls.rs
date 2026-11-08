@@ -64,7 +64,9 @@ impl Span {
 fn round_to(value: f64, args: &Args, step: f64) -> f64 {
     let decimals = |x: f64| x.to_string().split_once('.').map_or(0, |(_, fraction)| fraction.len());
     let scale = 10_f64.powi(decimals(step).max(args.min.map_or(0, decimals)) as i32);
-    (value * scale).round() / scale
+    let rounded = (value * scale).round() / scale;
+    // Far past f64's range the scale overflows: the step is then too coarse to drift.
+    if rounded.is_finite() { rounded } else { value }
 }
 
 impl Page {

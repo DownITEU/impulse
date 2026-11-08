@@ -182,7 +182,10 @@ impl Page {
             Choice::Default => loaded.cheats[index].hotkeys.get(slot).copied().flatten(),
         };
         // As in Wand, a cheat never holds one chord twice.
-        let taken = |chord: Chord| loaded.hotkeys[index].iter().enumerate().any(|(at, bound)| at != slot && *bound == Some(chord));
+        let taken = |chord: Chord| {
+            let other = |(at, bound): (usize, &Option<Chord>)| at != slot && bound.is_some_and(|bound| bound.same_keys(chord));
+            loaded.hotkeys[index].iter().enumerate().any(other)
+        };
         if wanted.is_some_and(taken) {
             return;
         }
