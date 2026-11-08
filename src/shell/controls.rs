@@ -64,6 +64,7 @@ impl Page {
         if let Some(loaded) = self.loaded_mut() {
             loaded.values[index] = value;
         }
+        self.push_value(index, value, cx);
         cx.notify();
     }
 
@@ -131,8 +132,8 @@ impl Page {
                         .text_size(px(14.))
                         .on_click(cx.listener(move |page, _, _, cx| {
                             if running && let Some(loaded) = page.loaded_mut() {
-                                loaded.values[index] = loaded.cheats[index].args.clamp(value + by);
-                                cx.notify();
+                                let next = loaded.cheats[index].args.clamp(value + by);
+                                page.set_value(index, next, cx);
                             }
                         }))
                 };
@@ -174,11 +175,7 @@ impl Page {
                     options,
                     current,
                     cx,
-                    move |page, option, _, _| {
-                        if let Some(loaded) = page.loaded_mut() {
-                            loaded.values[index] = option as f64;
-                        }
-                    },
+                    move |page, option, _, cx| page.set_value(index, option as f64, cx),
                 )
                 .into_any_element()
             }
@@ -206,13 +203,18 @@ impl Page {
             if !running {
                 return;
             }
-            // A cheat with a text field takes its value from it.
-            let typed = page.trainer(page.selected.as_ref()).and_then(|loaded| {
-                let text = loaded.inputs.get(&index)?.read(cx).value();
-                Some(loaded.cheats[index].args.clamp(text.parse().ok()?))
+            // A cheat with a text field takes its value from it; a button cheat sends its own and
+            // keeps no state.
+            let (typed, fired) = page.trainer(page.selected.as_ref()).map_or((None, None), |loaded| {
+                let cheat = &loaded.cheats[index];
+                let typed = loaded.inputs.get(&index).and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
+                (typed, (cheat.kind == Kind::Button).then(|| cheat.args.pressed()))
             });
             if let Some(value) = typed {
                 page.set_value(index, value, cx);
+            }
+            if let Some(value) = fired {
+                page.push_value(index, value, cx);
             }
             page.flash(Flash::Cheat(index), cx);
         }))

@@ -1,5 +1,5 @@
 //! The combined page (`docs/design.md`): the installed games, the open game's trainer and its controls.
-//! Launching is a preview until the trainer host exists: controls change local state only.
+//! LAUNCH + ATTACH runs the open game's trainer (`run.rs`); its cheat controls drive the live session.
 
 mod art;
 mod assets;
@@ -12,6 +12,7 @@ mod keys;
 mod library;
 mod loaded;
 mod log_view;
+mod run;
 mod settings;
 mod side;
 mod sidebar;
@@ -43,12 +44,14 @@ pub use assets::Assets;
 use library::{Game, Library};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
+use run::Play;
 use settings::Tab;
 use theme::*;
 use wand_dir::WandDir;
 use widgets::{grid, mono, notice, square};
 
 use crate::{
+    play::tophat::Server,
     preferences::{self, Preferences},
     session::{Account, Session},
     transport::Transport,
@@ -105,8 +108,9 @@ pub struct Page {
     // Games whose trainer is being read or downloaded right now.
     loading: HashSet<Arc<str>>,
     selected: Option<Arc<str>>,
-    // The game in preview.
-    running: Option<Arc<str>>,
+    play: Play,
+    // Started with the first run.
+    tophat: Option<Arc<Server>>,
     favorites: HashSet<Arc<str>>,
     accent: u32,
     lead: Lead,
@@ -171,7 +175,8 @@ impl Page {
             trainers: HashMap::new(),
             loading: HashSet::new(),
             selected: None,
-            running: None,
+            play: Play::Idle,
+            tophat: None,
             favorites: HashSet::new(),
             accent: ACCENTS[0].1,
             lead: Lead::Number,
@@ -219,7 +224,7 @@ impl Page {
     }
 
     fn is_running(&self) -> bool {
-        self.running.is_some() && self.running == self.selected
+        self.play.live().is_some_and(|game| Some(game) == self.selected.as_ref())
     }
 
     fn select(&mut self, id: Arc<str>, window: &mut Window, cx: &mut Context<Self>) {
@@ -328,7 +333,7 @@ impl Page {
         let running = self
             .games()
             .iter()
-            .find(|game| Some(&game.id) == self.running.as_ref());
+            .find(|game| Some(&game.id) == self.play.live());
         h_flex()
             .h(px(30.))
             .flex_none()
@@ -347,7 +352,7 @@ impl Page {
                         h_flex()
                             .gap(px(8.))
                             .child(square(7., accent))
-                            .child(mono("PREVIEW", 11.).text_color(accent)),
+                            .child(mono("LIVE", 11.).text_color(accent)),
                     )
                     .child(mono(game.name.clone(), 11.))
                     .child(mono(format!("{active}/{total} ACTIVE"), 11.))

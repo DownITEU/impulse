@@ -2,7 +2,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -32,6 +32,9 @@ pub struct Game {
     /// Lower case, for the filter.
     pub search: String,
     pub store: String,
+    /// The launcher's own id, e.g. `steam:1203620`.
+    pub store_id: String,
+    pub location: PathBuf,
     pub version: Option<u32>,
     pub support: Support,
     pub mods: u32,
@@ -113,6 +116,8 @@ fn game(
         name: title.name.to_uppercase().into(),
         search: title.name.to_lowercase(),
         store: store(&found.store_id).to_uppercase(),
+        store_id: found.store_id.clone(),
+        location: found.location.clone(),
         version: found.version,
         support,
         mods: entry.trainer.as_ref().map_or(0, |t| t.cheat_count),

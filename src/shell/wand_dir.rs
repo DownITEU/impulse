@@ -88,6 +88,11 @@ impl Page {
         .detach();
     }
 
+    /// Wand's `trainerlib` folder, once the field points at an install.
+    pub(super) fn wand_trainerlib(&self) -> Option<PathBuf> {
+        self.wand.found.as_ref().map(Install::trainerlib)
+    }
+
     /// `choice`: the user picked this, so it is remembered once it checks out.
     fn show_wand_dir(&mut self, path: PathBuf, choice: bool, window: &mut Window, cx: &mut Context<Self>) {
         let text = path.to_string_lossy().into_owned();

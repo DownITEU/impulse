@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 
 use super::keys;
-use crate::trainer::{Cheat, Kind, Stamp, Trainer};
+use crate::trainer::{Cheat, Kind, Plan, Stamp, Trainer};
 
 const INPUT_DIGITS: usize = 6;
 
@@ -30,10 +30,13 @@ pub struct Loaded {
     pub inputs: HashMap<usize, Entity<InputState>>,
     pub pinned: HashSet<usize>,
     pub folded: HashSet<SharedString>,
+    /// What running this trainer takes.
+    pub plan: Plan,
 }
 
 impl Loaded {
     pub fn new(trainer: Trainer, stamp: Stamp, window: &mut Window, cx: &mut App) -> Self {
+        let plan = trainer.plan();
         let cheats = trainer.blueprint.cheats;
         let values: Vec<f64> = cheats.iter().map(initial).collect();
         let inputs = cheats
@@ -61,7 +64,13 @@ impl Loaded {
             values,
             inputs,
             folded: HashSet::new(),
+            plan,
         }
+    }
+
+    /// A trainer starts with every cheat at rest.
+    pub fn reset(&mut self) {
+        self.values = self.cheats.iter().map(initial).collect();
     }
 
     /// Whether the cheat was moved away from its resting value.

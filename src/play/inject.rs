@@ -6,7 +6,7 @@ use std::{ffi::c_void, io, mem::transmute, os::windows::ffi::OsStrExt, ptr};
 use anyhow::{Context, Result, bail, ensure};
 use serde::Serialize;
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, HANDLE, HMODULE, WAIT_OBJECT_0},
+    Foundation::{HMODULE, WAIT_OBJECT_0},
     System::{
         Diagnostics::Debug::WriteProcessMemory,
         LibraryLoader::{GetModuleHandleW, GetProcAddress},
@@ -19,7 +19,7 @@ use windows_sys::Win32::{
     },
 };
 
-use super::image::Image;
+use super::{handle::Handle, image::Image};
 use crate::pe;
 
 const START_EXPORT: &str = "StartTophatServiceThread";
@@ -66,16 +66,6 @@ pub fn tophat(pid: u32, service: &Image, startup: &Startup) -> Result<()> {
     // The thread reads this after we return.
     arg.leak();
     Ok(())
-}
-
-/// A Win32 handle closed on drop.
-struct Handle(HANDLE);
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        // SAFETY: the handle is owned, valid and closed once.
-        unsafe { CloseHandle(self.0) };
-    }
 }
 
 /// Memory allocated in the target, released on drop unless `leak`ed.

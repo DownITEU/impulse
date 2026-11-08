@@ -7,6 +7,7 @@ use super::{
     Menu, Page,
     assets::Icon,
     library::{Game, Support},
+    run::{Play, label},
     theme::*,
     widgets::{icon, mono, square, tracked},
 };
@@ -77,29 +78,35 @@ impl Page {
     fn actions(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
         let running = self.is_running();
+        let starting = match &self.play {
+            Play::Busy { game: busy, stage, .. } if *busy == game.id => Some(*stage),
+            _ => None,
+        };
         let favorite = self.favorites.contains(&game.id);
-        // Nothing to preview before the cheat list is there.
-        let launchable = !running && self.trainer(Some(&game.id)).is_some();
+        // Nothing to run before the cheat list is there, and one run at a time.
+        let launchable = !self.play.is_active() && self.trainer(Some(&game.id)).is_some();
         let id = game.id.clone();
         let overlays: Vec<SharedString> = OVERLAYS.into_iter().map(SharedString::from).collect();
         h_flex()
             .relative()
             .justify_end()
             .gap(px(8.))
-            .when(running, |bar| {
+            .when(running || starting.is_some(), |bar| {
                 bar.child(
                     action("stop")
                         .px(px(16.))
                         .border_color(accent)
                         .text_color(accent)
-                        .on_click(cx.listener(|page, _, _, cx| {
-                            page.running = None;
-                            cx.notify();
-                        }))
+                        .on_click(cx.listener(|page, _, _, cx| page.stop_run(cx)))
                         .child(square(9., accent))
                         .child(tracked("STOP", 12.5, 0.14)),
                 )
-                .child(
+            })
+            .when_some(starting, |bar, stage| {
+                bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent))
+            })
+            .when(running, |bar| {
+                bar.child(
                     self.dropdown(
                         action("overlay")
                             .pl(px(16.))
@@ -118,7 +125,6 @@ impl Page {
                 )
             })
             .when(launchable, |bar| {
-                let id = id.clone();
                 bar.child(
                     h_flex()
                         .id("launch")
@@ -131,10 +137,7 @@ impl Page {
                         .text_color(rgb(BG))
                         .font_weight(FontWeight::BOLD)
                         .cursor_pointer()
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.running = Some(id.clone());
-                            cx.notify();
-                        }))
+                        .on_click(cx.listener(|page, _, window, cx| page.start_run(window, cx)))
                         .child(icon(Icon::Play, 13., rgb(BG)))
                         .child(tracked("LAUNCH + ATTACH", 12.5, 0.14))
                         .child(

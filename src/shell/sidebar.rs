@@ -149,7 +149,7 @@ impl Page {
                     .text_color(name_color)
                     .child(game.name.clone()),
             )
-            .when(Some(&game.id) == self.running.as_ref(), |row| {
+            .when(Some(&game.id) == self.play.live(), |row| {
                 row.child(self.live())
             })
             .when(game.support == Support::UpdatePending, |row| {

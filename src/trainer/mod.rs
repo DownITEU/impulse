@@ -13,6 +13,10 @@ use serde_json::Value;
 
 use crate::{disk, session::Session, transport::Transport};
 
+mod plan;
+
+pub use plan::Plan;
+
 const DIR: &str = "trainers";
 
 #[derive(Deserialize)]
@@ -22,11 +26,27 @@ pub struct Trainer {
     /// Cheat uuids the user pinned in Wand.
     #[serde(default)]
     pub pinned_mods: Vec<String>,
+    // What running it takes: read by `plan`.
+    loader: Option<String>,
+    #[serde(default)]
+    loader_args: LoaderArgs,
+    #[serde(default)]
+    game_events: Vec<Value>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LoaderArgs {
+    binary_url: Option<String>,
+    binary_hash: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct Blueprint {
     pub cheats: Vec<Cheat>,
+    // Free-form on purpose: a shape we do not read must not make the trainer unreadable.
+    #[serde(default)]
+    config: Value,
 }
 
 #[derive(Deserialize)]
@@ -34,6 +54,9 @@ pub struct Cheat {
     pub uuid: String,
     pub name: String,
     pub category: String,
+    /// The variable the trainer exposes for this cheat.
+    #[serde(default)]
+    pub target: String,
     #[serde(rename = "type")]
     pub kind: Kind,
     /// Key chords as Windows virtual-key codes.
@@ -69,9 +92,16 @@ pub struct Args {
     options: Vec<Value>,
     /// A label or `true` when the value is applied with a button.
     button: Option<Value>,
+    /// What a button cheat sends when pressed.
+    value: Option<Value>,
 }
 
 impl Args {
+    /// What pressing a button cheat sends: its own value, else 1 (a toggle on).
+    pub fn pressed(&self) -> f64 {
+        self.value.as_ref().and_then(Value::as_f64).unwrap_or(1.)
+    }
+
     /// Never panics: trainers may send `min > max`.
     pub fn clamp(&self, value: f64) -> f64 {
         value

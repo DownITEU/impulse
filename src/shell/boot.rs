@@ -12,6 +12,7 @@ use super::{
 };
 use crate::{
     catalog::{self, Catalog},
+    play::binary,
     session::{self, Source, account},
     trainer,
 };
@@ -116,6 +117,7 @@ impl Page {
             unblock(move || {
                 catalog::forget(&dir);
                 trainer::forget(&dir);
+                binary::forget(&dir);
                 account::forget(&dir);
                 art::forget(&art::cache_dir(&dir));
             })
@@ -124,7 +126,7 @@ impl Page {
             page.update_in(cx, |page, window, cx| {
                 page.library = Load::Pending;
                 page.trainers.clear();
-                page.running = None;
+                page.stop_run(cx);
                 page.boot(window, cx);
                 cx.notify();
             })
@@ -142,8 +144,8 @@ impl Page {
             self.selected = library.games.first().map(|game| game.id.clone());
             self.drop_cheat_state();
         }
-        if !listed(&self.running) {
-            self.running = None;
+        if !listed(&self.play.game().cloned()) {
+            self.stop_run(cx);
         }
         self.library = Load::Ready(library);
         self.open_trainer(window, cx);

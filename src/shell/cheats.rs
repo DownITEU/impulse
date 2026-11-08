@@ -49,9 +49,7 @@ impl Page {
                 column.child(update_callout())
             })
             .when(!running, |column| {
-                column.child(
-                    mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),
-                )
+                column.child(self.run_note(&game.id))
             })
             .child(self.cheat_list(loaded, running, cx))
     }
