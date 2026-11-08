@@ -89,18 +89,25 @@ fn initial(cheat: &Cheat) -> f64 {
     cheat.args.min.unwrap_or(0.)
 }
 
+/// Cap labels; a chord that could never match gets none.
+fn caps(hotkeys: &[Vec<u16>]) -> Vec<SharedString> {
+    let chord = |vks: &Vec<u16>| Chord::from_vks(vks);
+    match hotkeys {
+        // A pair is "decrease, increase", told apart by its slot even when one side is unset.
+        [down, up] => [("↑", up), ("↓", down)]
+            .into_iter()
+            .filter_map(|(arrow, vks)| Some(format!("{arrow} {}", chord(vks)?).into()))
+            .collect(),
+        chords => chords.iter().filter_map(chord).map(|chord| chord.to_string().into()).collect(),
+    }
+}
+
 fn row(cheat: &Cheat) -> Row {
-    let chords: Vec<Chord> = cheat.hotkeys.iter().filter_map(|vks| Chord::from_vks(vks)).collect();
-    let keys = match chords.as_slice() {
-        // A pair is "decrease, increase".
-        [down, up] => vec![format!("↑ {up}"), format!("↓ {down}")],
-        chords => chords.iter().map(Chord::to_string).collect(),
-    };
     Row {
         name: cheat.name.to_uppercase().into(),
         search: cheat.name.to_lowercase(),
         category: cheat.category.to_uppercase().into(),
-        keys: keys.into_iter().map(SharedString::from).collect(),
+        keys: caps(&cheat.hotkeys),
         tip: cheat
             .instructions
             .clone()
@@ -122,5 +129,17 @@ pub fn number(value: f64) -> String {
         format!("{value:.0}")
     } else {
         format!("{value:.1}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::caps;
+
+    #[test]
+    fn a_pair_keeps_its_arrows_when_a_side_is_unset() {
+        assert_eq!(caps(&[vec![18, 117], vec![16, 117]]), ["↑ SHIFT+F6", "↓ ALT+F6"]);
+        assert_eq!(caps(&[vec![], vec![117]]), ["↑ F6"]);
+        assert_eq!(caps(&[vec![112], vec![113], vec![]]), ["F1", "F2"]);
     }
 }
