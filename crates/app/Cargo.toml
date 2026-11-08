@@ -1,0 +1,53 @@
+[package]
+name = "impulse"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+aes.workspace = true
+anyhow.workspace = true
+blocking.workspace = true
+bytes.workspace = true
+cbc = { workspace = true, features = ["alloc"] }
+form_urlencoded.workspace = true
+futures.workspace = true
+gpui-kit.workspace = true
+chrono = { workspace = true, features = ["clock"] }
+h2.workspace = true
+http.workspace = true
+log.workspace = true
+rusty-leveldb.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+tao.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "time", "sync", "macros"] }
+ureq.workspace = true
+url.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+webview2-com.workspace = true
+windows-registry.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
+    "Win32_Security_WinTrust",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_ProcessStatus",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+wry.workspace = true
+
+[build-dependencies]
+embed-resource.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
