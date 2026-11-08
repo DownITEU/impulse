@@ -104,12 +104,12 @@ impl From<Trainer> for model::Trainer {
 }
 
 fn cheat(cheat: Cheat) -> model::Cheat {
+    // A scalar is shown as a slider, an incremental as a number without a text field.
+    let typed = matches!(cheat.kind, Kind::Number);
     let kind = match cheat.kind {
         Kind::Toggle => model::Kind::Toggle,
-        Kind::Number => model::Kind::Number,
-        Kind::Slider => model::Kind::Slider,
-        Kind::Scalar => model::Kind::Scalar,
-        Kind::Incremental => model::Kind::Incremental,
+        Kind::Number | Kind::Incremental => model::Kind::Number,
+        Kind::Slider | Kind::Scalar => model::Kind::Slider,
         Kind::Button => model::Kind::Button,
         Kind::Selection => model::Kind::Selection,
         Kind::Unknown => model::Kind::Unknown,
@@ -134,7 +134,7 @@ fn cheat(cheat: Cheat) -> model::Cheat {
             max: args.max,
             step: args.step,
             options: options.collect(),
-            button: !matches!(args.button, None | Some(Value::Null | Value::Bool(false))),
+            button: typed && !matches!(args.button, None | Some(Value::Null | Value::Bool(false))),
             pressed: args.value.as_ref().and_then(Value::as_f64).unwrap_or(1.),
         },
         hotkeys: cheat.hotkeys.iter().map(|vks| Chord::from_vks(vks)).collect(),
@@ -219,7 +219,9 @@ mod tests {
              "hotkeys": [[18, 117], [16, 117]], "args": {"min": 0, "max": 1000, "step": 10, "button": "set"}},
             {"uuid": "c", "name": "Time", "category": "world", "type": "selection",
              "args": {"options": ["Noon", 2, {"label": "Night", "value": 3}, {"value": "Dawn"}]}},
-            {"uuid": "d", "name": "New", "category": "world", "type": "from-the-future", "args": {"value": 10}}
+            {"uuid": "d", "name": "New", "category": "world", "type": "from-the-future", "args": {"value": 10}},
+            {"uuid": "e", "name": "Gold", "category": "world", "type": "incremental", "args": {"button": "add"}},
+            {"uuid": "f", "name": "Speed", "category": "world", "type": "scalar"}
         ]},
         "pinnedMods": ["b"],
         "loaderArgs": {"binaryHash": "kept"}
@@ -235,6 +237,8 @@ mod tests {
         assert_eq!(cheats[2].args.options, ["Noon", "2", "Night", "Dawn"]);
         assert_eq!((cheats[2].args.pressed, cheats[3].args.pressed), (1., 10.));
         assert!(cheats[3].kind == model::Kind::Unknown);
+        assert!(cheats[4].kind == model::Kind::Number && !cheats[4].args.button);
+        assert!(cheats[5].kind == model::Kind::Slider);
         assert_eq!(trainer.pinned, ["b"]);
     }
 
@@ -253,7 +257,7 @@ mod tests {
         assert!(path.ends_with("trainers/82102.json"));
         disk::replace(&path, &serde_json::to_vec(&stored).unwrap()).unwrap();
         let (trainer, found) = cached(&dir, "82102").unwrap();
-        assert!(found == stamp && trainer.blueprint.cheats.len() == 4);
+        assert!(found == stamp && trainer.blueprint.cheats.len() == 6);
         assert!(fs::read_to_string(&path).unwrap().contains("binaryHash"));
         fs::remove_dir_all(&dir).unwrap();
         assert!(cached(&dir, "82102").is_none());

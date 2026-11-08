@@ -27,8 +27,6 @@ pub enum Kind {
     Toggle,
     Number,
     Slider,
-    Scalar,
-    Incremental,
     Button,
     Selection,
     Unknown,
@@ -41,7 +39,7 @@ pub struct Args {
     pub step: Option<f64>,
     /// A selection's labels; the value sent is the index.
     pub options: Vec<String>,
-    /// The value is typed, then applied with a button.
+    /// A number typed, then applied with a button.
     pub button: bool,
     /// What a button cheat sends when pressed.
     pub pressed: f64,

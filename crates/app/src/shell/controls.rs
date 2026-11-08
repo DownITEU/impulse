@@ -90,7 +90,7 @@ impl Page {
                 }))
                 .child(toggle(live, self.accent))
                 .into_any_element(),
-            Kind::Slider | Kind::Scalar => {
+            Kind::Slider => {
                 let span = Span::of(&cheat.args);
                 h_flex()
                     .gap(px(5.))
@@ -121,7 +121,7 @@ impl Page {
                 })
                 .child(self.press(index, "SET", "OK", running, cx))
                 .into_any_element(),
-            Kind::Number | Kind::Incremental => {
+            Kind::Number => {
                 let step = cheat.args.step.unwrap_or(1.);
                 let nudge = |id: &'static str, label: &'static str, by: f64| {
                     button(label)
