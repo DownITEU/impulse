@@ -24,7 +24,7 @@ impl Chord {
     /// Virtual-key codes in press order. The side-less `VK_SHIFT`, `VK_CONTROL` and `VK_MENU` are
     /// the left keys. `None` for no key, a code above 255, a key named twice or more than seven keys.
     pub fn from_vks(vks: &[u16]) -> Option<Self> {
-        let mut chord = Self(0);
+        let mut held = Held::default();
         for &vk in vks {
             let vk = match u8::try_from(vk).ok()? {
                 0 => return None,
@@ -33,16 +33,22 @@ impl Chord {
                 0x12 => 0xA4,
                 vk => vk,
             };
-            if let Some(modifier) = MODIFIERS.iter().find(|modifier| modifier.vk == vk) {
-                chord.0 |= u64::from(modifier.bit);
-            } else if chord.keys().count() == MAX_KEYS || chord.keys().any(|key| key == vk) {
-                // A key held twice takes two bytes, yet the keyboard reports it once: it could never match.
+            let full = |chord: Chord| chord.keys().count() == MAX_KEYS || chord.contains(vk);
+            // A key held twice takes two bytes, yet the keyboard reports it once: it could never match.
+            if bit(vk).is_none() && held.chord().is_some_and(full) {
                 return None;
-            } else {
-                chord.0 = ((chord.0 & !0xFF) << 8) | (u64::from(vk) << 8) | (chord.0 & 0xFF);
             }
+            held.press(vk);
         }
-        (chord.0 != 0).then_some(chord)
+        held.chord()
+    }
+
+    /// A modifier is in it when its bit is set, any other key when it is among the keys.
+    pub(crate) fn contains(self, vk: u8) -> bool {
+        match bit(vk) {
+            Some(bit) => self.0 & u64::from(bit) != 0,
+            None => self.keys().any(|key| key == vk),
+        }
     }
 
     pub(crate) fn modifiers(self) -> impl Iterator<Item = &'static Modifier> {
@@ -54,6 +60,42 @@ impl Chord {
         let byte = move |at: usize| (self.0 >> (8 * at)) as u8;
         let count = (1..=MAX_KEYS).take_while(|&at| byte(at) != 0).count();
         (1..=count).rev().map(byte)
+    }
+}
+
+fn bit(vk: u8) -> Option<u8> {
+    MODIFIERS.iter().find(|modifier| modifier.vk == vk).map(|modifier| modifier.bit)
+}
+
+/// The keys held now, tracked as Easymic's `KeyChord` does.
+#[derive(Default)]
+pub(crate) struct Held(u64);
+
+impl Held {
+    pub fn press(&mut self, vk: u8) {
+        match bit(vk) {
+            Some(bit) => self.0 |= u64::from(bit),
+            None => self.0 = ((self.0 & !0xFF) << 8) | (u64::from(vk) << 8) | (self.0 & 0xFF),
+        }
+    }
+
+    pub fn release(&mut self, vk: u8) {
+        let modifiers = self.0 & 0xFF;
+        self.0 = match bit(vk) {
+            Some(bit) => self.0 & !u64::from(bit),
+            // Only the newest key's release keeps the keys below it; any other ends the combination.
+            None if (self.0 >> 8) as u8 == vk => ((self.0 >> 16) << 8) | modifiers,
+            None => modifiers,
+        };
+    }
+
+    pub fn chord(&self) -> Option<Chord> {
+        (self.0 != 0).then_some(Chord(self.0))
+    }
+
+    /// The held modifiers with `vk` as the only key; `None` when `vk` is a modifier.
+    pub fn alone(&self, vk: u8) -> Option<Chord> {
+        bit(vk).is_none().then_some(Chord((self.0 & 0xFF) | (u64::from(vk) << 8)))
     }
 }
 
@@ -80,5 +122,20 @@ mod tests {
             assert_eq!(Chord::from_vks(vks), None, "{vks:?}");
         }
         assert!(Chord::from_vks(&[0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]).is_some());
+    }
+
+    #[test]
+    fn releasing_the_newest_key_keeps_the_rest_and_any_other_ends_them() {
+        let mut held = Held::default();
+        for vk in [0xA2, 0x41, 0x42] {
+            held.press(vk);
+        }
+        held.release(0x42);
+        assert_eq!(held.chord(), Chord::from_vks(&[0xA2, 0x41]));
+        held.press(0x42);
+        held.release(0x41);
+        assert_eq!(held.chord(), Chord::from_vks(&[0xA2]));
+        held.release(0xA2);
+        assert_eq!(held.chord(), None);
     }
 }
