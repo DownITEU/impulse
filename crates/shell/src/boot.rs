@@ -115,7 +115,8 @@ impl Page {
                 page.update_in(cx, |page, window, cx| {
                     match snapshot {
                         Snapshot::Cached(Some(trainer)) | Snapshot::Fresh(Ok(trainer)) => {
-                            let loaded = Loaded::new(trainer, stamp.clone(), window, cx);
+                            let hotkeys = page.bindings.slots(&id, &trainer.cheats);
+                            let loaded = Loaded::new(trainer, hotkeys, stamp.clone(), window, cx);
                             page.install(id.clone(), loaded);
                         }
                         // The network is next.

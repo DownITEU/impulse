@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    Bounds, Context, Div, ElementId, Entity, FontWeight, Hsla, IntoElement, Rgba, SharedString,
-    Stateful, Svg, Task, canvas,
+    AnyView, App, Bounds, Context, Div, ElementId, Entity, FontWeight, Hsla, InteractiveText, IntoElement, Rgba,
+    SharedString, Stateful, StyledText, Svg, Task, Window, canvas,
     component::{
         h_flex,
         input::{Input, InputState},
+        tooltip::Tooltip,
         v_flex,
     },
     div, fill, point,
@@ -16,6 +17,7 @@ use gpui_kit::{
 use super::{assets::Icon, theme::*};
 
 const FLASH: Duration = Duration::from_millis(900);
+const TIP_WIDTH: f32 = 320.;
 
 pub fn icon(icon: Icon, size: f32, color: impl Into<Hsla>) -> Svg {
     svg()
@@ -53,15 +55,34 @@ pub fn square(side: f32, color: impl Into<Hsla>) -> Div {
     div().size(px(side)).flex_none().bg(color.into())
 }
 
-pub fn keycap(text: impl Into<SharedString>) -> Div {
-    mono(text, 10.5)
+/// Shrinks with its row: the text is cut, and shown whole in a tooltip.
+pub fn keycap(id: impl Into<ElementId>, text: SharedString) -> Stateful<Div> {
+    div()
+        .id(id)
+        .min_w_0()
         .px(px(6.))
         .py(px(3.))
         .border_1()
         .border_color(line(0.16))
         .bg(rgb(RAISED))
         .text_color(rgb(MUTED))
-        .whitespace_nowrap()
+        .font_family(MONO)
+        .font_weight(FontWeight::MEDIUM)
+        .text_size(px(10.5))
+        .truncate()
+        .child(fitted("text", text))
+}
+
+/// Text for a parent that truncates: a tooltip holds the whole of it when it was cut.
+pub fn fitted(id: impl Into<ElementId>, text: SharedString) -> InteractiveText {
+    let styled = StyledText::new(text.clone());
+    let layout = styled.layout().clone();
+    InteractiveText::new(id, styled).tooltip(move |_, window, cx| (layout.text() != *text).then(|| tip(text.clone(), window, cx)))
+}
+
+/// A tooltip that wraps instead of running across the window.
+pub fn tip(text: SharedString, window: &mut Window, cx: &mut App) -> AnyView {
+    Tooltip::element(move |_, _| div().max_w(px(TIP_WIDTH)).child(text.clone())).build(window, cx)
 }
 
 pub fn segment(label: &'static str, fill: Option<u32>, color: u32) -> Div {

@@ -1,6 +1,7 @@
 //! `model::Provider` for Wand: the user's WeMod account handed off from Wand, its catalog and trainers.
 
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, PoisonError},
 };
@@ -20,6 +21,7 @@ use crate::{
     folder::Setting,
     run::Host,
     session::{self, Session, Source, account},
+    store,
     trainer::{self, Stamp, Trainer},
     transport::Transport,
 };
@@ -33,6 +35,8 @@ pub struct Wand {
     session: Mutex<Shared<BoxFuture<'static, Link>>>,
     folder: Arc<Setting>,
     host: Host,
+    // The hotkeys the user changed in Wand, read when a trainer first needs them.
+    hotkeys: Shared<BoxFuture<'static, Arc<store::Custom>>>,
 }
 
 impl Wand {
@@ -49,6 +53,14 @@ impl Wand {
             transport,
             folder,
             data_dir,
+            hotkeys: async {
+                unblock(store::hotkeys).await.map(Arc::new).unwrap_or_else(|e| {
+                    log::warn!("Wand's own hotkeys: {e:#}");
+                    Arc::default()
+                })
+            }
+            .boxed()
+            .shared(),
         }
     }
 
@@ -120,13 +132,17 @@ impl model::Provider for Wand {
             version: install.build,
         };
         let (dir, id, session, host) = (self.data_dir.clone(), game.id.clone(), self.session(), self.host.clone());
+        let hotkeys = self.hotkeys.clone();
         channel(|tx| async move {
             let copy = {
                 let (dir, id) = (dir.clone(), id.clone());
                 unblock(move || trainer::cached(&dir, &id)).await
             };
+            let custom = hotkeys.await;
+            let custom = custom.get(&*id);
+            let snapshot = |trainer| snapshot(trainer, &host, custom);
             let fresh = copy.as_ref().is_some_and(|(_, found)| *found == stamp);
-            send(&tx, Snapshot::Cached(copy.map(|(trainer, _)| snapshot(trainer, &host))));
+            send(&tx, Snapshot::Cached(copy.map(|(trainer, _)| snapshot(trainer))));
             if fresh {
                 return;
             }
@@ -138,7 +154,7 @@ impl model::Provider for Wand {
             if let Err(e) = &fetched {
                 log::warn!("trainer {id}: {e:#}");
             }
-            send(&tx, Snapshot::Fresh(fetched.map(|trainer| snapshot(trainer, &host))));
+            send(&tx, Snapshot::Fresh(fetched.map(snapshot)));
         })
     }
 
@@ -163,10 +179,16 @@ impl model::Provider for Wand {
 }
 
 /// The cheat list with a runner for exactly its plan.
-fn snapshot(trainer: Trainer, host: &Host) -> model::Trainer {
+/// `custom` holds the hotkeys the user changed in Wand for this game.
+fn snapshot(trainer: Trainer, host: &Host, custom: Option<&HashMap<String, store::Slots>>) -> model::Trainer {
     let plan = trainer.plan();
     let runner = host.runner(&plan);
-    trainer.into_model(model::Plan { image: plan.image, minimum_age: plan.minimum_age, launch: plan.launch, runner })
+    let mut trainer =
+        trainer.into_model(model::Plan { image: plan.image, minimum_age: plan.minimum_age, launch: plan.launch, runner });
+    if let Some(custom) = custom {
+        store::customize(&mut trainer.cheats, custom);
+    }
+    trainer
 }
 
 fn connect(transport: &Result<Transport, String>, data_dir: &Path) -> Shared<BoxFuture<'static, Link>> {

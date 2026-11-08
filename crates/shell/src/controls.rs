@@ -11,7 +11,7 @@ use gpui_kit::{
 use model::{Args, Kind};
 
 use super::{
-    Flash, Menu, Page,
+    Flash, Load, Menu, Page,
     assets::Icon,
     loaded::{Loaded, number},
     theme::*,
@@ -59,7 +59,54 @@ impl Span {
     }
 }
 
+/// Rounds to the step's decimals, as Wand does, so repeated steps do not drift.
+fn round_to(value: f64, step: f64) -> f64 {
+    let decimals = step.to_string().split_once('.').map_or(0, |(_, fraction)| fraction.len());
+    let scale = 10_f64.powi(decimals as i32);
+    (value * scale).round() / scale
+}
+
 impl Page {
+    /// A hotkey slot of the live trainer's cheat, stepped as Wand steps it: a pair moves by the step
+    /// and stops at the ends, a selection wraps, a numeric field takes the new value too.
+    pub(super) fn hotkey(&mut self, index: usize, slot: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(game) = self.play.live().cloned() else { return };
+        let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
+        let (cheat, value, up) = (&loaded.cheats[index], loaded.values[index], slot == 1);
+        let next = match cheat.kind {
+            Kind::Toggle => 1. - value.min(1.),
+            Kind::Button => {
+                let pressed = cheat.args.pressed;
+                self.push_value(index, pressed, cx);
+                if self.selected.as_ref() == Some(&game) {
+                    self.flash(Flash::Cheat(index), cx);
+                }
+                return;
+            }
+            Kind::Number | Kind::Slider => {
+                let step = cheat.args.step.filter(|step| *step > 0.).unwrap_or(1.);
+                cheat.args.clamp(round_to(if up { value + step } else { value - step }, step))
+            }
+            Kind::Selection => {
+                let count = loaded.rows[index].options.len() as f64;
+                if count == 0. {
+                    return;
+                }
+                (value + if up { 1. } else { -1. }).rem_euclid(count)
+            }
+            Kind::Unknown => return,
+        };
+        if next == value {
+            return;
+        }
+        loaded.values[index] = next;
+        if let Some(input) = loaded.inputs.get(&index) {
+            input.update(cx, |input, cx| input.set_value(number(next), window, cx));
+        }
+        self.push_value(index, next, cx);
+        cx.notify();
+    }
+
     fn set_value(&mut self, index: usize, value: f64, cx: &mut Context<Self>) {
         if let Some(loaded) = self.loaded_mut() {
             loaded.values[index] = value;

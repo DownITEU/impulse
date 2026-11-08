@@ -32,7 +32,7 @@ pub struct Cheat {
     pub category: String,
     pub kind: Kind,
     pub args: Args,
-    /// By slot, so a pair stays "decrease, increase" when one side is unset or unusable (`None`).
+    /// By slot (see `Kind::slots`), so a pair stays "decrease, increase" when one side is unset or unusable (`None`).
     pub hotkeys: Vec<Option<Chord>>,
     pub instructions: Option<String>,
     pub description: Option<String>,
@@ -46,6 +46,17 @@ pub enum Kind {
     Button,
     Selection,
     Unknown,
+}
+
+impl Kind {
+    /// Hotkey slots: a toggle flips, a button applies, a pair steps down and up (a selection wraps).
+    pub fn slots(self) -> usize {
+        match self {
+            Self::Toggle | Self::Button => 1,
+            Self::Number | Self::Slider | Self::Selection => 2,
+            Self::Unknown => 0,
+        }
+    }
 }
 
 #[derive(Default, Debug, PartialEq)]

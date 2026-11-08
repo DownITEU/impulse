@@ -28,8 +28,9 @@ pub enum Stage {
     Attaching,
 }
 
-/// Dropping the future abandons the run; a trainer that is already in the game ends with its session.
-pub async fn run(request: Request, mut stage: impl FnMut(Stage)) -> Result<Live> {
+/// The game's process and the live trainer. Dropping the future abandons the run; a trainer that is
+/// already in the game ends with its session.
+pub async fn run(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Process, Live)> {
     stage(Stage::Preparing);
     let prepared = request.runner.prepare().await?;
 
@@ -41,7 +42,7 @@ pub async fn run(request: Request, mut stage: impl FnMut(Stage)) -> Result<Live>
     };
 
     stage(Stage::Attaching);
-    prepared.attach(process).await
+    Ok((process.clone(), prepared.attach(process).await?))
 }
 
 async fn wait_for_game(request: &Request, stage: &mut impl FnMut(Stage)) -> Result<Process> {

@@ -52,6 +52,11 @@ impl Chord {
         }
     }
 
+    /// Its virtual-key codes, modifiers first: `from_vks` reads them back to the same chord.
+    pub fn vks(self) -> impl Iterator<Item = u8> {
+        self.modifiers().map(|modifier| modifier.vk).chain(self.keys())
+    }
+
     pub(crate) fn modifiers(self) -> impl Iterator<Item = &'static Modifier> {
         MODIFIERS.iter().filter(move |modifier| self.0 & u64::from(modifier.bit) != 0)
     }
@@ -92,11 +97,6 @@ impl Held {
 
     pub fn chord(&self) -> Option<Chord> {
         (self.0 != 0).then_some(Chord(self.0))
-    }
-
-    /// The held modifiers with `vk` as the only key; `None` when `vk` is a modifier.
-    pub fn alone(&self, vk: u8) -> Option<Chord> {
-        bit(vk).is_none().then_some(Chord((self.0 & 0xFF) | (u64::from(vk) << 8)))
     }
 }
 

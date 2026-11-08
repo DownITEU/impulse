@@ -6713,6 +6713,8 @@ dependencies = [
  "log",
  "model",
  "play",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

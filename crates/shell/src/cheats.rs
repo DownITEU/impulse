@@ -1,6 +1,6 @@
 use gpui_kit::{
     AnyElement, Context, FontWeight, IntoElement, SharedString,
-    component::{h_flex, tooltip::Tooltip, v_flex},
+    component::{h_flex, v_flex},
     div,
     prelude::*,
     px, rgb,
@@ -12,7 +12,7 @@ use super::{
     library::{Game, Support},
     loaded::Loaded,
     theme::*,
-    widgets::{filter, icon, icon_button, keycap, mono, notice, tracked},
+    widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
 };
 
 const PINNED: &str = "PINNED";
@@ -211,8 +211,9 @@ impl Page {
                     })),
             )
             .child(
+                // Shrinks with the caps, in proportion to their widths.
                 h_flex()
-                    .flex_1()
+                    .flex_auto()
                     .min_w_0()
                     .gap(px(8.))
                     .child(
@@ -222,16 +223,14 @@ impl Page {
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_size(px(13.5))
                             .text_color(rgb(name_color))
-                            .child(row.name.clone()),
+                            .child(fitted("name", row.name.clone())),
                     )
                     .when_some(row.tip.clone(), |name, text| {
                         name.child(
                             div()
                                 .id(("info", index))
                                 .child(icon(Icon::Info, 13., rgb(FAINT)))
-                                .tooltip(move |window, cx| {
-                                    Tooltip::new(text.clone()).build(window, cx)
-                                }),
+                                .tooltip(move |window, cx| tip(text.clone(), window, cx)),
                         )
                     })
                     .child(
@@ -261,14 +260,7 @@ impl Page {
                             ),
                     ),
             )
-            .child(
-                h_flex()
-                    .w(px(196.))
-                    .flex_none()
-                    .justify_end()
-                    .gap(px(4.))
-                    .children(row.keys.iter().cloned().map(keycap)),
-            )
+            .child(self.caps(index, loaded, cx))
             .child(
                 h_flex()
                     .w(px(186.))

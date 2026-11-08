@@ -1,38 +1,68 @@
-//! Recording a chord for rebinding, as Easymic's `HotkeyCapture`.
+//! Recording a chord for rebinding, after Easymic's `HotkeyCapture`.
 
 use crate::{Chord, chord::Held};
 
 const ESC: u8 = 0x1B;
+const BACKSPACE: u8 = 0x08;
+const DELETE: u8 = 0x2E;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Step {
-    Preview(Chord),
-    /// The chord at the first release; `None` when `ESC` alone cleared it.
-    Done(Option<Chord>),
+    /// The keys held so far; `None` once every modifier went up before a key.
+    Preview(Option<Chord>),
+    Done(Outcome),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Outcome {
+    Bound(Chord),
+    /// `ESC` alone.
+    Cancelled,
+    /// `BACKSPACE` alone: back to the default.
+    Reset,
+    /// `DELETE` alone.
+    Unbound,
 }
 
 /// Fed key changes without repeats; its hook should hide every down, so neither the app nor the game acts on it.
 #[derive(Default)]
 pub struct Capture {
     held: Held,
-    last: Option<Chord>,
     done: bool,
 }
 
 impl Capture {
-    /// `None` for a release before any press and for everything after `Done`.
+    /// Ends at the first release once a key besides modifiers is held, with the chord held just before
+    /// it; modifiers alone come and go. `None` for a release it never saw pressed and after `Done`.
     pub fn key(&mut self, vk: u8, down: bool) -> Option<Step> {
         if self.done {
             return None;
         }
         if down {
+            let alone = self.held.chord().is_none();
+            if let Some(outcome) = alone.then(|| command(vk)).flatten() {
+                self.done = true;
+                return Some(Step::Done(outcome));
+            }
             self.held.press(vk);
-            self.last = self.held.chord();
-            return self.last.map(Step::Preview);
+            return Some(Step::Preview(self.held.chord()));
         }
-        let last = self.last?;
+        let before = self.held.chord().filter(|chord| chord.contains(vk))?;
+        self.held.release(vk);
+        if before.keys().next().is_none() {
+            return Some(Step::Preview(self.held.chord()));
+        }
         self.done = true;
-        Some(Step::Done((Chord::from_vks(&[ESC.into()]) != Some(last)).then_some(last)))
+        Some(Step::Done(Outcome::Bound(before)))
+    }
+}
+
+fn command(vk: u8) -> Option<Outcome> {
+    match vk {
+        ESC => Some(Outcome::Cancelled),
+        BACKSPACE => Some(Outcome::Reset),
+        DELETE => Some(Outcome::Unbound),
+        _ => None,
     }
 }
 
@@ -40,36 +70,44 @@ impl Capture {
 mod tests {
     use super::*;
 
+    const LCTRL: u8 = 0xA2;
+    const LSHIFT: u8 = 0xA0;
+    const F6: u8 = 0x75;
+
     fn feed(keys: &[(u8, bool)]) -> Vec<Option<Step>> {
         let mut capture = Capture::default();
         keys.iter().map(|&(vk, down)| capture.key(vk, down)).collect()
     }
 
-    fn chord(vks: &[u16]) -> Chord {
-        Chord::from_vks(vks).unwrap()
+    fn chord(vks: &[u16]) -> Option<Chord> {
+        Chord::from_vks(vks)
     }
 
     #[test]
-    fn previews_each_press_and_ends_at_the_first_release() {
-        let steps = feed(&[(0xA2, true), (0x75, true), (0xA2, false)]);
-        let done = Step::Done(Some(chord(&[0x11, 0x75])));
-        assert_eq!(steps, [Some(Step::Preview(chord(&[0x11]))), Some(Step::Preview(chord(&[0x11, 0x75]))), Some(done)]);
+    fn previews_each_change_and_ends_at_the_first_release_after_a_key() {
+        let steps = feed(&[(LCTRL, true), (LSHIFT, true), (LSHIFT, false), (F6, true), (LCTRL, false), (F6, false)]);
+        let previews = [chord(&[0x11]), chord(&[0x11, 0x10]), chord(&[0x11]), chord(&[0x11, 0x75])];
+        let mut expected: Vec<_> = previews.into_iter().map(|preview| Some(Step::Preview(preview))).collect();
+        expected.extend([Some(Step::Done(Outcome::Bound(chord(&[0x11, 0x75]).unwrap()))), None]);
+        assert_eq!(steps, expected);
     }
 
     #[test]
-    fn esc_alone_clears_and_esc_in_a_chord_binds() {
-        assert_eq!(feed(&[(ESC, true), (ESC, false)])[1], Some(Step::Done(None)));
-        assert_eq!(feed(&[(0xA2, true), (ESC, true), (ESC, false)])[2], Some(Step::Done(Some(chord(&[0x11, 0x1B])))));
-        assert_eq!(feed(&[(ESC, true), (0x41, true), (ESC, false)])[2], Some(Step::Done(Some(chord(&[0x1B, 0x41])))));
+    fn modifiers_alone_never_bind() {
+        assert_eq!(feed(&[(LCTRL, true), (LCTRL, false)])[1], Some(Step::Preview(None)));
     }
 
     #[test]
-    fn nothing_follows_done() {
-        assert_eq!(feed(&[(0x41, true), (0x41, false), (0x42, true), (0x42, false)])[2..], [None, None]);
+    fn commands_count_only_alone() {
+        assert_eq!(feed(&[(ESC, true)]), [Some(Step::Done(Outcome::Cancelled))]);
+        assert_eq!(feed(&[(BACKSPACE, true)]), [Some(Step::Done(Outcome::Reset))]);
+        assert_eq!(feed(&[(DELETE, true)]), [Some(Step::Done(Outcome::Unbound))]);
+        let steps = feed(&[(LCTRL, true), (DELETE, true), (DELETE, false)]);
+        assert_eq!(steps[2], Some(Step::Done(Outcome::Bound(chord(&[0x11, 0x2E]).unwrap()))));
     }
 
     #[test]
-    fn a_release_before_any_press_is_ignored() {
+    fn a_release_it_never_saw_pressed_is_ignored() {
         assert_eq!(feed(&[(0x41, false)]), [None]);
     }
 }

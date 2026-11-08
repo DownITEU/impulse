@@ -15,6 +15,7 @@ pub struct Row {
     pub name: SharedString,
     pub search: String,
     pub category: SharedString,
+    /// One cap per hotkey slot.
     pub keys: Vec<SharedString>,
     pub tip: Option<SharedString>,
     pub options: Vec<SharedString>,
@@ -23,6 +24,8 @@ pub struct Row {
 pub struct Loaded {
     pub cheats: Vec<Cheat>,
     pub rows: Vec<Row>,
+    /// By cheat, then slot: the provider's bindings with the user's choices laid over them.
+    pub hotkeys: Vec<Vec<Option<Chord>>>,
     /// What it was asked for; another stamp on the game means it is stale.
     pub stamp: Stamp,
     /// The disk copy was stale and its refresh failed: the next open asks again.
@@ -38,7 +41,7 @@ pub struct Loaded {
 }
 
 impl Loaded {
-    pub fn new(trainer: Trainer, stamp: Stamp, window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(trainer: Trainer, hotkeys: Vec<Vec<Option<Chord>>>, stamp: Stamp, window: &mut Window, cx: &mut App) -> Self {
         let Trainer { cheats, pinned, plan } = trainer;
         let values: Vec<f64> = cheats.iter().map(initial).collect();
         let inputs = cheats
@@ -57,7 +60,8 @@ impl Loaded {
             })
             .collect();
         Self {
-            rows: cheats.iter().map(row).collect(),
+            rows: cheats.iter().zip(&hotkeys).map(|(cheat, slots)| row(cheat, slots)).collect(),
+            hotkeys,
             pinned: (0..cheats.len())
                 .filter(|&index| pinned.contains(&cheats[index].id))
                 .collect(),
@@ -69,6 +73,11 @@ impl Loaded {
             folded: HashSet::new(),
             plan,
         }
+    }
+
+    pub fn rebind(&mut self, index: usize, slots: Vec<Option<Chord>>) {
+        self.rows[index].keys = caps(self.cheats[index].kind, &slots);
+        self.hotkeys[index] = slots;
     }
 
     /// A trainer starts with every cheat at rest.
@@ -92,24 +101,31 @@ fn initial(cheat: &Cheat) -> f64 {
     cheat.args.min.unwrap_or(0.)
 }
 
-/// Cap labels; a chord that could never match gets none.
-fn caps(hotkeys: &[Option<Chord>]) -> Vec<SharedString> {
-    match hotkeys {
-        // A pair is "decrease, increase", told apart by its slot even when one side is unset.
-        [down, up] => [("↑", up), ("↓", down)]
-            .into_iter()
-            .filter_map(|(arrow, chord)| Some(format!("{arrow} {}", (*chord)?).into()))
-            .collect(),
-        chords => chords.iter().flatten().map(|chord| chord.to_string().into()).collect(),
-    }
+const UNBOUND: &str = "-";
+
+/// A slot's cap: a pair's arrow (`Kind::slots` order), then `body`.
+pub fn cap(kind: Kind, slot: usize, body: &str) -> SharedString {
+    let arrow = match (kind, slot) {
+        (Kind::Selection, 0) => "← ",
+        (Kind::Selection, _) => "→ ",
+        (Kind::Number | Kind::Slider, 0) => "↓ ",
+        (Kind::Number | Kind::Slider, _) => "↑ ",
+        _ => "",
+    };
+    format!("{arrow}{body}").into()
 }
 
-fn row(cheat: &Cheat) -> Row {
+fn caps(kind: Kind, slots: &[Option<Chord>]) -> Vec<SharedString> {
+    let body = |chord: &Option<Chord>| chord.map_or_else(|| UNBOUND.to_owned(), |chord| chord.to_string());
+    slots.iter().enumerate().map(|(slot, chord)| cap(kind, slot, &body(chord))).collect()
+}
+
+fn row(cheat: &Cheat, slots: &[Option<Chord>]) -> Row {
     Row {
         name: cheat.name.to_uppercase().into(),
         search: cheat.name.to_lowercase(),
         category: cheat.category.to_uppercase().into(),
-        keys: caps(&cheat.hotkeys),
+        keys: caps(cheat.kind, slots),
         tip: cheat
             .instructions
             .clone()
@@ -137,14 +153,15 @@ pub fn number(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use hotkeys::Chord;
+    use model::Kind;
 
     use super::caps;
 
     #[test]
-    fn a_pair_keeps_its_arrows_when_a_side_is_unset() {
+    fn every_slot_gets_a_cap_with_its_pair_arrow() {
         let chords = |all: &[&[u16]]| all.iter().map(|vks| Chord::from_vks(vks)).collect::<Vec<_>>();
-        assert_eq!(caps(&chords(&[&[18, 117], &[16, 117]])), ["↑ SHIFT+F6", "↓ ALT+F6"]);
-        assert_eq!(caps(&chords(&[&[], &[117]])), ["↑ F6"]);
-        assert_eq!(caps(&chords(&[&[112], &[113], &[]])), ["F1", "F2"]);
+        assert_eq!(caps(Kind::Number, &chords(&[&[18, 117], &[]])), ["↓ ALT+F6", "↑ -"]);
+        assert_eq!(caps(Kind::Selection, &chords(&[&[112], &[113]])), ["← F1", "→ F2"]);
+        assert_eq!(caps(Kind::Toggle, &chords(&[&[112]])), ["F1"]);
     }
 }

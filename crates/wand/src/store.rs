@@ -1,4 +1,5 @@
 use std::{
+    collections::{BTreeMap, HashMap},
     env, fmt, fs,
     path::Path,
     process,
@@ -6,7 +7,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
+use hotkeys::Chord;
 use rusty_leveldb::{DB, Options};
+use serde::Deserialize;
 use serde_json::Value;
 
 // Chromium layout: `_<origin>\0` + script key; both keys and values carry an encoding byte.
@@ -30,32 +33,55 @@ impl fmt::Debug for WandToken {
     }
 }
 
+/// A cheat's hotkey slots the user changed in Wand: VKs, or `None` for unbound.
+pub type Slots = BTreeMap<usize, Option<Vec<u16>>>;
+/// By game id, then cheat id.
+pub type Custom = HashMap<String, HashMap<String, Slots>>;
+
 /// Reads Wand's access token from a copy of its localStorage leveldb (blocking).
 pub fn read() -> Result<WandToken> {
-    let root = env::var_os("APPDATA").context("APPDATA is not set")?;
-    let mut found = Vec::new();
-    let mut failed = None;
-    for profile in PROFILES {
-        match read_profile(
-            &Path::new(&root)
-                .join(profile)
-                .join(r"Local Storage\leveldb"),
-        ) {
-            Ok(Some(candidate)) => found.push(candidate),
-            Ok(None) => {}
-            Err(e) => failed = Some(e),
-        }
-    }
-    if found.is_empty()
-        && let Some(e) = failed
-    {
-        return Err(e);
-    }
+    let found = stores()?.iter().filter_map(token).collect();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs_f64();
     newest(found, now)
+}
+
+/// The hotkeys the user changed in Wand, from the profile with the newest session (blocking).
+pub fn hotkeys() -> Result<Custom> {
+    let stores = stores()?;
+    let expiry = |store: &Value| store["token"]["expiresAt"].as_f64().unwrap_or(f64::MIN);
+    stores.iter().max_by(|a, b| expiry(a).total_cmp(&expiry(b))).map_or(Ok(Custom::new()), custom)
+}
+
+/// Lays the user's Wand hotkeys over the trainer's.
+pub fn customize(cheats: &mut [model::Cheat], custom: &HashMap<String, Slots>) {
+    for cheat in cheats {
+        let slots = cheat.kind.slots();
+        for (&slot, vks) in custom.get(&cheat.id).into_iter().flatten().filter(|(slot, _)| **slot < slots) {
+            cheat.hotkeys.resize(cheat.hotkeys.len().max(slots), None);
+            cheat.hotkeys[slot] = vks.as_deref().and_then(Chord::from_vks);
+        }
+    }
+}
+
+/// Each profile's store; a profile's error only when none could be read.
+fn stores() -> Result<Vec<Value>> {
+    let root = env::var_os("APPDATA").context("APPDATA is not set")?;
+    let mut found = Vec::new();
+    let mut failed = None;
+    for profile in PROFILES {
+        match read_profile(&Path::new(&root).join(profile).join(r"Local Storage\leveldb")) {
+            Ok(Some(store)) => found.push(store),
+            Ok(None) => {}
+            Err(e) => failed = Some(e),
+        }
+    }
+    match failed {
+        Some(e) if found.is_empty() => Err(e),
+        _ => Ok(found),
+    }
 }
 
 fn newest(found: Vec<(f64, String)>, now: f64) -> Result<WandToken> {
@@ -69,7 +95,7 @@ fn newest(found: Vec<(f64, String)>, now: f64) -> Result<WandToken> {
     Ok(WandToken { access_token })
 }
 
-fn read_profile(src: &Path) -> Result<Option<(f64, String)>> {
+fn read_profile(src: &Path) -> Result<Option<Value>> {
     if !src.is_dir() {
         return Ok(None);
     }
@@ -93,26 +119,41 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-fn read_db(dir: &Path) -> Result<Option<(f64, String)>> {
+fn read_db(dir: &Path) -> Result<Option<Value>> {
     let opt = Options {
         create_if_missing: false,
         ..Options::default()
     };
     let mut db = DB::open(dir, opt).context("open Wand store copy")?;
-    db.get(KEY)
-        .map(|raw| parse(&raw))
-        .transpose()
-        .map(Option::flatten)
+    db.get(KEY).map(|raw| parse(&raw)).transpose()
 }
 
-fn parse(raw: &[u8]) -> Result<Option<(f64, String)>> {
-    let store: Value =
-        serde_json::from_str(&decode(raw)?).map_err(|_| anyhow!("Wand store is not valid JSON"))?;
+fn parse(raw: &[u8]) -> Result<Value> {
+    serde_json::from_str(&decode(raw)?).map_err(|_| anyhow!("Wand store is not valid JSON"))
+}
+
+fn token(store: &Value) -> Option<(f64, String)> {
     let token = &store["token"];
-    Ok(token["expiresAt"]
-        .as_f64()
-        .zip(token["accessToken"].as_str())
-        .map(|(at, t)| (at, t.to_owned())))
+    token["expiresAt"].as_f64().zip(token["accessToken"].as_str()).map(|(at, t)| (at, t.to_owned()))
+}
+
+#[derive(Deserialize)]
+struct Preferences {
+    #[serde(default, rename = "customHotkeys")]
+    custom_hotkeys: HashMap<String, Slots>,
+}
+
+fn custom(store: &Value) -> Result<Custom> {
+    let Some(games) = store.get("gamePreferences").filter(|games| !games.is_null()) else {
+        return Ok(Custom::new());
+    };
+    let games: HashMap<String, Preferences> =
+        serde_json::from_value(games.clone()).context("Wand's game preferences have an unknown shape")?;
+    Ok(games
+        .into_iter()
+        .filter(|(_, preferences)| !preferences.custom_hotkeys.is_empty())
+        .map(|(game, preferences)| (game, preferences.custom_hotkeys))
+        .collect())
 }
 
 // First byte: 0 = UTF-16LE, 1 = Latin-1.
@@ -151,10 +192,33 @@ mod tests {
     #[test]
     fn parses_both_encodings() {
         for raw in [utf16(JSON), latin1(JSON)] {
-            assert_eq!(parse(&raw).unwrap(), Some((2000.5, "tok-1".to_owned())));
+            assert_eq!(token(&parse(&raw).unwrap()), Some((2000.5, "tok-1".to_owned())));
         }
         assert!(decode(&[7, 1]).is_err());
-        assert_eq!(parse(&latin1(r#"{"token":{}}"#)).unwrap(), None);
+        assert_eq!(token(&parse(&latin1(r#"{"token":{}}"#)).unwrap()), None);
+    }
+
+    #[test]
+    fn custom_hotkeys_lay_over_the_trainer_and_null_unbinds() {
+        let store: Value = serde_json::from_str(
+            r#"{"gamePreferences":{"g":{"customHotkeys":{"a":{"1":[17,113],"0":null,"7":[65]}}},"h":{}}}"#,
+        )
+        .unwrap();
+        let custom = custom(&store).unwrap();
+        assert_eq!(custom.keys().collect::<Vec<_>>(), ["g"]);
+        let mut cheats = vec![model::Cheat {
+            id: "a".into(),
+            key: None,
+            name: String::new(),
+            category: String::new(),
+            kind: model::Kind::Number,
+            args: model::Args::default(),
+            hotkeys: vec![Chord::from_vks(&[112])],
+            instructions: None,
+            description: None,
+        }];
+        customize(&mut cheats, &custom["g"]);
+        assert_eq!(cheats[0].hotkeys, [None, Chord::from_vks(&[17, 113])]);
     }
 
     #[test]

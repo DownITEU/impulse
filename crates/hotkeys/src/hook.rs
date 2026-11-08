@@ -11,7 +11,7 @@ use windows_sys::Win32::{
     Foundation::{LPARAM, LRESULT, WPARAM},
     System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
     UI::WindowsAndMessaging::{
-        CallNextHookEx, GetMessageW, HC_ACTION, KBDLLHOOKSTRUCT, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW,
+        CallNextHookEx, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, HC_ACTION, KBDLLHOOKSTRUCT, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW,
         SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN, WM_QUIT, WM_SYSKEYDOWN, WM_USER,
     },
 };
@@ -65,6 +65,14 @@ impl Drop for Hook {
             let _ = join.join();
         }
     }
+}
+
+/// The process that owns the foreground window; 0 for none.
+pub fn foreground_pid() -> u32 {
+    let mut pid = 0;
+    // SAFETY: plain Win32 calls; `pid` outlives them.
+    unsafe { GetWindowThreadProcessId(GetForegroundWindow(), &mut pid) };
+    pid
 }
 
 unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {

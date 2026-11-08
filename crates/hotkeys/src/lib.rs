@@ -7,7 +7,7 @@ mod hook;
 mod matcher;
 mod names;
 
-pub use capture::{Capture, Step};
+pub use capture::{Capture, Outcome, Step};
 pub use chord::Chord;
-pub use hook::Hook;
+pub use hook::{Hook, foreground_pid};
 pub use matcher::{Binding, Fired, Matcher};

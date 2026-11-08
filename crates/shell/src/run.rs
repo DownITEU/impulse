@@ -5,7 +5,7 @@ use std::{mem, sync::Arc};
 use anyhow::{Context as _, Result};
 use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{Context, Div, Task, Window, prelude::*, rgb};
-use model::{Event, Live, Rule, Session};
+use model::{Event, Live, Process, Rule, Session};
 
 use super::{Page, theme::*, widgets::mono};
 use play::{Request, Stage, run};
@@ -20,6 +20,8 @@ pub(super) enum Play {
     },
     Live {
         game: Arc<str>,
+        /// The game's process, for hotkeys that fire only while it is in front.
+        pid: u32,
         session: Arc<dyn Session>,
         _events: Task<()>,
     },
@@ -93,7 +95,7 @@ impl Page {
                 })
                 .await
             };
-            page.update(cx, |page, cx| page.run_finished(game, outcome, cx)).ok();
+            page.update_in(cx, |page, window, cx| page.run_finished(game, outcome, window, cx)).ok();
         });
         self.play = Play::Busy { game: id, stage: Stage::Preparing, _run: task };
         cx.notify();
@@ -118,8 +120,8 @@ impl Page {
         }
     }
 
-    fn run_finished(&mut self, id: Arc<str>, outcome: Result<Live>, cx: &mut Context<Self>) {
-        let Live { session, events } = match outcome {
+    fn run_finished(&mut self, id: Arc<str>, outcome: Result<(Process, Live)>, window: &mut Window, cx: &mut Context<Self>) {
+        let (process, Live { session, events }) = match outcome {
             Ok(attached) => attached,
             Err(e) => return self.fail_run(id, e, cx),
         };
@@ -129,7 +131,8 @@ impl Page {
             page.update(cx, |page, cx| page.run_ended(cx)).ok();
         });
         log::info!("trainer is live in {id}");
-        self.play = Play::Live { game: id, session: Arc::from(session), _events: watcher };
+        self.play = Play::Live { game: id, pid: process.pid, session: Arc::from(session), _events: watcher };
+        self.arm_hotkeys(window, cx);
         cx.notify();
     }
 
@@ -139,6 +142,7 @@ impl Page {
             log::info!("trainer session ended");
             let game = game.clone();
             self.play = Play::Idle;
+            self.bindings.disarm();
             self.reset_values(&game);
             self.install_deferred();
             cx.notify();
@@ -155,6 +159,7 @@ impl Page {
     /// Ends the run: a live trainer is stopped the way Wand stops it, and the page stays busy until
     /// that is done; a starting one is abandoned, which closes its session as it is dropped.
     pub(super) fn stop_run(&mut self, cx: &mut Context<Self>) {
+        self.bindings.disarm();
         match mem::replace(&mut self.play, Play::Idle) {
             Play::Live { game, session, .. } => {
                 self.reset_values(&game);

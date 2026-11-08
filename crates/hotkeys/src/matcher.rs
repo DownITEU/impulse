@@ -1,8 +1,7 @@
-//! Which bindings a key fires: Easymic's `HotkeyService` without multi-press, tap-only or per-app scopes.
+//! Which bindings a key fires, matched as Wand does: Easymic's `HotkeyService` without multi-press,
+//! tap-only or per-app scopes.
 
-use std::collections::{HashMap, hash_map::Entry};
-
-use crate::{Chord, chord::Held};
+use crate::Chord;
 
 pub struct Binding<T> {
     pub action: T,
@@ -19,53 +18,50 @@ pub enum Fired<T> {
 
 /// Pure: fed key changes without repeats, it never reads the system.
 pub struct Matcher<T> {
-    bindings: HashMap<Chord, Binding<T>>,
-    held: Held,
-    // Fired chords waiting for one of their keys to go up.
-    pressed: Vec<Chord>,
+    bindings: Vec<(Chord, Binding<T>)>,
+    down: [u64; 4],
+    // Fired bindings waiting for one of their keys to go up.
+    pressed: Vec<usize>,
 }
 
 impl<T> Default for Matcher<T> {
     fn default() -> Self {
-        Self { bindings: HashMap::new(), held: Held::default(), pressed: Vec::new() }
+        Self { bindings: Vec::new(), down: [0; 4], pressed: Vec::new() }
     }
 }
 
 impl<T: Clone> Matcher<T> {
-    /// False when the chord is taken.
-    pub fn bind(&mut self, chord: Chord, binding: Binding<T>) -> bool {
-        match self.bindings.entry(chord) {
-            Entry::Vacant(entry) => {
-                entry.insert(binding);
-                true
-            }
-            Entry::Occupied(_) => false,
-        }
+    /// A chord may be bound more than once: all of them fire.
+    pub fn bind(&mut self, chord: Chord, binding: Binding<T>) {
+        self.bindings.push((chord, binding));
     }
 
-    /// On a down, both the whole held chord and the new key with the held modifiers fire: a held
-    /// movement key does not stop `NUM 1`, yet `CTRL+F1` never fires `F1`. Returns whether to hide the down.
+    /// A down fires the longest bound chords that hold the key and whose keys are all held: a held
+    /// Shift does not stop `F1`, yet `CTRL+F1` beats `F1`. Returns whether to hide the down.
     pub fn key(&mut self, vk: u8, down: bool, mut fire: impl FnMut(Fired<T>)) -> bool {
+        let (word, bit) = (usize::from(vk / 64), 1 << (vk % 64));
         if !down {
+            self.down[word] &= !bit;
             let bindings = &self.bindings;
-            self.pressed.retain(|chord| {
+            self.pressed.retain(|&at| {
+                let (chord, binding) = &bindings[at];
                 let up = chord.contains(vk);
                 if up {
-                    fire(Fired::Release(bindings[chord].action.clone()));
+                    fire(Fired::Release(binding.action.clone()));
                 }
                 !up
             });
-            self.held.release(vk);
             return false;
         }
-        self.held.press(vk);
-        let whole = self.held.chord();
-        let alone = self.held.alone(vk).filter(|&alone| Some(alone) != whole);
+        self.down[word] |= bit;
+        let held = |key: u8| self.down[usize::from(key / 64)] & (1 << (key % 64)) != 0;
+        let matches = |chord: &Chord| chord.contains(vk) && chord.vks().all(held);
+        let longest = self.bindings.iter().filter(|(chord, _)| matches(chord)).map(|(chord, _)| chord.vks().count()).max();
         let mut block = false;
-        for chord in whole.into_iter().chain(alone) {
-            if let Some(binding) = self.bindings.get(&chord) {
+        for (at, (chord, binding)) in self.bindings.iter().enumerate() {
+            if Some(chord.vks().count()) == longest && matches(chord) {
                 fire(Fired::Press(binding.action.clone()));
-                self.pressed.push(chord);
+                self.pressed.push(at);
                 block |= binding.block;
             }
         }
@@ -79,13 +75,13 @@ mod tests {
 
     const LCTRL: u8 = 0xA2;
     const RCTRL: u8 = 0xA3;
+    const LSHIFT: u8 = 0xA0;
     const F1: u8 = 0x70;
-    const W: u8 = 0x57;
 
     fn matcher(bindings: &[(&[u16], char, bool)]) -> Matcher<char> {
         let mut matcher = Matcher::default();
         for &(vks, action, block) in bindings {
-            assert!(matcher.bind(Chord::from_vks(vks).unwrap(), Binding { action, block }));
+            matcher.bind(Chord::from_vks(vks).unwrap(), Binding { action, block });
         }
         matcher
     }
@@ -97,17 +93,17 @@ mod tests {
     }
 
     #[test]
-    fn modifiers_must_match_exactly_and_by_side() {
+    fn the_longest_held_chord_wins_and_extra_keys_do_not_stop_it() {
         let mut matcher = matcher(&[(&[0x70], 'a', false), (&[0x11, 0x70], 'b', false)]);
         assert_eq!(feed(&mut matcher, &[(LCTRL, true), (F1, true)]).0, [Fired::Press('b')]);
-        let (fired, _) = feed(&mut matcher, &[(F1, false), (LCTRL, false), (RCTRL, true), (F1, true)]);
-        assert_eq!(fired, [Fired::Release('b')]);
+        let (fired, _) = feed(&mut matcher, &[(F1, false), (LCTRL, false), (LSHIFT, true), (F1, true)]);
+        assert_eq!(fired, [Fired::Release('b'), Fired::Press('a')]);
     }
 
     #[test]
-    fn a_held_key_does_not_stop_another_binding() {
-        let mut matcher = matcher(&[(&[0x70], 'a', false)]);
-        assert_eq!(feed(&mut matcher, &[(W, true), (F1, true)]).0, [Fired::Press('a')]);
+    fn a_right_modifier_is_not_the_left_one() {
+        let mut matcher = matcher(&[(&[0x11, 0x70], 'b', false)]);
+        assert_eq!(feed(&mut matcher, &[(RCTRL, true), (F1, true)]).0, []);
     }
 
     #[test]
@@ -119,8 +115,8 @@ mod tests {
     }
 
     #[test]
-    fn a_chord_binds_once() {
-        let mut matcher = matcher(&[(&[0x70], 'a', false)]);
-        assert!(!matcher.bind(Chord::from_vks(&[0x70]).unwrap(), Binding { action: 'b', block: false }));
+    fn a_chord_bound_twice_fires_both() {
+        let mut matcher = matcher(&[(&[0x70], 'a', false), (&[0x70], 'b', false)]);
+        assert_eq!(feed(&mut matcher, &[(F1, true)]).0, [Fired::Press('a'), Fired::Press('b')]);
     }
 }

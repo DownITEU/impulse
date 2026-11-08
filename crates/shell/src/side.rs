@@ -1,5 +1,5 @@
 use gpui_kit::{
-    Div, FontWeight, IntoElement,
+    Context, Div, FontWeight, IntoElement,
     component::{h_flex, v_flex},
     div,
     prelude::*,
@@ -123,7 +123,7 @@ impl Page {
             )
     }
 
-    pub(super) fn session_panel(&self, game: &Game, running: bool) -> impl IntoElement {
+    pub(super) fn session_panel(&self, game: &Game, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
         let loaded = self.trainer(Some(&game.id));
         let total = loaded.map_or(game.mods as usize, |loaded| loaded.cheats.len());
@@ -163,9 +163,15 @@ impl Page {
             .child(
                 stat("HOTKEYS").child(
                     h_flex()
+                        .id("hotkeys-scope")
                         .gap(px(8.))
+                        .cursor_pointer()
+                        .on_click(cx.listener(|page, _, window, cx| page.toggle_game_only(window, cx)))
                         .child(square(7., accent))
-                        .child(tracked("GLOBAL", 12., 0.12).font_weight(FontWeight::BOLD)),
+                        .child(
+                            tracked(if self.bindings.game_only() { "IN GAME" } else { "GLOBAL" }, 12., 0.12)
+                                .font_weight(FontWeight::BOLD),
+                        ),
                 ),
             )
     }

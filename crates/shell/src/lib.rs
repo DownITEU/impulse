@@ -3,6 +3,7 @@
 
 mod art;
 mod assets;
+mod bindings;
 mod boot;
 mod cheats;
 mod controls;
@@ -39,6 +40,7 @@ use gpui_kit::{
 };
 
 pub use assets::Assets;
+use bindings::Bindings;
 use folders::FolderRow;
 use library::{Game, Library};
 use loaded::Loaded;
@@ -106,6 +108,7 @@ pub struct Page {
     deferred: Option<(Arc<str>, Loaded)>,
     selected: Option<Arc<str>>,
     play: Play,
+    bindings: Bindings,
     favorites: HashSet<Arc<str>>,
     accent: u32,
     lead: Lead,
@@ -150,7 +153,15 @@ impl Page {
             state
         };
         let (game_filter, mod_filter) = (filter("filter"), filter("filter mods"));
+        // A capture hides keys from every app: it must not outlive the user's attention.
+        cx.observe_window_activation(window, |page, window, cx| {
+            if !window.is_window_active() {
+                page.cancel_capture(cx);
+            }
+        })
+        .detach();
         let page = Self {
+            bindings: Bindings::load(&data_dir),
             data_dir,
             provider,
             account: None,
@@ -213,6 +224,7 @@ impl Page {
     }
 
     fn select(&mut self, id: Arc<str>, window: &mut Window, cx: &mut Context<Self>) {
+        self.cancel_capture(cx);
         self.selected = Some(id);
         self.drop_cheat_state();
         self.open_trainer(window, cx);
@@ -275,7 +287,7 @@ impl Page {
                             .child(
                                 div()
                                     .when(!wide, |panel| panel.flex_1())
-                                    .child(self.session_panel(game, running)),
+                                    .child(self.session_panel(game, running, cx)),
                             ),
                     ),
             )
@@ -364,7 +376,7 @@ impl Page {
                     .when(errors > 0, |item| item.child(problem(errors, DANGER)))
                     .when(warnings > 0, |item| item.child(problem(warnings, WARN))),
             )
-            .child(mono("HOTKEYS ON", 11.))
+            .child(self.hotkeys_status())
             .child(mono("IMPULSE 0.1", 11.).text_color(rgb(GHOST)))
     }
 }
