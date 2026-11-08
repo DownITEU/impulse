@@ -13,6 +13,7 @@ disk = { path = "crates/disk" }
 fetch = { path = "crates/fetch" }
 hotkeys = { path = "crates/hotkeys" }
 journal = { path = "crates/journal" }
+model = { path = "crates/model" }
 pe = { path = "crates/pe" }
 
 aes = "0.8"

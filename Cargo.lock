@@ -3675,6 +3675,7 @@ dependencies = [
  "http",
  "journal",
  "log",
+ "model",
  "pe",
  "rusty-leveldb",
  "serde",
@@ -4355,6 +4356,10 @@ dependencies = [
  "wasi",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "model"
+version = "0.1.0"
 
 [[package]]
 name = "moxcms"

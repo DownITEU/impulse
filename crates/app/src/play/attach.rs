@@ -5,13 +5,13 @@ use std::{path::Path, time::Duration};
 use anyhow::{Context, Result, ensure};
 use blocking::unblock;
 use futures::channel::mpsc::Receiver;
+use model::Process;
 use uuid::Uuid;
 
 use super::{
     binary,
     image::Image,
     inject::{self, Startup},
-    process::Process,
     tophat::{Event, Run, Server, Session},
 };
 use crate::wand::install::{PLUGIN, SERVICE};

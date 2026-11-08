@@ -1,15 +1,14 @@
-//! Finding the game's process the way Wand does: by executable name or install folder, once it
-//! has run long enough to be past its start-up, taking the biggest if several match.
+//! Finding the game's process by its `Rule`, taking the biggest if several match.
 
 use std::{
     io, mem,
     path::{Path, PathBuf},
-    ptr,
     time::Duration,
 };
 
 use anyhow::{Result, bail};
 use blocking::unblock;
+use model::{Process, Rule};
 use tokio::runtime::Handle as Runtime;
 use windows_sys::Win32::{
     Foundation::FILETIME,
@@ -24,56 +23,35 @@ use super::handle::Handle;
 
 const POLL: Duration = Duration::from_secs(1);
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Process {
-    pub pid: u32,
-    pub path: PathBuf,
-    pub age: Duration,
-    pub working_set: usize,
-    /// Creation time in 100 ns ticks. With the pid it names this process alone: a reused pid has
-    /// another.
-    pub created: u64,
+/// What ranks a process; only its identity leaves this module.
+#[derive(Debug)]
+struct Candidate {
+    process: Process,
+    age: Duration,
+    working_set: usize,
 }
 
-#[derive(Clone)]
-pub struct Rule {
-    /// Path suffix of the executable, `*` matching inside one folder or file name. Without it
-    /// the install folder decides.
-    pub image: Option<String>,
-    pub location: PathBuf,
-    /// A younger process is still starting up.
-    pub minimum_age: Duration,
+/// The matching process that is old enough, the one with the most memory if there are several (blocking).
+pub fn find(rule: &Rule) -> Result<Option<Process>> {
+    Ok(pick(running()?, rule))
 }
 
-impl Rule {
-    fn matches(&self, process: &Process) -> bool {
-        let path = process.path.to_string_lossy().to_lowercase();
-        match &self.image {
-            Some(image) => ends_with_image(&path, &image.to_lowercase()),
-            None => {
-                let folder = self.location.to_string_lossy().to_lowercase();
-                path.strip_prefix(folder.trim_end_matches('\\')).is_some_and(|rest| rest.starts_with('\\'))
-            }
-        }
-    }
-}
-
-/// The matching process that is old enough, the one with the most memory if there are several.
-pub fn pick(processes: Vec<Process>, rule: &Rule) -> Option<Process> {
-    processes
+fn pick(candidates: Vec<Candidate>, rule: &Rule) -> Option<Process> {
+    candidates
         .into_iter()
-        .filter(|process| rule.matches(process) && process.age >= rule.minimum_age)
-        .max_by_key(|process| process.working_set)
+        .filter(|candidate| rule.matches(&candidate.process.path) && candidate.age >= rule.minimum_age)
+        .max_by_key(|candidate| candidate.working_set)
+        .map(|candidate| candidate.process)
 }
 
-/// Polls until `pick` finds a process. The sleeps run on `runtime`: this future may be driven by
+/// Polls until `find` finds a process. The sleeps run on `runtime`: this future may be driven by
 /// an executor that has no timer.
 pub async fn wait(runtime: &Runtime, rule: &Rule, timeout: Duration) -> Result<Process> {
     let mut waited = Duration::ZERO;
     loop {
         let found = {
             let rule = rule.clone();
-            unblock(move || running().map(|all| pick(all, &rule))).await?
+            unblock(move || find(&rule)).await?
         };
         if let Some(process) = found {
             return Ok(process);
@@ -88,7 +66,7 @@ pub async fn wait(runtime: &Runtime, rule: &Rule, timeout: Duration) -> Result<P
 }
 
 /// Every process we may look at (blocking). Protected ones are skipped.
-pub fn running() -> Result<Vec<Process>> {
+fn running() -> Result<Vec<Candidate>> {
     let mut pids = vec![0u32; 1024];
     let count = loop {
         let mut bytes = 0;
@@ -103,11 +81,15 @@ pub fn running() -> Result<Vec<Process>> {
         }
         pids.resize(pids.len() * 2, 0);
     };
-    Ok(pids[..count].iter().filter_map(|&pid| of(pid)).collect())
+    Ok(pids[..count].iter().filter_map(|&pid| candidate(pid)).collect())
 }
 
 /// The process `pid` is now, if it can be looked at (blocking).
 pub fn of(pid: u32) -> Option<Process> {
+    candidate(pid).map(|candidate| candidate.process)
+}
+
+fn candidate(pid: u32) -> Option<Candidate> {
     // SAFETY: plain Win32 call; the handle is owned by the guard.
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
     if handle.is_null() {
@@ -121,7 +103,8 @@ pub fn of(pid: u32) -> Option<Process> {
     let mut memory: PROCESS_MEMORY_COUNTERS = unsafe { mem::zeroed() };
     memory.cb = size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
     let known = unsafe { GetProcessMemoryInfo(process.0, &mut memory, memory.cb) } != 0;
-    Some(Process { pid, path, age, working_set: if known { memory.WorkingSetSize } else { 0 }, created })
+    let working_set = if known { memory.WorkingSetSize } else { 0 };
+    Some(Candidate { process: Process { pid, path, created }, age, working_set })
 }
 
 /// Fails unless `handle` is the very process `expected` describes. A handle keeps its process
@@ -169,90 +152,28 @@ fn now() -> u64 {
     ticks(&time)
 }
 
-/// `path` ends with the folders and file of `image`, whole names only: `game.exe` is not `mygame.exe`.
-fn ends_with_image(path: &str, image: &str) -> bool {
-    let mut names = path.rsplit('\\');
-    let patterns = image.rsplit(['\\', '/']);
-    patterns.into_iter().all(|pattern| names.next().is_some_and(|name| glob(pattern, name)))
-}
-
-/// `*` matches any run of characters. Iterative, at most pattern x text steps: the pattern is
-/// remote data, and recursion would let it stall the search or the stack.
-fn glob(pattern: &str, text: &str) -> bool {
-    let (pattern, text): (Vec<char>, Vec<char>) = (pattern.chars().collect(), text.chars().collect());
-    let (mut at, mut seen) = (0, 0);
-    // Where the last `*` was and how much text it has taken so far.
-    let mut star = None;
-    while seen < text.len() {
-        if pattern.get(at) == Some(&'*') {
-            star = Some((at + 1, seen));
-            at += 1;
-        } else if pattern.get(at) == Some(&text[seen]) {
-            at += 1;
-            seen += 1;
-        } else if let Some((resume, taken)) = star {
-            (at, seen, star) = (resume, taken + 1, Some((resume, taken + 1)));
-        } else {
-            return false;
-        }
-    }
-    pattern[at..].iter().all(|&c| c == '*')
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn process(path: &str, secs: u64, working_set: usize) -> Process {
-        Process { pid: 1, path: PathBuf::from(path), age: Duration::from_secs(secs), working_set, created: 7 }
-    }
-
-    fn rule(image: Option<&str>, location: &str) -> Rule {
-        Rule { image: image.map(str::to_owned), location: PathBuf::from(location), minimum_age: Duration::from_secs(8) }
-    }
-
-    #[test]
-    fn an_image_matches_whole_trailing_names() {
-        let path = r"d:\steam\common\enshrouded\enshrouded.exe";
-        assert!(ends_with_image(path, "enshrouded.exe"));
-        assert!(ends_with_image(path, r"enshrouded\enshrouded.exe"));
-        assert!(ends_with_image(path, "ens*ded.exe"));
-        assert!(ends_with_image(path, "*.exe"));
-        assert!(!ends_with_image(path, "shrouded.exe"), "a longer name is another program");
-        assert!(!ends_with_image(path, r"*.exe\enshrouded.exe"));
-        assert!(!ends_with_image(r"c:\a.exe", r"b\a.exe"), "more names than the path has");
-        assert!(!ends_with_image(path, "enshrouded.ex"));
-    }
-
-    #[test]
-    fn a_hostile_pattern_cannot_stall_the_search() {
-        let started = std::time::Instant::now();
-        let pattern = format!("{}b", "*a".repeat(2000));
-        assert!(!ends_with_image(&format!(r"c:\{}", "a".repeat(200)), &pattern));
-        assert!(ends_with_image(r"c:\aaab", "*a*a*b"));
-        assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
-    }
-
-    #[test]
-    fn without_an_image_the_install_folder_decides() {
-        let rule = rule(None, r"D:\Steam\common\Game\");
-        let inside = process(r"D:\STEAM\common\game\bin\x64\g.exe", 60, 1);
-        assert!(rule.matches(&inside));
-        assert!(!rule.matches(&process(r"D:\Steam\common\Game2\g.exe", 60, 1)), "a sibling folder with the same prefix");
-        assert!(!rule.matches(&process(r"D:\Steam\common\g.exe", 60, 1)));
+    fn candidate(path: &str, secs: u64, working_set: usize) -> Candidate {
+        let process = Process { pid: 1, path: PathBuf::from(path), created: 7 };
+        Candidate { process, age: Duration::from_secs(secs), working_set }
     }
 
     #[test]
     fn the_biggest_old_enough_match_is_picked() {
-        let rule = rule(Some("g.exe"), r"C:\g");
-        let all = vec![
-            process(r"C:\g\g.exe", 30, 100),
-            process(r"C:\g\g.exe", 30, 900),
-            process(r"C:\g\g.exe", 2, 5000),
-            process(r"C:\other\o.exe", 30, 9000),
-        ];
-        assert_eq!(pick(all.clone(), &rule), Some(all[1].clone()));
-        assert_eq!(pick(vec![all[2].clone()], &rule), None, "too young");
+        let rule = Rule { image: Some("g.exe".into()), location: PathBuf::from(r"C:\g"), minimum_age: Duration::from_secs(8) };
+        let all = || {
+            vec![
+                candidate(r"C:\g\g.exe", 30, 100),
+                candidate(r"C:\g\g.exe", 30, 900),
+                candidate(r"C:\g\g.exe", 2, 5000),
+                candidate(r"C:\other\o.exe", 30, 9000),
+            ]
+        };
+        assert_eq!(pick(all(), &rule), Some(all().swap_remove(1).process));
+        assert_eq!(pick(vec![candidate(r"C:\g\g.exe", 2, 5000)], &rule), None, "too young");
     }
 
     #[test]
@@ -271,8 +192,8 @@ mod tests {
     fn this_process_is_listed_with_a_sane_age_and_memory() {
         let me = std::env::current_exe().unwrap();
         let listed = running().unwrap();
-        let found = listed.iter().find(|p| p.pid == std::process::id()).expect("our own process");
-        assert!(found.path.to_string_lossy().eq_ignore_ascii_case(&me.to_string_lossy()));
+        let found = listed.iter().find(|c| c.process.pid == std::process::id()).expect("our own process");
+        assert!(found.process.path.to_string_lossy().eq_ignore_ascii_case(&me.to_string_lossy()));
         assert!(found.working_set > 0 && found.age < Duration::from_secs(3600), "{found:?}");
     }
 }

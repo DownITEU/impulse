@@ -4,6 +4,7 @@
 use std::{ffi::c_void, io, mem::transmute, os::windows::ffi::OsStrExt, ptr};
 
 use anyhow::{Context, Result, bail, ensure};
+use model::Process;
 use serde::Serialize;
 use windows_sys::Win32::{
     Foundation::{HMODULE, WAIT_OBJECT_0},
@@ -22,7 +23,7 @@ use windows_sys::Win32::{
 use super::{
     handle::Handle,
     image::Image,
-    process::{self, Process},
+    process,
 };
 
 const START_EXPORT: &str = "StartTophatServiceThread";
@@ -205,7 +206,7 @@ mod tests {
     fn an_image_without_the_start_routine_is_refused_before_a_process_is_opened() {
         let image = Image::unchecked(r"C:\Windows\System32\kernel32.dll");
         let startup = Startup { wand_port: 1, client_id: "c", trainer_session_id: "s" };
-        let nobody = Process { pid: u32::MAX, path: PathBuf::new(), age: Duration::ZERO, working_set: 0, created: 0 };
+        let nobody = Process { pid: u32::MAX, path: PathBuf::new(), created: 0 };
         // kernel32 exports no start routine, and the pid is bogus: only the first check can be what fails.
         assert!(tophat(&nobody, &image, &startup).unwrap_err().to_string().contains(START_EXPORT));
     }

@@ -9,6 +9,7 @@ disk.workspace = true
 fetch.workspace = true
 hotkeys.workspace = true
 journal.workspace = true
+model.workspace = true
 pe.workspace = true
 
 aes.workspace = true

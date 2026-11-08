@@ -5,11 +5,12 @@ use std::{path::PathBuf, time::Duration};
 use anyhow::Result;
 use blocking::unblock;
 use futures::channel::mpsc::Receiver;
+use model::{Process, Rule};
 
 use super::{
     attach::{Game, attach},
     binary, launch,
-    process::{self, Process, Rule},
+    process,
     tophat::{Event, Server, Session},
 };
 
@@ -45,7 +46,7 @@ pub async fn run(server: &Server, request: Request, mut stage: impl FnMut(Stage)
     let trainer = unblock(move || binary::ensure(&data_dir, &url, &hash)).await?;
 
     let rule = request.rule.clone();
-    let running = unblock(move || process::running().map(|all| process::pick(all, &rule))).await?;
+    let running = unblock(move || process::find(&rule)).await?;
     let process = match running {
         Some(process) => process,
         None => wait_for_game(server, &request, &mut stage).await?,
