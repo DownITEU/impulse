@@ -19,7 +19,11 @@ use windows_sys::Win32::{
     },
 };
 
-use super::{handle::Handle, image::Image};
+use super::{
+    handle::Handle,
+    image::Image,
+    process::{self, Process},
+};
 use crate::pe;
 
 const START_EXPORT: &str = "StartTophatServiceThread";
@@ -36,11 +40,14 @@ pub struct Startup<'a> {
     pub trainer_session_id: &'a str,
 }
 
-/// Loads `service` into `pid` and starts its thread. Returns once the thread is running; the
+/// Loads `service` into `target` and starts its thread. Returns once the thread is running; the
 /// service registers with the server on its own. The DLL stays mapped for the game's lifetime.
-pub fn tophat(pid: u32, service: &Image, startup: &Startup) -> Result<()> {
+/// `target` is checked against the opened process: a reused pid must not receive the DLL.
+pub fn tophat(target: &Process, service: &Image, startup: &Startup) -> Result<()> {
+    let pid = target.pid;
     let start = pe::export(service.path(), START_EXPORT).with_context(|| format!("the service has no {START_EXPORT}"))?;
     let process = open(pid)?;
+    process::verify(&process, target)?;
     let mut wow = 0;
     // SAFETY: `process` is a live handle and `wow` outlives the call.
     ensure!(unsafe { IsWow64Process(process.0, &mut wow) } != 0, "cannot query process {pid}: {}", io::Error::last_os_error());
@@ -175,6 +182,7 @@ fn module_base(process: &Handle, pid: u32, image: &Image) -> Result<usize> {
 mod tests {
     use std::{
         future::Future,
+        path::PathBuf,
         process::{Command, Stdio},
         time::Duration,
     };
@@ -198,8 +206,24 @@ mod tests {
     fn an_image_without_the_start_routine_is_refused_before_a_process_is_opened() {
         let image = Image::unchecked(r"C:\Windows\System32\kernel32.dll");
         let startup = Startup { wand_port: 1, client_id: "c", trainer_session_id: "s" };
+        let nobody = Process { pid: u32::MAX, path: PathBuf::new(), age: Duration::ZERO, working_set: 0, created: 0 };
         // kernel32 exports no start routine, and the pid is bogus: only the first check can be what fails.
-        assert!(tophat(u32::MAX, &image, &startup).unwrap_err().to_string().contains(START_EXPORT));
+        assert!(tophat(&nobody, &image, &startup).unwrap_err().to_string().contains(START_EXPORT));
+    }
+
+    #[test]
+    fn a_process_that_is_not_the_one_found_is_never_injected() {
+        let service = crate::wand::install::installs()
+            .first()
+            .map_or_else(|| PathBuf::from(r"C:\Windows\System32\kernel32.dll"), |install| install.trainerlib().join(crate::wand::install::SERVICE));
+        let image = Image::unchecked(service.to_str().unwrap());
+        let startup = Startup { wand_port: 1, client_id: "c", trainer_session_id: "s" };
+        let mut me = process::of(std::process::id()).unwrap();
+        // A pid that was reused has another creation time: nothing may happen before this error.
+        me.created += 1;
+        if pe::export(image.path(), START_EXPORT).is_some() {
+            assert!(tophat(&me, &image, &startup).unwrap_err().to_string().contains("reused"));
+        }
     }
 
     /// Waits for `work` from this thread, with the timer on the runtime like the app's callers.
@@ -225,7 +249,7 @@ mod tests {
 
         let outcome = (|| -> Result<()> {
             let startup = Startup { wand_port: server.port, client_id: &client_id, trainer_session_id: &uuid::Uuid::new_v4().to_string() };
-            tophat(target.id(), &service, &startup)?;
+            tophat(&process::of(target.id()).context("the throwaway process")?, &service, &startup)?;
             let channel = bounded(&server.runtime, 20, waiting)?.context("the server dropped the waiter")?;
             let (session, mut events) = Session::open(server.runtime.clone(), channel, &client_id);
             // No trainer is running, so the service may refuse the stop; the session must still end.

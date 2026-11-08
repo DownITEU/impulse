@@ -7,7 +7,7 @@ use super::{
     Menu, Page,
     assets::Icon,
     library::{Game, Support},
-    run::{Play, label},
+    run::{Play, STOPPING, label},
     theme::*,
     widgets::{icon, mono, square, tracked},
 };
@@ -82,6 +82,7 @@ impl Page {
             Play::Busy { game: busy, stage, .. } if *busy == game.id => Some(*stage),
             _ => None,
         };
+        let stopping = matches!(&self.play, Play::Stopping { game: ending, .. } if *ending == game.id);
         let favorite = self.favorites.contains(&game.id);
         // Nothing to run before the cheat list is there, and one run at a time.
         let launchable = !self.play.is_active() && self.trainer(Some(&game.id)).is_some();
@@ -104,6 +105,9 @@ impl Page {
             })
             .when_some(starting, |bar, stage| {
                 bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent))
+            })
+            .when(stopping, |bar| {
+                bar.child(tracked(STOPPING, 12.5, 0.14).text_color(accent))
             })
             .when(running, |bar| {
                 bar.child(

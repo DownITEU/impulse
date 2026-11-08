@@ -10,6 +10,7 @@ use uuid::Uuid;
 use super::{
     image::Image,
     inject::{self, Startup},
+    process::Process,
     tophat::{Event, Run, Server, Session},
 };
 use crate::{
@@ -20,8 +21,8 @@ use crate::{
 const DIAL_IN_WITHIN: Duration = Duration::from_secs(15);
 
 pub struct Game<'a> {
-    pub pid: u32,
-    pub exe: &'a Path,
+    /// As found: injection refuses a process that is no longer this one.
+    pub process: &'a Process,
     pub trainer: &'a Path,
     pub variables: &'a [String],
 }
@@ -29,7 +30,8 @@ pub struct Game<'a> {
 /// `trainerlib` is the directory of Wand's service and plugin DLLs. Every DLL is checked before
 /// it enters the game. Dropping the returned session ends it; `stop` is the clean way.
 pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Result<(Session, Receiver<Event>)> {
-    let version = pe::header(game.exe).with_context(|| format!("{} is not a PE image", game.exe.display()))?.timestamp;
+    let exe = &game.process.path;
+    let version = pe::header(exe).with_context(|| format!("{} is not a PE image", exe.display()))?.timestamp;
     let (service, plugin, trainer) = {
         let (service, plugin, trainer) = (trainerlib.join(SERVICE), trainerlib.join(PLUGIN), game.trainer.to_owned());
         unblock(move || Ok::<_, anyhow::Error>((Image::open(&service)?, Image::open(&plugin)?, Image::open(&trainer)?))).await?
@@ -38,10 +40,10 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     let client_id = Uuid::new_v4().to_string();
     // Before the injection: the service dials in as soon as it starts.
     let waiting = server.expect(&client_id);
-    let (pid, port, id) = (game.pid, server.port, client_id.clone());
+    let (target, port, id) = (game.process.clone(), server.port, client_id.clone());
     unblock(move || {
         let startup = Startup { wand_port: port, client_id: &id, trainer_session_id: &Uuid::new_v4().to_string() };
-        inject::tophat(pid, &service, &startup)
+        inject::tophat(&target, &service, &startup)
     })
     .await?;
 
@@ -50,7 +52,7 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
         .context("the service did not dial in")?
         .context("the server dropped the service")?;
     let (session, events) = Session::open(server.runtime.clone(), channel, &client_id);
-    let run = Run { process_id: game.pid, game_version: version, trainer, variables: game.variables };
+    let run = Run { process_id: game.process.pid, game_version: version, trainer, variables: game.variables };
     session.start(plugin, run).await?;
     Ok((session, events))
 }
@@ -61,29 +63,11 @@ mod tests {
 
     use futures::executor::block_on;
     use serde_json::Value;
-    use windows_sys::Win32::{
-        Foundation::CloseHandle,
-        System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW},
-    };
 
     use super::*;
 
     fn var(name: &str) -> Option<String> {
         env::var(format!("IMPULSE_E2E_{name}")).ok()
-    }
-
-    fn image_of(pid: u32) -> PathBuf {
-        // SAFETY: plain Win32 calls; the buffer is valid for the length passed and the handle is closed once.
-        unsafe {
-            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-            assert!(!process.is_null(), "cannot open process {pid}");
-            let mut name = vec![0u16; 32_768];
-            let mut len = name.len() as u32;
-            let named = QueryFullProcessImageNameW(process, 0, name.as_mut_ptr(), &mut len);
-            CloseHandle(process);
-            assert!(named != 0, "cannot read the image of process {pid}");
-            PathBuf::from(String::from_utf16_lossy(&name[..len as usize]))
-        }
     }
 
     /// Hand-run against a game at its main menu; the variables are in the ignore reason below.
@@ -95,7 +79,8 @@ mod tests {
         let exe = PathBuf::from(var("GAME_EXE").expect("IMPULSE_E2E_GAME_EXE"));
         let trainer = PathBuf::from(var("TRAINER").expect("IMPULSE_E2E_TRAINER"));
         // A wrong pid would put the service into some other program.
-        assert!(image_of(pid).to_string_lossy().eq_ignore_ascii_case(&exe.to_string_lossy()), "process {pid} is not {}", exe.display());
+        let process = crate::play::process::of(pid).expect("a process with that id");
+        assert!(process.path.to_string_lossy().eq_ignore_ascii_case(&exe.to_string_lossy()), "process {pid} is not {}", exe.display());
 
         let blueprint = fs::read_to_string(var("BLUEPRINT").expect("IMPULSE_E2E_BLUEPRINT")).unwrap();
         let blueprint: Value = serde_json::from_str(blueprint.trim_start_matches('\u{feff}')).unwrap();
@@ -108,7 +93,7 @@ mod tests {
 
         let server = Server::start().unwrap();
         let trainerlib = crate::wand::install::installs().first().expect("a Wand install").trainerlib();
-        let game = Game { pid, exe: &exe, trainer: &trainer, variables: &variables };
+        let game = Game { process: &process, trainer: &trainer, variables: &variables };
         let (session, mut events) = block_on(attach(&server, &trainerlib, game)).unwrap();
         println!("attached, phase {:?}", session.phase());
 

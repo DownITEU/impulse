@@ -30,6 +30,9 @@ pub struct Process {
     pub path: PathBuf,
     pub age: Duration,
     pub working_set: usize,
+    /// Creation time in 100 ns ticks. With the pid it names this process alone: a reused pid has
+    /// another.
+    pub created: u64,
 }
 
 #[derive(Clone)]
@@ -100,18 +103,43 @@ pub fn running() -> Result<Vec<Process>> {
         }
         pids.resize(pids.len() * 2, 0);
     };
-    let now = now();
-    Ok(pids[..count].iter().filter_map(|&pid| inspect(pid, now)).collect())
+    Ok(pids[..count].iter().filter_map(|&pid| of(pid)).collect())
 }
 
-fn inspect(pid: u32, now: u64) -> Option<Process> {
+/// The process `pid` is now, if it can be looked at (blocking).
+pub fn of(pid: u32) -> Option<Process> {
     // SAFETY: plain Win32 call; the handle is owned by the guard.
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
     if handle.is_null() {
         return None;
     }
     let process = Handle(handle);
+    let (path, created) = identity(&process)?;
+    let age = Duration::from_nanos(now().saturating_sub(created) * 100);
 
+    // SAFETY: zeroed counters of the declared size.
+    let mut memory: PROCESS_MEMORY_COUNTERS = unsafe { mem::zeroed() };
+    memory.cb = size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+    let known = unsafe { GetProcessMemoryInfo(process.0, &mut memory, memory.cb) } != 0;
+    Some(Process { pid, path, age, working_set: if known { memory.WorkingSetSize } else { 0 }, created })
+}
+
+/// Fails unless `handle` is the very process `expected` describes. A handle keeps its process
+/// from being replaced, so this closes the gap between finding a process by pid and opening it
+/// for injection: the pid may have been reused in between.
+pub fn verify(handle: &Handle, expected: &Process) -> Result<()> {
+    match identity(handle) {
+        Some((path, created)) if created == expected.created && same_path(&path, &expected.path) => Ok(()),
+        _ => bail!("process {} is not the one that was found: it exited and its id was reused", expected.pid),
+    }
+}
+
+fn same_path(a: &Path, b: &Path) -> bool {
+    a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy())
+}
+
+/// Image path and creation time of the process a handle names.
+fn identity(process: &Handle) -> Option<(PathBuf, u64)> {
     let mut name = vec![0u16; 32_768];
     let mut len = name.len() as u32;
     // SAFETY: `name` is valid for `len` characters.
@@ -126,13 +154,7 @@ fn inspect(pid: u32, now: u64) -> Option<Process> {
     if unsafe { GetProcessTimes(process.0, created, exited, kernel, user) } == 0 {
         return None;
     }
-    let age = Duration::from_nanos(now.saturating_sub(ticks(created)) * 100);
-
-    // SAFETY: zeroed counters of the declared size.
-    let mut memory: PROCESS_MEMORY_COUNTERS = unsafe { mem::zeroed() };
-    memory.cb = size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
-    let known = unsafe { GetProcessMemoryInfo(process.0, &mut memory, memory.cb) } != 0;
-    Some(Process { pid, path, age, working_set: if known { memory.WorkingSetSize } else { 0 } })
+    Some((path, ticks(created)))
 }
 
 /// 100 ns ticks since 1601.
@@ -154,15 +176,27 @@ fn ends_with_image(path: &str, image: &str) -> bool {
     patterns.into_iter().all(|pattern| names.next().is_some_and(|name| glob(pattern, name)))
 }
 
-/// `*` matches any run of characters.
+/// `*` matches any run of characters. Iterative, at most pattern x text steps: the pattern is
+/// remote data, and recursion would let it stall the search or the stack.
 fn glob(pattern: &str, text: &str) -> bool {
-    match pattern.split_once('*') {
-        None => pattern == text,
-        Some((head, tail)) => {
-            let Some(rest) = text.strip_prefix(head) else { return false };
-            (0..=rest.len()).filter(|&at| rest.is_char_boundary(at)).any(|at| glob(tail, &rest[at..]))
+    let (pattern, text): (Vec<char>, Vec<char>) = (pattern.chars().collect(), text.chars().collect());
+    let (mut at, mut seen) = (0, 0);
+    // Where the last `*` was and how much text it has taken so far.
+    let mut star = None;
+    while seen < text.len() {
+        if pattern.get(at) == Some(&'*') {
+            star = Some((at + 1, seen));
+            at += 1;
+        } else if pattern.get(at) == Some(&text[seen]) {
+            at += 1;
+            seen += 1;
+        } else if let Some((resume, taken)) = star {
+            (at, seen, star) = (resume, taken + 1, Some((resume, taken + 1)));
+        } else {
+            return false;
         }
     }
+    pattern[at..].iter().all(|&c| c == '*')
 }
 
 #[cfg(test)]
@@ -170,7 +204,7 @@ mod tests {
     use super::*;
 
     fn process(path: &str, secs: u64, working_set: usize) -> Process {
-        Process { pid: 1, path: PathBuf::from(path), age: Duration::from_secs(secs), working_set }
+        Process { pid: 1, path: PathBuf::from(path), age: Duration::from_secs(secs), working_set, created: 7 }
     }
 
     fn rule(image: Option<&str>, location: &str) -> Rule {
@@ -188,6 +222,15 @@ mod tests {
         assert!(!ends_with_image(path, r"*.exe\enshrouded.exe"));
         assert!(!ends_with_image(r"c:\a.exe", r"b\a.exe"), "more names than the path has");
         assert!(!ends_with_image(path, "enshrouded.ex"));
+    }
+
+    #[test]
+    fn a_hostile_pattern_cannot_stall_the_search() {
+        let started = std::time::Instant::now();
+        let pattern = format!("{}b", "*a".repeat(2000));
+        assert!(!ends_with_image(&format!(r"c:\{}", "a".repeat(200)), &pattern));
+        assert!(ends_with_image(r"c:\aaab", "*a*a*b"));
+        assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
     }
 
     #[test]
@@ -210,6 +253,18 @@ mod tests {
         ];
         assert_eq!(pick(all.clone(), &rule), Some(all[1].clone()));
         assert_eq!(pick(vec![all[2].clone()], &rule), None, "too young");
+    }
+
+    #[test]
+    fn a_handle_is_verified_against_what_was_found() {
+        let found = of(std::process::id()).unwrap();
+        // SAFETY: plain Win32 call; the handle is owned by the guard.
+        let ours = Handle(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, found.pid) });
+        assert!(verify(&ours, &found).is_ok());
+        let reused = Process { created: found.created + 1, ..found.clone() };
+        assert!(verify(&ours, &reused).unwrap_err().to_string().contains("reused"));
+        let other = Process { path: PathBuf::from(r"C:\elsewhere\other.exe"), ..found };
+        assert!(verify(&ours, &other).is_err());
     }
 
     #[test]

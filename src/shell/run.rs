@@ -26,6 +26,11 @@ pub(super) enum Play {
         session: Arc<tophat::Session>,
         _events: Task<()>,
     },
+    /// The trainer is being taken down: a new run waits until it is gone.
+    Stopping {
+        game: Arc<str>,
+        _stop: Task<()>,
+    },
     /// Stays until the next run, so the reason is still there when the user looks.
     Failed {
         game: Arc<str>,
@@ -37,7 +42,9 @@ impl Play {
     pub fn game(&self) -> Option<&Arc<str>> {
         match self {
             Self::Idle => None,
-            Self::Busy { game, .. } | Self::Live { game, .. } | Self::Failed { game, .. } => Some(game),
+            Self::Busy { game, .. } | Self::Live { game, .. } | Self::Stopping { game, .. } | Self::Failed { game, .. } => {
+                Some(game)
+            }
         }
     }
 
@@ -48,11 +55,13 @@ impl Play {
         }
     }
 
-    /// A run is under way or in place: another cannot start.
+    /// A run is under way, in place or ending: another cannot start.
     pub fn is_active(&self) -> bool {
-        matches!(self, Self::Busy { .. } | Self::Live { .. })
+        matches!(self, Self::Busy { .. } | Self::Live { .. } | Self::Stopping { .. })
     }
 }
+
+pub(super) const STOPPING: &str = "STOPPING THE TRAINER";
 
 pub(super) fn label(stage: Stage) -> &'static str {
     match stage {
@@ -154,21 +163,37 @@ impl Page {
         cx.notify();
     }
 
-    /// Ends the run: a live trainer is stopped the way Wand stops it, a starting one is abandoned.
+    /// Ends the run: a live trainer is stopped the way Wand stops it, and the page stays busy until
+    /// that is done; a starting one is abandoned, which closes its session as it is dropped.
     pub(super) fn stop_run(&mut self, cx: &mut Context<Self>) {
-        let ended = mem::replace(&mut self.play, Play::Idle);
-        if let Some(game) = ended.game() {
-            self.reset_values(&game.clone());
-        }
-        if let Play::Live { session, .. } = ended {
-            cx.spawn(async move |_, _| {
-                if let Err(e) = session.stop().await {
-                    log::warn!("stopping the trainer: {e:#}");
+        match mem::replace(&mut self.play, Play::Idle) {
+            Play::Live { game, session, .. } => {
+                self.reset_values(&game);
+                let id = game.clone();
+                let stop = cx.spawn(async move |page, cx| {
+                    if let Err(e) = session.stop().await {
+                        log::warn!("stopping the trainer: {e:#}");
+                    }
+                    page.update(cx, |page, cx| page.run_stopped(cx)).ok();
+                });
+                self.play = Play::Stopping { game: id, _stop: stop };
+            }
+            // Already on its way out.
+            stopping @ Play::Stopping { .. } => self.play = stopping,
+            other => {
+                if let Some(game) = other.game() {
+                    self.reset_values(&game.clone());
                 }
-            })
-            .detach();
+            }
         }
         cx.notify();
+    }
+
+    fn run_stopped(&mut self, cx: &mut Context<Self>) {
+        if matches!(self.play, Play::Stopping { .. }) {
+            self.play = Play::Idle;
+            cx.notify();
+        }
     }
 
     fn reset_values(&mut self, id: &Arc<str>) {
@@ -197,6 +222,7 @@ impl Page {
         match &self.play {
             Play::Failed { game, error } if game == id => mono(error.clone(), 11.).text_color(rgb(WARN)),
             Play::Busy { game, stage, .. } if game == id => mono(label(*stage), 11.).text_color(rgb(self.accent)),
+            Play::Stopping { game, .. } if game == id => mono(STOPPING, 11.).text_color(rgb(self.accent)),
             _ => mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),
         }
     }

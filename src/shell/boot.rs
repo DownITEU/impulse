@@ -231,6 +231,11 @@ impl Page {
 
     // A newer copy may order the cheats differently.
     fn install(&mut self, id: Arc<str>, loaded: Loaded) {
+        // A run in place keeps the cheat list it started with: its variables and values belong to
+        // it. The newer copy is on disk and is read when the game is opened again.
+        if self.play.is_active() && self.play.game() == Some(&id) {
+            return;
+        }
         if self.selected.as_ref() == Some(&id) {
             self.drop_cheat_state();
         }

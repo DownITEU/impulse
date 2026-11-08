@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{sync::LazyLock, time::Duration};
 
 use anyhow::{Context, Result};
 use ureq::Agent;
@@ -8,6 +8,8 @@ static AGENT: LazyLock<Agent> = LazyLock::new(|| {
     Agent::config_builder()
         .http_status_as_error(false)
         .user_agent("Impulse")
+        // Covers connecting and reading the body: a server that stalls must not hold a worker, or a run, forever.
+        .timeout_global(Some(Duration::from_secs(120)))
         .build()
         .into()
 });
