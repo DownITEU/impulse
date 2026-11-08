@@ -27,7 +27,7 @@ struct Saved {
 pub struct Setting {
     file: PathBuf,
     // Held while saving, so writes happen in the order they are applied.
-    chosen: Mutex<Option<PathBuf>>,
+    chosen: Mutex<Choice>,
     calls: AtomicU64,
 }
 
@@ -38,19 +38,20 @@ impl Setting {
         let saved = fs::read(&file).ok().and_then(|bytes| {
             serde_json::from_slice::<Saved>(&bytes).inspect_err(|e| log::warn!("{FILE} ignored: {e}")).ok()
         });
-        Self { file, chosen: Mutex::new(saved.unwrap_or_default().wand_dir), calls: AtomicU64::new(0) }
+        let choice = Choice { dir: saved.unwrap_or_default().wand_dir, written: true };
+        Self { file, chosen: Mutex::new(choice), calls: AtomicU64::new(0) }
     }
 
     /// The install runs read from (blocking). A saved choice Squirrel removed falls back to the newest.
     pub fn install(&self) -> Option<Install> {
-        let chosen = self.chosen().clone();
+        let chosen = self.chosen().dir.clone();
         chosen.and_then(|dir| install::resolve(&dir)).or_else(|| install::installs().into_iter().next())
     }
 
     /// What Settings shows (blocking); a choice that no longer resolves is shown as the newest, not erased.
     pub fn folder(&self) -> Folder {
         let installs = install::installs();
-        let chosen = self.chosen().clone();
+        let chosen = self.chosen().dir.clone();
         let path = chosen.filter(|dir| install::resolve(dir).is_some()).or_else(|| installs.first().map(|install| install.root.clone()));
         let found = path.as_deref().and_then(install::resolve);
         describe(path, found, installs)
@@ -70,20 +71,27 @@ impl Setting {
         if let Some(found) = &found {
             let wanted = (Some(&found.root) != installs.first().map(|install| &install.root)).then(|| path.clone());
             let mut chosen = self.chosen();
-            if call == self.calls.load(Ordering::SeqCst) && *chosen != wanted {
+            if call == self.calls.load(Ordering::SeqCst) && (chosen.dir != wanted || !chosen.written) {
                 let json = serde_json::to_vec_pretty(&Saved { wand_dir: wanted.clone() });
-                if let Err(e) = json.map_err(anyhow::Error::from).and_then(|json| disk::replace(&self.file, &json)) {
+                let written = json.map_err(anyhow::Error::from).and_then(|json| disk::replace(&self.file, &json));
+                if let Err(e) = &written {
                     log::warn!("{FILE} not saved: {e:#}");
                 }
-                *chosen = wanted;
+                *chosen = Choice { dir: wanted, written: written.is_ok() };
             }
         }
         describe(Some(path), found, installs)
     }
 
-    fn chosen(&self) -> MutexGuard<'_, Option<PathBuf>> {
+    fn chosen(&self) -> MutexGuard<'_, Choice> {
         self.chosen.lock().unwrap_or_else(PoisonError::into_inner)
     }
+}
+
+struct Choice {
+    dir: Option<PathBuf>,
+    /// Whether `wand.json` holds `dir`: a failed write is tried again by the next choice.
+    written: bool,
 }
 
 fn describe(path: Option<PathBuf>, found: Option<Install>, installs: Vec<Install>) -> Folder {
@@ -110,7 +118,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(FILE), b"{ not json").unwrap();
         let setting = Setting::load(&dir);
-        assert_eq!(*setting.chosen(), None);
+        assert_eq!(setting.chosen().dir, None);
 
         // A folder holding an install: `app-<version>` with both DLLs.
         let lib = dir.join(r"Wand\app-1.0.0").join(r"resources\app.asar.unpacked\static\unpacked\trainerlib");
@@ -123,11 +131,11 @@ mod tests {
         setting.set(newer, dir.join("nothing here"));
         let folder = setting.set(older, chosen.clone());
         assert_eq!((folder.status.as_deref(), folder.selected.as_ref()), (Ok("WAND 1.0.0"), Some(&chosen)));
-        assert!(setting.chosen().is_none() && Setting::load(&dir).chosen().is_none());
+        assert!(setting.chosen().dir.is_none() && Setting::load(&dir).chosen().dir.is_none());
 
         let latest = setting.call();
         setting.set(latest, chosen.clone());
-        assert_eq!(*Setting::load(&dir).chosen(), Some(chosen));
+        assert_eq!(Setting::load(&dir).chosen().dir, Some(chosen));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

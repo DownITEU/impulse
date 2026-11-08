@@ -32,14 +32,14 @@ pub(super) struct FolderRow {
     check: Task<()>,
     // A check is out: the provider may still apply it, so a listing must not show another path.
     checking: bool,
-    // Counts the user's edits: a listing that started before one must not overwrite it.
+    // Counts the user's edits: a listing that started before one, or during a check, must not overwrite it.
     edits: u32,
 }
 
 impl Page {
     /// Lists the folders: their picks always, their path and status unless the user edited since.
     pub(super) fn scan_folders(&self, window: &Window, cx: &mut Context<Self>) {
-        let edits: Vec<u32> = self.folders.iter().map(|row| row.edits).collect();
+        let edits: Vec<Option<u32>> = self.folders.iter().map(|row| (!row.checking).then_some(row.edits)).collect();
         let listing = self.provider.folders();
         cx.spawn_in(window, async move |page, cx| {
             let folders = listing.await;
@@ -54,7 +54,7 @@ impl Page {
         .detach();
     }
 
-    fn list_folder(&mut self, folder: Folder, edits: &[u32], window: &mut Window, cx: &mut Context<Self>) {
+    fn list_folder(&mut self, folder: Folder, edits: &[Option<u32>], window: &mut Window, cx: &mut Context<Self>) {
         let Some(at) = self.folders.iter().position(|row| row.folder.id == folder.id) else {
             let at = self.folders.len();
             let input = cx.new(|cx| InputState::new(window, cx).placeholder("path to the folder"));
@@ -70,7 +70,7 @@ impl Page {
             return;
         };
         let row = &mut self.folders[at];
-        if edits.get(at) == Some(&row.edits) && !row.checking {
+        if edits.get(at) == Some(&Some(row.edits)) {
             set_text(&row.input, folder.path.clone(), window, cx);
             row.folder = folder;
         } else {
