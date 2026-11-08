@@ -11,6 +11,6 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. A
 ## Invariants
 
 - Never ship or commit WeMod binaries (TrainerLib, trainer DLLs, Tophat).
-- WeMod/Wand code lives in `providers/wand`, and its rules are in `providers/wand/CLAUDE.md`. Read them before touching anything that reaches Wand, its API, its files or a game process.
+- WeMod/Wand code lives in `crates/wand`, and its rules are in `crates/wand/CLAUDE.md`. Read them before touching anything that reaches Wand, its API, its files or a game process.
 - Never log tokens, auth codes or auth response bodies.
 - Keep provider research out of Git.

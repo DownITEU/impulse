@@ -256,12 +256,10 @@ mod tests {
     #[test]
     fn every_workspace_crate_is_ours() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for group in ["crates", "providers"] {
-            for dir in fs::read_dir(root.join(group)).unwrap() {
-                let manifest = fs::read_to_string(dir.unwrap().path().join("Cargo.toml")).unwrap();
-                let name = manifest.lines().find_map(|line| line.strip_prefix("name = \"")?.strip_suffix('"')).unwrap();
-                assert!(OURS.contains(&name.replace('-', "_").as_str()), "{name} is missing from OURS");
-            }
+        for dir in fs::read_dir(root.join("crates")).unwrap() {
+            let manifest = fs::read_to_string(dir.unwrap().path().join("Cargo.toml")).unwrap();
+            let name = manifest.lines().find_map(|line| line.strip_prefix("name = \"")?.strip_suffix('"')).unwrap();
+            assert!(OURS.contains(&name.replace('-', "_").as_str()), "{name} is missing from OURS");
         }
         assert_eq!(crate_of("wand::catalog"), "wand");
     }

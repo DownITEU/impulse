@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "providers/*"]
+members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
@@ -16,7 +16,7 @@ hotkeys = { path = "crates/hotkeys" }
 journal = { path = "crates/journal" }
 model = { path = "crates/model" }
 pe = { path = "crates/pe" }
-wand = { path = "providers/wand" }
+wand = { path = "crates/wand" }
 
 aes = "0.8"
 anyhow = "1"
