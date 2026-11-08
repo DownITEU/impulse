@@ -20,7 +20,7 @@ use crate::{
     folder::Setting,
     run::Host,
     session::{self, Session, Source, account},
-    trainer::{self, Stamp},
+    trainer::{self, Stamp, Trainer},
     transport::Transport,
 };
 
@@ -126,7 +126,7 @@ impl model::Provider for Wand {
                 unblock(move || trainer::cached(&dir, &id)).await
             };
             let fresh = copy.as_ref().is_some_and(|(_, found)| *found == stamp);
-            send(&tx, Snapshot::Cached(copy.map(|(trainer, _)| trainer.into_model(&host))));
+            send(&tx, Snapshot::Cached(copy.map(|(trainer, _)| snapshot(trainer, &host))));
             if fresh {
                 return;
             }
@@ -138,7 +138,7 @@ impl model::Provider for Wand {
             if let Err(e) = &fetched {
                 log::warn!("trainer {id}: {e:#}");
             }
-            send(&tx, Snapshot::Fresh(fetched.map(|trainer| trainer.into_model(&host))));
+            send(&tx, Snapshot::Fresh(fetched.map(|trainer| snapshot(trainer, &host))));
         })
     }
 
@@ -160,6 +160,13 @@ impl model::Provider for Wand {
         binary::forget(dir);
         account::forget(dir);
     }
+}
+
+/// The cheat list with a runner for exactly its plan.
+fn snapshot(trainer: Trainer, host: &Host) -> model::Trainer {
+    let plan = trainer.plan();
+    let runner = host.runner(&plan);
+    trainer.into_model(model::Plan { image: plan.image, minimum_age: plan.minimum_age, launch: plan.launch, runner })
 }
 
 fn connect(transport: &Result<Transport, String>, data_dir: &Path) -> Shared<BoxFuture<'static, Link>> {

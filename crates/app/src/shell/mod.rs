@@ -301,7 +301,7 @@ impl Page {
             Load::Ready(_) => notice(
                 "[ NO GAMES ]",
                 "NO INSTALLED GAMES FOUND",
-                "Impulse looks in Steam, Epic, GOG, Ubisoft, Xbox, Rockstar and EA for games from the Wand catalog.",
+                "Impulse looks in Steam, Epic, GOG, Ubisoft, Xbox, Rockstar and EA for games it has trainers for.",
             ),
         }
     }

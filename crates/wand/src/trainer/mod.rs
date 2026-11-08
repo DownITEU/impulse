@@ -12,7 +12,7 @@ use hotkeys::Chord;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{run::Host, session::Session, transport::Transport};
+use crate::{session::Session, transport::Transport};
 
 mod plan;
 
@@ -98,14 +98,9 @@ struct Args {
 }
 
 impl Trainer {
-    /// The cheat list and what running it takes, with a runner on `host`.
-    pub fn into_model(self, host: &Host) -> model::Trainer {
-        let plan = self.plan();
-        model::Trainer {
-            plan: model::Plan { image: plan.image.clone(), minimum_age: plan.minimum_age, launch: plan.launch, runner: host.runner(&plan) },
-            cheats: self.blueprint.cheats.into_iter().map(cheat).collect(),
-            pinned: self.pinned_mods,
-        }
+    /// `plan` is what running it takes; see `plan()`.
+    pub fn into_model(self, plan: model::Plan) -> model::Trainer {
+        model::Trainer { cheats: self.blueprint.cheats.into_iter().map(cheat).collect(), pinned: self.pinned_mods, plan }
     }
 }
 
@@ -235,10 +230,9 @@ mod tests {
 
     #[test]
     fn parses_every_control_shape() {
-        let dir = std::env::temp_dir();
-        let host = Host::new(dir.clone(), std::sync::Arc::new(crate::folder::Setting::load(&dir)));
-        let trainer = serde_json::from_str::<Trainer>(JSON).unwrap().into_model(&host);
-        let cheats = &trainer.cheats;
+        let trainer: Trainer = serde_json::from_str(JSON).unwrap();
+        let pinned = trainer.pinned_mods;
+        let cheats: Vec<model::Cheat> = trainer.blueprint.cheats.into_iter().map(cheat).collect();
         assert!(cheats[0].kind == model::Kind::Toggle && !cheats[0].args.button && cheats[0].key.is_none());
         assert_eq!(cheats[1].hotkeys, [Chord::from_vks(&[18, 117]), Chord::from_vks(&[16, 117])]);
         assert!(cheats[1].args.button && cheats[1].args.step == Some(10.));
@@ -247,7 +241,7 @@ mod tests {
         assert!(cheats[3].kind == model::Kind::Unknown);
         assert!(cheats[4].kind == model::Kind::Number && !cheats[4].args.button);
         assert!(cheats[5].kind == model::Kind::Slider);
-        assert_eq!(trainer.pinned, ["b"]);
+        assert_eq!(pinned, ["b"]);
     }
 
     #[test]

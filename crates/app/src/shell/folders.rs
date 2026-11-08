@@ -30,6 +30,8 @@ pub(super) struct FolderRow {
     input: Entity<InputState>,
     // Starting a check drops the previous one, so the newest text wins.
     check: Task<()>,
+    // A check is out: the provider may still apply it, so a listing must not show another path.
+    checking: bool,
     // Counts the user's edits: a listing that started before one must not overwrite it.
     edits: u32,
 }
@@ -64,11 +66,11 @@ impl Page {
             })
             .detach();
             set_text(&input, folder.path.clone(), window, cx);
-            self.folders.push(FolderRow { folder, input, check: Task::ready(()), edits: 0 });
+            self.folders.push(FolderRow { folder, input, check: Task::ready(()), checking: false, edits: 0 });
             return;
         };
         let row = &mut self.folders[at];
-        if edits.get(at) == Some(&row.edits) {
+        if edits.get(at) == Some(&row.edits) && !row.checking {
             set_text(&row.input, folder.path.clone(), window, cx);
             row.folder = folder;
         } else {
@@ -83,10 +85,12 @@ impl Page {
         // "Copy as path" in Explorer wraps the path in quotes.
         let path = PathBuf::from(row.input.read(cx).value().trim().trim_matches('"'));
         let checked = self.provider.set_folder(row.folder.id, path);
+        row.checking = true;
         row.check = cx.spawn(async move |page, cx| {
             let folder = checked.await;
             page.update(cx, |page, cx| {
-                page.folders[at].folder = folder;
+                let row = &mut page.folders[at];
+                (row.folder, row.checking) = (folder, false);
                 cx.notify();
             })
             .ok();

@@ -65,6 +65,8 @@ impl Page {
             log::info!("caches invalidated");
             page.update_in(cx, |page, window, cx| {
                 page.library = Load::Pending;
+                // `boot` asks for the session again.
+                page.signed_out = false;
                 page.trainers.clear();
                 page.deferred = None;
                 page.stop_run(cx);

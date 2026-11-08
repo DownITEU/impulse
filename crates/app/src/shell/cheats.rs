@@ -26,7 +26,7 @@ impl Page {
             return column.child(notice(
                 "[ NO TRAINER ]",
                 &format!("NO TRAINER FOR {} YET", game.name),
-                "Wand has no trainer for this game. Impulse will flag it in your library as soon as one ships.",
+                "There is no trainer for this game yet. Impulse will flag it in your library as soon as one ships.",
             ));
         }
         let loaded = match self.trainers.get(&game.id) {
@@ -300,7 +300,7 @@ fn update_callout() -> impl IntoElement {
                         .text_color(rgb(WARN)),
                 )
                 .child(div().text_size(px(13.5)).text_color(rgb(TEXT_2)).child(
-                    "This build is newer than the trainer supports. Mods may not work until Wand ships an update.",
+                    "This build is newer than the trainer supports. Mods may not work until the trainer is updated.",
                 )),
         )
 }
