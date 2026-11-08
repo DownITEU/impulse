@@ -9,8 +9,6 @@ use anyhow::{Result, bail};
 use futures::future::BoxFuture;
 use gpui_kit::http_client::{AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
 
-use crate::{disk, transport::cdn};
-
 const WEMOD_CDN: &str = "https://api-cdn.wemod.com";
 
 /// Lets `img(url)` load public art through the disk cache and the native CDN client.
@@ -61,7 +59,7 @@ fn load(cache: &Path, url: &str) -> Result<Vec<u8>> {
         Ok(bytes) => return Ok(bytes),
         Err(_) => {}
     }
-    let response = cdn::get(url, None)?;
+    let response = fetch::get(url, None)?;
     // An empty file marks art the CDN does not have.
     let keep: &[u8] = match response.status {
         200 => &response.body,

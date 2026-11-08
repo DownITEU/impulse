@@ -11,7 +11,6 @@ use anyhow::{Context, Result, bail, ensure};
 use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_READ, GetFinalPathNameByHandleW, VOLUME_NAME_DOS};
 
 use super::trust;
-use crate::pe;
 
 /// The only way to name a file the service or the injector will load.
 pub struct Image {

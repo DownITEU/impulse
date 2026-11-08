@@ -3,7 +3,6 @@ use std::{fs, path::Path, time::Duration};
 use anyhow::{Result, bail};
 
 use super::Catalog;
-use crate::{disk, transport::cdn};
 
 const URL: &str = "https://storage-cdn.wemod.com/catalog.json";
 const BODY: &str = "catalog.json";
@@ -33,7 +32,7 @@ pub fn refresh(data_dir: &Path, have_copy: bool) -> Result<Option<Catalog>> {
     let etag = have_copy
         .then(|| fs::read_to_string(&tag_file).ok())
         .flatten();
-    let response = cdn::get(URL, etag.as_deref())?;
+    let response = fetch::get(URL, etag.as_deref())?;
     match response.status {
         // A 200 that does not parse (captive portal, cut body) is a failure too.
         200 => {

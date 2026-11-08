@@ -26,7 +26,7 @@ use super::{
     theme::*,
     widgets::{button, filter, flash, flash_button, icon_button, mono, square, tracked},
 };
-use crate::journal::{self, Level, Record};
+use journal::{Level, Record};
 
 actions!(log_view, [CopyRows, SelectAllRows, CloseLog]);
 

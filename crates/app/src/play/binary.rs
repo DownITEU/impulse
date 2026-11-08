@@ -8,8 +8,6 @@ use std::{
 use anyhow::{Result, ensure};
 use sha2::{Digest, Sha256};
 
-use crate::{disk, transport::cdn};
-
 // Not under `trainers`: that folder is the metadata's, and dropping it must not reach here.
 const DIR: &str = "trainer-binaries";
 
@@ -29,7 +27,7 @@ pub fn ensure(data_dir: &Path, url: &str, hash: &str) -> Result<PathBuf> {
     if hash_of(&path).is_ok_and(|found| found == hash) {
         return Ok(path);
     }
-    let response = cdn::get(url, None)?;
+    let response = fetch::get(url, None)?;
     ensure!(response.status == 200, "GET {url}: status {}", response.status);
     ensure!(sha256(&response.body) == hash, "the downloaded trainer does not match its hash");
     disk::replace(&path, &response.body)?;

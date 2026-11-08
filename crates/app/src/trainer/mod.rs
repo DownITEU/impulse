@@ -11,7 +11,7 @@ use blocking::unblock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{disk, session::Session, transport::Transport};
+use crate::{session::Session, transport::Transport};
 
 mod plan;
 

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 
-use super::keys;
+use hotkeys::Chord;
 use crate::trainer::{Cheat, Kind, Plan, Stamp, Trainer};
 
 const INPUT_DIGITS: usize = 6;
@@ -90,11 +90,11 @@ fn initial(cheat: &Cheat) -> f64 {
 }
 
 fn row(cheat: &Cheat) -> Row {
-    let chord = |keys: &Vec<u16>| keys::chord(keys);
-    let keys = match cheat.hotkeys.as_slice() {
+    let chords: Vec<Chord> = cheat.hotkeys.iter().filter_map(|vks| Chord::from_vks(vks)).collect();
+    let keys = match chords.as_slice() {
         // A pair is "decrease, increase".
-        [down, up] => vec![format!("↑ {}", chord(up)), format!("↓ {}", chord(down))],
-        chords => chords.iter().map(chord).collect(),
+        [down, up] => vec![format!("↑ {up}"), format!("↓ {down}")],
+        chords => chords.iter().map(Chord::to_string).collect(),
     };
     Row {
         name: cheat.name.to_uppercase().into(),

@@ -24,7 +24,6 @@ use super::{
     image::Image,
     process::{self, Process},
 };
-use crate::pe;
 
 const START_EXPORT: &str = "StartTophatServiceThread";
 const LOAD_WITHIN_MS: u32 = 30_000;

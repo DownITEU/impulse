@@ -9,7 +9,6 @@ use windows_sys::Win32::{
 };
 
 use super::Session;
-use crate::disk;
 
 /// None when nothing is stored or the file is unreadable (corrupt, another Windows user).
 pub(super) fn load(path: &Path) -> Option<Session> {

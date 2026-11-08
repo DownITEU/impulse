@@ -1,11 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod catalog;
-mod disk;
-mod journal;
 mod library;
-#[allow(dead_code)] // machine and export wait for the injector
-mod pe;
 #[allow(dead_code, unused_imports)] // until the launch stage uses it
 mod play;
 mod preferences;

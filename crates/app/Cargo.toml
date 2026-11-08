@@ -5,6 +5,12 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+disk.workspace = true
+fetch.workspace = true
+hotkeys.workspace = true
+journal.workspace = true
+pe.workspace = true
+
 aes.workspace = true
 anyhow.workspace = true
 blocking.workspace = true
@@ -13,7 +19,6 @@ cbc = { workspace = true, features = ["alloc"] }
 form_urlencoded.workspace = true
 futures.workspace = true
 gpui-kit.workspace = true
-chrono = { workspace = true, features = ["clock"] }
 h2.workspace = true
 http.workspace = true
 log.workspace = true
@@ -23,7 +28,6 @@ serde_json.workspace = true
 sha2.workspace = true
 tao.workspace = true
 tokio = { workspace = true, features = ["rt", "net", "time", "sync", "macros"] }
-ureq.workspace = true
 url.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 webview2-com.workspace = true

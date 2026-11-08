@@ -7,7 +7,7 @@ use blocking::unblock;
 use serde::{Deserialize, Serialize};
 
 use super::{Session, now};
-use crate::{disk, transport::Transport};
+use crate::transport::Transport;
 
 const FILE: &str = "account.json";
 // A name changes rarely; one request a day keeps it current.

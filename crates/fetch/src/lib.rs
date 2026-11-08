@@ -1,9 +1,11 @@
+//! Public files over HTTPS: a blocking GET for CDNs (catalog, art, trainer DLLs).
+
 use std::{sync::LazyLock, time::Duration};
 
 use anyhow::{Context, Result};
 use ureq::Agent;
 
-// Public CDNs (catalog, art) send no CORS headers, so the null-origin bridge cannot read them.
+// Public CDNs send no CORS headers, so the null-origin bridge cannot read them.
 static AGENT: LazyLock<Agent> = LazyLock::new(|| {
     Agent::config_builder()
         .http_status_as_error(false)
@@ -16,14 +18,14 @@ static AGENT: LazyLock<Agent> = LazyLock::new(|| {
 
 const MAX_BODY: u64 = 64 << 20;
 
-pub struct CdnResponse {
+pub struct Response {
     pub status: u16,
     pub etag: Option<String>,
     pub body: Vec<u8>,
 }
 
 /// Blocking GET; `etag` makes it conditional (304 has an empty body).
-pub fn get(url: &str, etag: Option<&str>) -> Result<CdnResponse> {
+pub fn get(url: &str, etag: Option<&str>) -> Result<Response> {
     let mut request = AGENT.get(url);
     if let Some(tag) = etag {
         request = request.header("If-None-Match", format!("\"{tag}\""));
@@ -40,7 +42,7 @@ pub fn get(url: &str, etag: Option<&str>) -> Result<CdnResponse> {
         .limit(MAX_BODY)
         .read_to_vec()
         .with_context(|| format!("read {url}"))?;
-    Ok(CdnResponse {
+    Ok(Response {
         status: response.status().as_u16(),
         etag,
         body,

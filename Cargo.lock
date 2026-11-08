@@ -1427,6 +1427,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "disk"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1794,6 +1801,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
+]
+
+[[package]]
+name = "fetch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ureq",
 ]
 
 [[package]]
@@ -3265,6 +3280,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotkeys"
+version = "0.1.0"
+
+[[package]]
 name = "html5ever"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3645,21 +3664,24 @@ dependencies = [
  "blocking",
  "bytes",
  "cbc",
- "chrono",
+ "disk",
  "embed-resource",
+ "fetch",
  "form_urlencoded",
  "futures",
  "gpui-kit",
  "h2",
+ "hotkeys",
  "http",
+ "journal",
  "log",
+ "pe",
  "rusty-leveldb",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tao",
  "tokio",
- "ureq",
  "url",
  "uuid",
  "webview2-com",
@@ -3881,6 +3903,16 @@ checksum = "1c00acbd29eabad4a2392fa0e921c874934dbbf4194312ad20f04a0ed67a3cb3"
 dependencies = [
  "getrandom 0.4.3",
  "libc",
+]
+
+[[package]]
+name = "journal"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "futures",
+ "log",
+ "windows-registry 0.6.1",
 ]
 
 [[package]]
@@ -5250,6 +5282,10 @@ dependencies = [
  "digest 0.10.7",
  "hmac",
 ]
+
+[[package]]
+name = "pe"
+version = "0.1.0"
 
 [[package]]
 name = "percent-encoding"

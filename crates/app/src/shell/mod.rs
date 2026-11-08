@@ -8,7 +8,6 @@ mod cheats;
 mod controls;
 mod header;
 mod hero;
-mod keys;
 mod library;
 mod loaded;
 mod log_view;

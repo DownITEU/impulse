@@ -8,8 +8,6 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::disk;
-
 const FILE: &str = "preferences.json";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

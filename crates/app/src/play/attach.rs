@@ -14,10 +14,7 @@ use super::{
     process::Process,
     tophat::{Event, Run, Server, Session},
 };
-use crate::{
-    pe,
-    wand::install::{PLUGIN, SERVICE},
-};
+use crate::wand::install::{PLUGIN, SERVICE};
 
 const DIAL_IN_WITHIN: Duration = Duration::from_secs(15);
 
