@@ -10,4 +10,4 @@ model.workspace = true
 
 anyhow.workspace = true
 blocking.workspace = true
-windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { workspace = true, features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
