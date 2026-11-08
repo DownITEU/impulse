@@ -16,19 +16,23 @@ pub enum Step {
 pub struct Capture {
     held: Held,
     last: Option<Chord>,
+    done: bool,
 }
 
 impl Capture {
-    /// `None` for a release before any press.
+    /// `None` for a release before any press and for everything after `Done`.
     pub fn key(&mut self, vk: u8, down: bool) -> Option<Step> {
+        if self.done {
+            return None;
+        }
         if down {
             self.held.press(vk);
             self.last = self.held.chord();
             return self.last.map(Step::Preview);
         }
         let last = self.last?;
-        self.held.release(vk);
-        Some(Step::Done((vk != ESC || self.held.chord().is_some()).then_some(last)))
+        self.done = true;
+        Some(Step::Done((Chord::from_vks(&[ESC.into()]) != Some(last)).then_some(last)))
     }
 }
 
@@ -53,9 +57,15 @@ mod tests {
     }
 
     #[test]
-    fn esc_alone_clears_and_esc_with_a_modifier_binds() {
+    fn esc_alone_clears_and_esc_in_a_chord_binds() {
         assert_eq!(feed(&[(ESC, true), (ESC, false)])[1], Some(Step::Done(None)));
         assert_eq!(feed(&[(0xA2, true), (ESC, true), (ESC, false)])[2], Some(Step::Done(Some(chord(&[0x11, 0x1B])))));
+        assert_eq!(feed(&[(ESC, true), (0x41, true), (ESC, false)])[2], Some(Step::Done(Some(chord(&[0x1B, 0x41])))));
+    }
+
+    #[test]
+    fn nothing_follows_done() {
+        assert_eq!(feed(&[(0x41, true), (0x41, false), (0x42, true), (0x42, false)])[2..], [None, None]);
     }
 
     #[test]

@@ -22,7 +22,8 @@ const MAX_KEYS: usize = 7;
 
 impl Chord {
     /// Virtual-key codes in press order. The side-less `VK_SHIFT`, `VK_CONTROL` and `VK_MENU` are
-    /// the left keys. `None` for no key, a code above 255, a key named twice or more than seven keys.
+    /// the left keys. `None` for no key, a code above 255, a key other than a modifier named twice or
+    /// more than seven such keys.
     pub fn from_vks(vks: &[u16]) -> Option<Self> {
         let mut held = Held::default();
         for &vk in vks {
