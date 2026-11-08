@@ -12,7 +12,7 @@ use futures::channel::oneshot;
 use serde::{Deserialize, Serialize};
 use tao::{
     event::Event,
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
+    event_loop::{ControlFlow, DeviceEventFilter, EventLoop, EventLoopBuilder, EventLoopProxy},
     platform::windows::{EventLoopBuilderExtWindows, WindowBuilderExtWindows},
     window::{Window, WindowBuilder},
 };
@@ -47,6 +47,9 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
     let _ = started.send(proxy.clone());
     let pending = Pending::default();
     // Commands sent meanwhile wait in the proxy queue. `run` never returns, so the parts stay alive.
+    // tao registers raw input for the whole process, and then Windows skips the `hotkeys` hook
+    // while Impulse is in front.
+    event_loop.set_device_event_filter(DeviceEventFilter::Always);
     let built = build_retrying(data_dir, &event_loop, proxy, pending.clone());
 
     let (mut ready, mut queue, mut next_id) = (false, Vec::new(), 0u64);

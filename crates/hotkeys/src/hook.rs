@@ -23,7 +23,8 @@ thread_local! {
 }
 
 /// Not the tao thread: that one runs WebView2 work, and Windows removes a hook that stalls.
-/// Dropping it removes the hook. Hooks started later see keys first.
+/// Dropping it removes the hook. Hooks started later see keys first. Windows skips it while this
+/// process is in front if the process registered raw keyboard input.
 pub struct Hook {
     thread: u32,
     join: Option<JoinHandle<()>>,
@@ -150,5 +151,31 @@ mod tests {
     #[test]
     fn the_hook_starts_and_stops() {
         drop(Hook::start(|_, _| false).unwrap());
+    }
+
+    /// Injects F24; the hook hides the press, and the lone release reaches nothing bound to it.
+    /// Run with `cargo test -p hotkeys -- --ignored`.
+    #[test]
+    #[ignore = "injects input"]
+    fn the_hook_sees_injected_keys() {
+        use std::time::Duration;
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VK_F24};
+
+        let (tx, seen) = mpsc::channel();
+        let hook = Hook::start(move |vk, down| {
+            let ours = vk == VK_F24 as u8;
+            if ours {
+                let _ = tx.send(down);
+            }
+            ours
+        })
+        .unwrap();
+        let key = |flags| INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VK_F24, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } } };
+        let inputs = [key(0), key(KEYEVENTF_KEYUP)];
+        // SAFETY: a valid array of `INPUT`.
+        assert_eq!(unsafe { SendInput(2, inputs.as_ptr(), mem::size_of::<INPUT>() as i32) }, 2);
+        let wait = || seen.recv_timeout(Duration::from_secs(2));
+        assert_eq!((wait(), wait()), (Ok(true), Ok(false)));
+        drop(hook);
     }
 }
