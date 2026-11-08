@@ -3646,6 +3646,7 @@ dependencies = [
  "bytes",
  "cbc",
  "chrono",
+ "embed-resource",
  "form_urlencoded",
  "futures",
  "gpui-kit",

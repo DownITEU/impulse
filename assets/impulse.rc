@@ -1,0 +1,2 @@
+// Id 1 is the one GPUI loads as the window and taskbar icon.
+1 ICON "assets/logo.ico"
