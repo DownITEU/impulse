@@ -16,7 +16,7 @@ use crate::{session::Session, transport::Transport};
 
 mod plan;
 
-pub use plan::Plan;
+pub use plan::{Binary, Plan};
 
 const DIR: &str = "trainers";
 

@@ -11,8 +11,8 @@ const MINIMUM_AGE: Duration = Duration::from_secs(8);
 const EVENT_KEY_CHARS: usize = 22;
 
 /// A trainer DLL on the public CDN, exactly as the response names it: both fields are
-/// untrusted until `play::binary` has checked them.
-#[derive(Debug, PartialEq)]
+/// untrusted until `binary` has checked them.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Binary {
     pub url: String,
     /// SHA-256 of the file, hex.

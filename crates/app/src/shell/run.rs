@@ -2,11 +2,10 @@
 
 use std::{mem, sync::Arc};
 
-use anyhow::{Context as _, Result, anyhow};
-use futures::{StreamExt, channel::mpsc::Receiver};
+use anyhow::{Context as _, Result};
+use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{Context, Div, Task, Window, prelude::*, rgb};
-use model::Rule;
-use wand::tophat::{self, Event, Outcome, Server};
+use model::{Event, Live, Rule, Session};
 
 use super::{Page, theme::*, widgets::mono};
 use crate::play::run::{Request, Stage, run};
@@ -21,7 +20,7 @@ pub(super) enum Play {
     },
     Live {
         game: Arc<str>,
-        session: Arc<tophat::Session>,
+        session: Arc<dyn Session>,
         _events: Task<()>,
     },
     /// The trainer is being taken down: a new run waits until it is gone.
@@ -68,7 +67,7 @@ pub(super) const STOPPING: &str = "STOPPING THE TRAINER";
 
 pub(super) fn label(stage: Stage) -> &'static str {
     match stage {
-        Stage::Downloading => "DOWNLOADING THE TRAINER",
+        Stage::Preparing => "PREPARING THE TRAINER",
         Stage::Launching => "STARTING THE GAME",
         Stage::WaitingForGame => "WAITING FOR THE GAME",
         Stage::Attaching => "LOADING THE TRAINER",
@@ -81,50 +80,35 @@ impl Page {
         if self.play.is_active() {
             return;
         }
-        let prepared = self.run_request(&id).and_then(|request| Ok((request, self.tophat_server()?)));
-        let (request, server) = match prepared {
-            Ok(prepared) => prepared,
+        let request = match self.run_request(&id) {
+            Ok(request) => request,
             Err(e) => return self.fail_run(id, e, cx),
         };
         let game = id.clone();
         let task = cx.spawn_in(window, async move |page, cx| {
             let outcome = {
                 let (progress, mut progress_cx) = (page.clone(), cx.clone());
-                run(&server, request, move |stage| {
+                run(request, move |stage| {
                     progress.update(&mut progress_cx, |page, cx| page.run_stage(stage, cx)).ok();
                 })
                 .await
             };
             page.update(cx, |page, cx| page.run_finished(game, outcome, cx)).ok();
         });
-        self.play = Play::Busy { game: id, stage: Stage::Downloading, _run: task };
+        self.play = Play::Busy { game: id, stage: Stage::Preparing, _run: task };
         cx.notify();
     }
 
     fn run_request(&self, id: &Arc<str>) -> Result<Request> {
         let game = self.games().iter().find(|game| game.id == *id).context("the game is not in the library")?;
         let plan = &self.trainer(Some(id)).context("the cheat list is not loaded")?.plan;
-        let binary = plan.binary.as_ref().map_err(|why| anyhow!("{why}"))?;
+        let trainerlib = self.wand_trainerlib().context("Wand's folder is not set: pick it in Settings, APP")?;
         Ok(Request {
-            data_dir: self.data_dir.clone(),
-            trainerlib: self.wand_trainerlib().context("Wand's folder is not set: pick it in Settings, APP")?,
+            runner: self.host.runner(plan, trainerlib)?,
             store_id: game.store_id.clone(),
             rule: Rule { image: plan.image.clone(), location: game.location.clone(), minimum_age: plan.minimum_age },
             launch: plan.launch,
-            binary_url: binary.url.clone(),
-            binary_hash: binary.hash.clone(),
-            variables: plan.variables.clone(),
         })
-    }
-
-    /// One server for the app's life, started with the first run.
-    fn tophat_server(&mut self) -> Result<Arc<Server>> {
-        if let Some(server) = &self.tophat {
-            return Ok(server.clone());
-        }
-        let server = Arc::new(Server::start()?);
-        self.tophat = Some(server.clone());
-        Ok(server)
     }
 
     fn run_stage(&mut self, stage: Stage, cx: &mut Context<Self>) {
@@ -134,8 +118,8 @@ impl Page {
         }
     }
 
-    fn run_finished(&mut self, id: Arc<str>, outcome: Result<(tophat::Session, Receiver<Event>)>, cx: &mut Context<Self>) {
-        let (session, events) = match outcome {
+    fn run_finished(&mut self, id: Arc<str>, outcome: Result<Live>, cx: &mut Context<Self>) {
+        let Live { session, events } = match outcome {
             Ok(attached) => attached,
             Err(e) => return self.fail_run(id, e, cx),
         };
@@ -145,7 +129,7 @@ impl Page {
             page.update(cx, |page, cx| page.run_ended(cx)).ok();
         });
         log::info!("trainer is live in {id}");
-        self.play = Play::Live { game: id, session: Arc::new(session), _events: watcher };
+        self.play = Play::Live { game: id, session: Arc::from(session), _events: watcher };
         cx.notify();
     }
 
@@ -211,14 +195,14 @@ impl Page {
     /// Sends a cheat's value to the running trainer.
     pub(super) fn push_value(&self, index: usize, value: f64, cx: &mut Context<Self>) {
         let Play::Live { game, session, .. } = &self.play else { return };
-        let Some(target) = self.trainer(Some(game)).and_then(|loaded| loaded.cheats[index].key.clone()) else {
+        let Some(key) = self.trainer(Some(game)).and_then(|loaded| loaded.cheats[index].key.clone()) else {
             return;
         };
         let session = session.clone();
-        cx.spawn(async move |_, _| match session.set_value(&target, value).await {
-            Ok(Outcome::Failed) => log::warn!("the trainer refused {target} = {value}"),
-            Ok(_) => {}
-            Err(e) => log::warn!("{target}: {e:#}"),
+        cx.spawn(async move |_, _| {
+            if let Err(e) = session.set(&key, value).await {
+                log::warn!("{key} = {value}: {e:#}");
+            }
         })
         .detach();
     }
@@ -234,12 +218,11 @@ impl Page {
     }
 }
 
-async fn watch(mut events: Receiver<Event>) {
+async fn watch(mut events: BoxStream<'static, Event>) {
     while let Some(event) = events.next().await {
         match event {
             Event::Log(text) => log::info!("trainer: {text}"),
             Event::Status(text) => log::debug!("trainer status: {text}"),
-            _ => {}
         }
     }
 }

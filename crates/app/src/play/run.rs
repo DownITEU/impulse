@@ -1,16 +1,10 @@
-//! A whole run: the trainer's DLL, the game's process, the trainer inside it.
+//! A whole run: the trainer prepared, the game's process found or started, the trainer inside it.
 
-use std::{path::PathBuf, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use blocking::unblock;
-use futures::channel::mpsc::Receiver;
-use model::{Process, Rule};
-use wand::{
-    attach::{Game, attach},
-    binary,
-    tophat::{Event, Server, Session},
-};
+use model::{Live, Process, Rule, Runner};
 
 use super::launch;
 
@@ -19,31 +13,25 @@ const LAUNCHED_WITHIN: Duration = Duration::from_secs(45);
 const STARTED_BY_USER_WITHIN: Duration = Duration::from_secs(180);
 
 pub struct Request {
-    pub data_dir: PathBuf,
-    /// Wand's `trainerlib` folder.
-    pub trainerlib: PathBuf,
+    pub runner: Arc<dyn Runner>,
     pub store_id: String,
     pub rule: Rule,
     /// Start the game when it is not running; `false` waits for the user to start it.
     pub launch: bool,
-    pub binary_url: String,
-    pub binary_hash: String,
-    pub variables: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Stage {
-    Downloading,
+    Preparing,
     Launching,
     WaitingForGame,
     Attaching,
 }
 
 /// Dropping the future abandons the run; a trainer that is already in the game ends with its session.
-pub async fn run(server: &Server, request: Request, mut stage: impl FnMut(Stage)) -> Result<(Session, Receiver<Event>)> {
-    stage(Stage::Downloading);
-    let (data_dir, url, hash) = (request.data_dir.clone(), request.binary_url.clone(), request.binary_hash.clone());
-    let trainer = unblock(move || binary::ensure(&data_dir, &url, &hash)).await?;
+pub async fn run(request: Request, mut stage: impl FnMut(Stage)) -> Result<Live> {
+    stage(Stage::Preparing);
+    let prepared = request.runner.prepare().await?;
 
     let rule = request.rule.clone();
     let running = unblock(move || agent::find(&rule)).await?;
@@ -53,8 +41,7 @@ pub async fn run(server: &Server, request: Request, mut stage: impl FnMut(Stage)
     };
 
     stage(Stage::Attaching);
-    let game = Game { process: &process, trainer: &trainer, trainer_hash: &request.binary_hash, variables: &request.variables };
-    attach(server, &request.trainerlib, game).await
+    prepared.attach(process).await
 }
 
 async fn wait_for_game(request: &Request, stage: &mut impl FnMut(Stage)) -> Result<Process> {

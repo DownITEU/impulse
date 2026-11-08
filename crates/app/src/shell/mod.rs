@@ -50,8 +50,8 @@ use wand_dir::WandDir;
 use widgets::{grid, mono, notice, square};
 
 use wand::{
+    run::Host,
     session::{Account, Session},
-    tophat::Server,
     transport::Transport,
 };
 
@@ -111,8 +111,7 @@ pub struct Page {
     deferred: Option<(Arc<str>, Loaded)>,
     selected: Option<Arc<str>>,
     play: Play,
-    // Started with the first run.
-    tophat: Option<Arc<Server>>,
+    host: Host,
     favorites: HashSet<Arc<str>>,
     accent: u32,
     lead: Lead,
@@ -169,6 +168,7 @@ impl Page {
             // A few bytes from the local data directory: not worth a loading state.
             preferences: preferences::load(&data_dir),
             wand: WandDir::new(window, cx),
+            host: Host::new(data_dir.clone()),
             data_dir,
             transport,
             session,
@@ -179,7 +179,6 @@ impl Page {
             deferred: None,
             selected: None,
             play: Play::Idle,
-            tophat: None,
             favorites: HashSet::new(),
             accent: ACCENTS[0].1,
             lead: Lead::Number,
