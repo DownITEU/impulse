@@ -211,7 +211,7 @@ impl Page {
     /// Sends a cheat's value to the running trainer.
     pub(super) fn push_value(&self, index: usize, value: f64, cx: &mut Context<Self>) {
         let Play::Live { game, session, .. } = &self.play else { return };
-        let Some(target) = self.trainer(Some(game)).map(|loaded| loaded.cheats[index].target.clone()).filter(|target| !target.is_empty()) else {
+        let Some(target) = self.trainer(Some(game)).and_then(|loaded| loaded.cheats[index].key.clone()) else {
             return;
         };
         let session = session.clone();

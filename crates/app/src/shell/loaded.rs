@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use hotkeys::Chord;
-use wand::trainer::{Cheat, Kind, Plan, Stamp, Trainer};
+use model::{Cheat, Kind};
+use wand::trainer::{Plan, Stamp, Trainer};
 
 const INPUT_DIGITS: usize = 6;
 
@@ -36,12 +37,12 @@ pub struct Loaded {
 impl Loaded {
     pub fn new(trainer: Trainer, stamp: Stamp, window: &mut Window, cx: &mut App) -> Self {
         let plan = trainer.plan();
-        let cheats = trainer.blueprint.cheats;
+        let model::Trainer { cheats, pinned } = trainer.into();
         let values: Vec<f64> = cheats.iter().map(initial).collect();
         let inputs = cheats
             .iter()
             .enumerate()
-            .filter(|(_, cheat)| cheat.kind == Kind::Number && cheat.args.has_button())
+            .filter(|(_, cheat)| cheat.kind == Kind::Number && cheat.args.button)
             .map(|(index, cheat)| {
                 let input = cx.new(|cx| {
                     InputState::new(window, cx)
@@ -56,7 +57,7 @@ impl Loaded {
         Self {
             rows: cheats.iter().map(row).collect(),
             pinned: (0..cheats.len())
-                .filter(|&index| trainer.pinned_mods.contains(&cheats[index].uuid))
+                .filter(|&index| pinned.contains(&cheats[index].id))
                 .collect(),
             cheats,
             stamp,
@@ -89,15 +90,14 @@ fn initial(cheat: &Cheat) -> f64 {
 }
 
 /// Cap labels; a chord that could never match gets none.
-fn caps(hotkeys: &[Vec<u16>]) -> Vec<SharedString> {
-    let chord = |vks: &Vec<u16>| Chord::from_vks(vks);
+fn caps(hotkeys: &[Option<Chord>]) -> Vec<SharedString> {
     match hotkeys {
         // A pair is "decrease, increase", told apart by its slot even when one side is unset.
         [down, up] => [("↑", up), ("↓", down)]
             .into_iter()
-            .filter_map(|(arrow, vks)| Some(format!("{arrow} {}", chord(vks)?).into()))
+            .filter_map(|(arrow, chord)| Some(format!("{arrow} {}", (*chord)?).into()))
             .collect(),
-        chords => chords.iter().filter_map(chord).map(|chord| chord.to_string().into()).collect(),
+        chords => chords.iter().flatten().map(|chord| chord.to_string().into()).collect(),
     }
 }
 
@@ -115,8 +115,8 @@ fn row(cheat: &Cheat) -> Row {
             .map(SharedString::from),
         options: cheat
             .args
-            .options()
-            .into_iter()
+            .options
+            .iter()
             .map(|option| option.to_uppercase().into())
             .collect(),
     }
@@ -133,12 +133,15 @@ pub fn number(value: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    use hotkeys::Chord;
+
     use super::caps;
 
     #[test]
     fn a_pair_keeps_its_arrows_when_a_side_is_unset() {
-        assert_eq!(caps(&[vec![18, 117], vec![16, 117]]), ["↑ SHIFT+F6", "↓ ALT+F6"]);
-        assert_eq!(caps(&[vec![], vec![117]]), ["↑ F6"]);
-        assert_eq!(caps(&[vec![112], vec![113], vec![]]), ["F1", "F2"]);
+        let chords = |all: &[&[u16]]| all.iter().map(|vks| Chord::from_vks(vks)).collect::<Vec<_>>();
+        assert_eq!(caps(&chords(&[&[18, 117], &[16, 117]])), ["↑ SHIFT+F6", "↓ ALT+F6"]);
+        assert_eq!(caps(&chords(&[&[], &[117]])), ["↑ F6"]);
+        assert_eq!(caps(&chords(&[&[112], &[113], &[]])), ["F1", "F2"]);
     }
 }

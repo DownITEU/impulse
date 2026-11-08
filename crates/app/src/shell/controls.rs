@@ -8,7 +8,7 @@ use gpui_kit::{
     prelude::*,
     px, relative, rgb,
 };
-use wand::trainer::{Args, Kind};
+use model::{Args, Kind};
 
 use super::{
     Flash, Menu, Page,
@@ -104,7 +104,7 @@ impl Page {
                     )
                     .into_any_element()
             }
-            Kind::Number if cheat.args.has_button() => h_flex()
+            Kind::Number if cheat.args.button => h_flex()
                 .gap(px(8.))
                 .when_some(loaded.inputs.get(&index), |control, input| {
                     control.child(
@@ -208,7 +208,7 @@ impl Page {
             let (typed, fired) = page.trainer(page.selected.as_ref()).map_or((None, None), |loaded| {
                 let cheat = &loaded.cheats[index];
                 let typed = loaded.inputs.get(&index).and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
-                (typed, (cheat.kind == Kind::Button).then(|| cheat.args.pressed()))
+                (typed, (cheat.kind == Kind::Button).then_some(cheat.args.pressed))
             });
             if let Some(value) = typed {
                 page.set_value(index, value, cx);

@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use blocking::unblock;
+use hotkeys::Chord;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -22,10 +23,10 @@ const DIR: &str = "trainers";
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Trainer {
-    pub blueprint: Blueprint,
+    blueprint: Blueprint,
     /// Cheat uuids the user pinned in Wand.
     #[serde(default)]
-    pub pinned_mods: Vec<String>,
+    pinned_mods: Vec<String>,
     // What running it takes: read by `plan`.
     loader: Option<String>,
     #[serde(default)]
@@ -42,35 +43,35 @@ struct LoaderArgs {
 }
 
 #[derive(Deserialize)]
-pub struct Blueprint {
-    pub cheats: Vec<Cheat>,
+struct Blueprint {
+    cheats: Vec<Cheat>,
     // Free-form on purpose: a shape we do not read must not make the trainer unreadable.
     #[serde(default)]
     config: Value,
 }
 
 #[derive(Deserialize)]
-pub struct Cheat {
-    pub uuid: String,
-    pub name: String,
-    pub category: String,
+struct Cheat {
+    uuid: String,
+    name: String,
+    category: String,
     /// The variable the trainer exposes for this cheat.
     #[serde(default)]
-    pub target: String,
+    target: String,
     #[serde(rename = "type")]
-    pub kind: Kind,
+    kind: Kind,
     /// Key chords as Windows virtual-key codes.
     #[serde(default)]
-    pub hotkeys: Vec<Vec<u16>>,
+    hotkeys: Vec<Vec<u16>>,
     #[serde(default)]
-    pub args: Args,
-    pub instructions: Option<String>,
-    pub description: Option<String>,
+    args: Args,
+    instructions: Option<String>,
+    description: Option<String>,
 }
 
-#[derive(Clone, Copy, PartialEq, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Kind {
+enum Kind {
     Toggle,
     Number,
     Slider,
@@ -83,50 +84,62 @@ pub enum Kind {
 }
 
 #[derive(Default, Deserialize)]
-pub struct Args {
-    pub min: Option<f64>,
-    pub max: Option<f64>,
-    pub step: Option<f64>,
+struct Args {
+    min: Option<f64>,
+    max: Option<f64>,
+    step: Option<f64>,
     /// Each is a string, a number or `{label, value}`.
     #[serde(default)]
     options: Vec<Value>,
     /// A label or `true` when the value is applied with a button.
     button: Option<Value>,
-    /// What a button cheat sends when pressed.
+    /// What a button cheat sends when pressed; 1 (a toggle on) without it.
     value: Option<Value>,
 }
 
-impl Args {
-    /// What pressing a button cheat sends: its own value, else 1 (a toggle on).
-    pub fn pressed(&self) -> f64 {
-        self.value.as_ref().and_then(Value::as_f64).unwrap_or(1.)
+impl From<Trainer> for model::Trainer {
+    fn from(trainer: Trainer) -> Self {
+        Self { cheats: trainer.blueprint.cheats.into_iter().map(cheat).collect(), pinned: trainer.pinned_mods }
     }
+}
 
-    /// Never panics: trainers may send `min > max`.
-    pub fn clamp(&self, value: f64) -> f64 {
-        value
-            .max(self.min.unwrap_or(f64::MIN))
-            .min(self.max.unwrap_or(f64::MAX))
-    }
-
-    pub fn has_button(&self) -> bool {
-        !matches!(self.button, None | Some(Value::Null | Value::Bool(false)))
-    }
-
-    pub fn options(&self) -> Vec<String> {
-        let text = |value: &Value| match value {
-            Value::String(text) => text.clone(),
-            other => other.to_string(),
-        };
-        self.options
-            .iter()
-            .map(
-                |option| match option.get("label").filter(|l| l.is_string()) {
-                    Some(label) => text(label),
-                    None => text(option.get("value").unwrap_or(option)),
-                },
-            )
-            .collect()
+fn cheat(cheat: Cheat) -> model::Cheat {
+    let kind = match cheat.kind {
+        Kind::Toggle => model::Kind::Toggle,
+        Kind::Number => model::Kind::Number,
+        Kind::Slider => model::Kind::Slider,
+        Kind::Scalar => model::Kind::Scalar,
+        Kind::Incremental => model::Kind::Incremental,
+        Kind::Button => model::Kind::Button,
+        Kind::Selection => model::Kind::Selection,
+        Kind::Unknown => model::Kind::Unknown,
+    };
+    let args = cheat.args;
+    let text = |value: &Value| match value {
+        Value::String(text) => text.clone(),
+        other => other.to_string(),
+    };
+    let options = args.options.iter().map(|option| match option.get("label").filter(|l| l.is_string()) {
+        Some(label) => text(label),
+        None => text(option.get("value").unwrap_or(option)),
+    });
+    model::Cheat {
+        id: cheat.uuid,
+        key: Some(cheat.target).filter(|target| !target.is_empty()),
+        name: cheat.name,
+        category: cheat.category,
+        kind,
+        args: model::Args {
+            min: args.min,
+            max: args.max,
+            step: args.step,
+            options: options.collect(),
+            button: !matches!(args.button, None | Some(Value::Null | Value::Bool(false))),
+            pressed: args.value.as_ref().and_then(Value::as_f64).unwrap_or(1.),
+        },
+        hotkeys: cheat.hotkeys.iter().map(|vks| Chord::from_vks(vks)).collect(),
+        instructions: cheat.instructions,
+        description: cheat.description,
     }
 }
 
@@ -214,14 +227,15 @@ mod tests {
 
     #[test]
     fn parses_every_control_shape() {
-        let trainer: Trainer = serde_json::from_str(JSON).unwrap();
-        let cheats = &trainer.blueprint.cheats;
-        assert!(cheats[0].kind == Kind::Toggle && !cheats[0].args.has_button());
-        assert_eq!(cheats[1].hotkeys, [[18, 117], [16, 117]]);
-        assert!(cheats[1].args.has_button() && cheats[1].args.step == Some(10.));
-        assert_eq!(cheats[2].args.options(), ["Noon", "2", "Night", "Dawn"]);
-        assert!(cheats[3].kind == Kind::Unknown);
-        assert_eq!(trainer.pinned_mods, ["b"]);
+        let trainer: model::Trainer = serde_json::from_str::<Trainer>(JSON).unwrap().into();
+        let cheats = &trainer.cheats;
+        assert!(cheats[0].kind == model::Kind::Toggle && !cheats[0].args.button && cheats[0].key.is_none());
+        assert_eq!(cheats[1].hotkeys, [Chord::from_vks(&[18, 117]), Chord::from_vks(&[16, 117])]);
+        assert!(cheats[1].args.button && cheats[1].args.step == Some(10.));
+        assert_eq!(cheats[2].args.options, ["Noon", "2", "Night", "Dawn"]);
+        assert_eq!((cheats[2].args.pressed, cheats[3].args.pressed), (1., 10.));
+        assert!(cheats[3].kind == model::Kind::Unknown);
+        assert_eq!(trainer.pinned, ["b"]);
     }
 
     #[test]
