@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
+use wand::catalog::Catalog;
+
 use super::{
     App,
     registry::{self, CLASSES_ROOT, View},
 };
-use crate::catalog::Catalog;
 
 const PACKAGES: &str =
     r"Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages";

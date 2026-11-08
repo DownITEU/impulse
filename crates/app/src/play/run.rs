@@ -6,12 +6,13 @@ use anyhow::Result;
 use blocking::unblock;
 use futures::channel::mpsc::Receiver;
 use model::{Process, Rule};
-
-use super::{
+use wand::{
     attach::{Game, attach},
-    binary, launch,
+    binary,
     tophat::{Event, Server, Session},
 };
+
+use super::launch;
 
 // Wand's wait after it starts a game itself; when the user has to start it there is more to do.
 const LAUNCHED_WITHIN: Duration = Duration::from_secs(45);

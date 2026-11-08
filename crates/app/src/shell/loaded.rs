@@ -3,9 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
-
 use hotkeys::Chord;
-use crate::trainer::{Cheat, Kind, Plan, Stamp, Trainer};
+use wand::trainer::{Cheat, Kind, Plan, Stamp, Trainer};
 
 const INPUT_DIGITS: usize = 6;
 

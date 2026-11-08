@@ -6,12 +6,10 @@ use anyhow::{Context as _, Result, anyhow};
 use futures::{StreamExt, channel::mpsc::Receiver};
 use gpui_kit::{Context, Div, Task, Window, prelude::*, rgb};
 use model::Rule;
+use wand::tophat::{self, Event, Outcome, Server};
 
 use super::{Page, theme::*, widgets::mono};
-use crate::play::{
-    run::{Request, Stage, run},
-    tophat::{self, Event, Outcome, Server},
-};
+use crate::play::run::{Request, Stage, run};
 
 pub(super) enum Play {
     Idle,

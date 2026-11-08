@@ -1,20 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod catalog;
 mod library;
 mod play;
 mod preferences;
-mod session;
 mod shell;
-mod trainer;
-mod transport;
-mod wand;
 
 use std::{env, path::PathBuf};
 
 use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use wand::transport::Transport;
 
-use crate::{shell::Page, transport::Transport};
+use crate::shell::Page;
 
 fn main() {
     let data_dir =

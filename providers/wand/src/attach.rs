@@ -9,12 +9,12 @@ use futures::channel::mpsc::Receiver;
 use model::Process;
 use uuid::Uuid;
 
-use super::{
+use crate::{
     binary,
     inject::{self, Startup},
+    install::{PLUGIN, PUBLISHER, SERVICE},
     tophat::{Event, Run, Server, Session},
 };
-use crate::wand::install::{PLUGIN, PUBLISHER, SERVICE};
 
 const DIAL_IN_WITHIN: Duration = Duration::from_secs(15);
 
@@ -100,7 +100,7 @@ mod tests {
         }
 
         let server = Server::start().unwrap();
-        let trainerlib = crate::wand::install::installs().first().expect("a Wand install").trainerlib();
+        let trainerlib = crate::install::installs().first().expect("a Wand install").trainerlib();
         let hash = binary::hash_of(&trainer).unwrap();
         let game = Game { process: &process, trainer: &trainer, trainer_hash: &hash, variables: &variables };
         let (session, mut events) = block_on(attach(&server, &trainerlib, game)).unwrap();

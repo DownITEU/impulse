@@ -15,6 +15,7 @@ use gpui_kit::{
     prelude::*,
     px, rgb,
 };
+use wand::install::{self, Install};
 
 use super::{
     Menu, Page,
@@ -23,10 +24,7 @@ use super::{
     theme::*,
     widgets::{icon_button, mono},
 };
-use crate::{
-    preferences,
-    wand::install::{self, Install},
-};
+use crate::preferences;
 
 pub(super) struct WandDir {
     input: Entity<InputState>,

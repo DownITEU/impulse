@@ -16,7 +16,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::catalog::Catalog;
+use wand::catalog::Catalog;
 
 pub struct Installed {
     pub game_id: String,

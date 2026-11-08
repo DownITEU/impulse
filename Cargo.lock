@@ -3674,33 +3674,22 @@ dependencies = [
  "agent",
  "anyhow",
  "blocking",
- "bytes",
  "cbc",
  "disk",
  "embed-resource",
  "fetch",
- "form_urlencoded",
  "futures",
  "gpui-kit",
- "h2",
  "hotkeys",
- "http",
  "journal",
  "log",
  "model",
  "pe",
- "rusty-leveldb",
  "serde",
  "serde_json",
- "sha2 0.10.9",
- "tao",
- "tokio",
- "url",
- "uuid",
- "webview2-com",
+ "wand",
  "windows-registry 0.6.1",
  "windows-sys 0.61.2",
- "wry",
 ]
 
 [[package]]
@@ -7969,6 +7958,36 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wand"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "anyhow",
+ "blocking",
+ "bytes",
+ "disk",
+ "fetch",
+ "form_urlencoded",
+ "futures",
+ "h2",
+ "http",
+ "log",
+ "model",
+ "pe",
+ "rusty-leveldb",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tao",
+ "tokio",
+ "url",
+ "uuid",
+ "webview2-com",
+ "windows-sys 0.61.2",
+ "wry",
 ]
 
 [[package]]

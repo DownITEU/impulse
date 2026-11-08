@@ -4,17 +4,17 @@ use std::{path::PathBuf, sync::Arc};
 
 use blocking::unblock;
 use gpui_kit::{AsyncWindowContext, Context, WeakEntity, Window};
+use wand::{
+    binary,
+    catalog::{self, Catalog},
+    session::{self, Source, account},
+    trainer,
+};
 
 use super::{
     Load, Page, art,
     library::{self, Library, Support},
     loaded::Loaded,
-};
-use crate::{
-    catalog::{self, Catalog},
-    play::binary,
-    session::{self, Source, account},
-    trainer,
 };
 
 impl Page {

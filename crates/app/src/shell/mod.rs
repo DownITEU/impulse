@@ -49,12 +49,13 @@ use theme::*;
 use wand_dir::WandDir;
 use widgets::{grid, mono, notice, square};
 
-use crate::{
-    play::tophat::Server,
-    preferences::{self, Preferences},
+use wand::{
     session::{Account, Session},
+    tophat::Server,
     transport::Transport,
 };
+
+use crate::preferences::{self, Preferences};
 
 const SIDEBAR_WIDTH: f32 = 248.;
 // Below this pane width the map and session panels drop under the cheat list.

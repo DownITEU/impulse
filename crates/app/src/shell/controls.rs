@@ -8,6 +8,7 @@ use gpui_kit::{
     prelude::*,
     px, relative, rgb,
 };
+use wand::trainer::{Args, Kind};
 
 use super::{
     Flash, Menu, Page,
@@ -16,7 +17,6 @@ use super::{
     theme::*,
     widgets::{button, flash_button, icon, mono, toggle},
 };
-use crate::trainer::{Args, Kind};
 
 const TOP_TICK: u8 = 9;
 

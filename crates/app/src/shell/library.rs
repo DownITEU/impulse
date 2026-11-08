@@ -7,13 +7,10 @@ use std::{
 };
 
 use gpui_kit::SharedString;
+use wand::{catalog::Catalog, trainer::Stamp};
 
 use super::art;
-use crate::{
-    catalog::Catalog,
-    library::{self, Installed},
-    trainer::Stamp,
-};
+use crate::library::{self, Installed};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Support {

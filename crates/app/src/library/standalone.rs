@@ -1,10 +1,11 @@
 use std::{env, path::PathBuf};
 
+use wand::catalog::{Catalog, Locator, LocatorKind};
+
 use super::{
     App,
     registry::{CURRENT_USER, LOCAL_MACHINE, View, value},
 };
-use crate::catalog::{Catalog, Locator, LocatorKind};
 
 const UNINSTALL: &str = r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 

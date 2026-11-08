@@ -16,7 +16,7 @@ pub use account::Account;
 
 use crate::{
     transport::Transport,
-    wand::store::{self, WandToken},
+    store::{self, WandToken},
 };
 
 const CLIENT_ID: &str = "overlay";

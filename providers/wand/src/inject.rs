@@ -40,7 +40,7 @@ mod tests {
         super::tophat::{Server, Session},
         *,
     };
-    use crate::wand::install::{PUBLISHER, SERVICE, installs};
+    use crate::install::{PUBLISHER, SERVICE, installs};
 
     #[test]
     fn startup_is_the_json_the_service_reads() {
