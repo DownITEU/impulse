@@ -22,14 +22,16 @@ use log::{LevelFilter, Log, Metadata};
 
 pub const CAPACITY: usize = 5000;
 const FILE_LIMIT: u64 = 2 << 20;
-const CRATE: &str = env!("CARGO_CRATE_NAME");
+const APP: &str = "impulse";
+/// The workspace's crates: their records are kept from Debug up, the others' from Warn.
+const OURS: [&str; 9] = [APP, "agent", "disk", "fetch", "hotkeys", "journal", "model", "pe", "wand"];
 
 pub struct Record {
     /// Grows by one per record; unique within a run.
     pub seq: u64,
     pub time: DateTime<Local>,
     pub level: Level,
-    /// The module that logged, without the crate prefix.
+    /// The module that logged; the app's own without its crate name.
     pub source: String,
     pub message: String,
 }
@@ -81,10 +83,11 @@ pub fn init(data_dir: &Path) {
     }
     let previous = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
-        log::error!(target: concat!(env!("CARGO_CRATE_NAME"), "::panic"), "{info}");
+        log::error!(target: "impulse::panic", "{info}");
         previous(info);
     }));
     log::info!(
+        target: APP,
         "Impulse {} ({}) on Windows {}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::ARCH,
@@ -134,7 +137,7 @@ impl Journal {
 impl Log for Journal {
     // Dependencies are chatty below Warn.
     fn enabled(&self, metadata: &Metadata) -> bool {
-        let ours = metadata.target().starts_with(CRATE);
+        let ours = OURS.contains(&crate_of(metadata.target()));
         if !ours && CLOSING.load(Ordering::Relaxed) {
             return false;
         }
@@ -154,10 +157,10 @@ impl Log for Journal {
             }
             target => target,
         };
-        let source = match target.strip_prefix(CRATE) {
+        let source = match target.strip_prefix(APP) {
             Some("") => "app",
-            Some(module) => module.trim_start_matches("::"),
-            None => target,
+            Some(module) if module.starts_with("::") => &module[2..],
+            _ => target,
         };
         // Formatted before the lock: a `Display` impl may log too.
         let message = scrub(&record.args().to_string());
@@ -193,6 +196,10 @@ impl Log for Journal {
     }
 
     fn flush(&self) {}
+}
+
+fn crate_of(target: &str) -> &str {
+    target.split("::").next().unwrap_or_default()
 }
 
 // Not `eprintln!`: it panics when stderr is a closed pipe, and a panic here re-enters the logger.
@@ -238,4 +245,24 @@ fn windows_build() -> String {
         value("DisplayVersion"),
         value("CurrentBuild")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    #[test]
+    fn every_workspace_crate_is_ours() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for group in ["crates", "providers"] {
+            for dir in fs::read_dir(root.join(group)).unwrap() {
+                let manifest = fs::read_to_string(dir.unwrap().path().join("Cargo.toml")).unwrap();
+                let name = manifest.lines().find_map(|line| line.strip_prefix("name = \"")?.strip_suffix('"')).unwrap();
+                assert!(OURS.contains(&name.replace('-', "_").as_str()), "{name} is missing from OURS");
+            }
+        }
+        assert_eq!(crate_of("wand::catalog"), "wand");
+    }
 }

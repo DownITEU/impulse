@@ -10,7 +10,7 @@ use super::{
 const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 
 /// EA app games. Its local records carry no offer ids the catalog knows,
-/// so a game is recognised by its `versionPath` inside an EA install folder.
+/// so a game is recognised by its `exe` inside an EA install folder.
 pub fn apps(games: &[Game]) -> Vec<App> {
     match_folders(games, &install_folders())
 }
