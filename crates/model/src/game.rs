@@ -11,7 +11,8 @@ pub struct Game {
     pub store_ids: Vec<String>,
     /// The executable, relative to the install, whose PE timestamp is the build.
     pub exe: Option<String>,
-    pub standalone: Option<Standalone>,
+    /// One per `standalone:` store id.
+    pub standalone: Vec<Standalone>,
     /// A wide picture, then a small one.
     pub cover: Option<String>,
     pub thumbnail: Option<String>,

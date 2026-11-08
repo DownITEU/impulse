@@ -15,7 +15,7 @@ pub fn apps(games: &[Game]) -> Vec<App> {
     let mut seen = HashSet::new();
     games
         .iter()
-        .filter_map(|game| game.standalone.as_ref())
+        .flat_map(|game| &game.standalone)
         .filter(|app| seen.insert(app.store_id.to_ascii_lowercase()))
         .filter_map(|app| {
             let location = app

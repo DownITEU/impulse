@@ -102,14 +102,16 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
     let games = games.into_values().filter_map(|entry| {
         let title = titles.get(&entry.title_id)?;
         let art = |size: u32| title.thumbnail.as_deref().map(|path| format!("{ART_CDN}{}", path.replace("{size}", &size.to_string())));
-        let standalone = entry.correlation_ids.iter().find_map(|id| standalone.get(&id.to_ascii_lowercase()));
+        let standalone = entry.correlation_ids.iter().filter_map(|id| standalone.get(&id.to_ascii_lowercase()));
         Some(Game {
             name: title.name.clone(),
-            standalone: standalone.map(|app| Standalone {
-                store_id: format!("standalone:{}", app.id),
-                launcher: app.launcher.clone(),
-                locators: app.locators.iter().filter_map(locator).collect(),
-            }),
+            standalone: standalone
+                .map(|app| Standalone {
+                    store_id: format!("standalone:{}", app.id),
+                    launcher: app.launcher.clone(),
+                    locators: app.locators.iter().filter_map(locator).collect(),
+                })
+                .collect(),
             cover: art(460),
             thumbnail: art(100),
             map: map_of.get(entry.title_id.as_str()).map(|name| (*name).to_owned()),
@@ -145,13 +147,14 @@ mod tests {
     fn reads_games_in_model_terms() {
         let games = parse(
             br#"{"games":{
-                "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App"],"versionPath":"a.exe",
+                "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App","standalone:other"],"versionPath":"a.exe",
                      "trainer":{"cheatCount":3,"supportedVersions":[7],"updatedAt":"u"}},
                 "2":{"id":"2","titleId":"gone"}},
               "titles":{"t":{"name":"Game","thumbnail":"/t/{size}.jpg"}},
               "maps":[{"titleId":"t","name":"First"},{"titleId":"t","name":"Second"}],
               "platforms":{"standalone":{"apps":[{"id":"app","launcher":"l.exe",
-                "locators":[{"type":"directory","value":"C:\\G"},{"type":"from-the-future","value":"x"}]}]}}}"#,
+                "locators":[{"type":"directory","value":"C:\\G"},{"type":"from-the-future","value":"x"}]},
+                {"id":"other","launcher":"o.exe","locators":[]}]}}}"#,
         )
         .unwrap();
         let [game] = &games[..] else { panic!("one game with a title") };
@@ -159,7 +162,7 @@ mod tests {
         assert_eq!(game.cover.as_deref(), Some("https://api-cdn.wemod.com/t/460.jpg"));
         let offer = game.trainer.as_ref().unwrap();
         assert_eq!((offer.cheats, &offer.builds[..], offer.revision.as_deref()), (3, &[7][..], Some("u")));
-        let standalone = game.standalone.as_ref().unwrap();
-        assert_eq!((standalone.store_id.as_str(), standalone.locators.len()), ("standalone:app", 1));
+        let standalone: Vec<_> = game.standalone.iter().map(|app| (app.store_id.as_str(), app.locators.len())).collect();
+        assert_eq!(standalone, [("standalone:app", 1), ("standalone:other", 0)]);
     }
 }
