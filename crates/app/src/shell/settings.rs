@@ -125,7 +125,7 @@ impl Page {
             .min_w_0()
             .px(px(18.))
             .py(px(6.))
-            .child(self.wand_dir_row(cx))
+            .children(self.folder_rows(cx))
     }
 
     fn appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {

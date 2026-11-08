@@ -4,8 +4,9 @@ use std::collections::{HashMap, HashSet};
 
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use hotkeys::Chord;
-use model::{Cheat, Kind};
-use wand::trainer::{Plan, Stamp, Trainer};
+use model::{Cheat, Kind, Plan, Trainer};
+
+use super::library::Stamp;
 
 const INPUT_DIGITS: usize = 6;
 
@@ -22,8 +23,10 @@ pub struct Row {
 pub struct Loaded {
     pub cheats: Vec<Cheat>,
     pub rows: Vec<Row>,
-    /// What the disk copy was fetched for; another stamp on the game means it is stale.
+    /// What it was asked for; another stamp on the game means it is stale.
     pub stamp: Stamp,
+    /// The disk copy was stale and its refresh failed: the next open asks again.
+    pub stale: bool,
     /// One per cheat: 0 or 1 for a toggle, the option index for a selection, else the number.
     pub values: Vec<f64>,
     /// Text fields of the cheats applied with a button, by cheat index.
@@ -36,8 +39,7 @@ pub struct Loaded {
 
 impl Loaded {
     pub fn new(trainer: Trainer, stamp: Stamp, window: &mut Window, cx: &mut App) -> Self {
-        let plan = trainer.plan();
-        let model::Trainer { cheats, pinned } = trainer.into();
+        let Trainer { cheats, pinned, plan } = trainer;
         let values: Vec<f64> = cheats.iter().map(initial).collect();
         let inputs = cheats
             .iter()
@@ -61,6 +63,7 @@ impl Loaded {
                 .collect(),
             cheats,
             stamp,
+            stale: false,
             values,
             inputs,
             folded: HashSet::new(),

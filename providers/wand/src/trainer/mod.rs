@@ -12,7 +12,7 @@ use hotkeys::Chord;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{session::Session, transport::Transport};
+use crate::{run::Host, session::Session, transport::Transport};
 
 mod plan;
 
@@ -97,9 +97,15 @@ struct Args {
     value: Option<Value>,
 }
 
-impl From<Trainer> for model::Trainer {
-    fn from(trainer: Trainer) -> Self {
-        Self { cheats: trainer.blueprint.cheats.into_iter().map(cheat).collect(), pinned: trainer.pinned_mods }
+impl Trainer {
+    /// The cheat list and what running it takes, with a runner on `host`.
+    pub fn into_model(self, host: &Host) -> model::Trainer {
+        let plan = self.plan();
+        model::Trainer {
+            plan: model::Plan { image: plan.image.clone(), minimum_age: plan.minimum_age, launch: plan.launch, runner: host.runner(&plan) },
+            cheats: self.blueprint.cheats.into_iter().map(cheat).collect(),
+            pinned: self.pinned_mods,
+        }
     }
 }
 
@@ -229,7 +235,9 @@ mod tests {
 
     #[test]
     fn parses_every_control_shape() {
-        let trainer: model::Trainer = serde_json::from_str::<Trainer>(JSON).unwrap().into();
+        let dir = std::env::temp_dir();
+        let host = Host::new(dir.clone(), std::sync::Arc::new(crate::folder::Setting::load(&dir)));
+        let trainer = serde_json::from_str::<Trainer>(JSON).unwrap().into_model(&host);
         let cheats = &trainer.cheats;
         assert!(cheats[0].kind == model::Kind::Toggle && !cheats[0].args.button && cheats[0].key.is_none());
         assert_eq!(cheats[1].hotkeys, [Chord::from_vks(&[18, 117]), Chord::from_vks(&[16, 117])]);

@@ -26,10 +26,10 @@ impl Page {
             }
             _ => "search trainers".to_owned(),
         };
-        let name = match (&self.account, &self.session) {
-            (Some(account), _) => account.username.clone(),
-            (None, Load::Failed(_)) => "NOT SIGNED IN".to_owned(),
-            (None, _) => String::new(),
+        let name = match (&self.account, self.signed_out) {
+            (Some(account), _) => account.name.clone(),
+            (None, true) => "NOT SIGNED IN".to_owned(),
+            (None, false) => String::new(),
         };
         h_flex()
             .h(px(52.))
@@ -122,7 +122,7 @@ impl Page {
         window.blur(cx);
         self.settings = true;
         // An update may have installed a newer version since the last look.
-        self.scan_wand(window, cx);
+        self.scan_folders(window, cx);
         cx.notify();
     }
 }

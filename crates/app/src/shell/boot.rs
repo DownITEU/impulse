@@ -1,15 +1,11 @@
-//! Fills the page: disk copies first, the network only for what the open game lacks or holds stale.
+//! Fills the page from the provider: disk copies first, the network only for what the open game lacks or holds stale.
 
 use std::{path::PathBuf, sync::Arc};
 
 use blocking::unblock;
+use futures::StreamExt;
 use gpui_kit::{AsyncWindowContext, Context, WeakEntity, Window};
-use model::Game;
-use wand::{
-    binary, catalog,
-    session::{self, Source, account},
-    trainer,
-};
+use model::{SignIn, Snapshot};
 
 use super::{
     Load, Page, art,
@@ -19,92 +15,39 @@ use super::{
 
 impl Page {
     pub(super) fn boot(&self, window: &Window, cx: &mut Context<Self>) {
-        let dir = self.data_dir.clone();
+        let (mut games, art) = (self.provider.games(), art::cache_dir(&self.data_dir));
         cx.spawn_in(window, async move |page, cx| {
-            let cached = {
-                let dir = dir.clone();
-                unblock(move || catalog::cached(&dir)).await
-            };
-            let have_copy = cached.is_some();
-            let art = art::cache_dir(&dir);
-            if let Some(games) = cached {
-                rescan(&page, games, art.clone(), cx).await;
-            }
-            match unblock(move || catalog::refresh(&dir, have_copy)).await {
-                Ok(Some(games)) => {
-                    log::info!("catalog updated");
-                    rescan(&page, games, art, cx).await;
-                }
-                Ok(None) => log::debug!("catalog is up to date"),
-                Err(e) => {
-                    log::warn!("catalog not refreshed: {e:#}");
-                    if !have_copy {
+            let mut have_copy = false;
+            while let Some(snapshot) = games.next().await {
+                match snapshot {
+                    Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => {
+                        have_copy = true;
+                        rescan(&page, all, art.clone(), cx).await;
+                    }
+                    Snapshot::Fresh(Err(e)) if !have_copy => {
                         page.update(cx, |page, cx| {
                             page.library = Load::Failed(format!("{e:#}"));
                             cx.notify();
                         })
                         .ok();
                     }
+                    _ => {}
                 }
             }
         })
         .detach();
 
-        let Some(transport) = self.transport.clone() else {
-            return;
-        };
-        let dir = self.data_dir.clone();
+        let mut sign_in = self.provider.sign_in();
         cx.spawn_in(window, async move |page, cx| {
-            let cached = {
-                let dir = dir.clone();
-                unblock(move || account::cached(&dir)).await
-            };
-            let known = cached.as_ref().is_some_and(|(_, fresh)| *fresh);
-            if let Some((account, _)) = cached {
+            while let Some(state) = sign_in.next().await {
                 page.update(cx, |page, cx| {
-                    page.account = Some(account);
+                    match state {
+                        SignIn::Account(account) => page.account = Some(account),
+                        SignIn::Failed => page.signed_out = true,
+                    }
                     cx.notify();
                 })
                 .ok();
-            }
-            let session = match session::connect(&transport, dir.join("session.bin")).await {
-                Ok((session, source)) => {
-                    let how = match source {
-                        Source::Restored => "restored",
-                        Source::Refreshed => "refreshed",
-                        Source::Wand => "new from Wand",
-                    };
-                    let days = (session.expires_in().as_secs() + 43_200) / 86_400;
-                    log::info!("Session: {how}, expires in {days} d");
-                    Arc::new(session)
-                }
-                Err(e) => {
-                    log::error!("Session: {e:#}");
-                    page.update(cx, |page, cx| {
-                        page.session = Load::Failed(format!("{e:#}"));
-                        cx.notify();
-                    })
-                    .ok();
-                    return;
-                }
-            };
-            page.update_in(cx, |page, window, cx| {
-                page.session = Load::Ready(session.clone());
-                page.open_trainer(window, cx);
-            })
-            .ok();
-            if known {
-                return;
-            }
-            match account::fetch(&session, &transport, &dir).await {
-                Ok(account) => {
-                    page.update(cx, |page, cx| {
-                        page.account = Some(account);
-                        cx.notify();
-                    })
-                    .ok();
-                }
-                Err(e) => log::warn!("account: {e:#}"),
             }
         })
         .detach();
@@ -112,14 +55,11 @@ impl Page {
 
     /// Drops every disk copy and fills the page anew. The session stays: it is not a cache.
     pub(super) fn invalidate_caches(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let dir = self.data_dir.clone();
+        let (provider, art) = (self.provider.clone(), art::cache_dir(&self.data_dir));
         cx.spawn_in(window, async move |page, cx| {
             unblock(move || {
-                catalog::forget(&dir);
-                trainer::forget(&dir);
-                binary::forget(&dir);
-                account::forget(&dir);
-                art::forget(&art::cache_dir(&dir));
+                provider.forget_caches();
+                art::forget(&art);
             })
             .await;
             log::info!("caches invalidated");
@@ -153,81 +93,59 @@ impl Page {
         cx.notify();
     }
 
-    /// Brings the open game's trainer: the disk copy at once, then the API only when that
-    /// copy is missing or stale. Nothing is downloaded for a game the user did not open.
+    /// Brings the open game's trainer. Nothing is downloaded for a game the user did not open.
     pub(super) fn open_trainer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(game) = self.game() else {
             return;
         };
-        let held = match self.trainers.get(&game.id) {
-            Some(Load::Ready(loaded)) => Some(loaded.stamp == game.stamp),
-            _ => None,
-        };
-        if game.support == Support::NoTrainer || held == Some(true) {
+        let current = matches!(self.trainers.get(&game.id), Some(Load::Ready(loaded)) if !loaded.stale && loaded.stamp == game.stamp);
+        if game.support == Support::NoTrainer || current {
             return;
         }
         let (id, stamp) = (game.id.clone(), game.stamp.clone());
+        let mut snapshots = self.provider.trainer(&game.source, &game.install);
         // One task per game: a second open while it runs changes nothing.
         if !self.loading.insert(id.clone()) {
             return;
         }
-        let dir = self.data_dir.clone();
         cx.spawn_in(window, async move |page, cx| {
-            let mut fresh = false;
-            if held.is_none() {
-                let copy = {
-                    let (dir, id) = (dir.clone(), id.clone());
-                    unblock(move || trainer::cached(&dir, &id)).await
-                };
-                if let Some((trainer, found)) = copy {
-                    fresh = found == stamp;
-                    page.update_in(cx, |page, window, cx| {
-                        let loaded = Loaded::new(trainer, found, window, cx);
-                        page.install(id.clone(), loaded);
-                        cx.notify();
-                    })
-                    .ok();
-                }
-            }
-            // Asked now, not at the start: the session may have connected meanwhile.
-            let link = page.update(cx, |page, cx| {
-                let (Load::Ready(session), Some(transport)) = (&page.session, &page.transport)
-                else {
-                    return None;
-                };
-                let link = (!fresh).then(|| (session.clone(), transport.clone()))?;
-                page.trainers.entry(id.clone()).or_insert(Load::Pending);
-                cx.notify();
-                Some(link)
-            });
-            let result = match link {
-                Ok(Some((session, transport))) => {
-                    Some(trainer::fetch(&session, &transport, &dir, &id, stamp.clone()).await)
-                }
-                _ => None,
-            };
-            page.update_in(cx, |page, window, cx| {
-                match result {
-                    Some(Ok(trainer)) => {
-                        let loaded = Loaded::new(trainer, stamp, window, cx);
-                        page.install(id.clone(), loaded);
-                    }
-                    Some(Err(e)) => {
-                        log::warn!("trainer {id}: {e:#}");
-                        // A stale copy still beats an error.
-                        if !matches!(page.trainers.get(&id), Some(Load::Ready(_))) {
-                            page.trainers
-                                .insert(id.clone(), Load::Failed(format!("{e:#}")));
+            while let Some(snapshot) = snapshots.next().await {
+                page.update_in(cx, |page, window, cx| {
+                    match snapshot {
+                        Snapshot::Cached(Some(trainer)) | Snapshot::Fresh(Ok(trainer)) => {
+                            let loaded = Loaded::new(trainer, stamp.clone(), window, cx);
+                            page.install(id.clone(), loaded);
                         }
+                        // The network is next.
+                        Snapshot::Cached(None) => {
+                            page.trainers.entry(id.clone()).or_insert(Load::Pending);
+                        }
+                        Snapshot::Fresh(Err(e)) => page.refresh_failed(&id, format!("{e:#}")),
                     }
-                    None => {}
-                }
+                    cx.notify();
+                })
+                .ok();
+            }
+            page.update(cx, |page, cx| {
                 page.loading.remove(&id);
                 cx.notify();
             })
             .ok();
         })
         .detach();
+    }
+
+    /// A stale copy still beats an error, and the next open asks again.
+    fn refresh_failed(&mut self, id: &Arc<str>, error: String) {
+        if let Some((_, loaded)) = self.deferred.as_mut().filter(|(held, _)| held == id) {
+            loaded.stale = true;
+        }
+        match self.trainers.get_mut(id) {
+            Some(Load::Ready(loaded)) => loaded.stale = true,
+            _ => {
+                self.trainers.insert(id.clone(), Load::Failed(error));
+            }
+        }
     }
 
     // A newer copy may order the cheats differently.
@@ -251,13 +169,8 @@ impl Page {
     }
 }
 
-async fn rescan(
-    page: &WeakEntity<Page>,
-    games: Vec<Game>,
-    art: PathBuf,
-    cx: &mut AsyncWindowContext,
-) {
-    let library = unblock(move || library::scan(&games, &art)).await;
+async fn rescan(page: &WeakEntity<Page>, games: Vec<model::Game>, art: PathBuf, cx: &mut AsyncWindowContext) {
+    let library = unblock(move || library::scan(games, &art)).await;
     page.update_in(cx, |page, window, cx| page.set_library(library, window, cx))
         .ok();
 }

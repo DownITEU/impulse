@@ -2,13 +2,17 @@
 //! the catalog, trainer metadata and DLLs, Wand's install, and the Tophat host. Read `CLAUDE.md`.
 
 mod attach;
-pub mod binary;
-pub mod catalog;
+mod binary;
+mod catalog;
+mod folder;
 mod inject;
-pub mod install;
-pub mod run;
-pub mod session;
+mod install;
+mod provider;
+mod run;
+mod session;
 mod store;
 mod tophat;
-pub mod trainer;
-pub mod transport;
+mod trainer;
+mod transport;
+
+pub use provider::Wand;

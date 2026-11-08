@@ -1,10 +1,26 @@
+use std::{sync::Arc, time::Duration};
+
 use hotkeys::Chord;
 
-/// A trainer's cheat list, as the user sees it.
+use crate::Runner;
+
+/// A trainer's cheat list, as the user sees it, and what running exactly this list takes.
 pub struct Trainer {
     pub cheats: Vec<Cheat>,
     /// Ids of the cheats the user pinned.
     pub pinned: Vec<String>,
+    pub plan: Plan,
+}
+
+#[derive(Clone)]
+pub struct Plan {
+    /// Path suffix of the game's executable, `*` allowed; without it the install folder decides.
+    pub image: Option<String>,
+    /// A younger process is still starting.
+    pub minimum_age: Duration,
+    /// Whether to start the game; `false` waits for the user to start it.
+    pub launch: bool,
+    pub runner: Arc<dyn Runner>,
 }
 
 pub struct Cheat {

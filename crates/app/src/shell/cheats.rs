@@ -29,9 +29,9 @@ impl Page {
                 "Wand has no trainer for this game. Impulse will flag it in your library as soon as one ships.",
             ));
         }
-        let loaded = match (self.trainers.get(&game.id), &self.session) {
-            (Some(Load::Ready(loaded)), _) => loaded,
-            (Some(Load::Failed(why)), _) | (None, Load::Failed(why)) => {
+        let loaded = match self.trainers.get(&game.id) {
+            Some(Load::Ready(loaded)) => loaded,
+            Some(Load::Failed(why)) => {
                 return column.child(notice(
                     "[ NO DATA ]",
                     "THE CHEAT LIST IS NOT DOWNLOADED",
@@ -39,7 +39,7 @@ impl Page {
                 ));
             }
             // The disk answers within a frame or two: a card would only flash.
-            (None, _) if self.loading.contains(&game.id) => return column,
+            None if self.loading.contains(&game.id) => return column,
             _ => {
                 return column.child(notice("[ LOADING ]", "LOADING THE CHEAT LIST", KEPT));
             }

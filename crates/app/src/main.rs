@@ -2,13 +2,13 @@
 
 mod library;
 mod play;
-mod preferences;
 mod shell;
 
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, sync::Arc};
 
 use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
-use wand::transport::Transport;
+use model::Provider;
+use wand::Wand;
 
 use crate::shell::Page;
 
@@ -17,7 +17,8 @@ fn main() {
         PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows"))
             .join("Impulse");
     journal::init(&data_dir);
-    let transport = Transport::spawn(data_dir.clone());
+    // Built before the window: its browser bridge takes a moment to come up.
+    let provider: Arc<dyn Provider> = Arc::new(Wand::new(data_dir.clone()));
     gpui_kit::application()
         .with_assets(shell::Assets)
         .run(move |cx| {
@@ -38,7 +39,7 @@ fn main() {
                 ..Default::default()
             };
             gpui_kit::open_window(options, cx, |window, cx| {
-                cx.new(|cx| Page::new(transport, data_dir, window, cx))
+                cx.new(|cx| Page::new(provider, data_dir, window, cx))
             })
             .expect("failed to open window");
             // gpui-pre-windows keeps running after the last window closes.

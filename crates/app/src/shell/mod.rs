@@ -6,6 +6,7 @@ mod assets;
 mod boot;
 mod cheats;
 mod controls;
+mod folders;
 mod header;
 mod hero;
 mod library;
@@ -16,7 +17,6 @@ mod settings;
 mod side;
 mod sidebar;
 mod theme;
-mod wand_dir;
 mod widgets;
 
 use std::{
@@ -25,7 +25,6 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::Result;
 use gpui_kit::{
     AnyElement, App, Context, Entity, IntoElement, Render, Task, Window,
     component::{
@@ -40,22 +39,16 @@ use gpui_kit::{
 };
 
 pub use assets::Assets;
+use folders::FolderRow;
 use library::{Game, Library};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
 use run::Play;
 use settings::Tab;
 use theme::*;
-use wand_dir::WandDir;
 use widgets::{grid, mono, notice, square};
 
-use wand::{
-    run::Host,
-    session::{Account, Session},
-    transport::Transport,
-};
-
-use crate::preferences::{self, Preferences};
+use model::{Account, Provider};
 
 const SIDEBAR_WIDTH: f32 = 248.;
 // Below this pane width the map and session panels drop under the cheat list.
@@ -87,7 +80,8 @@ enum Lead {
 enum Menu {
     Overlay,
     Cheat(usize),
-    WandVersions,
+    /// A folder row's picks.
+    Choices(usize),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -98,9 +92,10 @@ enum Flash {
 
 pub struct Page {
     data_dir: PathBuf,
-    transport: Option<Transport>,
-    session: Load<Arc<Session>>,
+    provider: Arc<dyn Provider>,
     account: Option<Account>,
+    // No session: the header says so when no account is known.
+    signed_out: bool,
     library: Load<Library>,
     // By game id, for the games opened in this run.
     // `Pending` while a first download runs.
@@ -111,15 +106,13 @@ pub struct Page {
     deferred: Option<(Arc<str>, Loaded)>,
     selected: Option<Arc<str>>,
     play: Play,
-    host: Host,
     favorites: HashSet<Arc<str>>,
     accent: u32,
     lead: Lead,
     reduce_motion: bool,
     settings: bool,
     settings_tab: Tab,
-    preferences: Preferences,
-    wand: WandDir,
+    folders: Vec<FolderRow>,
     // Index into `hero::OVERLAYS`.
     overlay: usize,
     menu: Option<Menu>,
@@ -133,7 +126,7 @@ pub struct Page {
 
 impl Page {
     pub fn new(
-        transport: Result<Transport>,
+        provider: Arc<dyn Provider>,
         data_dir: PathBuf,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -157,22 +150,12 @@ impl Page {
             state
         };
         let (game_filter, mod_filter) = (filter("filter"), filter("filter mods"));
-        let (transport, session) = match transport {
-            Ok(transport) => (Some(transport), Load::Pending),
-            Err(e) => {
-                log::error!("Transport: {e:#}");
-                (None, Load::Failed(format!("{e:#}")))
-            }
-        };
         let page = Self {
-            // A few bytes from the local data directory: not worth a loading state.
-            preferences: preferences::load(&data_dir),
-            wand: WandDir::new(window, cx),
-            host: Host::new(data_dir.clone()),
             data_dir,
-            transport,
-            session,
+            provider,
             account: None,
+            signed_out: false,
+            folders: Vec::new(),
             library: Load::Pending,
             trainers: HashMap::new(),
             loading: HashSet::new(),
@@ -194,7 +177,7 @@ impl Page {
             mod_filter,
         };
         page.boot(window, cx);
-        page.scan_wand(window, cx);
+        page.scan_folders(window, cx);
         page
     }
 

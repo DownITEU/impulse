@@ -102,11 +102,11 @@ impl Page {
     fn run_request(&self, id: &Arc<str>) -> Result<Request> {
         let game = self.games().iter().find(|game| game.id == *id).context("the game is not in the library")?;
         let plan = &self.trainer(Some(id)).context("the cheat list is not loaded")?.plan;
-        let trainerlib = self.wand_trainerlib().context("Wand's folder is not set: pick it in Settings, APP")?;
+        let install = &game.install;
         Ok(Request {
-            runner: self.host.runner(plan, trainerlib)?,
-            store_id: game.store_id.clone(),
-            rule: Rule { image: plan.image.clone(), location: game.location.clone(), minimum_age: plan.minimum_age },
+            runner: plan.runner.clone(),
+            store_id: install.store_id.clone(),
+            rule: Rule { image: plan.image.clone(), location: install.location.clone(), minimum_age: plan.minimum_age },
             launch: plan.launch,
         })
     }

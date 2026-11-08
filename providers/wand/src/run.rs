@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex, PoisonError},
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use blocking::unblock;
 use futures::{FutureExt, StreamExt, future::BoxFuture};
 use model::{Attach, Live, Process};
@@ -13,6 +13,7 @@ use model::{Attach, Live, Process};
 use crate::{
     attach::{Game, attach},
     binary,
+    folder::Setting,
     tophat::{Event, Outcome, Server, Session},
     trainer::{Binary, Plan},
 };
@@ -21,18 +22,17 @@ use crate::{
 #[derive(Clone)]
 pub struct Host {
     data_dir: PathBuf,
+    folder: Arc<Setting>,
     server: Arc<Mutex<Option<Arc<Server>>>>,
 }
 
 impl Host {
-    pub fn new(data_dir: PathBuf) -> Self {
-        Self { data_dir, server: Arc::default() }
+    pub fn new(data_dir: PathBuf, folder: Arc<Setting>) -> Self {
+        Self { data_dir, folder, server: Arc::default() }
     }
 
-    /// `trainerlib` is Wand's folder of the service and plugin DLLs.
-    pub fn runner(&self, plan: &Plan, trainerlib: PathBuf) -> Result<Arc<dyn model::Runner>> {
-        let binary = plan.binary.clone().map_err(|why| anyhow!("{why}"))?;
-        Ok(Arc::new(Runner { host: self.clone(), trainerlib, binary, variables: plan.variables.clone() }))
+    pub fn runner(&self, plan: &Plan) -> Arc<dyn model::Runner> {
+        Arc::new(Runner { host: self.clone(), binary: plan.binary.clone(), variables: plan.variables.clone() })
     }
 
     fn server(&self) -> Result<Arc<Server>> {
@@ -48,21 +48,25 @@ impl Host {
 
 struct Runner {
     host: Host,
-    trainerlib: PathBuf,
-    binary: Binary,
+    /// `Err` says why this trainer cannot run here.
+    binary: Result<Binary, String>,
     variables: Vec<String>,
 }
 
 impl model::Runner for Runner {
     fn prepare(&self) -> BoxFuture<'_, Result<Box<dyn Attach>>> {
         async move {
+            let Binary { url, hash } = self.binary.clone().map_err(|why| anyhow!("{why}"))?;
+            let folder = self.host.folder.clone();
+            let install = unblock(move || folder.install()).await;
+            let trainerlib = install.context("Wand's folder is not set: pick it in Settings, APP")?.trainerlib();
             let server = self.host.server()?;
-            let (data_dir, Binary { url, hash }) = (self.host.data_dir.clone(), self.binary.clone());
+            let data_dir = self.host.data_dir.clone();
             let trainer = {
                 let hash = hash.clone();
                 unblock(move || binary::ensure(&data_dir, &url, &hash)).await?
             };
-            let prepared = Prepared { server, trainerlib: self.trainerlib.clone(), trainer, hash, variables: self.variables.clone() };
+            let prepared = Prepared { server, trainerlib, trainer, hash, variables: self.variables.clone() };
             Ok(Box::new(prepared) as Box<dyn Attach>)
         }
         .boxed()

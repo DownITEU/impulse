@@ -183,7 +183,7 @@ impl Page {
                 format!("{count} MODS")
             }
         };
-        let version = match game.version {
+        let version = match game.install.build {
             Some(version) => format!("V{version}"),
             None => "VERSION UNKNOWN".to_owned(),
         };

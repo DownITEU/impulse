@@ -12,8 +12,6 @@ use anyhow::Result;
 use blocking::unblock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub use account::Account;
-
 use crate::{
     transport::Transport,
     store::{self, WandToken},
