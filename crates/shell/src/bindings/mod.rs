@@ -49,6 +49,11 @@ impl Bindings {
         self.armed = None;
     }
 
+    /// The caller repaints.
+    pub fn cancel(&mut self) {
+        self.capture = None;
+    }
+
     /// What the slot being bound holds so far.
     fn held(&self, game: &str, cheat: &str, slot: usize) -> Option<Option<Chord>> {
         let capture = self.capture.as_ref()?;
@@ -171,11 +176,14 @@ impl Page {
         };
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
         let Some(index) = loaded.cheats.iter().position(|found| found.id == cheat) else { return };
+        let wanted = match choice {
+            Choice::Bound(chord) => Some(chord),
+            Choice::Unbound => None,
+            Choice::Default => loaded.cheats[index].hotkeys.get(slot).copied().flatten(),
+        };
         // As in Wand, a cheat never holds one chord twice.
         let taken = |chord: Chord| loaded.hotkeys[index].iter().enumerate().any(|(at, bound)| at != slot && *bound == Some(chord));
-        if let Choice::Bound(chord) = choice
-            && taken(chord)
-        {
+        if wanted.is_some_and(taken) {
             return;
         }
         self.bindings.store.choose(&game, cheat, slot, choice);

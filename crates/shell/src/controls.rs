@@ -59,10 +59,11 @@ impl Span {
     }
 }
 
-/// Rounds to the step's decimals, as Wand does, so repeated steps do not drift.
-fn round_to(value: f64, step: f64) -> f64 {
-    let decimals = step.to_string().split_once('.').map_or(0, |(_, fraction)| fraction.len());
-    let scale = 10_f64.powi(decimals as i32);
+/// Rounds to the decimals of the step and of `min`, so repeated steps do not drift (Wand rounds
+/// to the step's alone, which turns 0.5 + 1 into 2).
+fn round_to(value: f64, args: &Args, step: f64) -> f64 {
+    let decimals = |x: f64| x.to_string().split_once('.').map_or(0, |(_, fraction)| fraction.len());
+    let scale = 10_f64.powi(decimals(step).max(args.min.map_or(0, decimals)) as i32);
     (value * scale).round() / scale
 }
 
@@ -85,7 +86,7 @@ impl Page {
             }
             Kind::Number | Kind::Slider => {
                 let step = cheat.args.step.filter(|step| *step > 0.).unwrap_or(1.);
-                cheat.args.clamp(round_to(if up { value + step } else { value - step }, step))
+                cheat.args.clamp(round_to(if up { value + step } else { value - step }, &cheat.args, step))
             }
             Kind::Selection => {
                 let count = loaded.rows[index].options.len() as f64;
@@ -390,7 +391,16 @@ fn value_box(value: impl Into<SharedString>) -> Div {
 
 #[cfg(test)]
 mod tests {
-    use super::Span;
+    use model::Args;
+
+    use super::{Span, round_to};
+
+    #[test]
+    fn hotkey_steps_keep_the_origin_and_do_not_drift() {
+        let half = Args { min: Some(0.5), ..Args::default() };
+        assert_eq!(round_to(0.5 + 1., &half, 1.), 1.5);
+        assert_eq!(round_to(0.2 + 0.1, &Args::default(), 0.1), 0.3);
+    }
 
     #[test]
     fn steps_count_from_min() {

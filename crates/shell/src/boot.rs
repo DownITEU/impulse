@@ -160,13 +160,19 @@ impl Page {
         }
         if self.selected.as_ref() == Some(&id) {
             self.drop_cheat_state();
+            // Its cap may be gone, and with it the click that ends the capture.
+            self.bindings.cancel();
         }
         self.trainers.insert(id, Load::Ready(loaded));
     }
 
     /// For when a run lets go of its cheat list.
     pub(super) fn install_deferred(&mut self) {
-        if let Some((id, loaded)) = self.deferred.take() {
+        if let Some((id, mut loaded)) = self.deferred.take() {
+            // The user may have rebound a slot while it waited.
+            for (index, slots) in self.bindings.slots(&id, &loaded.cheats).into_iter().enumerate() {
+                loaded.rebind(index, slots);
+            }
             self.install(id, loaded);
         }
     }

@@ -3,6 +3,7 @@ use std::{
     env, fmt, fs,
     path::Path,
     process,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -99,7 +100,10 @@ fn read_profile(src: &Path) -> Result<Option<Value>> {
     if !src.is_dir() {
         return Ok(None);
     }
-    let dst = env::temp_dir().join(format!("impulse-wand-{}", process::id()));
+    // One folder per read: the sign-in and the hotkeys may read at once.
+    static READS: AtomicU64 = AtomicU64::new(0);
+    let read = READS.fetch_add(1, Ordering::Relaxed);
+    let dst = env::temp_dir().join(format!("impulse-wand-{}-{read}", process::id()));
     let _ = fs::remove_dir_all(&dst);
     let result = copy_dir(src, &dst).and_then(|()| read_db(&dst));
     let _ = fs::remove_dir_all(&dst);
