@@ -3670,26 +3670,12 @@ checksum = "6e44b0a4eaa4c82f441d50a963f2d5f05a787240aeee097597033e72accfd22f"
 name = "impulse"
 version = "0.1.0"
 dependencies = [
- "aes",
- "agent",
- "anyhow",
- "blocking",
- "cbc",
- "disk",
  "embed-resource",
- "fetch",
- "futures",
  "gpui-kit",
- "hotkeys",
  "journal",
- "log",
  "model",
- "pe",
- "serde",
- "serde_json",
+ "shell",
  "wand",
- "windows-registry 0.6.1",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3986,6 +3972,19 @@ dependencies = [
  "euclid",
  "polycool",
  "smallvec",
+]
+
+[[package]]
+name = "launchers"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "cbc",
+ "model",
+ "pe",
+ "serde",
+ "serde_json",
+ "windows-registry 0.6.1",
 ]
 
 [[package]]
@@ -5488,6 +5487,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
+name = "play"
+version = "0.1.0"
+dependencies = [
+ "agent",
+ "anyhow",
+ "blocking",
+ "model",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "png"
 version = "0.17.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6682,6 +6692,24 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.1",
  "digest 0.11.3",
+]
+
+[[package]]
+name = "shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blocking",
+ "disk",
+ "fetch",
+ "futures",
+ "gpui-kit",
+ "hotkeys",
+ "journal",
+ "launchers",
+ "log",
+ "model",
+ "play",
 ]
 
 [[package]]

@@ -10,7 +10,6 @@ use gpui_kit::SharedString;
 use model::Installation;
 
 use super::art;
-use crate::library;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Support {
@@ -51,7 +50,7 @@ pub struct Library {
 
 /// Scans the launchers and joins the result with `all` (blocking).
 pub fn scan(all: Vec<model::Game>, art_cache: &Path) -> Library {
-    let installed = library::scan(&all);
+    let installed = launchers::scan(&all);
     // Steam art also serves an Epic or GOG install when the title has a Steam release.
     let mut steam_apps = HashMap::<String, u32>::new();
     let mut with_trainer = HashSet::<&str>::new();

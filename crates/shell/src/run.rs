@@ -8,7 +8,7 @@ use gpui_kit::{Context, Div, Task, Window, prelude::*, rgb};
 use model::{Event, Live, Rule, Session};
 
 use super::{Page, theme::*, widgets::mono};
-use crate::play::run::{Request, Stage, run};
+use play::{Request, Stage, run};
 
 pub(super) enum Play {
     Idle,

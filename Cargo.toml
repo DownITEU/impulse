@@ -14,8 +14,11 @@ disk = { path = "crates/disk" }
 fetch = { path = "crates/fetch" }
 hotkeys = { path = "crates/hotkeys" }
 journal = { path = "crates/journal" }
+launchers = { path = "crates/launchers" }
 model = { path = "crates/model" }
 pe = { path = "crates/pe" }
+play = { path = "crates/play" }
+shell = { path = "crates/shell" }
 wand = { path = "crates/wand" }
 
 aes = "0.8"

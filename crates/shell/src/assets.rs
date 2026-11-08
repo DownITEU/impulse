@@ -15,7 +15,7 @@ macro_rules! icons {
 
         fn bundled(path: &str) -> Option<&'static [u8]> {
             $(if path == concat!("icons/", $file, ".svg") {
-                return Some(include_bytes!(concat!("../../assets/icons/", $file, ".svg")));
+                return Some(include_bytes!(concat!("../assets/icons/", $file, ".svg")));
             })*
             None
         }

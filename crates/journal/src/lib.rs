@@ -24,7 +24,7 @@ pub const CAPACITY: usize = 5000;
 const FILE_LIMIT: u64 = 2 << 20;
 const APP: &str = "impulse";
 /// The workspace's crates: their records are kept from Debug up, the others' from Warn.
-const OURS: [&str; 9] = [APP, "agent", "disk", "fetch", "hotkeys", "journal", "model", "pe", "wand"];
+const OURS: [&str; 12] = [APP, "agent", "disk", "fetch", "hotkeys", "journal", "launchers", "model", "pe", "play", "shell", "wand"];
 
 pub struct Record {
     /// Grows by one per record; unique within a run.

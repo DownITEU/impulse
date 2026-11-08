@@ -1,0 +1,20 @@
+[package]
+name = "shell"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+disk.workspace = true
+fetch.workspace = true
+hotkeys.workspace = true
+journal.workspace = true
+launchers.workspace = true
+model.workspace = true
+play.workspace = true
+
+anyhow.workspace = true
+blocking.workspace = true
+futures.workspace = true
+gpui-kit.workspace = true
+log.workspace = true
