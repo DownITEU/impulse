@@ -2,7 +2,6 @@
 
 mod catalog;
 mod library;
-#[allow(dead_code, unused_imports)] // until the launch stage uses it
 mod play;
 mod preferences;
 mod session;

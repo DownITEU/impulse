@@ -1,4 +1,4 @@
-//! Authenticode: only images signed by WeMod reach a game process.
+//! Authenticode: an image reaches a game process only signed by the publisher its caller expects.
 
 use std::{os::windows::ffi::OsStrExt, path::Path, ptr};
 
@@ -16,11 +16,9 @@ use windows_sys::Win32::{
     },
 };
 
-const PUBLISHER: &str = "WeMod LLC";
-
-/// Fails unless `path` has a valid embedded signature by WeMod. Revocation is not
-/// checked: it needs the network, and a trainer must start offline.
-pub fn check(path: &Path) -> Result<()> {
+/// Fails unless `path` has a valid embedded signature whose signer's display name is `publisher`.
+/// Revocation is not checked: it needs the network, and a trainer must start offline.
+pub fn check(path: &Path, publisher: &str) -> Result<()> {
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
     let mut file = WINTRUST_FILE_INFO {
         cbStruct: size_of::<WINTRUST_FILE_INFO>() as u32,
@@ -47,9 +45,9 @@ pub fn check(path: &Path) -> Result<()> {
         (status, signer)
     };
     match (status, signer) {
-        (0, Some(name)) if name == PUBLISHER => Ok(()),
+        (0, Some(name)) if name == publisher => Ok(()),
         (0, name) => bail!(
-            "{} is signed by {}, not by {PUBLISHER}",
+            "{} is signed by {}, not by {publisher}",
             path.display(),
             name.as_deref().unwrap_or("an unknown publisher")
         ),

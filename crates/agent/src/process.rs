@@ -3,13 +3,13 @@
 use std::{
     io, mem,
     path::{Path, PathBuf},
+    thread,
     time::Duration,
 };
 
 use anyhow::{Result, bail};
 use blocking::unblock;
 use model::{Process, Rule};
-use tokio::runtime::Handle as Runtime;
 use windows_sys::Win32::{
     Foundation::FILETIME,
     System::{
@@ -19,7 +19,7 @@ use windows_sys::Win32::{
     },
 };
 
-use super::handle::Handle;
+use crate::handle::Handle;
 
 const POLL: Duration = Duration::from_secs(1);
 
@@ -44,9 +44,8 @@ fn pick(candidates: Vec<Candidate>, rule: &Rule) -> Option<Process> {
         .map(|candidate| candidate.process)
 }
 
-/// Polls until `find` finds a process. The sleeps run on `runtime`: this future may be driven by
-/// an executor that has no timer.
-pub async fn wait(runtime: &Runtime, rule: &Rule, timeout: Duration) -> Result<Process> {
+/// Polls until `find` finds a process. Dropping the future stops it within one poll.
+pub async fn wait(rule: &Rule, timeout: Duration) -> Result<Process> {
     let mut waited = Duration::ZERO;
     loop {
         let found = {
@@ -59,8 +58,8 @@ pub async fn wait(runtime: &Runtime, rule: &Rule, timeout: Duration) -> Result<P
         if waited >= timeout {
             bail!("the game did not start in {} s", timeout.as_secs());
         }
-        // Inside the task: a timer built on this thread would panic without a runtime here.
-        let _ = runtime.spawn(async { tokio::time::sleep(POLL).await }).await;
+        // A blocking-pool sleep: the caller's executor may have no timer.
+        unblock(|| thread::sleep(POLL)).await;
         waited += POLL;
     }
 }
@@ -110,7 +109,7 @@ fn candidate(pid: u32) -> Option<Candidate> {
 /// Fails unless `handle` is the very process `expected` describes. A handle keeps its process
 /// from being replaced, so this closes the gap between finding a process by pid and opening it
 /// for injection: the pid may have been reused in between.
-pub fn verify(handle: &Handle, expected: &Process) -> Result<()> {
+pub(crate) fn verify(handle: &Handle, expected: &Process) -> Result<()> {
     match identity(handle) {
         Some((path, created)) if created == expected.created && same_path(&path, &expected.path) => Ok(()),
         _ => bail!("process {} is not the one that was found: it exited and its id was reused", expected.pid),

@@ -33,7 +33,7 @@ use super::{
     proto::{self, Event, Incoming},
     server::Channel,
 };
-use crate::play::image::Image;
+use agent::Image;
 
 #[cfg(test)]
 mod tests;

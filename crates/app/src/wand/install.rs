@@ -9,6 +9,8 @@ use std::{
 
 pub const SERVICE: &str = "tophat_service_x64.dll";
 pub const PLUGIN: &str = "TrainerLibPlugin_x64.dll";
+/// The signer of the service, the plugin and every trainer DLL.
+pub const PUBLISHER: &str = "WeMod LLC";
 
 const TRAINERLIB: &str = r"resources\app.asar.unpacked\static\unpacked\trainerlib";
 // Wand was WeMod: older installs live under the old name.

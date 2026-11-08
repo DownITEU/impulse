@@ -1,4 +1,4 @@
-//! A DLL that may enter a game: signed by WeMod, x64, and held open against replacement.
+//! A DLL that may enter a game: signed by the expected publisher, x64, and held open against replacement.
 
 use std::{
     fs::{File, OpenOptions},
@@ -10,16 +10,17 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_READ, GetFinalPathNameByHandleW, VOLUME_NAME_DOS};
 
-use super::trust;
+use crate::trust;
 
-/// The only way to name a file the service or the injector will load.
+/// The only way to name a file the injector or a loaded service will load.
 pub struct Image {
     path: PathBuf,
     lock: Option<File>,
 }
 
 impl Image {
-    pub fn open(path: &Path) -> Result<Self> {
+    /// `publisher` is the signer's display name the file must carry.
+    pub fn open(path: &Path, publisher: &str) -> Result<Self> {
         // Denies writes and deletes while this value lives: the file checked is the file loaded.
         let lock = OpenOptions::new()
             .read(true)
@@ -32,7 +33,7 @@ impl Image {
         // `LoadLibraryW` appends ".dll" to a name without an extension and would load a sibling.
         let dll = path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("dll"));
         ensure!(dll, "{} is not a .dll", path.display());
-        trust::check(&path)?;
+        trust::check(&path, publisher)?;
         let x64 = pe::header(&path).is_some_and(|header| header.machine == pe::X64);
         ensure!(x64, "{} is not an x64 image", path.display());
         Ok(Self { path, lock: Some(lock) })
@@ -43,14 +44,14 @@ impl Image {
     }
 
     /// For a failed load whose remote thread may still open the file: the lock then lasts until exit.
-    pub fn keep_locked(&self) {
+    pub(crate) fn keep_locked(&self) {
         if let Some(copy) = self.lock.as_ref().and_then(|lock| lock.try_clone().ok()) {
             mem::forget(copy);
         }
     }
 
-    /// A path no file backs, for tests that never load it.
-    #[cfg(test)]
+    /// A path no file backs, for tests that never load it. Never in a normal build.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn unchecked(path: &str) -> Self {
         Self { path: path.into(), lock: None }
     }
@@ -84,16 +85,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_wemod_signed_x64_dlls_open() {
+    fn only_a_dll_signed_by_the_expected_publisher_opens() {
         let kernel32 = Path::new(r"C:\Windows\System32\kernel32.dll");
-        let err = Image::open(kernel32).err().unwrap();
+        assert!(Image::open(kernel32, "Microsoft Windows").is_ok());
+        let err = Image::open(kernel32, "WeMod LLC").err().unwrap();
         assert!(err.to_string().contains("not by WeMod LLC"), "{err}");
-        assert!(Image::open(Path::new(r"C:\no\such.dll")).is_err());
+        assert!(Image::open(Path::new(r"C:\no\such.dll"), "Microsoft Windows").is_err());
     }
 
     #[test]
     fn a_file_without_the_dll_extension_is_refused_by_its_resolved_path() {
-        let err = Image::open(Path::new("Cargo.toml")).err().unwrap();
+        let err = Image::open(Path::new("Cargo.toml"), "Microsoft Windows").err().unwrap();
         let text = err.to_string();
         assert!(text.contains("is not a .dll") && text.contains(":\\"), "{text}");
     }

@@ -1,0 +1,30 @@
+[package]
+name = "agent"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[features]
+# `Image::unchecked` for tests elsewhere; only ever a dev-dependency feature.
+test-support = []
+
+[dependencies]
+model.workspace = true
+pe.workspace = true
+
+anyhow.workspace = true
+blocking.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
+    "Win32_Security_WinTrust",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_ProcessStatus",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }

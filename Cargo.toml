@@ -9,6 +9,7 @@ publish = false
 
 # Versions only: each crate names the features it uses.
 [workspace.dependencies]
+agent = { path = "crates/agent" }
 disk = { path = "crates/disk" }
 fetch = { path = "crates/fetch" }
 hotkeys = { path = "crates/hotkeys" }

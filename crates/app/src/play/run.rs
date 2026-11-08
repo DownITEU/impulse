@@ -10,7 +10,6 @@ use model::{Process, Rule};
 use super::{
     attach::{Game, attach},
     binary, launch,
-    process,
     tophat::{Event, Server, Session},
 };
 
@@ -46,10 +45,10 @@ pub async fn run(server: &Server, request: Request, mut stage: impl FnMut(Stage)
     let trainer = unblock(move || binary::ensure(&data_dir, &url, &hash)).await?;
 
     let rule = request.rule.clone();
-    let running = unblock(move || process::find(&rule)).await?;
+    let running = unblock(move || agent::find(&rule)).await?;
     let process = match running {
         Some(process) => process,
-        None => wait_for_game(server, &request, &mut stage).await?,
+        None => wait_for_game(&request, &mut stage).await?,
     };
 
     stage(Stage::Attaching);
@@ -57,7 +56,7 @@ pub async fn run(server: &Server, request: Request, mut stage: impl FnMut(Stage)
     attach(server, &request.trainerlib, game).await
 }
 
-async fn wait_for_game(server: &Server, request: &Request, stage: &mut impl FnMut(Stage)) -> Result<Process> {
+async fn wait_for_game(request: &Request, stage: &mut impl FnMut(Stage)) -> Result<Process> {
     let mut started = false;
     if request.launch {
         stage(Stage::Launching);
@@ -66,5 +65,5 @@ async fn wait_for_game(server: &Server, request: &Request, stage: &mut impl FnMu
     }
     stage(Stage::WaitingForGame);
     let within = if started { LAUNCHED_WITHIN } else { STARTED_BY_USER_WITHIN };
-    process::wait(&server.runtime, &request.rule, within).await
+    agent::wait(&request.rule, within).await
 }

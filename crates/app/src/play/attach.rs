@@ -2,6 +2,7 @@
 
 use std::{path::Path, time::Duration};
 
+use agent::Image;
 use anyhow::{Context, Result, ensure};
 use blocking::unblock;
 use futures::channel::mpsc::Receiver;
@@ -10,11 +11,10 @@ use uuid::Uuid;
 
 use super::{
     binary,
-    image::Image,
     inject::{self, Startup},
     tophat::{Event, Run, Server, Session},
 };
-use crate::wand::install::{PLUGIN, SERVICE};
+use crate::wand::install::{PLUGIN, PUBLISHER, SERVICE};
 
 const DIAL_IN_WITHIN: Duration = Duration::from_secs(15);
 
@@ -36,11 +36,11 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
         let (service, plugin, trainer) = (trainerlib.join(SERVICE), trainerlib.join(PLUGIN), game.trainer.to_owned());
         let hash = game.trainer_hash.to_owned();
         unblock(move || {
-            let trainer = Image::open(&trainer)?;
+            let trainer = Image::open(&trainer, PUBLISHER)?;
             // The download was checked earlier; the file may have been swapped before it was locked.
             let found = binary::hash_of(trainer.path()).context("cannot read the trainer")?;
             ensure!(found.eq_ignore_ascii_case(&hash), "the trainer on disk does not match its hash");
-            Ok::<_, anyhow::Error>((Image::open(&service)?, Image::open(&plugin)?, trainer))
+            Ok::<_, anyhow::Error>((Image::open(&service, PUBLISHER)?, Image::open(&plugin, PUBLISHER)?, trainer))
         })
         .await?
     };
@@ -87,7 +87,7 @@ mod tests {
         let exe = PathBuf::from(var("GAME_EXE").expect("IMPULSE_E2E_GAME_EXE"));
         let trainer = PathBuf::from(var("TRAINER").expect("IMPULSE_E2E_TRAINER"));
         // A wrong pid would put the service into some other program.
-        let process = crate::play::process::of(pid).expect("a process with that id");
+        let process = agent::of(pid).expect("a process with that id");
         assert!(process.path.to_string_lossy().eq_ignore_ascii_case(&exe.to_string_lossy()), "process {pid} is not {}", exe.display());
 
         let blueprint = fs::read_to_string(var("BLUEPRINT").expect("IMPULSE_E2E_BLUEPRINT")).unwrap();
