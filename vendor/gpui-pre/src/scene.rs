@@ -771,6 +771,9 @@ pub struct PaintSurface {
     pub content_mask: ContentMask<ScaledPixels>,
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub image_buffer: objc2_core_foundation::CFRetained<objc2_core_video::CVPixelBuffer>,
+    /// An NV12 texture on the window's device, drawn whole over `bounds`.
+    #[cfg(target_os = "windows")]
+    pub texture: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D,
 }
 
 impl From<PaintSurface> for Primitive {

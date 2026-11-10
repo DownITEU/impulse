@@ -5421,6 +5421,36 @@ impl Window {
         });
     }
 
+    /// Paints `texture`, NV12 on the window's device (`d3d11_device`), over `bounds`, scaled and converted to RGB
+    /// as it is drawn: a video frame never leaves the GPU. A texture of another device is skipped.
+    ///
+    /// This method should only be called as part of the paint phase of element drawing.
+    #[cfg(target_os = "windows")]
+    pub fn paint_surface(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        texture: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D,
+    ) {
+        use crate::PaintSurface;
+
+        self.invalidator.debug_assert_paint();
+
+        let bounds = self.snap_bounds(bounds);
+        let content_mask = self.snapped_content_mask();
+        self.next_frame.scene.insert_primitive(PaintSurface {
+            order: 0,
+            bounds,
+            content_mask,
+            texture,
+        });
+    }
+
+    /// The D3D11 device the window renders with; another one after the GPU is lost and recovered.
+    #[cfg(target_os = "windows")]
+    pub fn d3d11_device(&self) -> Option<windows::Win32::Graphics::Direct3D11::ID3D11Device> {
+        self.platform_window.d3d11_device()
+    }
+
     /// Removes an image from the sprite atlas.
     pub fn drop_image(&mut self, data: Arc<RenderImage>) -> Result<()> {
         for frame_index in 0..data.frame_count() {

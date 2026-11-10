@@ -92,6 +92,7 @@ struct DirectXRenderPipelines {
     mono_sprites: PipelineState<MonochromeSprite>,
     subpixel_sprites: PipelineState<SubpixelSprite>,
     poly_sprites: PipelineState<PolychromeSprite>,
+    surfaces: PipelineState<SurfaceSprite>,
 }
 
 struct DirectXGlobalElements {
@@ -384,7 +385,9 @@ impl DirectXRenderer {
                 PrimitiveBatch::PolychromeSprites { texture_id, range } => {
                     self.draw_polychrome_sprites(texture_id, range.start, range.len())
                 }
-                PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
+                PrimitiveBatch::Surfaces(range) => {
+                    self.draw_surfaces(range.start, &scene.surfaces[range])
+                }
             }
             .with_context(|| {
                 format!(
@@ -574,6 +577,15 @@ impl DirectXRenderer {
                 &devices.device,
                 &devices.device_context,
                 &scene.polychrome_sprites,
+            )?;
+        }
+
+        if !scene.surfaces.is_empty() {
+            let sprites: Vec<_> = scene.surfaces.iter().map(SurfaceSprite::of).collect();
+            self.pipelines.surfaces.update_buffer(
+                &devices.device,
+                &devices.device_context,
+                &sprites,
             )?;
         }
 
@@ -813,11 +825,43 @@ impl DirectXRenderer {
         )
     }
 
-    fn draw_surfaces(&mut self, surfaces: &[PaintSurface]) -> Result<()> {
-        if surfaces.is_empty() {
-            return Ok(());
+    /// Each surface is a draw of its own: its texture's planes are bound for it.
+    fn draw_surfaces(&mut self, start: usize, surfaces: &[PaintSurface]) -> Result<()> {
+        let devices = self.devices.as_ref().context("devices missing")?;
+        let batch_params = self
+            .globals
+            .batch_params_buffer
+            .as_ref()
+            .context("batch params buffer missing")?;
+        for (index, surface) in (start..).zip(surfaces) {
+            // A frame made before the device was lost is on the old one.
+            if unsafe { surface.texture.GetDevice() }.ok().as_ref() != Some(&devices.device) {
+                continue;
+            }
+            // A GPU that cannot sample NV12 leaves the surface out, not the frame.
+            let Some(planes) = plane_views(&devices.device, &surface.texture).log_err() else {
+                continue;
+            };
+            self.pipelines.surfaces.draw_with_planes(
+                &devices.device_context,
+                &planes,
+                batch_params,
+                slice::from_ref(&self.globals.sampler),
+                index as u32,
+            )?;
         }
+        // Bound, they would keep the last frame alive.
+        unsafe {
+            devices
+                .device_context
+                .PSSetShaderResources(SURFACE_PLANES_SLOT, Some(&[None, None]))
+        };
         Ok(())
+    }
+
+    /// The device the window renders with.
+    pub(crate) fn device(&self) -> Option<ID3D11Device> {
+        self.devices.as_ref().map(|devices| devices.device.clone())
     }
 
     pub(crate) fn gpu_specs(&self) -> Result<GpuSpecs> {
@@ -998,6 +1042,14 @@ impl DirectXRenderPipelines {
             create_blend_state(device)?,
         )?;
 
+        let surfaces = PipelineState::new(
+            device,
+            "surface_pipeline",
+            ShaderModule::Surface,
+            4,
+            create_blend_state(device)?,
+        )?;
+
         Ok(Self {
             shadow_pipeline,
             quad_pipeline,
@@ -1007,6 +1059,7 @@ impl DirectXRenderPipelines {
             mono_sprites,
             subpixel_sprites,
             poly_sprites,
+            surfaces,
         })
     }
 }
@@ -1084,6 +1137,49 @@ struct BatchParams {
 }
 
 const _: () = assert!(std::mem::size_of::<BatchParams>() == 16);
+
+/// What the surface shader reads of a `PaintSurface`; its texture is bound on its own.
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct SurfaceSprite {
+    bounds: Bounds<ScaledPixels>,
+    content_mask: Bounds<ScaledPixels>,
+}
+
+impl SurfaceSprite {
+    fn of(surface: &PaintSurface) -> Self {
+        Self {
+            bounds: surface.bounds,
+            content_mask: surface.content_mask.bounds,
+        }
+    }
+}
+
+// `t_luma` and `t_chroma` in the shader.
+const SURFACE_PLANES_SLOT: u32 = 2;
+
+/// The planes of an NV12 texture: R8 for luma, R8G8 for the chroma at half size.
+fn plane_views(
+    device: &ID3D11Device,
+    texture: &ID3D11Texture2D,
+) -> Result<[Option<ID3D11ShaderResourceView>; 2]> {
+    let view = |format| {
+        let desc = D3D11_SHADER_RESOURCE_VIEW_DESC {
+            Format: format,
+            ViewDimension: D3D11_SRV_DIMENSION_TEXTURE2D,
+            Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+                Texture2D: D3D11_TEX2D_SRV {
+                    MostDetailedMip: 0,
+                    MipLevels: 1,
+                },
+            },
+        };
+        let mut view = None;
+        unsafe { device.CreateShaderResourceView(texture, Some(&desc), Some(&mut view)) }
+            .map(|()| view)
+    };
+    Ok([view(DXGI_FORMAT_R8_UNORM)?, view(DXGI_FORMAT_R8G8_UNORM)?])
+}
 
 struct PipelineState<T> {
     label: &'static str,
@@ -1229,6 +1325,36 @@ impl<T> PipelineState<T> {
         );
         unsafe {
             device_context.DrawInstanced(4, instance_count, 0, 0);
+        }
+        Ok(())
+    }
+
+    fn draw_with_planes(
+        &self,
+        device_context: &ID3D11DeviceContext,
+        planes: &[Option<ID3D11ShaderResourceView>],
+        batch_params_buffer: &ID3D11Buffer,
+        sampler: &[Option<ID3D11SamplerState>],
+        instance: u32,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            (instance as usize) < self.buffer_size,
+            "DirectX instance range exceeds the {} buffer",
+            self.label
+        );
+        update_batch_start(device_context, batch_params_buffer, instance)?;
+        set_pipeline_state(
+            device_context,
+            slice::from_ref(&self.view),
+            D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
+            &self.vertex,
+            &self.fragment,
+            &self.blend_state,
+        );
+        unsafe {
+            device_context.PSSetSamplers(0, Some(sampler));
+            device_context.PSSetShaderResources(SURFACE_PLANES_SLOT, Some(planes));
+            device_context.DrawInstanced(4, 1, 0, 0);
         }
         Ok(())
     }
@@ -1716,6 +1842,7 @@ pub(crate) mod shader_resources {
         MonochromeSprite,
         SubpixelSprite,
         PolychromeSprite,
+        Surface,
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1788,6 +1915,10 @@ pub(crate) mod shader_resources {
                 ShaderModule::PolychromeSprite => match target {
                     ShaderTarget::Vertex => POLYCHROME_SPRITE_VERTEX_BYTES,
                     ShaderTarget::Fragment => POLYCHROME_SPRITE_FRAGMENT_BYTES,
+                },
+                ShaderModule::Surface => match target {
+                    ShaderTarget::Vertex => SURFACE_VERTEX_BYTES,
+                    ShaderTarget::Fragment => SURFACE_FRAGMENT_BYTES,
                 },
             };
             Self { inner: bytes }
@@ -1869,6 +2000,7 @@ pub(crate) mod shader_resources {
                 ShaderModule::MonochromeSprite => "monochrome_sprite",
                 ShaderModule::SubpixelSprite => "subpixel_sprite",
                 ShaderModule::PolychromeSprite => "polychrome_sprite",
+                ShaderModule::Surface => "surface",
             }
         }
     }

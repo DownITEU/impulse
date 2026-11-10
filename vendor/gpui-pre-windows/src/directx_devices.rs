@@ -10,8 +10,9 @@ use windows::Win32::{
         },
         Direct3D11::{
             D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_CREATE_DEVICE_DEBUG,
-            D3D11_FEATURE_D3D10_X_HARDWARE_OPTIONS, D3D11_FEATURE_DATA_D3D10_X_HARDWARE_OPTIONS,
-            D3D11_SDK_VERSION, D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext,
+            D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_FEATURE_D3D10_X_HARDWARE_OPTIONS,
+            D3D11_FEATURE_DATA_D3D10_X_HARDWARE_OPTIONS, D3D11_SDK_VERSION, D3D11CreateDevice,
+            ID3D11Device, ID3D11DeviceContext, ID3D11Multithread,
         },
         Dxgi::{
             CreateDXGIFactory2, DXGI_CREATE_FACTORY_DEBUG, DXGI_CREATE_FACTORY_FLAGS,
@@ -50,6 +51,10 @@ impl DirectXDevices {
             get_dxgi_factory(debug_layer_available).context("Creating DXGI factory")?;
         let (adapter, device, device_context, feature_level) =
             get_adapter(&dxgi_factory, debug_layer_available).context("Getting DXGI adapter")?;
+        // Media Foundation decodes on the device from threads of its own.
+        if let Ok(multithread) = device.cast::<ID3D11Multithread>() {
+            let _ = unsafe { multithread.SetMultithreadProtected(true) };
+        }
         match feature_level {
             D3D_FEATURE_LEVEL_11_1 => {
                 log::info!("Created device with Direct3D 11.1 feature level.")
@@ -146,31 +151,36 @@ fn get_device(
     feature_level: Option<*mut D3D_FEATURE_LEVEL>,
     debug_layer_available: bool,
 ) -> Result<ID3D11Device> {
-    let mut device: Option<ID3D11Device> = None;
     let device_flags = if debug_layer_available {
         D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_DEBUG
     } else {
         D3D11_CREATE_DEVICE_BGRA_SUPPORT
     };
-    unsafe {
-        D3D11CreateDevice(
-            adapter,
-            D3D_DRIVER_TYPE_UNKNOWN,
-            HMODULE::default(),
-            device_flags,
-            // 4x MSAA is required for Direct3D Feature Level 10.1 or better
-            Some(&[
-                D3D_FEATURE_LEVEL_11_1,
-                D3D_FEATURE_LEVEL_11_0,
-                D3D_FEATURE_LEVEL_10_1,
-            ]),
-            D3D11_SDK_VERSION,
-            Some(&mut device),
-            feature_level,
-            context,
-        )?;
-    }
-    let device = device.unwrap();
+    let create = |flags| -> Result<ID3D11Device> {
+        let mut device: Option<ID3D11Device> = None;
+        unsafe {
+            D3D11CreateDevice(
+                adapter,
+                D3D_DRIVER_TYPE_UNKNOWN,
+                HMODULE::default(),
+                flags,
+                // 4x MSAA is required for Direct3D Feature Level 10.1 or better
+                Some(&[
+                    D3D_FEATURE_LEVEL_11_1,
+                    D3D_FEATURE_LEVEL_11_0,
+                    D3D_FEATURE_LEVEL_10_1,
+                ]),
+                D3D11_SDK_VERSION,
+                Some(&mut device),
+                feature_level,
+                context,
+            )?;
+        }
+        Ok(device.unwrap())
+    };
+    // Video support lets Media Foundation decode on this device, so its frames are drawn without leaving the GPU.
+    let device = create(device_flags | D3D11_CREATE_DEVICE_VIDEO_SUPPORT)
+        .or_else(|_| create(device_flags))?;
     let mut data = D3D11_FEATURE_DATA_D3D10_X_HARDWARE_OPTIONS::default();
     unsafe {
         device

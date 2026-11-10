@@ -1266,3 +1266,71 @@ float4 polychrome_sprite_fragment(PolychromeSpriteFragmentInput input): SV_Targe
     color.a *= sprite.opacity * saturate(0.5 - distance);
     return color;
 }
+
+/*
+**
+**              Surfaces
+**
+*/
+
+// An NV12 video frame: luma, and the chroma at half size, two values a texel.
+Texture2D<float> t_luma: register(t2);
+Texture2D<float2> t_chroma: register(t3);
+
+struct SurfaceSprite {
+    Bounds bounds;
+    Bounds content_mask;
+};
+
+struct SurfaceVertexOutput {
+    float4 position: SV_Position;
+    float2 texture_position: TEXCOORD0;
+    float4 clip_distance: SV_ClipDistance;
+};
+
+struct SurfaceFragmentInput {
+    float4 position: SV_Position;
+    float2 texture_position: TEXCOORD0;
+};
+
+StructuredBuffer<SurfaceSprite> surface_sprites: register(t1);
+
+SurfaceVertexOutput surface_vertex(uint vertex_id: SV_VertexID, uint instance_id: SV_InstanceID) {
+    float2 unit_vertex = float2(float(vertex_id & 1u), 0.5 * float(vertex_id & 2u));
+    SurfaceSprite sprite = surface_sprites[batch_start_index + instance_id];
+
+    SurfaceVertexOutput output;
+    output.position = to_device_position(unit_vertex, sprite.bounds);
+    output.texture_position = unit_vertex;
+    output.clip_distance = distance_from_clip_rect(unit_vertex, sprite.bounds, sprite.content_mask);
+    return output;
+}
+
+float4 surface_fragment(SurfaceFragmentInput input): SV_Target {
+    float2 size;
+    t_luma.GetDimensions(size.x, size.y);
+    // A frame drawn smaller averages the texels under each pixel, or its detail shimmers.
+    // A bilinear tap already averages two texels a side.
+    float2 footprint = max(fwidth(input.texture_position) * size, 1.);
+    int2 taps = clamp(int2(ceil(footprint / 2.)), 1, 4);
+    // Taps stay a chroma texel inside the edges: the sampler wraps.
+    float2 edge = 1. / size;
+    float3 yuv = 0.;
+    for (int y = 0; y < taps.y; y++) {
+        for (int x = 0; x < taps.x; x++) {
+            float2 offset = ((float2(x, y) + 0.5) / float2(taps) - 0.5) * footprint / size;
+            float2 at = clamp(input.texture_position + offset, edge, 1. - edge);
+            yuv += float3(t_luma.SampleLevel(s_sprite, at, 0), t_chroma.SampleLevel(s_sprite, at, 0));
+        }
+    }
+    yuv /= float(taps.x * taps.y);
+
+    // BT.709 in limited range, as HD video is.
+    float luma = (yuv.x - 16. / 255.) * (255. / 219.);
+    float2 chroma = (yuv.yz - 128. / 255.) * (255. / 224.);
+    float3 rgb = float3(
+        luma + 1.5748 * chroma.y,
+        luma - 0.1873 * chroma.x - 0.4681 * chroma.y,
+        luma + 1.8556 * chroma.x);
+    return float4(saturate(rgb), 1.);
+}
