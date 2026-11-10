@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+exclude = ["vendor"]
 resolver = "3"
 
 [workspace.package]
@@ -47,3 +48,7 @@ webview2-com = "0.39"
 windows-registry = "0.6"
 windows-sys = "0.61"
 wry = "0.57.2"
+
+[patch.crates-io]
+gpui-pre = { path = "vendor/gpui-pre" }
+gpui-pre-windows = { path = "vendor/gpui-pre-windows" }

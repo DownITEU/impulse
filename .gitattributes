@@ -1,0 +1,10 @@
+# LF in the repository and in checkouts, whatever a machine's core.autocrlf.
+* text=auto eol=lf
+
+*.ico binary
+*.png binary
+*.ttf binary
+*.webp binary
+
+# Forked crates: out of GitHub's language stats.
+vendor/** linguist-vendored
