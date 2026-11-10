@@ -11,17 +11,30 @@ use anyhow::{Result, anyhow};
 use futures::channel::oneshot;
 use serde::{Deserialize, Serialize};
 use tao::{
-    event::Event,
-    event_loop::{ControlFlow, DeviceEventFilter, EventLoop, EventLoopBuilder, EventLoopProxy},
+    event::{Event, StartCause},
+    event_loop::{
+        ControlFlow, DeviceEventFilter, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget,
+    },
     platform::windows::{EventLoopBuilderExtWindows, WindowBuilderExtWindows},
     window::{Window, WindowBuilder},
 };
 use webview2_com::Error::WindowsError;
-use wry::{WebContext, WebView, WebViewBuilder, http::Response as HttpResponse};
+use wry::{
+    WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, http::Response as HttpResponse,
+};
 
 use super::{Cmd, Request, Response};
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Response>>>>>;
+// Fields drop in order: the WebView closes before its window.
+type Bridge = (WebView, WebContext, Window);
+
+// A running WebView2 commits ~65 MB across its processes, so it runs only around requests.
+const IDLE: Duration = Duration::from_secs(30);
+// wry's defaults, then no GPU process and the network service inside the browser process.
+const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
+    --enable-features=NetworkServiceInProcess2 \
+    --disable-gpu --disable-software-rasterizer --in-process-gpu";
 
 #[derive(Serialize)]
 struct Call<'a> {
@@ -46,32 +59,49 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
     let proxy = event_loop.create_proxy();
     let _ = started.send(proxy.clone());
     let pending = Pending::default();
-    // Commands sent meanwhile wait in the proxy queue. `run` never returns, so the parts stay alive.
     // tao registers raw input for the whole process, and then Windows skips the `hotkeys` hook
     // while Impulse is in front.
     event_loop.set_device_event_filter(DeviceEventFilter::Always);
-    let built = build_retrying(data_dir, &event_loop, proxy, pending.clone());
+    let data_dir = data_dir.to_owned();
 
-    let (mut ready, mut queue, mut next_id) = (false, Vec::new(), 0u64);
-    event_loop.run(move |event, _, flow| {
-        *flow = ControlFlow::Wait;
-        let Event::UserEvent(cmd) = event else { return };
-        let webview = match &built {
-            Ok((_, _, webview)) => webview,
-            Err(e) => {
-                if let Cmd::Fetch(_, tx) = cmd {
-                    let _ = tx.send(Err(anyhow!("{e:#}")));
+    let mut bridge: Option<Bridge> = None;
+    let (mut ready, mut queue, mut next_id, mut last) = (false, Vec::new(), 0u64, Instant::now());
+    event_loop.run(move |event, target, flow| {
+        match event {
+            Event::UserEvent(Cmd::Ready) => ready = true,
+            Event::UserEvent(Cmd::Fetch(request, tx)) => {
+                last = Instant::now();
+                let built = bridge.take().map_or_else(
+                    || build_retrying(&data_dir, target, proxy.clone(), pending.clone()),
+                    Ok,
+                );
+                match built {
+                    Ok(built) => {
+                        bridge = Some(built);
+                        queue.push((request, tx));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(anyhow!("{e:#}")));
+                    }
                 }
-                return;
             }
+            Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
+                if queue.is_empty() && pending.lock().unwrap().is_empty() {
+                    (bridge, ready) = (None, false);
+                    log::debug!("WebView2 closed while idle");
+                } else {
+                    last = Instant::now();
+                }
+            }
+            _ => {}
+        }
+        *flow = match bridge {
+            Some(_) => ControlFlow::WaitUntil(last + IDLE),
+            None => ControlFlow::Wait,
         };
-        match cmd {
-            Cmd::Ready => ready = true,
-            Cmd::Fetch(request, tx) => queue.push((request, tx)),
-        }
-        if !ready {
+        let Some((webview, ..)) = bridge.as_ref().filter(|_| ready) else {
             return;
-        }
+        };
         for (request, tx) in queue.drain(..) {
             next_id += 1;
             pending.lock().unwrap().insert(next_id, tx);
@@ -90,15 +120,15 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
 // After some hard kills WebView2 keeps the profile busy for about 50 s; a clean exit frees it at once.
 fn build_retrying(
     data_dir: &Path,
-    event_loop: &EventLoop<Cmd>,
+    target: &EventLoopWindowTarget<Cmd>,
     proxy: EventLoopProxy<Cmd>,
     pending: Pending,
-) -> Result<(Window, WebContext, WebView)> {
+) -> Result<Bridge> {
     const ERROR_BUSY: i32 = 0x800700AA_u32 as i32;
     let deadline = Instant::now() + Duration::from_secs(90);
     let mut busy = false;
     loop {
-        match build(data_dir, event_loop, proxy.clone(), pending.clone()) {
+        match build(data_dir, target, proxy.clone(), pending.clone()) {
             Err(e)
                 if Instant::now() < deadline
                     && matches!(e.downcast_ref(), Some(wry::Error::WebView2Error(WindowsError(w))) if w.code().0 == ERROR_BUSY) =>
@@ -123,14 +153,14 @@ fn build_retrying(
 // COM: WebViewBuilder::build runs CoInitializeEx(STA) on this thread, and tao skips OLE with drag and drop off.
 fn build(
     data_dir: &Path,
-    event_loop: &EventLoop<Cmd>,
+    target: &EventLoopWindowTarget<Cmd>,
     proxy: EventLoopProxy<Cmd>,
     pending: Pending,
-) -> Result<(Window, WebContext, WebView)> {
+) -> Result<Bridge> {
     let window = WindowBuilder::new()
         .with_visible(false)
         .with_drag_and_drop(false)
-        .build(event_loop)?;
+        .build(target)?;
     let mut context = WebContext::new(Some(data_dir.join("webview")));
     let url = url::Url::from_file_path(data_dir.join("bridge.html"))
         .map_err(|()| anyhow!("data dir is not an absolute path"))?;
@@ -150,8 +180,9 @@ fn build(
                 .unwrap()
         })
         .with_url(url.as_str())
+        .with_additional_browser_args(BROWSER_ARGS)
         .build(&window)?;
-    Ok((window, context, webview))
+    Ok((webview, context, window))
 }
 
 fn reply(pending: &Pending, raw: &[u8]) {
