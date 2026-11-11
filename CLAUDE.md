@@ -6,7 +6,7 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. A
 
 - `cargo build` - debug build (shaders compile at runtime; release needs `fxc.exe` from the Windows SDK)
 - `cargo test`, `cargo clippy --all-targets -- -D warnings`; `cargo test -p <crate>` for one crate (non-UI crates build without GPUI)
-- `scripts\ui.ps1 -Steps 'click:1016,25;wait:800;shot:out.png'` - starts the debug exe, drives it with posted window messages (`wait`, `move`, `click`, `text`, `shot`; client pixels) and captures it with `PrintWindow`, then kills it. No real cursor, focus or screen capture; refuses to run while Impulse is open. Build first with `cargo build`.
+- `scripts\ui.ps1 -Steps 'click:1016,25;wait:800;shot:out.png'` - starts the debug exe, drives it with posted window messages (`wait`, `move`, `click`, `rclick`, `wheel`, `text`, `key`, `shot`; client pixels) and captures it with `PrintWindow`, then kills it. No real cursor, focus or screen capture; refuses to run while Impulse is open. Build first with `cargo build`.
 
 ## Invariants
 
