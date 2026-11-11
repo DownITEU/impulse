@@ -204,6 +204,10 @@ impl WindowsWindowInner {
     }
 
     fn handle_get_min_max_info_msg(&self, lparam: LPARAM) -> Option<isize> {
+        // Fullscreen fills the monitor, even one smaller than the minimum.
+        if self.state.is_fullscreen() {
+            return None;
+        }
         let min_size = self.state.min_size?;
         let scale_factor = self.state.scale_factor.get();
         let boarder_offset = &self.state.border_offset;
@@ -879,6 +883,7 @@ impl WindowsWindowInner {
         let new_dpi = wparam.loword() as f32;
 
         let is_maximized = self.state.is_maximized();
+        let is_fullscreen = self.state.is_fullscreen();
         let new_scale_factor = new_dpi / USER_DEFAULT_SCREEN_DPI as f32;
         self.state.scale_factor.set(new_scale_factor);
         self.state.border_offset.update(handle).log_err();
@@ -887,13 +892,14 @@ impl WindowsWindowInner {
             .direct_manipulation
             .set_scale_factor(new_scale_factor);
 
-        if is_maximized {
+        if is_maximized || is_fullscreen {
             // Get the monitor and its work area at the new DPI
             let monitor = unsafe { MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST) };
             let mut monitor_info: MONITORINFO = unsafe { std::mem::zeroed() };
             monitor_info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
             if unsafe { GetMonitorInfoW(monitor, &mut monitor_info) }.as_bool() {
-                let work_area = monitor_info.rcWork;
+                // Fullscreen keeps filling its whole monitor, not the suggested rect.
+                let work_area = if is_fullscreen { monitor_info.rcMonitor } else { monitor_info.rcWork };
                 let width = work_area.right - work_area.left;
                 let height = work_area.bottom - work_area.top;
 
