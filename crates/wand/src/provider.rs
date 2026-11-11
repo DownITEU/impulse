@@ -14,19 +14,27 @@ use futures::{
     future::{self, BoxFuture, Shared},
     stream::{self, BoxStream},
 };
-use model::{Account, Folder, Game, Installation, SignIn, Snapshot};
+use model::{Account, Clear, Folder, Game, Installation, MapOffer, SignIn, Snapshot, Store};
 
 use crate::{
     binary, catalog,
     folder::Setting,
+    map,
     run::Host,
     session::{self, Session, Source, account},
     store,
     trainer::{self, Stamp, Trainer},
-    transport::Transport,
+    transport::{self, Transport},
 };
 
 type Link = Result<(Arc<Session>, Transport), String>;
+
+// Store ids.
+const MAPS: &str = "maps";
+const CATALOG: &str = "catalog";
+const TRAINERS: &str = "trainers";
+const TRAINER_FILES: &str = "trainer-files";
+const BRIDGE: &str = "bridge";
 
 pub struct Wand {
     data_dir: PathBuf,
@@ -158,6 +166,36 @@ impl model::Provider for Wand {
         })
     }
 
+    /// The API is asked only when the disk copy is missing or was fetched for another revision.
+    fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<model::Map>> {
+        let (dir, offer, session) = (self.data_dir.clone(), offer.clone(), self.session());
+        channel(|tx| async move {
+            let mut copy = {
+                let (dir, id) = (dir.clone(), offer.id.clone());
+                unblock(move || map::cached(&dir, &id)).await
+            };
+            let fresh = copy.as_ref().is_some_and(|copy| copy.stamp == offer.revision);
+            let mut icons = copy.as_mut().and_then(|copy| copy.icons.take());
+            send(&tx, Snapshot::Cached(copy.map(|copy| copy.map)));
+            if !fresh {
+                let mut fetched = async {
+                    let (session, transport) = session.await.map_err(|e| anyhow!(e))?;
+                    map::fetch(&session, &transport, &dir, &offer.id, offer.revision.clone()).await
+                }
+                .await;
+                if let Err(e) = &fetched {
+                    log::warn!("map {}: {e:#}", offer.id);
+                }
+                icons = fetched.as_mut().ok().and_then(|copy| copy.icons.take());
+                send(&tx, Snapshot::Fresh(fetched.map(|copy| copy.map)));
+            }
+            // The map shows first; icons it misses follow.
+            if let Some(icons) = icons && let Some(map) = unblock(move || icons.download(&dir)).await {
+                send(&tx, Snapshot::Fresh(Ok(map)));
+            }
+        })
+    }
+
     fn folders(&self) -> BoxFuture<'static, Vec<Folder>> {
         let folder = self.folder.clone();
         unblock(move || vec![folder.folder()]).boxed()
@@ -169,12 +207,36 @@ impl model::Provider for Wand {
         unblock(move || folder.set(call, path)).boxed()
     }
 
-    fn forget_caches(&self) {
-        let dir = &self.data_dir;
-        catalog::forget(dir);
-        trainer::forget(dir);
-        binary::forget(dir);
-        account::forget(dir);
+    fn stores(&self) -> BoxFuture<'static, Vec<Store>> {
+        let dir = self.data_dir.clone();
+        unblock(move || {
+            let now = |id, name, hint, bytes| Store { id, name, hint, bytes, clear: Clear::Now };
+            let (profile, asked) = transport::profile(&dir);
+            vec![
+                now(MAPS, "MAPS", "pins, regions and icons", map::size(&dir)),
+                now(CATALOG, "CATALOG", "the games and your account name", catalog::size(&dir) + account::size(&dir)),
+                now(TRAINERS, "TRAINERS", "cheat lists", trainer::size(&dir)),
+                now(TRAINER_FILES, "TRAINER FILES", "trainer DLLs from the CDN", binary::size(&dir)),
+                Store { id: BRIDGE, name: "BROWSER", hint: "WebView2 cache", bytes: profile, clear: Clear::NextStart { asked } },
+            ]
+        })
+        .boxed()
+    }
+
+    fn clear(&self, id: &'static str) -> BoxFuture<'static, ()> {
+        let dir = self.data_dir.clone();
+        unblock(move || match id {
+            MAPS => map::forget(&dir),
+            CATALOG => {
+                catalog::forget(&dir);
+                account::forget(&dir);
+            }
+            TRAINERS => trainer::forget(&dir),
+            TRAINER_FILES => binary::forget(&dir),
+            BRIDGE => transport::clear_profile_on_start(&dir),
+            _ => {}
+        })
+        .boxed()
     }
 }
 

@@ -115,4 +115,12 @@ impl model::Session for Running {
     fn stop(&self) -> BoxFuture<'_, Result<()>> {
         self.0.stop().boxed()
     }
+
+    fn position(&self) -> BoxFuture<'_, Result<[f64; 3]>> {
+        self.0.position().boxed()
+    }
+
+    fn teleport(&self, to: [f64; 3]) -> BoxFuture<'_, Result<()>> {
+        self.0.teleport(to).boxed()
+    }
 }

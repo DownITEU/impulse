@@ -9,6 +9,9 @@ pub struct Trainer {
     pub cheats: Vec<Cheat>,
     /// Ids of the cheats the user pinned.
     pub pinned: Vec<String>,
+    /// Whether a run of it tells where the player is, and can move the player.
+    pub location: bool,
+    pub teleport: bool,
     pub plan: Plan,
 }
 

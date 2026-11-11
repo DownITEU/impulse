@@ -2,15 +2,15 @@
 
 use gpui_kit::{Context, IntoElement, component::h_flex, prelude::*, px, rgb};
 
-use super::super::{
-    Page,
-    loaded::{Loaded, cap},
-    theme::*,
-    widgets::keycap,
+use super::{
+    super::{
+        Page,
+        loaded::{Loaded, cap},
+        theme::*,
+        widgets::keycap,
+    },
+    PRESS_KEYS,
 };
-
-const CAPS_WIDTH: f32 = 220.;
-const PRESS_KEYS: &str = "PRESS KEYS";
 
 impl Page {
     pub(in super::super) fn caps(&self, index: usize, loaded: &Loaded, cx: &mut Context<Self>) -> impl IntoElement {
@@ -20,7 +20,6 @@ impl Page {
         h_flex()
             .flex_initial()
             .min_w_0()
-            .max_w(px(CAPS_WIDTH))
             .justify_end()
             .gap(px(4.))
             .children(loaded.rows[index].keys.iter().enumerate().map(|(slot, label)| {

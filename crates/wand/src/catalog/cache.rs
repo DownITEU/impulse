@@ -15,6 +15,10 @@ pub fn cached(data_dir: &Path) -> Option<Vec<Game>> {
     super::parse(&fs::read(data_dir.join(BODY)).ok()?).ok()
 }
 
+pub fn size(data_dir: &Path) -> u64 {
+    disk::size(&data_dir.join(BODY)) + disk::size(&data_dir.join(ETAG))
+}
+
 pub fn forget(data_dir: &Path) {
     let _ = fs::remove_file(data_dir.join(ETAG));
     let _ = fs::remove_file(data_dir.join(BODY));

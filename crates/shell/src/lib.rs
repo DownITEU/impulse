@@ -6,17 +6,31 @@ mod assets;
 mod bindings;
 mod boot;
 mod cheats;
+mod collections;
 mod controls;
+mod dialog;
+mod docks;
 mod folders;
 mod header;
 mod hero;
+mod hud;
+mod layer;
 mod library;
 mod loaded;
 mod log_view;
+mod map;
+mod pane;
+mod prefs;
+mod profile;
+mod resources;
+mod root;
 mod run;
+mod saved;
 mod settings;
 mod side;
 mod sidebar;
+mod status;
+mod store;
 mod theme;
 mod widgets;
 
@@ -27,41 +41,49 @@ use std::{
 };
 
 use gpui_kit::{
-    AnyElement, App, Context, Entity, IntoElement, Render, Task, Window,
+    App, Context, Entity, FocusHandle, IntoElement, Render, Task, Window,
     component::{
         h_flex,
         input::{InputEvent, InputState},
-        scroll::ScrollableElement,
         v_flex,
     },
     div,
     prelude::*,
-    px, rgb,
+    rgb,
 };
 
 pub use assets::Assets;
 use bindings::Bindings;
+use collections::Editor;
+use docks::Docks;
 use folders::FolderRow;
+use layer::Layer;
 use library::{Game, Library};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
+use map::{MapEvent, MapView};
+use prefs::{Lead, Panels, Prefs};
+use profile::Profiles;
+use resources::{Resources, ResourcesEvent};
+pub use root::Root;
 use run::Play;
 use settings::Tab;
 use theme::*;
-use widgets::{grid, mono, notice, square};
+use widgets::grid;
 
 use model::{Account, Provider};
 
 const SIDEBAR_WIDTH: f32 = 248.;
-// Below this pane width the map and session panels drop under the cheat list.
-const WIDE_PANE: f32 = 900.;
 
 pub fn init(data_dir: &Path, cx: &mut App) {
     theme::init(cx);
     cx.set_http_client(Arc::new(art::CdnClient {
-        cache: art::cache_dir(data_dir),
+        cache: art::Media::Pictures.dir(data_dir),
     }));
     log_view::bind_keys(cx);
+    map::bind_keys(cx);
+    hud::bind_keys(cx);
+    dialog::bind_keys(cx);
 }
 
 /// Something that arrives after the window opens.
@@ -71,25 +93,19 @@ enum Load<T> {
     Failed(String),
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum Lead {
-    Number,
-    Thumbnail,
-}
-
 /// The open dropdown.
 #[derive(Clone, Copy, PartialEq)]
 enum Menu {
-    Overlay,
     Cheat(usize),
     /// A folder row's picks.
     Choices(usize),
+    /// A collection chip's actions.
+    Collection(usize),
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum Flash {
     Cheat(usize),
-    Caches,
 }
 
 pub struct Page {
@@ -109,20 +125,29 @@ pub struct Page {
     selected: Option<Arc<str>>,
     play: Play,
     bindings: Bindings,
-    favorites: HashSet<Arc<str>>,
+    profiles: Profiles,
     accent: u32,
     lead: Lead,
+    panels: Panels,
     reduce_motion: bool,
+    // The collection being named.
+    editor: Option<Editor>,
     settings: bool,
     settings_tab: Tab,
     folders: Vec<FolderRow>,
-    // Index into `hero::OVERLAYS`.
-    overlay: usize,
+    // The window is the overlay over a game: the HUD replaces the page.
+    over: bool,
+    layer: Entity<Layer>,
+    docks: Entity<Docks>,
+    hud_focus: FocusHandle,
+    dialog_focus: FocusHandle,
     menu: Option<Menu>,
     // The press-only button showing its confirmation.
     flashed: Option<(Flash, Task<()>)>,
     log: Entity<LogView>,
     log_open: bool,
+    map: Entity<MapView>,
+    resources: Entity<Resources>,
     game_filter: Entity<InputState>,
     mod_filter: Entity<InputState>,
 }
@@ -134,12 +159,21 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let log = cx.new(|cx| LogView::new(ACCENTS[0].1, window, cx));
+        let prefs = Prefs::load(&data_dir);
+        let accent = prefs.accent();
+        let log = cx.new(|cx| LogView::new(accent, window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
             if matches!(event, LogEvent::Close) {
                 page.log_open = false;
             }
             cx.notify();
+        })
+        .detach();
+        let map = cx.new(|cx| MapView::new(provider.clone(), &data_dir, accent, window, cx));
+        cx.subscribe_in(&map, window, |page, _, _: &MapEvent, window, cx| page.close_map(window, cx)).detach();
+        let resources = cx.new(|cx| Resources::new(provider.clone(), data_dir.clone(), accent, cx));
+        cx.subscribe_in(&resources, window, |page, _, event: &ResourcesEvent, window, cx| match event {
+            ResourcesEvent::Cleared => page.reload(window, cx),
         })
         .detach();
         let mut filter = |placeholder: &'static str| {
@@ -160,8 +194,25 @@ impl Page {
             }
         })
         .detach();
+        let page = cx.weak_entity();
+        let layer = cx.new(|cx| Layer::new(&data_dir, move |cx| page.upgrade().and_then(|page| page.read(cx).play.pid()), window, cx));
+        cx.observe_in(&layer, window, Self::overlay_changed).detach();
+        let docks = cx.new(|_| Docks::load(&data_dir, &hud::DOCKS));
+        cx.observe_in(&docks, window, |page, _, window, cx| {
+            page.sync_map_dock(window, cx);
+            cx.notify();
+        })
+        .detach();
+        // A run's time and mods are kept when it ends, and so does closing the window or quitting.
+        cx.on_app_quit(|page, _| {
+            page.close_session();
+            async {}
+        })
+        .detach();
+        cx.on_release(|page, _| page.close_session()).detach();
         let page = Self {
             bindings: Bindings::load(&data_dir),
+            profiles: Profiles::load(&data_dir),
             data_dir,
             provider,
             account: None,
@@ -171,19 +222,27 @@ impl Page {
             trainers: HashMap::new(),
             loading: HashSet::new(),
             deferred: None,
-            selected: None,
+            // Opens once the library lists it.
+            selected: prefs.game.as_deref().map(Arc::from),
             play: Play::Idle,
-            favorites: HashSet::new(),
-            accent: ACCENTS[0].1,
-            lead: Lead::Number,
-            reduce_motion: false,
+            accent,
+            lead: prefs.lead,
+            panels: prefs.panels,
+            reduce_motion: prefs.reduce_motion,
+            editor: None,
             settings: false,
             settings_tab: Tab::Appearance,
-            overlay: 0,
+            over: false,
+            layer,
+            docks,
+            hud_focus: cx.focus_handle(),
+            dialog_focus: cx.focus_handle(),
             menu: None,
             flashed: None,
             log,
             log_open: false,
+            map,
+            resources,
             game_filter,
             mod_filter,
         };
@@ -225,17 +284,24 @@ impl Page {
 
     fn select(&mut self, id: Arc<str>, window: &mut Window, cx: &mut Context<Self>) {
         self.cancel_capture(cx);
+        self.map.update(cx, |map, cx| map.hide(window, cx));
         self.selected = Some(id);
+        self.save_prefs();
+        // Another trainer's names: the old filter would hide them.
+        self.mod_filter.update(cx, |filter, cx| filter.set_value("", window, cx));
         self.drop_cheat_state();
         self.open_trainer(window, cx);
+        // Over a game, its dock opens the new game's map.
+        self.sync_map_dock(window, cx);
         cx.notify();
     }
 
     /// The open menu and flash are keyed by cheat index, which means another cheat in another trainer.
     fn drop_cheat_state(&mut self) {
-        if matches!(self.menu, Some(Menu::Cheat(_))) {
+        if matches!(self.menu, Some(Menu::Cheat(_) | Menu::Collection(_))) {
             self.menu = None;
         }
+        self.editor = None;
         if matches!(self.flashed, Some((Flash::Cheat(_), _))) {
             self.flashed = None;
         }
@@ -250,146 +316,17 @@ impl Page {
     fn is_flashed(&self, button: Flash) -> bool {
         self.flashed.as_ref().is_some_and(|(at, _)| *at == button)
     }
-
-    fn pane(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
-        let Some(game) = self.game() else {
-            return div()
-                .flex_1()
-                .p(px(24.))
-                .child(self.vacant())
-                .into_any_element();
-        };
-        let running = self.is_running();
-        let wide = window.viewport_size().width >= px(SIDEBAR_WIDTH + WIDE_PANE);
-        let side = match wide {
-            true => v_flex().flex_none(),
-            false => h_flex().items_start(),
-        };
-        v_flex()
-            .id("pane")
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .child(self.hero(game, cx))
-            .child(
-                div()
-                    .flex()
-                    .when(!wide, |body| body.flex_col())
-                    .when(wide, |body| body.items_start())
-                    .gap(px(20.))
-                    .px(px(24.))
-                    .pt(px(20.))
-                    .pb(px(28.))
-                    .child(self.cheats(game, cx))
-                    .child(
-                        side.gap(px(16.))
-                            .child(self.map_panel(game, running))
-                            .child(
-                                div()
-                                    .when(!wide, |panel| panel.flex_1())
-                                    .child(self.session_panel(game, running, cx)),
-                            ),
-                    ),
-            )
-            .overflow_y_scrollbar()
-            .into_any_element()
-    }
-
-    // The pane before there is a game to open.
-    fn vacant(&self) -> impl IntoElement {
-        match &self.library {
-            Load::Pending => notice(
-                "[ SCANNING ]",
-                "LOOKING FOR INSTALLED GAMES",
-                "Reading the game catalog and your launchers.",
-            ),
-            Load::Failed(why) => notice(
-                "[ NO CATALOG ]",
-                "THE GAME CATALOG IS UNAVAILABLE",
-                &format!(
-                    "It could not be downloaded: {why}. Impulse tries again on the next start."
-                ),
-            ),
-            Load::Ready(_) => notice(
-                "[ NO GAMES ]",
-                "NO INSTALLED GAMES FOUND",
-                "Impulse looks in Steam, Epic, GOG, Ubisoft, Xbox, Rockstar and EA for games it has trainers for.",
-            ),
-        }
-    }
-
-    fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (errors, warnings) = self.log.read(cx).problems();
-        let problem = |count: usize, color: u32| {
-            h_flex()
-                .gap(px(6.))
-                .child(square(7., rgb(color)))
-                .child(mono(count.to_string(), 11.).text_color(rgb(color)))
-        };
-        let accent = rgb(self.accent);
-        let running = self
-            .games()
-            .iter()
-            .find(|game| Some(&game.id) == self.play.live());
-        h_flex()
-            .h(px(30.))
-            .flex_none()
-            .px(px(20.))
-            .gap(px(22.))
-            .border_t_1()
-            .border_color(line(0.09))
-            .bg(rgb(STATUSBAR))
-            .text_color(rgb(DIM))
-            .map(|bar| match running {
-                Some(game) => {
-                    let (active, total) = self
-                        .trainer(Some(&game.id))
-                        .map_or((0, 0), |loaded| (loaded.active(), loaded.cheats.len()));
-                    bar.child(
-                        h_flex()
-                            .gap(px(8.))
-                            .child(square(7., accent))
-                            .child(mono("LIVE", 11.).text_color(accent)),
-                    )
-                    .child(mono(game.name.clone(), 11.))
-                    .child(mono(format!("{active}/{total} ACTIVE"), 11.))
-                }
-                None => bar.child(mono("IDLE", 11.)),
-            })
-            .child(div().flex_1())
-            .child(
-                h_flex()
-                    .id("log")
-                    .h_full()
-                    .gap(px(10.))
-                    .cursor_pointer()
-                    .hover(|style| style.text_color(rgb(TEXT)))
-                    .when(self.log_open, |item| item.text_color(rgb(TEXT)))
-                    .on_click(cx.listener(|page, _, window, cx| {
-                        page.log_open = !page.log_open;
-                        if page.log_open {
-                            page.log.update(cx, |log, cx| log.focus(window, cx));
-                        }
-                        cx.notify();
-                    }))
-                    .child(mono("LOG", 11.))
-                    .when(errors > 0, |item| item.child(problem(errors, DANGER)))
-                    .when(warnings > 0, |item| item.child(problem(warnings, WARN))),
-            )
-            .child(self.hotkeys_status())
-            .child(mono("IMPULSE 0.1", 11.).text_color(rgb(GHOST)))
-    }
 }
 
 impl Render for Page {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.over {
+            return self.hud(window, cx);
+        }
         v_flex()
             .relative()
             .size_full()
             .bg(rgb(BG))
-            .text_color(rgb(TEXT))
-            .font_family(UI)
-            .text_size(px(14.))
             .child(grid(32., line(0.025)))
             .child(self.header(window, cx))
             .child(
@@ -413,5 +350,7 @@ impl Render for Page {
             )
             .child(self.status_bar(cx))
             .when(self.settings, |page| page.child(self.settings_modal(cx)))
+            .children(self.collection_editor(cx))
+            .into_any_element()
     }
 }

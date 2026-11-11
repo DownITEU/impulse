@@ -9,9 +9,10 @@ use gpui_kit::{
 };
 
 use super::{
-    Lead, Page, SIDEBAR_WIDTH,
+    Page, SIDEBAR_WIDTH,
     assets::Icon,
     library::{Game, Support},
+    prefs::Lead,
     theme::*,
     widgets::{filter, icon, icon_button, mono, square},
 };
@@ -20,12 +21,28 @@ impl Page {
     pub(super) fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.game_filter.read(cx).value().to_lowercase();
         let games = self.games();
-        let rows: Vec<_> = games
-            .iter()
-            .enumerate()
-            .filter(|(_, game)| game.search.contains(&query))
-            .map(|(index, game)| self.game_row(index, game, cx).into_any_element())
-            .collect();
+        // Favorites first; the numbers follow that order and stay through the filter.
+        let (starred, rest): (Vec<_>, Vec<_>) = games.iter().enumerate().partition(|(_, game)| self.profiles.of(&game.id).favorite);
+        let sectioned = !starred.is_empty();
+        let mut number = 0;
+        let mut rows = Vec::new();
+        for (title, section) in [("FAVORITES", starred), ("GAMES", rest)] {
+            let shown: Vec<_> = section
+                .into_iter()
+                .map(|found| {
+                    number += 1;
+                    (number, found)
+                })
+                .filter(|(_, (_, game))| game.search.contains(&query))
+                .collect();
+            if sectioned && !shown.is_empty() {
+                rows.push(section_title(title, shown.len()).into_any_element());
+            }
+            rows.extend(shown.into_iter().map(|(number, (index, game))| self.game_row(index, number, game, cx).into_any_element()));
+        }
+        if rows.is_empty() && !games.is_empty() {
+            rows.push(mono("NO GAMES MATCH", 11.).px(px(16.)).py(px(10.)).text_color(rgb(FAINT)).into_any_element());
+        }
         v_flex()
             .w(px(SIDEBAR_WIDTH))
             .flex_none()
@@ -87,7 +104,7 @@ impl Page {
             )
     }
 
-    fn game_row(&self, index: usize, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
+    fn game_row(&self, index: usize, number: usize, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
         let current = Some(&game.id) == self.selected.as_ref();
         let no_trainer = game.support == Support::NoTrainer;
@@ -97,7 +114,7 @@ impl Page {
             (false, false) => rgb(TEXT_2),
         };
         let lead = match self.lead {
-            Lead::Number => mono(format!("{:02}", index + 1), 11.)
+            Lead::Number => mono(format!("{number:02}"), 11.)
                 .w(px(22.))
                 .flex_none()
                 .text_color(if current { accent } else { rgb(FAINT) })
@@ -172,4 +189,14 @@ impl Page {
             )
             .into_any_element()
     }
+}
+
+fn section_title(title: &'static str, count: usize) -> impl IntoElement {
+    h_flex()
+        .h(px(26.))
+        .flex_none()
+        .px(px(16.))
+        .gap(px(7.))
+        .child(mono(title, 10.).text_color(rgb(DIM)))
+        .child(mono(format!("{count:02}"), 10.).text_color(rgb(GHOST)))
 }

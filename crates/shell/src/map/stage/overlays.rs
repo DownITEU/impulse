@@ -1,0 +1,207 @@
+//! What floats over the map and moves with it: the hovered pin's chip, the right click menu,
+//! the buttons and layers, the player's readout.
+
+use gpui_kit::{
+    AnyElement, Context, Div, FontWeight, IntoElement, Stateful,
+    component::{h_flex, v_flex},
+    div, img,
+    prelude::*,
+    px, rgb,
+};
+use model::Map;
+
+use super::{Stage, input::KEY_ZOOM};
+use crate::{
+    assets::Icon,
+    map::{
+        BUTTON, MARGIN,
+        board::Board,
+        kind,
+        markers::HEAD_ABOVE,
+        picture::{fill, picture},
+        state::Saved,
+    },
+    theme::*,
+    widgets::{button, icon, mono, square},
+};
+
+// The right click menu's size, about.
+const MENU: (f64, f64) = (150., 70.);
+const CHIP_WIDTH: f32 = 260.;
+// 16:9 across the chip.
+const CHIP_PICTURE: f32 = 146.;
+// The chip's height below its picture, about.
+const CHIP_TEXT: f32 = 76.;
+
+impl Stage {
+    /// The pin the cursor rests on, beside it: its picture across the top, then what it is.
+    pub(super) fn chip(&self, map: &Map, board: &Board) -> Option<AnyElement> {
+        let (index, camera) = (self.shown.chip.filter(|pin| board.selected != Some(*pin))?, self.camera?);
+        let pin = &map.pins[index];
+        let ((x, y), (width, height)) = (camera.to_view(pin.at, self.size()), self.size());
+        let (wide, tall) = (f64::from(CHIP_WIDTH), f64::from(CHIP_TEXT + if pin.image.is_some() { CHIP_PICTURE } else { 0. }));
+        let left = if x + 24. + wide > width { x - 24. - wide } else { x + 24. };
+        let top = (y - HEAD_ABOVE - 40.).min(height - tall - f64::from(MARGIN)).max(f64::from(MARGIN));
+        let about = plain(&pin.description);
+        let text = v_flex()
+            .p(px(10.))
+            .gap(px(3.))
+            .child(div().truncate().text_size(px(13.5)).font_weight(FontWeight::BOLD).text_color(rgb(TEXT_BRIGHT)).child(pin.name.clone()))
+            .child(mono(kind(map, pin), 9.5).truncate().text_color(rgb(DIM)))
+            .when(!about.is_empty(), |text| text.child(div().pt(px(3.)).line_clamp(2).text_size(px(12.)).text_color(rgb(TEXT_2)).child(about)))
+            .when(board.saved.found.contains(&pin.id), |text| {
+                let accent = rgb(board.accent);
+                text.child(h_flex().pt(px(3.)).gap(px(5.)).child(icon(Icon::Check, 10., accent)).child(mono("FOUND", 9.5).text_color(accent)))
+            });
+        let chip = v_flex()
+            .absolute()
+            .left(px(left as f32))
+            .top(px(top as f32))
+            .w(px(CHIP_WIDTH))
+            .border_1()
+            .border_color(line(0.16))
+            .bg(alpha(PANEL, 0.97))
+            .when_some(pin.image.as_ref(), |chip, image| {
+                chip.child(picture(index, [fill(img(image.preview.clone()), ("pin-media", index))], (CHIP_WIDTH - 2., CHIP_PICTURE)))
+            })
+            .child(text);
+        Some(chip.into_any_element())
+    }
+
+    /// What a right click beside the pins offers: a pin of the user's own, the player moved there.
+    pub(super) fn target_menu(&self, map: &Map, board: &Board, cx: &Context<Self>) -> Option<AnyElement> {
+        let (target, camera) = (self.shown.target?, self.camera?);
+        let ((x, y), (width, height)) = (camera.to_view(target, self.size()), self.size());
+        // Inside the view near its right and bottom edges.
+        let (x, y) = (x.min(width - MENU.0).max(0.), y.min(height - MENU.1).max(0.));
+        let teleport = board.can_teleport_to_plane(map).then(|| {
+            button("TELEPORT HERE").id("map-teleport").border_color(rgb(board.accent)).on_click(cx.listener(move |stage, _, _, cx| {
+                stage.shown.target = None;
+                stage.board.update(cx, |board, cx| board.teleport_to_plane(target, cx));
+            }))
+        });
+        let add = button("ADD MY PIN")
+            .id("map-add-mark")
+            .on_click(cx.listener(move |stage, _, _, cx| stage.board.update(cx, |board, cx| board.add_mark(target, cx))));
+        let menu = v_flex().occlude().absolute().left(px(x as f32)).top(px(y as f32)).gap(px(4.)).child(add).children(teleport);
+        Some(menu.into_any_element())
+    }
+
+    /// Bottom right: follow the player, zoom, layers.
+    pub(super) fn buttons(&self, map: &Map, board: &Board, cx: &Context<Self>) -> impl IntoElement {
+        let accent = board.accent;
+        let locate = board.player.filter(|_| map.frame.is_some()).map(|_| {
+            control("map-follow", Icon::Player, self.follow, accent).on_click(cx.listener(|stage, _, _, cx| {
+                stage.follow ^= true;
+                let board = stage.board.clone();
+                stage.center_on_player(board.read(cx));
+                cx.notify();
+            }))
+        });
+        let zoom_in = control("map-zoom-in", Icon::Plus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(KEY_ZOOM, cx)));
+        let zoom_out = control("map-zoom-out", Icon::Minus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(1. / KEY_ZOOM, cx)));
+        let layers = control("map-layers", Icon::Layers, self.layers_open, accent).on_click(cx.listener(|stage, _, _, cx| {
+            stage.layers_open ^= true;
+            cx.notify();
+        }));
+        h_flex()
+            .occlude()
+            .absolute()
+            .right(px(MARGIN))
+            .bottom(px(MARGIN))
+            .items_end()
+            .gap(px(8.))
+            .when(self.layers_open, |row| row.child(layers_menu(map, &board.saved, accent, cx)))
+            .child(v_flex().gap(px(8.)).children(locate).child(v_flex().child(zoom_in).child(zoom_out.border_t_0())).child(layers))
+    }
+
+    /// Where the player is, and what went wrong last.
+    pub(super) fn readout(&self, board: &Board) -> impl IntoElement {
+        let chip = |text: String, color: u32| {
+            mono(text, 10.5).px(px(7.)).py(px(3.)).border_1().border_color(alpha(color, 0.4)).bg(alpha(BG, 0.85)).text_color(rgb(color))
+        };
+        h_flex()
+            .absolute()
+            .left(px(MARGIN))
+            .bottom(px(MARGIN))
+            .gap(px(8.))
+            .when_some(board.player, |strip, [x, y, z]| strip.child(chip(format!("X {x:.0} · Y {y:.0} · Z {z:.0}"), board.accent)))
+            .when_some(board.note.clone(), |strip, note| strip.child(chip(note, WARN)))
+    }
+}
+
+fn layers_menu(map: &Map, saved: &Saved, accent: u32, cx: &Context<Stage>) -> impl IntoElement {
+    let row = |id: &'static str, label: &'static str, on: bool, flip: fn(&mut Saved)| {
+        h_flex()
+            .id(id)
+            .h(px(28.))
+            .px(px(10.))
+            .gap(px(10.))
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(ROW_HOVER)))
+            .child(square(11., alpha(accent, if on { 1. } else { 0. })).border_1().border_color(if on { rgb(accent) } else { line(0.3) }))
+            .child(mono(label, 10.5).font_weight(FontWeight::BOLD).text_color(rgb(if on { TEXT } else { DIM })))
+            .on_click(cx.listener(move |stage, _, _, cx| stage.board.update(cx, |board, cx| board.filter(flip, cx))))
+    };
+    v_flex()
+        .w(px(170.))
+        .py(px(4.))
+        .border_1()
+        .border_color(line(0.16))
+        .bg(rgb(PANEL))
+        .when(!map.labels.is_empty(), |menu| menu.child(row("layer-labels", "PLACE NAMES", saved.labels, |saved| saved.labels ^= true)))
+        .when(!map.regions.is_empty(), |menu| menu.child(row("layer-regions", "REGIONS", saved.regions, |saved| saved.regions ^= true)))
+        .child(row("layer-clusters", "GROUP CLOSE PINS", saved.clusters, |saved| saved.clusters ^= true))
+}
+
+/// A square map button; `on` lights it in the accent.
+fn control(id: &'static str, glyph: Icon, on: bool, accent: u32) -> Stateful<Div> {
+    div()
+        .id(id)
+        .size(px(BUTTON))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .border_1()
+        .border_color(if on { rgb(accent) } else { line(0.2) })
+        .bg(rgb(if on { RAISED_HOVER } else { PANEL }))
+        .hover(|style| style.bg(rgb(RAISED_HOVER)))
+        .child(icon(glyph, 15., rgb(if on { accent } else { TEXT_2 })))
+}
+
+/// The first paragraph of markdown as plain text.
+fn plain(markdown: &str) -> String {
+    let mut rest = markdown.lines().map(str::trim).find(|line| !line.is_empty()).unwrap_or_default();
+    // Links keep their text.
+    let mut text = String::new();
+    while let Some(at) = rest.find("](") {
+        text.push_str(&rest[..at]);
+        rest = closing(&rest[at + 1..]).map_or("", |end| &rest[at + end + 2..]);
+    }
+    text.push_str(rest);
+    text.chars().filter(|c| !"*_#>`[".contains(*c)).collect::<String>().trim().to_owned()
+}
+
+/// The `)` closing the `(` that `text` starts with, past pairs inside it.
+fn closing(text: &str) -> Option<usize> {
+    let mut depth = 0;
+    text.char_indices().find_map(|(at, c)| {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            _ => {}
+        }
+        (depth == 0).then_some(at)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn plain_text_keeps_what_links_say() {
+        assert_eq!(super::plain("
+**Read** [Fallout](https://w/Fallout_(series)) or [Gate](pin:a).
+More"), "Read Fallout or Gate.");
+    }
+}

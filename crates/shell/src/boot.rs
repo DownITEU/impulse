@@ -15,7 +15,7 @@ use super::{
 
 impl Page {
     pub(super) fn boot(&self, window: &Window, cx: &mut Context<Self>) {
-        let (mut games, art) = (self.provider.games(), art::cache_dir(&self.data_dir));
+        let (mut games, art) = (self.provider.games(), art::Media::Pictures.dir(&self.data_dir));
         cx.spawn_in(window, async move |page, cx| {
             let mut have_copy = false;
             while let Some(snapshot) = games.next().await {
@@ -53,29 +53,18 @@ impl Page {
         .detach();
     }
 
-    /// Drops every disk copy and fills the page anew. The session stays: it is not a cache.
-    pub(super) fn invalidate_caches(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (provider, art) = (self.provider.clone(), art::cache_dir(&self.data_dir));
-        cx.spawn_in(window, async move |page, cx| {
-            unblock(move || {
-                provider.forget_caches();
-                art::forget(&art);
-            })
-            .await;
-            log::info!("caches invalidated");
-            page.update_in(cx, |page, window, cx| {
-                page.library = Load::Pending;
-                // `boot` asks for the session again.
-                page.signed_out = false;
-                page.trainers.clear();
-                page.deferred = None;
-                page.stop_run(cx);
-                page.boot(window, cx);
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
+    /// Fills the page anew after a provider's store was cleared. The session stays: it is not a cache.
+    pub(super) fn reload(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        log::info!("caches cleared");
+        self.library = Load::Pending;
+        // `boot` asks for the session again.
+        self.signed_out = false;
+        // The run keeps what it leaves on first, from the trainers about to go.
+        self.stop_run(cx);
+        self.trainers.clear();
+        self.deferred = None;
+        self.boot(window, cx);
+        cx.notify();
     }
 
     fn set_library(&mut self, library: Library, window: &mut Window, cx: &mut Context<Self>) {
@@ -116,7 +105,7 @@ impl Page {
                     match snapshot {
                         Snapshot::Cached(Some(trainer)) | Snapshot::Fresh(Ok(trainer)) => {
                             let hotkeys = page.bindings.slots(&id, &trainer.cheats);
-                            let loaded = Loaded::new(trainer, hotkeys, stamp.clone(), window, cx);
+                            let loaded = Loaded::new(trainer, hotkeys, stamp.clone(), page.profiles.of(&id), window, cx);
                             page.install(id.clone(), loaded);
                         }
                         // The network is next.
@@ -169,10 +158,11 @@ impl Page {
     /// For when a run lets go of its cheat list.
     pub(super) fn install_deferred(&mut self) {
         if let Some((id, mut loaded)) = self.deferred.take() {
-            // The user may have rebound a slot while it waited.
+            // The user may have rebound a slot, pinned a mod or folded a section while it waited.
             for (index, slots) in self.bindings.slots(&id, &loaded.cheats).into_iter().enumerate() {
                 loaded.rebind(index, slots);
             }
+            loaded.restore(self.profiles.of(&id));
             self.install(id, loaded);
         }
     }

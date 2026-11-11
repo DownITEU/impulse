@@ -161,7 +161,7 @@ fn build(
         .with_visible(false)
         .with_drag_and_drop(false)
         .build(target)?;
-    let mut context = WebContext::new(Some(data_dir.join("webview")));
+    let mut context = WebContext::new(Some(data_dir.join(super::PROFILE)));
     let url = url::Url::from_file_path(data_dir.join("bridge.html"))
         .map_err(|()| anyhow!("data dir is not an absolute path"))?;
     let webview = WebViewBuilder::new_with_web_context(&mut context)

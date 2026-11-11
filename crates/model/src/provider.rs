@@ -5,17 +5,36 @@ use std::path::PathBuf;
 use anyhow::Result;
 use futures::{future::BoxFuture, stream::BoxStream};
 
-use crate::{Game, Installation, Trainer};
+use crate::{Game, Installation, Map, MapOffer, Trainer};
 
 pub trait Provider: Send + Sync {
     fn sign_in(&self) -> BoxStream<'static, SignIn>;
     fn games(&self) -> BoxStream<'static, Snapshot<Vec<Game>>>;
     fn trainer(&self, game: &Game, install: &Installation) -> BoxStream<'static, Snapshot<Trainer>>;
+    fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<Map>>;
     fn folders(&self) -> BoxFuture<'static, Vec<Folder>>;
     /// Saves `path` when its status is `Ok`. Calls are ordered: an older one never saves over a newer.
     fn set_folder(&self, id: &'static str, path: PathBuf) -> BoxFuture<'static, Folder>;
-    /// Blocking.
-    fn forget_caches(&self);
+    /// What it keeps on disk (sizes are read when asked).
+    fn stores(&self) -> BoxFuture<'static, Vec<Store>>;
+    /// Empties the store `id` names; the next use downloads it again.
+    fn clear(&self, id: &'static str) -> BoxFuture<'static, ()>;
+}
+
+/// Files a provider keeps, of one kind.
+pub struct Store {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub hint: &'static str,
+    pub bytes: u64,
+    pub clear: Clear,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Clear {
+    Now,
+    /// Only while nothing uses it: at the next start. `asked` once it is due.
+    NextStart { asked: bool },
 }
 
 /// A snapshot stream yields `Cached` first, then `Fresh` only when the copy was missing or stale.

@@ -1,6 +1,6 @@
-//! Trainer hotkeys: the live run's hook, rebinding a slot by pressing its keys or buttons, the saved
-//! choices and the Settings tab. Every hook is global: a capture's runs first and hides what it takes
-//! from every app.
+//! Trainer hotkeys: the live run's hook, rebinding a slot or the overlay hotkey by pressing its keys or
+//! buttons, the saved choices and the Settings tab. Every hook is global: a capture's runs first and
+//! hides what it takes from every app.
 
 mod caps;
 mod settings;
@@ -14,7 +14,10 @@ use hotkeys::{Binding, Capture, Chord, Fired, Hook, Matcher, Outcome, Step};
 use model::Cheat;
 
 use super::{Load, Page, run::Play, theme::*, widgets::mono};
+pub(super) use store::file;
 use store::{Choice, Store};
+
+pub(super) const PRESS_KEYS: &str = "PRESS KEYS";
 
 pub(super) struct Bindings {
     store: Store,
@@ -23,11 +26,16 @@ pub(super) struct Bindings {
     capture: Option<Capturing>,
 }
 
-struct Capturing {
-    game: Arc<str>,
+/// What a capture binds.
+#[derive(PartialEq)]
+pub(super) enum Target {
     // An id, not an index: a newer cheat list may arrive meanwhile.
-    cheat: String,
-    slot: usize,
+    Slot { game: Arc<str>, cheat: String, slot: usize },
+    Overlay,
+}
+
+struct Capturing {
+    target: Target,
     held: Option<Chord>,
     _hook: Hook,
     _steps: Task<()>,
@@ -63,7 +71,12 @@ impl Bindings {
     /// What the slot being bound holds so far.
     fn held(&self, game: &str, cheat: &str, slot: usize) -> Option<Option<Chord>> {
         let capture = self.capture.as_ref()?;
-        (*capture.game == *game && capture.cheat == cheat && capture.slot == slot).then_some(capture.held)
+        let bound = matches!(&capture.target, Target::Slot { game: at, cheat: id, slot: on } if **at == *game && id == cheat && *on == slot);
+        bound.then_some(capture.held)
+    }
+
+    pub fn overlay_held(&self) -> Option<Option<Chord>> {
+        self.capture.as_ref().filter(|capture| capture.target == Target::Overlay).map(|capture| capture.held)
     }
 }
 
@@ -126,11 +139,16 @@ impl Page {
         cx.notify();
     }
 
-    /// Starts binding the open trainer's slot; a second click on it ends that.
+    /// Starts binding the open trainer's slot.
     fn capture(&mut self, index: usize, slot: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(game) = self.selected.clone() else { return };
         let Some(cheat) = self.trainer(Some(&game)).map(|loaded| loaded.cheats[index].id.clone()) else { return };
-        let again = self.bindings.held(&game, &cheat, slot).is_some();
+        self.start_capture(Target::Slot { game, cheat, slot }, window, cx);
+    }
+
+    /// A second click on what is being bound ends that.
+    pub(super) fn start_capture(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
+        let again = self.bindings.capture.as_ref().is_some_and(|capture| capture.target == target);
         self.cancel_capture(cx);
         // Only the active window's user may be typing for it.
         if again || !window.is_window_active() {
@@ -157,7 +175,7 @@ impl Page {
                 }
             }
         });
-        self.bindings.capture = Some(Capturing { game, cheat, slot, held: None, _hook: hook, _steps: task });
+        self.bindings.capture = Some(Capturing { target, held: None, _hook: hook, _steps: task });
         cx.notify();
     }
 
@@ -175,9 +193,10 @@ impl Page {
                 }
             }
             Step::Done(outcome) => {
-                if let Some(capture) = self.bindings.capture.take() {
-                    let Capturing { game, cheat, slot, .. } = capture;
-                    self.rebind(game, &cheat, slot, outcome, window, cx);
+                match self.bindings.capture.take().map(|capture| capture.target) {
+                    Some(Target::Slot { game, cheat, slot }) => self.rebind(game, &cheat, slot, outcome, window, cx),
+                    Some(Target::Overlay) => self.rebind_overlay(outcome, cx),
+                    None => {}
                 }
             }
         }
@@ -191,6 +210,7 @@ impl Page {
             Outcome::Unbound => Choice::Unbound,
             Outcome::Bound(chord) => Choice::Bound(chord),
         };
+        let overlay = self.layer.read(cx).hotkey();
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
         let Some(index) = loaded.cheats.iter().position(|found| found.id == cheat) else { return };
         let wanted = match choice {
@@ -198,10 +218,10 @@ impl Page {
             Choice::Unbound => None,
             Choice::Default => loaded.cheats[index].hotkeys.get(slot).copied().flatten(),
         };
-        // As in Wand, a cheat never holds one chord twice.
+        // As in Wand, a cheat never holds one chord twice, nor the overlay's.
         let taken = |chord: Chord| {
             let other = |(at, bound): (usize, &Option<Chord>)| at != slot && bound.is_some_and(|bound| bound.same_keys(chord));
-            loaded.hotkeys[index].iter().enumerate().any(other)
+            overlay.fired_by(chord.vks()) || loaded.hotkeys[index].iter().enumerate().any(other)
         };
         if wanted.is_some_and(taken) {
             return;
@@ -216,8 +236,12 @@ impl Page {
 
     /// The status bar's hotkey note; while binding, the keys that end it.
     pub(super) fn hotkeys_status(&self) -> Div {
-        if self.bindings.capture.is_some() {
-            return mono("PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND", 11.).text_color(rgb(self.accent));
+        if let Some(capture) = &self.bindings.capture {
+            let keys = match capture.target {
+                Target::Slot { .. } => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND",
+                Target::Overlay => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT",
+            };
+            return mono(keys, 11.).text_color(rgb(self.accent));
         }
         match self.bindings.armed.is_some() {
             true => mono("HOTKEYS ON", 11.),

@@ -1,8 +1,9 @@
-//! Game art and avatars. Every image is kept on disk, so it loads at once and offline.
+//! Pictures, map tiles and pin videos from public CDNs. Each is kept on disk, so it loads at once and offline.
 
 use std::{
     fs,
     path::{Path, PathBuf},
+    time::{Duration, SystemTime},
 };
 
 use anyhow::{Result, bail};
@@ -36,12 +37,24 @@ impl HttpClient for CdnClient {
     }
 }
 
-pub fn cache_dir(data_dir: &Path) -> PathBuf {
-    data_dir.join("art")
+/// A kind of cached file, in a folder of its own: sized, cleared and limited apart.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Media {
+    Pictures,
+    Tiles,
+    Videos,
 }
 
-pub fn forget(cache: &Path) {
-    let _ = fs::remove_dir_all(cache);
+impl Media {
+    pub const ALL: [Self; 3] = [Self::Pictures, Self::Tiles, Self::Videos];
+
+    pub fn dir(self, data_dir: &Path) -> PathBuf {
+        data_dir.join(match self {
+            Self::Pictures => "art",
+            Self::Tiles => "tiles",
+            Self::Videos => "videos",
+        })
+    }
 }
 
 /// Whether the CDN already answered 404 for `url` (blocking), so nothing asks for it again.
@@ -49,14 +62,40 @@ pub fn known_missing(cache: &Path, url: &str) -> bool {
     fs::metadata(file(cache, url)).is_ok_and(|meta| meta.len() == 0)
 }
 
-// Disk first and never revalidated: art under one URL does not change.
-fn load(cache: &Path, url: &str) -> Result<Vec<u8>> {
+// Disk first and never revalidated: files under one URL do not change.
+pub(super) fn load(cache: &Path, url: &str) -> Result<Vec<u8>> {
     let file = file(cache, url);
     match fs::read(&file) {
         Ok(bytes) if bytes.is_empty() => bail!("{url} does not exist"),
-        Ok(bytes) => return Ok(bytes),
-        Err(_) => {}
+        Ok(bytes) => {
+            touch(&file);
+            Ok(bytes)
+        }
+        Err(_) => download(&file, url),
     }
+}
+
+/// `url`'s file on disk, downloaded first when it is not there (blocking).
+pub fn path(cache: &Path, url: &str) -> Result<PathBuf> {
+    let file = file(cache, url);
+    match fs::metadata(&file) {
+        Ok(meta) if meta.len() == 0 => bail!("{url} does not exist"),
+        Ok(_) => touch(&file),
+        Err(_) => drop(download(&file, url)?),
+    }
+    Ok(file)
+}
+
+// The media limit drops the least recently used files first; a day's precision spares a write per hit.
+fn touch(file: &Path) {
+    let age = fs::metadata(file).and_then(|meta| meta.modified()).map(|at| at.elapsed().unwrap_or_default());
+    if age.is_ok_and(|age| age < Duration::from_secs(24 * 60 * 60)) {
+        return;
+    }
+    let _ = fs::File::options().write(true).open(file).and_then(|file| file.set_modified(SystemTime::now()));
+}
+
+fn download(file: &Path, url: &str) -> Result<Vec<u8>> {
     let response = fetch::get(url, None)?;
     // An empty file marks art the CDN does not have.
     let keep: &[u8] = match response.status {
@@ -64,7 +103,7 @@ fn load(cache: &Path, url: &str) -> Result<Vec<u8>> {
         404 => &[],
         status => bail!("GET {url}: HTTP {status}"),
     };
-    if let Err(e) = disk::replace(&file, keep) {
+    if let Err(e) = disk::replace(file, keep) {
         log::warn!("art not cached: {e:#}");
     }
     if response.status == 404 {

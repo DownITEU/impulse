@@ -1,0 +1,186 @@
+//! A game's interactive map: tiles, pins and how the game's coordinates lie on it.
+
+/// A map a provider has for a game, before it is opened.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MapOffer {
+    pub id: String,
+    pub name: String,
+    pub thumbnail: Option<String>,
+    /// Changes whenever the map does.
+    pub revision: Option<String>,
+}
+
+/// A point of the unit square the whole tile pyramid covers; y grows down.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+pub struct Map {
+    pub tiles: Tiles,
+    /// RGB behind the tiles.
+    pub background: u32,
+    pub categories: Vec<Category>,
+    pub pins: Vec<Pin>,
+    pub regions: Vec<Region>,
+    pub labels: Vec<Label>,
+    /// `None`: the map cannot place the player.
+    pub frame: Option<Frame>,
+    pub teleport: bool,
+    /// Still being worked on: pins may be missing or move.
+    pub unfinished: bool,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Tiles {
+    /// A URL with `{z}`, `{x}` and `{y}`.
+    pub template: String,
+    /// Rows count from the bottom.
+    pub flipped: bool,
+    /// Pixels along a tile's side.
+    pub size: u32,
+    pub min_zoom: u8,
+    pub max_zoom: u8,
+}
+
+impl Tiles {
+    /// `column` and `row` count from the top left, below `2^zoom`.
+    pub fn url(&self, zoom: u8, column: u32, row: u32) -> String {
+        let row = if self.flipped { (1u32 << zoom) - 1 - row } else { row };
+        self.template
+            .replace("{z}", &zoom.to_string())
+            .replace("{x}", &column.to_string())
+            .replace("{y}", &row.to_string())
+    }
+}
+
+pub struct Category {
+    pub name: String,
+    pub color: u32,
+    /// Whether its pins show before the user chooses.
+    pub shown: bool,
+    pub groups: Vec<Group>,
+}
+
+pub struct Group {
+    /// Stable across revisions of the map.
+    pub id: String,
+    pub name: String,
+    pub icon: Option<Glyph>,
+}
+
+/// An icon's outline: SVG path data fitted and centered in the unit square, y down.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Glyph {
+    pub path: String,
+}
+
+/// Where a pin lies against the ground the map shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Level {
+    Above,
+    Below,
+}
+
+/// How a description links to another pin of its map: this, then the pin's id.
+pub const PIN_LINK: &str = "pin:";
+
+/// A picture's URLs: one sized for a card, one to see it whole.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Picture {
+    pub preview: String,
+    pub full: String,
+}
+
+pub struct Pin {
+    /// Stable across revisions of the map.
+    pub id: String,
+    pub at: Point,
+    pub name: String,
+    /// Markdown; it links to other pins of the map with `PIN_LINK`.
+    pub description: String,
+    /// Indexes of its category and of the group in it.
+    pub group: (usize, usize),
+    pub image: Option<Picture>,
+    pub video: Option<String>,
+    /// Where it is in the game's own coordinates.
+    pub position: Option<[f64; 3]>,
+    pub level: Option<Level>,
+}
+
+pub struct Region {
+    pub name: String,
+    pub color: u32,
+    pub thickness: f32,
+    pub outline: Vec<Point>,
+    /// The zoom levels it shows at, inclusive.
+    pub zoom: (f32, f32),
+}
+
+pub struct Label {
+    pub text: String,
+    pub color: u32,
+    pub size: f32,
+    pub at: Point,
+    pub zoom: (f32, f32),
+}
+
+/// How the game's coordinates lie on the map plane.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Frame {
+    /// The game axes that run along the plane's x, along its y, and up: a permutation of 0, 1, 2.
+    pub axes: [usize; 3],
+    /// Where the game's zero lies.
+    pub origin: Point,
+    /// Plane units per game unit along x and y; never zero.
+    pub scale: (f64, f64),
+}
+
+impl Frame {
+    pub fn to_map(&self, position: [f64; 3]) -> Point {
+        Point {
+            x: self.origin.x + position[self.axes[0]] * self.scale.0,
+            y: self.origin.y + position[self.axes[1]] * self.scale.1,
+        }
+    }
+
+    /// `height` is the game's up coordinate, which the plane does not hold.
+    pub fn to_game(&self, at: Point, height: f64) -> [f64; 3] {
+        let mut position = [0.; 3];
+        position[self.axes[0]] = (at.x - self.origin.x) / self.scale.0;
+        position[self.axes[1]] = (at.y - self.origin.y) / self.scale.1;
+        position[self.axes[2]] = height;
+        position
+    }
+
+    pub fn height(&self, position: [f64; 3]) -> f64 {
+        position[self.axes[2]]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tile_urls_follow_the_template_and_the_row_order() {
+        let mut tiles =
+            Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 0, max_zoom: 8 };
+        assert_eq!(tiles.url(3, 5, 1), "https://cdn/3/1/5.webp");
+        tiles.flipped = true;
+        assert_eq!(tiles.url(3, 5, 1), "https://cdn/3/6/5.webp");
+        assert_eq!(tiles.url(0, 0, 0), "https://cdn/0/0/0.webp");
+    }
+
+    #[test]
+    fn a_frame_maps_both_ways_through_swapped_axes() {
+        let frame = Frame { axes: [2, 0, 1], origin: Point { x: 0.5, y: 0.25 }, scale: (0.001, -0.002) };
+        let position = [40., 7., -100.];
+        let at = frame.to_map(position);
+        assert!((at.x - 0.4).abs() < 1e-12 && (at.y - 0.17).abs() < 1e-12, "{at:?}");
+        assert_eq!(frame.height(position), 7.);
+        let back = frame.to_game(at, 7.);
+        assert!(back.iter().zip(position).all(|(got, want)| (got - want).abs() < 1e-9), "{back:?}");
+    }
+}

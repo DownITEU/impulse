@@ -11,12 +11,17 @@ hotkeys.workspace = true
 journal.workspace = true
 launchers.workspace = true
 model.workspace = true
+overlay.workspace = true
 play.workspace = true
+video.workspace = true
 
 anyhow.workspace = true
 blocking.workspace = true
 futures.workspace = true
 gpui-kit.workspace = true
+image = { workspace = true, features = ["webp"] }
 log.workspace = true
+raw-window-handle.workspace = true
+rustc-hash.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -21,6 +21,9 @@ pub trait Session: Send + Sync {
     /// Sets the variable a cheat's `key` names; `Err` when the trainer refuses it.
     fn set<'a>(&'a self, key: &'a str, value: f64) -> BoxFuture<'a, Result<()>>;
     fn stop(&self) -> BoxFuture<'_, Result<()>>;
+    /// Where the player is, in the game's own coordinates.
+    fn position(&self) -> BoxFuture<'_, Result<[f64; 3]>>;
+    fn teleport(&self, to: [f64; 3]) -> BoxFuture<'_, Result<()>>;
 }
 
 pub struct Live {

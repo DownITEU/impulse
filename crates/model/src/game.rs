@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::MapOffer;
+
 /// A game a provider knows; the store releases of one title are separate games.
 #[derive(Default)]
 pub struct Game {
@@ -16,7 +18,8 @@ pub struct Game {
     /// A wide picture, then a small one.
     pub cover: Option<String>,
     pub thumbnail: Option<String>,
-    pub map: Option<String>,
+    /// The title's maps, the first one first.
+    pub maps: Vec<MapOffer>,
     pub trainer: Option<Offer>,
 }
 

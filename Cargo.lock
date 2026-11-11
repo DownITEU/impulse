@@ -5198,6 +5198,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "overlay"
+version = "0.1.0"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "pango"
 version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6704,13 +6711,18 @@ dependencies = [
  "futures",
  "gpui-kit",
  "hotkeys",
+ "image",
  "journal",
  "launchers",
  "log",
  "model",
+ "overlay",
  "play",
+ "raw-window-handle",
+ "rustc-hash 2.1.3",
  "serde",
  "serde_json",
+ "video",
 ]
 
 [[package]]
@@ -7959,6 +7971,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "video"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "vswhom"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8018,6 +8039,7 @@ dependencies = [
  "sha2 0.10.9",
  "tao",
  "tokio",
+ "ttf-parser",
  "url",
  "uuid",
  "webview2-com",

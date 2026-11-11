@@ -1,6 +1,10 @@
 //! Running the open game's trainer: LAUNCH + ATTACH, the cheat values going to it, STOP.
 
-use std::{mem, sync::Arc};
+use std::{
+    mem,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context as _, Result};
 use futures::{StreamExt, stream::BoxStream};
@@ -22,8 +26,13 @@ pub(super) enum Play {
         game: Arc<str>,
         /// The game's process, for hotkeys that fire only while it is in front.
         pid: u32,
+        since: Instant,
+        /// Its time and mods are kept.
+        closed: bool,
         session: Arc<dyn Session>,
         _events: Task<()>,
+        /// Repaints the session clock.
+        _clock: Task<()>,
     },
     /// The trainer is being taken down: a new run waits until it is gone.
     Stopping {
@@ -50,6 +59,22 @@ impl Play {
     pub fn live(&self) -> Option<&Arc<str>> {
         match self {
             Self::Live { game, .. } => Some(game),
+            _ => None,
+        }
+    }
+
+    /// The live game's process.
+    pub fn pid(&self) -> Option<u32> {
+        match self {
+            Self::Live { pid, .. } => Some(*pid),
+            _ => None,
+        }
+    }
+
+    /// When the live run began.
+    pub fn since(&self) -> Option<Instant> {
+        match self {
+            Self::Live { since, .. } => Some(*since),
             _ => None,
         }
     }
@@ -130,8 +155,18 @@ impl Page {
             watch(events).await;
             page.update(cx, |page, cx| page.run_ended(cx)).ok();
         });
+        let clock = cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                if page.update(cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
+            }
+        });
         log::info!("trainer is live in {id}");
-        self.play = Play::Live { game: id, pid: process.pid, session: Arc::from(session), _events: watcher };
+        self.play = Play::Live { game: id, pid: process.pid, since: Instant::now(), closed: false, session: Arc::from(session), _events: watcher, _clock: clock };
+        self.open_session(window, cx);
+        self.sync_map(cx);
         self.arm_hotkeys(window, cx);
         cx.notify();
     }
@@ -141,7 +176,9 @@ impl Page {
         if let Play::Live { game, .. } = &self.play {
             log::info!("trainer session ended");
             let game = game.clone();
+            self.close_session();
             self.play = Play::Idle;
+            self.sync_map(cx);
             self.bindings.disarm();
             self.reset_values(&game);
             self.install_deferred();
@@ -160,6 +197,7 @@ impl Page {
     /// that is done; a starting one is abandoned, which closes its session as it is dropped.
     pub(super) fn stop_run(&mut self, cx: &mut Context<Self>) {
         self.bindings.disarm();
+        self.close_session();
         match mem::replace(&mut self.play, Play::Idle) {
             Play::Live { game, session, .. } => {
                 self.reset_values(&game);
@@ -180,6 +218,7 @@ impl Page {
                 }
             }
         }
+        self.sync_map(cx);
         self.install_deferred();
         cx.notify();
     }

@@ -112,15 +112,42 @@ impl Page {
             .border_1()
             .border_color(line(0.09))
             .bg(alpha(BG, 0.78))
+            .child(self.collections_bar(loaded, running, cx))
             .child(
                 filter(&self.mod_filter, self.accent)
                     .h(px(38.))
-                    .px(px(14.))
+                    .pl(px(14.))
+                    .pr(px(8.))
+                    .gap(px(10.))
                     .border_b_1()
                     .border_color(line(0.09))
-                    .child(mono(format!("{shown:02} MODS"), 10.5).text_color(rgb(GHOST))),
+                    .child(mono(format!("{shown:02} MODS"), 10.5).flex_none().text_color(rgb(GHOST)))
+                    .child(self.saved_bar(loaded, running, cx)),
             )
             .children(rows)
+            .when(shown == 0, |list| list.child(mono("NO MODS MATCH THE FILTER", 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
+    }
+
+    fn toggle_fold(&mut self, title: SharedString, cx: &mut Context<Self>) {
+        let Some(game) = self.selected.clone() else { return };
+        let Some(loaded) = self.loaded_mut() else { return };
+        if !loaded.folded.remove(&title) {
+            loaded.folded.insert(title);
+        }
+        let folded = loaded.folded.iter().map(SharedString::to_string).collect();
+        self.profiles.edit(&game, |profile| profile.folded = folded);
+        cx.notify();
+    }
+
+    fn toggle_pin(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(game) = self.selected.clone() else { return };
+        let Some(loaded) = self.loaded_mut() else { return };
+        if !loaded.pinned.remove(&index) {
+            loaded.pinned.insert(index);
+        }
+        let pinned = loaded.pinned.iter().map(|&index| loaded.cheats[index].id.clone()).collect();
+        self.profiles.edit(&game, |profile| profile.pinned = Some(pinned));
+        cx.notify();
     }
 
     fn section(
@@ -152,16 +179,8 @@ impl Page {
             .child(mono(format!("{count:02}"), 11.).text_color(rgb(FAINT)))
             .child(div().flex_1())
             .child(
-                icon_button(("fold", at), chevron, 26., 13.).on_click(cx.listener(
-                    move |page, _, _, cx| {
-                        if let Some(loaded) = page.loaded_mut()
-                            && !loaded.folded.remove(&title)
-                        {
-                            loaded.folded.insert(title.clone());
-                        }
-                        cx.notify();
-                    },
-                )),
+                icon_button(("fold", at), chevron, 26., 13.)
+                    .on_click(cx.listener(move |page, _, _, cx| page.toggle_fold(title.clone(), cx))),
             )
     }
 
@@ -243,14 +262,7 @@ impl Page {
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                if let Some(loaded) = page.loaded_mut()
-                                    && !loaded.pinned.remove(&index)
-                                {
-                                    loaded.pinned.insert(index);
-                                }
-                                cx.notify();
-                            }))
+                            .on_click(cx.listener(move |page, _, _, cx| page.toggle_pin(index, cx)))
                             .child(
                                 icon(Icon::Pin, 12., if pinned { accent } else { rgb(GHOST) })
                                     .id(("pin-icon", index))
@@ -263,9 +275,8 @@ impl Page {
             .child(self.caps(index, loaded, cx))
             .child(
                 h_flex()
-                    .w(px(186.))
+                    .w(px(loaded.control_width))
                     .flex_none()
-                    .justify_end()
                     .gap(px(8.))
                     .opacity(if running { 1. } else { 0.4 })
                     .child(self.control(index, loaded, running, live, cx)),

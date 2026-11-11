@@ -31,6 +31,10 @@ pub fn cached(data_dir: &Path) -> Option<(Account, bool)> {
     Some((stored.account, fresh))
 }
 
+pub fn size(data_dir: &Path) -> u64 {
+    disk::size(&data_dir.join(FILE))
+}
+
 pub fn forget(data_dir: &Path) {
     let _ = fs::remove_file(data_dir.join(FILE));
 }

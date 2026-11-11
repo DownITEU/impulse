@@ -45,10 +45,16 @@ struct LoaderArgs {
 #[derive(Deserialize)]
 struct Blueprint {
     cheats: Vec<Cheat>,
+    #[serde(default)]
+    flags: u32,
     // Free-form on purpose: a shape we do not read must not make the trainer unreadable.
     #[serde(default)]
     config: Value,
 }
+
+// Bits of `Blueprint::flags`.
+const TELEPORTS: u32 = 4;
+const LOCATES: u32 = 8;
 
 #[derive(Deserialize)]
 struct Cheat {
@@ -100,7 +106,14 @@ struct Args {
 impl Trainer {
     /// `plan` is what running it takes; see `plan()`.
     pub fn into_model(self, plan: model::Plan) -> model::Trainer {
-        model::Trainer { cheats: self.blueprint.cheats.into_iter().map(cheat).collect(), pinned: self.pinned_mods, plan }
+        let flags = self.blueprint.flags;
+        model::Trainer {
+            cheats: self.blueprint.cheats.into_iter().map(cheat).collect(),
+            pinned: self.pinned_mods,
+            location: flags & LOCATES != 0,
+            teleport: flags & TELEPORTS != 0,
+            plan,
+        }
     }
 }
 
@@ -164,6 +177,10 @@ struct Stored {
 pub fn cached(data_dir: &Path, game_id: &str) -> Option<(Trainer, Stamp)> {
     let stored: Stored = serde_json::from_slice(&fs::read(file(data_dir, game_id)).ok()?).ok()?;
     Some((Trainer::deserialize(&stored.trainer).ok()?, stored.stamp))
+}
+
+pub fn size(data_dir: &Path) -> u64 {
+    disk::size(&data_dir.join(DIR))
 }
 
 pub fn forget(data_dir: &Path) {

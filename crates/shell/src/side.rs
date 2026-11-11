@@ -1,7 +1,9 @@
+use std::time::Duration;
+
 use gpui_kit::{
-    Context, Div, FontWeight, IntoElement,
+    Context, Div, FontWeight, IntoElement, ObjectFit, Window,
     component::{h_flex, v_flex},
-    div,
+    div, img,
     prelude::*,
     px, relative, rgb,
 };
@@ -10,29 +12,61 @@ use super::{
     Page,
     assets::Icon,
     library::Game,
+    map,
+    run::Play,
     theme::*,
-    widgets::{grid, icon, icon_button, mono, square, tracked},
+    widgets::{grid, icon_button, mono, square, tracked},
 };
 
-const MAP_WIDTH: f32 = 280.;
-// The preview keeps the mockup's 300:220 ratio inside the 1 px borders.
-const MAP_HEIGHT: f32 = (MAP_WIDTH - 2.) * 220. / 300.;
+const MAP_HEIGHT: f32 = 204.;
 
 impl Page {
-    pub(super) fn map_panel(&self, game: &Game, running: bool) -> impl IntoElement {
+    pub(super) fn open_map(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(game) = self.game() else { return };
+        let (id, offers) = (game.id.clone(), game.source.maps.clone());
+        self.map.update(cx, |map, cx| map.show(&id, &offers, window, cx));
+        self.sync_map(cx);
+    }
+
+    pub(super) fn close_map(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Over a game the map is a dock, and Escape's last step leaves the overlay.
+        if self.over {
+            return self.layer.read(cx).leave();
+        }
+        self.map.update(cx, |map, cx| map.hide(window, cx));
+    }
+
+    /// Gives the open map the live run of its game, or takes it away.
+    pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
+        let open = self.map.read(cx).is_open(cx);
+        let run = match &self.play {
+            Play::Live { game, session, .. } if open && Some(game) == self.selected.as_ref() => {
+                self.trainer(Some(game)).map(|loaded| map::Run {
+                    session: session.clone(),
+                    location: loaded.location,
+                    teleport: loaded.teleport,
+                })
+            }
+            _ => None,
+        };
+        let live = match &self.play {
+            Play::Live { game, .. } => Some(game.clone()),
+            _ => None,
+        };
+        self.map.update(cx, |map, cx| {
+            map.set_run(run, cx);
+            map.set_live(live, cx);
+        });
+    }
+
+    /// The caller gives it a width.
+    pub(super) fn map_panel(&self, game: &Game, cx: &mut Context<Self>) -> Div {
         let accent = rgb(self.accent);
         let bracket = || div().absolute().size(px(10.)).border_color(accent);
-        let layer = |glyph: Icon, color| {
-            icon(glyph, 0., color)
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-        };
+        let offer = game.source.maps.first();
+        let open = || cx.listener(|page, _, window, cx| page.open_map(window, cx));
         v_flex()
             .relative()
-            .w(px(MAP_WIDTH))
-            .flex_none()
             .border_1()
             .border_color(line(0.1))
             .bg(rgb(PANEL))
@@ -50,39 +84,24 @@ impl Page {
                             .text_color(rgb(MUTED))
                             .child(mono("MAP", 10.5))
                             .child(mono("/", 10.5).text_color(rgb(GHOST)))
-                            .child(mono(game.map.clone().unwrap_or("-".into()), 10.5)),
+                            .child(mono(offer.map_or("-".into(), |offer| offer.name.to_uppercase()), 10.5)),
                     )
-                    .child(icon_button("map", Icon::Expand, 26., 13.)),
+                    .when(offer.is_some(), |header| header.child(icon_button("map", Icon::Expand, 26., 13.).on_click(open()))),
             )
-            .child(match &game.map {
-                Some(_) => div()
+            .child(match offer {
+                Some(offer) => div()
+                    .id("map-preview")
                     .relative()
                     .h(px(MAP_HEIGHT))
+                    .overflow_hidden()
+                    .cursor_pointer()
+                    .on_click(open())
                     .child(grid(20., line(0.035)))
-                    .child(layer(Icon::MapTerrain, rgb(TEXT)))
-                    .child(layer(Icon::MapPins, accent))
-                    .when(running, |map| {
-                        map.child(
-                            icon(Icon::Player, 34., accent)
-                                .absolute()
-                                .left(relative(0.32))
-                                .top(relative(0.69))
-                                .ml(px(-17.))
-                                .mt(px(-17.)),
-                        )
-                        .child(
-                            mono("X 1204 · Y 388", 10.5)
-                                .absolute()
-                                .left(px(10.))
-                                .bottom(px(10.))
-                                .px(px(7.))
-                                .py(px(3.))
-                                .border_1()
-                                .border_color(alpha(self.accent, 0.4))
-                                .bg(alpha(BG, 0.85))
-                                .text_color(accent),
-                        )
-                    }),
+                    // Out of the flow: an image in it takes its own height at the box's width.
+                    .when_some(offer.thumbnail.clone(), |preview, url| {
+                        preview.child(img(url).absolute().top_0().left_0().size_full().object_fit(ObjectFit::Cover))
+                    })
+                    .into_any_element(),
                 None => div()
                     .h(px(MAP_HEIGHT))
                     .p(px(16.))
@@ -91,7 +110,8 @@ impl Page {
                     .justify_center()
                     .text_center()
                     .text_color(rgb(FAINT))
-                    .child(mono("NO INTERACTIVE MAP FOR THIS GAME", 11.)),
+                    .child(mono("NO INTERACTIVE MAP FOR THIS GAME", 11.))
+                    .into_any_element(),
             })
             .child(
                 bracket()
@@ -123,44 +143,54 @@ impl Page {
             )
     }
 
-    pub(super) fn session_panel(&self, game: &Game, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The live run's clock, or the last run's time, over the active count and the hotkeys' scope.
+    /// `strip`: all of it in one line that wraps.
+    pub(super) fn session_panel(&self, game: &Game, running: bool, strip: bool, cx: &mut Context<Self>) -> Div {
         let accent = rgb(self.accent);
+        let last = self.profiles.of(&game.id).last;
+        let (title, time) = match self.play.since().filter(|_| running) {
+            Some(since) => ("SESSION", since.elapsed()),
+            None if last > 0 => ("LAST SESSION", Duration::from_secs(last)),
+            None => ("SESSION", Duration::ZERO),
+        };
         let loaded = self.trainer(Some(&game.id));
         let total = loaded.map_or(game.mods as usize, |loaded| loaded.cheats.len());
         let active = match (running, loaded) {
             (true, Some(loaded)) => format!("{:02}", loaded.active()),
             _ => "-".to_owned(),
         };
-        v_flex()
-            .border_1()
-            .border_color(line(0.1))
-            .bg(rgb(PANEL))
-            .px(px(16.))
+        let active = h_flex()
+            .gap(px(8.))
+            .child(mono(active, 13.).text_color(if running { accent } else { rgb(FAINT) }))
+            .child(mono(format!("/ {total}"), 13.).text_color(rgb(FAINT)));
+        let clock = |size: f32| {
+            mono(clock(time), size)
+                .font_weight(FontWeight::BOLD)
+                .line_height(relative(1.15))
+                .text_color(rgb(if running { TEXT_BRIGHT } else { FAINT }))
+        };
+        let panel = div().flex().border_1().border_color(line(0.1)).bg(rgb(PANEL)).px(px(16.));
+        if strip {
+            let pair = |name: &'static str| h_flex().gap(px(12.)).child(label(name));
+            return panel
+                .flex_wrap()
+                .items_center()
+                .gap_x(px(32.))
+                .gap_y(px(6.))
+                .py(px(10.))
+                .child(pair(title).child(clock(24.)))
+                .child(div().flex_1())
+                .child(pair("ACTIVE").child(active))
+                .child(pair("HOTKEYS").child(self.hotkeys_scope(cx)));
+        }
+        // In a taller box the stats keep to its bottom.
+        panel
+            .flex_col()
+            .justify_between()
             .pt(px(14.))
             .pb(px(6.))
-            .child(label("SESSION"))
-            .child(
-                // No clock until a real trainer session exists.
-                mono("00:00:00", 42.)
-                    .font_weight(FontWeight::BOLD)
-                    .line_height(relative(1.15))
-                    .mt(px(6.))
-                    .mb(px(10.))
-                    .text_color(rgb(if running { TEXT_BRIGHT } else { FAINT })),
-            )
-            .child(
-                stat("ACTIVE").child(
-                    h_flex()
-                        .gap(px(8.))
-                        .child(mono(active, 13.).text_color(if running {
-                            accent
-                        } else {
-                            rgb(FAINT)
-                        }))
-                        .child(mono(format!("/ {total}"), 13.).text_color(rgb(FAINT))),
-                ),
-            )
-            .child(stat("HOTKEYS").child(self.hotkeys_scope(cx)))
+            .child(v_flex().child(label(title)).child(clock(42.).mt(px(6.)).mb(px(10.))))
+            .child(v_flex().child(stat("ACTIVE").child(active)).child(stat("HOTKEYS").child(self.hotkeys_scope(cx))))
     }
 
     /// Switches where hotkeys fire; while they are off, Settings turns them on.
@@ -185,6 +215,12 @@ impl Page {
                     .when(!enabled, |text| text.text_color(rgb(GHOST))),
             )
     }
+}
+
+/// `01:02:03`.
+fn clock(time: Duration) -> String {
+    let secs = time.as_secs();
+    format!("{:02}:{:02}:{:02}", secs / 3600, secs / 60 % 60, secs % 60)
 }
 
 fn label(text: &'static str) -> Div {

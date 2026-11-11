@@ -1,18 +1,16 @@
 use gpui_kit::{
-    Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex,
+    Context, Div, FontWeight, IntoElement, ObjectFit, Stateful, component::h_flex,
     div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb,
 };
 
 use super::{
-    Menu, Page,
+    Page,
     assets::Icon,
     library::{Game, Support},
     run::{Play, STOPPING, label},
     theme::*,
     widgets::{icon, mono, square, tracked},
 };
-
-pub(super) const OVERLAYS: [&str; 2] = ["STICKY", "IN-GAME"];
 
 impl Page {
     pub(super) fn hero(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
@@ -59,23 +57,64 @@ impl Page {
                 linear_color_stop(rgb(BG), 1.),
             )))
             .child(self.actions(game, cx))
+            .child(self.title(game, 56.).relative())
+    }
+
+    /// The game's name over its mods, version and store.
+    pub(super) fn title(&self, game: &Game, size: f32) -> Div {
+        let has_trainer = game.support != Support::NoTrainer;
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(size * 0.18))
             .child(
-                div()
-                    .relative()
-                    .flex()
-                    .flex_col()
-                    .gap(px(10.))
-                    .child(
-                        tracked(&game.name, 56., 0.04)
-                            .font_weight(FontWeight::BOLD)
-                            .line_height(relative(0.95))
-                            .text_color(rgb(if has_trainer { TEXT_BRIGHT } else { MUTED })),
-                    )
-                    .child(self.meta(game)),
+                tracked(&game.name, size, 0.04)
+                    .font_weight(FontWeight::BOLD)
+                    .line_height(relative(0.95))
+                    .text_color(rgb(if has_trainer { TEXT_BRIGHT } else { MUTED })),
             )
+            .child(self.meta(game))
     }
 
     fn actions(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
+        let accent = rgb(self.accent);
+        let running = self.is_running();
+        let favorite = self.profiles.of(&game.id).favorite;
+        let id = game.id.clone();
+        let layer = self.layer.clone();
+        h_flex()
+            .relative()
+            .justify_end()
+            .gap(px(8.))
+            .child(self.run_button(game, cx))
+            // Over the running game; the mode and the hotkey are in Settings.
+            .when(running, |bar| {
+                bar.child(
+                    action("overlay")
+                        .px(px(16.))
+                        .on_click(move |_, _, cx| layer.read(cx).toggle())
+                        .child(icon(Icon::Layers, 14., rgb(TEXT)))
+                        .child(tracked("OVERLAY", 12.5, 0.14))
+                        .child(tracked(&self.overlay_hotkey(cx), 12.5, 0.14).text_color(rgb(FAINT))),
+                )
+            })
+            .child(
+                action("favorite")
+                    .w(px(38.))
+                    .justify_center()
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.profiles.edit(&id, |profile| profile.favorite = !profile.favorite);
+                        cx.notify();
+                    }))
+                    .child(match favorite {
+                        true => icon(Icon::StarFill, 16., accent),
+                        false => icon(Icon::Star, 16., rgb(MUTED)),
+                    }),
+            )
+    }
+
+    /// LAUNCH + ATTACH, the run's stage, or STOP.
+    pub(super) fn run_button(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
         let running = self.is_running();
         let starting = match &self.play {
@@ -83,14 +122,9 @@ impl Page {
             _ => None,
         };
         let stopping = matches!(&self.play, Play::Stopping { game: ending, .. } if *ending == game.id);
-        let favorite = self.favorites.contains(&game.id);
         // Nothing to run before the cheat list is there, and one run at a time.
         let launchable = !self.play.is_active() && self.trainer(Some(&game.id)).is_some();
-        let id = game.id.clone();
-        let overlays: Vec<SharedString> = OVERLAYS.into_iter().map(SharedString::from).collect();
         h_flex()
-            .relative()
-            .justify_end()
             .gap(px(8.))
             .when(running || starting.is_some(), |bar| {
                 bar.child(
@@ -108,25 +142,6 @@ impl Page {
             })
             .when(stopping, |bar| {
                 bar.child(tracked(STOPPING, 12.5, 0.14).text_color(accent))
-            })
-            .when(running, |bar| {
-                bar.child(
-                    self.dropdown(
-                        action("overlay")
-                            .pl(px(16.))
-                            .pr(px(12.))
-                            .child(tracked("OVERLAY", 12.5, 0.14))
-                            .child(
-                                tracked(OVERLAYS[self.overlay], 12.5, 0.14).text_color(rgb(FAINT)),
-                            )
-                            .child(icon(Icon::ChevronDown, 12., rgb(TEXT))),
-                        Menu::Overlay,
-                        overlays,
-                        self.overlay,
-                        cx,
-                        |page, mode, _, _| page.overlay = mode,
-                    ),
-                )
             })
             .when(launchable, |bar| {
                 bar.child(
@@ -154,21 +169,6 @@ impl Page {
                         ),
                 )
             })
-            .child(
-                action("favorite")
-                    .w(px(38.))
-                    .justify_center()
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        if !page.favorites.remove(&id) {
-                            page.favorites.insert(id.clone());
-                        }
-                        cx.notify();
-                    }))
-                    .child(match favorite {
-                        true => icon(Icon::StarFill, 16., accent),
-                        false => icon(Icon::Star, 16., rgb(MUTED)),
-                    }),
-            )
     }
 
     fn meta(&self, game: &Game) -> impl IntoElement {
@@ -187,6 +187,7 @@ impl Page {
             Some(version) => format!("V{version}"),
             None => "VERSION UNKNOWN".to_owned(),
         };
+        let profile = self.profiles.of(&game.id);
         h_flex()
             .flex_wrap()
             .gap_x(px(10.))
@@ -207,6 +208,18 @@ impl Page {
             )
             .child(slash())
             .child(mono(game.store.clone(), 12.))
+            .when(profile.sessions > 0, |meta| {
+                let sessions = if profile.sessions == 1 { "1 SESSION".to_owned() } else { format!("{} SESSIONS", profile.sessions) };
+                meta.child(slash()).child(mono(played(profile.played), 12.)).child(slash()).child(mono(sessions, 12.))
+            })
+    }
+}
+
+/// `42 MIN PLAYED`, then `1.2 H PLAYED`.
+fn played(secs: u64) -> String {
+    match secs {
+        0..3600 => format!("{} MIN PLAYED", secs / 60),
+        _ => format!("{:.1} H PLAYED", secs as f64 / 3600.),
     }
 }
 

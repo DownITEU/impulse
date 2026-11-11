@@ -35,6 +35,7 @@ use super::{
 };
 use agent::Image;
 
+mod location;
 #[cfg(test)]
 mod tests;
 
@@ -86,6 +87,8 @@ pub struct Session {
     held: Mutex<Vec<Image>>,
     // One teardown at a time: a second `stop` must not close the stream under the first.
     teardown: AsyncMutex<()>,
+    // One position request at a time: they share the trainer's coordinate variables.
+    coords: AsyncMutex<()>,
 }
 
 #[derive(Default)]
@@ -99,6 +102,8 @@ struct Shared {
     client_id: String,
     outgoing: Mutex<Option<UnboundedSender<Vec<u8>>>>,
     waiting: Mutex<Waiting>,
+    // The trainer's own variables (`wm_*`), as it last pushed them.
+    values: Mutex<HashMap<String, f64>>,
     phase: watch::Sender<Phase>,
     // Sequence numbers start at 1 and do not skip: they are only for requests.
     seq: AtomicU64,
@@ -113,6 +118,7 @@ impl Session {
             client_id: client_id.to_owned(),
             outgoing: Mutex::new(Some(channel.outgoing)),
             waiting: Mutex::default(),
+            values: Mutex::default(),
             phase,
             seq: AtomicU64::new(0),
             ids: AtomicU64::new(0),
@@ -129,6 +135,7 @@ impl Session {
             started: AtomicBool::new(false),
             held: Mutex::default(),
             teardown: AsyncMutex::new(()),
+            coords: AsyncMutex::new(()),
         };
         (session, events)
     }
@@ -333,6 +340,11 @@ impl Shared {
                         }
                         starting
                     });
+                }
+                if let Event::Value { name, value, .. } = &event
+                    && name.starts_with("wm_")
+                {
+                    self.values.lock().unwrap().insert(name.clone(), *value);
                 }
                 let _ = events.try_send(event);
             }

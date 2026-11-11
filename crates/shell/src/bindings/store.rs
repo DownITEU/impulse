@@ -2,13 +2,14 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
-    fs,
     path::{Path, PathBuf},
 };
 
 use hotkeys::Chord;
 use model::Cheat;
 use serde::{Deserialize, Serialize};
+
+use super::super::store;
 
 const FILE: &str = "hotkeys.json";
 
@@ -45,13 +46,17 @@ pub struct Store {
     saved: Saved,
 }
 
+/// Where the user's choices are kept.
+pub fn file(data_dir: &Path) -> PathBuf {
+    data_dir.join(FILE)
+}
+
 impl Store {
     /// A missing or damaged file means no choices. Blocking, and so are the saves: the file is small
     /// and changes only on a click, and writing in place keeps the saves in order.
     pub fn load(data_dir: &Path) -> Self {
-        let file = data_dir.join(FILE);
-        let saved = fs::read(&file).ok().and_then(|raw| serde_json::from_slice(&raw).ok()).unwrap_or_default();
-        Self { file, saved }
+        let file = file(data_dir);
+        Self { saved: store::load(&file).unwrap_or_default(), file }
     }
 
     pub fn enabled(&self) -> bool {
@@ -107,17 +112,14 @@ impl Store {
     }
 
     fn save(&self) {
-        let written = serde_json::to_vec_pretty(&self.saved)
-            .map_err(anyhow::Error::from)
-            .and_then(|json| disk::replace(&self.file, &json));
-        if let Err(e) = written {
-            log::warn!("{FILE} not saved: {e:#}");
-        }
+        store::save(&self.file, &self.saved);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use model::{Args, Kind};
 
     use super::*;

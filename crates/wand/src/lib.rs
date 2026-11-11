@@ -7,6 +7,7 @@ mod catalog;
 mod folder;
 mod inject;
 mod install;
+mod map;
 mod provider;
 mod run;
 mod session;

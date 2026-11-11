@@ -5,12 +5,12 @@ mod cache;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use model::{Game, Locator, Offer, Standalone};
+use model::{Game, Locator, MapOffer, Offer, Standalone};
 use serde::Deserialize;
 
-pub use cache::{cached, forget, refresh};
+pub use cache::{cached, forget, refresh, size};
 
-const ART_CDN: &str = "https://api-cdn.wemod.com";
+pub(crate) const ART_CDN: &str = "https://api-cdn.wemod.com";
 
 #[derive(Deserialize)]
 struct Catalog {
@@ -53,7 +53,11 @@ struct Title {
 #[serde(rename_all = "camelCase")]
 struct Map {
     title_id: String,
+    external_id: String,
     name: String,
+    /// CDN path.
+    thumbnail: Option<String>,
+    updated_at: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -93,9 +97,14 @@ enum LocatorKind {
 /// A game whose title is missing is left out.
 fn parse(json: &[u8]) -> Result<Vec<Game>> {
     let Catalog { games, titles, platforms, maps } = serde_json::from_slice(json).context("parse catalog")?;
-    let mut map_of = HashMap::new();
-    for map in &maps {
-        map_of.entry(map.title_id.as_str()).or_insert(map.name.as_str());
+    let mut maps_of: HashMap<String, Vec<MapOffer>> = HashMap::new();
+    for map in maps {
+        maps_of.entry(map.title_id).or_default().push(MapOffer {
+            id: map.external_id,
+            name: map.name,
+            thumbnail: map.thumbnail.map(|path| format!("{ART_CDN}{path}")),
+            revision: map.updated_at,
+        });
     }
     let standalone: HashMap<String, &StandaloneApp> =
         platforms.standalone.apps.iter().map(|app| (format!("standalone:{}", app.id).to_ascii_lowercase(), app)).collect();
@@ -114,7 +123,7 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
                 .collect(),
             cover: art(460),
             thumbnail: art(100),
-            map: map_of.get(entry.title_id.as_str()).map(|name| (*name).to_owned()),
+            maps: maps_of.get(&entry.title_id).cloned().unwrap_or_default(),
             trainer: entry.trainer.map(|trainer| Offer {
                 cheats: trainer.cheat_count,
                 builds: trainer.supported_versions,
@@ -151,14 +160,21 @@ mod tests {
                      "trainer":{"cheatCount":3,"supportedVersions":[7],"updatedAt":"u"}},
                 "2":{"id":"2","titleId":"gone"}},
               "titles":{"t":{"name":"Game","thumbnail":"/t/{size}.jpg"}},
-              "maps":[{"titleId":"t","name":"First"},{"titleId":"t","name":"Second"}],
+              "maps":[{"id":"1","titleId":"t","externalId":"x1","name":"First","thumbnail":"/m/1.webp","updatedAt":"r1"},
+                       {"id":"2","titleId":"t","externalId":"x2","name":"Second"},
+                       {"id":"3","titleId":"other","externalId":"x3","name":"Elsewhere"}],
               "platforms":{"standalone":{"apps":[{"id":"app","launcher":"l.exe",
                 "locators":[{"type":"directory","value":"C:\\G"},{"type":"from-the-future","value":"x"}]},
                 {"id":"other","launcher":"o.exe","locators":[]}]}}}"#,
         )
         .unwrap();
         let [game] = &games[..] else { panic!("one game with a title") };
-        assert_eq!((game.name.as_str(), game.exe.as_deref(), game.map.as_deref()), ("Game", Some("a.exe"), Some("First")));
+        assert_eq!((game.name.as_str(), game.exe.as_deref()), ("Game", Some("a.exe")));
+        let maps: Vec<_> = game.maps.iter().map(|m| (m.id.as_str(), m.name.as_str(), m.thumbnail.as_deref(), m.revision.as_deref())).collect();
+        assert_eq!(
+            maps,
+            [("x1", "First", Some("https://api-cdn.wemod.com/m/1.webp"), Some("r1")), ("x2", "Second", None, None)]
+        );
         assert_eq!(game.cover.as_deref(), Some("https://api-cdn.wemod.com/t/460.jpg"));
         let offer = game.trainer.as_ref().unwrap();
         assert_eq!((offer.cheats, &offer.builds[..], offer.revision.as_deref()), (3, &[7][..], Some("u")));

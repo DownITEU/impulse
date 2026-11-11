@@ -36,8 +36,7 @@ pub struct Game {
     pub stamp: Stamp,
     pub hero: Option<String>,
     pub thumbnail: Option<String>,
-    pub map: Option<SharedString>,
-    /// As the provider knows it, for asking for the trainer.
+    /// As the provider knows it, for asking for the trainer and the maps.
     pub source: model::Game,
     pub install: Installation,
 }
@@ -115,7 +114,6 @@ fn game(
             .filter(|url| !art::known_missing(art_cache, url))
             .or_else(|| entry.cover.clone()),
         thumbnail: entry.thumbnail.clone(),
-        map: entry.map.as_ref().map(|name| name.to_uppercase().into()),
         source: entry,
         install: found,
     }

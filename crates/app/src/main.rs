@@ -4,7 +4,7 @@ use std::{env, path::PathBuf, sync::Arc};
 
 use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
 use model::Provider;
-use shell::Page;
+use shell::Root;
 use wand::Wand;
 
 fn main() {
@@ -34,7 +34,7 @@ fn main() {
                 ..Default::default()
             };
             gpui_kit::open_window(options, cx, |window, cx| {
-                cx.new(|cx| Page::new(provider, data_dir, window, cx))
+                cx.new(|cx| Root::new(provider, data_dir, window, cx))
             })
             .expect("failed to open window");
             // gpui-pre-windows keeps running after the last window closes.

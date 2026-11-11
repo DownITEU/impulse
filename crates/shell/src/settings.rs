@@ -1,87 +1,52 @@
 use gpui_kit::{
-    ClickEvent, Context, Div, FontWeight, IntoElement, Window,
-    component::{h_flex, v_flex},
+    Context, Div, FontWeight, IntoElement, Window,
+    component::{h_flex, scroll::ScrollableElement, v_flex},
     div,
     prelude::*,
     px, rgb,
 };
 
 use super::{
-    Flash, Lead, Page,
-    assets::Icon,
+    Page,
+    prefs::{Lead, Panels},
     theme::*,
-    widgets::{choice, flash_button, icon_button, mono, segmented, square, toggle, tracked},
+    widgets::{choice, mono, segmented, square, toggle, tracked},
 };
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum Tab {
     Appearance,
+    Overlay,
     Hotkeys,
     App,
+    Resources,
 }
 
 // The tabs without a page yet are shown but not clickable.
 const TABS: [(&str, Option<Tab>); 6] = [
-    ("ACCOUNT", None),
     ("APPEARANCE", Some(Tab::Appearance)),
-    ("OVERLAY", None),
+    ("OVERLAY", Some(Tab::Overlay)),
     ("HOTKEYS", Some(Tab::Hotkeys)),
     ("APP", Some(Tab::App)),
+    ("RESOURCES", Some(Tab::Resources)),
     ("ABOUT", None),
 ];
 
 impl Page {
     pub(super) fn settings_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .id("settings-backdrop")
-            .occlude()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .flex()
-            .justify_center()
-            .items_start()
-            .pt(px(96.))
-            .bg(alpha(SUNKEN, 0.78))
-            .on_click(cx.listener(Self::close_settings))
-            .child(
-                v_flex()
-                    .id("settings")
-                    .w(px(640.))
-                    .border_1()
-                    .border_color(line(0.14))
-                    .bg(rgb(PANEL))
-                    .on_click(|_, _, cx| cx.stop_propagation())
-                    .child(
-                        h_flex()
-                            .h(px(44.))
-                            .pl(px(16.))
-                            .pr(px(6.))
-                            .justify_between()
-                            .border_b_1()
-                            .border_color(line(0.09))
-                            .child(tracked("SETTINGS", 13., 0.16).font_weight(FontWeight::BOLD))
-                            .child(
-                                icon_button("settings-close", Icon::Close, 32., 12.)
-                                    .on_click(cx.listener(Self::close_settings)),
-                            ),
-                    )
-                    .child(
-                        h_flex()
-                            .items_start()
-                            .min_h(px(300.))
-                            .child(self.tabs(cx))
-                            .child(match self.settings_tab {
-                                Tab::Appearance => self.appearance(cx).into_any_element(),
-                                Tab::Hotkeys => self.hotkey_settings(cx).into_any_element(),
-                                Tab::App => self.app(cx).into_any_element(),
-                            }),
-                    ),
-            )
+        let body = h_flex().items_stretch().min_h(px(300.)).child(self.tabs(cx)).child(
+            div().id("settings-page").flex_1().min_w_0().overflow_y_scrollbar().child(match self.settings_tab {
+                Tab::Appearance => self.appearance(cx).into_any_element(),
+                Tab::Overlay => self.overlay_settings(cx).into_any_element(),
+                Tab::Hotkeys => self.hotkey_settings(cx).into_any_element(),
+                Tab::App => self.app(cx).into_any_element(),
+                Tab::Resources => self.resources.clone().into_any_element(),
+            }),
+        );
+        self.dialog("settings", "SETTINGS", 640., Self::close_settings, body, cx)
     }
 
-    fn close_settings(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn close_settings(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.settings = false;
         cx.notify();
     }
@@ -90,7 +55,6 @@ impl Page {
         v_flex()
             .w(px(168.))
             .flex_none()
-            .min_h(px(300.))
             .py(px(8.))
             .border_r_1()
             .border_color(line(0.07))
@@ -109,6 +73,7 @@ impl Page {
                         item.cursor_pointer()
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.settings_tab = tab;
+                                page.resources.update(cx, |resources, cx| resources.measure(cx));
                                 cx.notify();
                             }))
                     })
@@ -144,6 +109,9 @@ impl Page {
                         log.accent = color;
                         cx.notify();
                     });
+                    page.map.update(cx, |map, cx| map.set_accent(color, cx));
+                    page.resources.update(cx, |resources, _| resources.set_accent(color));
+                    page.save_prefs();
                     cx.notify();
                 }))
                 .child(
@@ -159,6 +127,14 @@ impl Page {
         let lead = |id: &'static str, label: &'static str, lead: Lead| {
             choice(id, label, self.lead == lead, self.accent).on_click(cx.listener(move |page, _, _, cx| {
                 page.lead = lead;
+                page.save_prefs();
+                cx.notify();
+            }))
+        };
+        let panels = |id: &'static str, label: &'static str, panels: Panels| {
+            choice(id, label, self.panels == panels, self.accent).on_click(cx.listener(move |page, _, _, cx| {
+                page.panels = panels;
+                page.save_prefs();
                 cx.notify();
             }))
         };
@@ -179,36 +155,24 @@ impl Page {
                 ),
             )
             .child(
-                row("REDUCE MOTION", "no blinking LIVE, no transitions", 64.).child(
+                row("PANELS", "map and session over the mods, or beside them", 64.).child(
+                    segmented()
+                        .h(px(26.))
+                        .child(panels("panels-top", "TOP", Panels::Top))
+                        .child(panels("panels-side", "SIDE", Panels::Side)),
+                ),
+            )
+            .child(
+                row("REDUCE MOTION", "no blinking LIVE, no transitions", 64.).border_b_0().child(
                     div()
                         .id("reduce-motion")
                         .cursor_pointer()
                         .on_click(cx.listener(|page, _, _, cx| {
                             page.reduce_motion = !page.reduce_motion;
+                            page.save_prefs();
                             cx.notify();
                         }))
                         .child(toggle(self.reduce_motion, self.accent)),
-                ),
-            )
-            .child(
-                row(
-                    "CACHES",
-                    "download the catalog, trainers and art again",
-                    64.,
-                )
-                .border_b_0()
-                .child(
-                    flash_button(
-                        "INVALIDATE",
-                        "DONE",
-                        self.is_flashed(Flash::Caches),
-                        self.accent,
-                    )
-                    .id("invalidate-caches")
-                    .on_click(cx.listener(|page, _, window, cx| {
-                        page.invalidate_caches(window, cx);
-                        page.flash(Flash::Caches, cx);
-                    })),
                 ),
             )
     }
@@ -226,11 +190,12 @@ pub(super) fn label(title: &'static str, hint: &'static str) -> Div {
         )
 }
 
+/// The control the caller adds keeps its width; a long hint wraps.
 pub(super) fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
     h_flex()
         .min_h(px(height))
-        .justify_between()
+        .gap(px(16.))
         .border_b_1()
         .border_color(line(0.07))
-        .child(label(title, hint))
+        .child(label(title, hint).flex_1().min_w_0())
 }

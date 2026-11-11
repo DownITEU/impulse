@@ -21,3 +21,12 @@ pub fn replace(path: &Path, data: &[u8]) -> Result<()> {
     fs::write(&tmp, data).with_context(|| format!("write {}", tmp.display()))?;
     fs::rename(&tmp, path).with_context(|| format!("replace {}", path.display()))
 }
+
+/// Bytes under `path`, a file or a folder (blocking); what cannot be read counts as nothing.
+pub fn size(path: &Path) -> u64 {
+    let Ok(meta) = fs::symlink_metadata(path) else { return 0 };
+    if !meta.is_dir() {
+        return meta.len();
+    }
+    fs::read_dir(path).into_iter().flatten().flatten().map(|entry| size(&entry.path())).sum()
+}

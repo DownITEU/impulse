@@ -22,10 +22,11 @@ http.workspace = true
 log.workspace = true
 rusty-leveldb.workspace = true
 serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 tao.workspace = true
 tokio = { workspace = true, features = ["rt", "net", "time", "sync", "macros"] }
+ttf-parser.workspace = true
 url.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 webview2-com.workspace = true

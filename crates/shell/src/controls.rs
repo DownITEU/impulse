@@ -102,10 +102,7 @@ impl Page {
         if next == value {
             return;
         }
-        loaded.values[index] = next;
-        if let Some(input) = loaded.inputs.get(&index) {
-            input.update(cx, |input, cx| input.set_value(number(next), window, cx));
-        }
+        loaded.put(index, next, window, cx);
         self.push_value(index, next, cx);
         cx.notify();
     }
@@ -330,7 +327,6 @@ impl Page {
         cx: &mut Context<Self>,
         pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
     ) -> Stateful<Div> {
-        let accent = rgb(self.accent);
         trigger
             .relative()
             .on_click(cx.listener(move |page, _, _, cx| {
@@ -344,40 +340,48 @@ impl Page {
                 }
             }))
             .when(self.menu == Some(menu) && !options.is_empty(), |trigger| {
-                trigger.child(deferred(
-                    v_flex()
-                        .occlude()
-                        .absolute()
-                        .top(relative(1.))
-                        // Spans the trigger, borders included.
-                        .left(px(-1.))
-                        .right(px(-1.))
-                        .mt(px(3.))
-                        .py(px(4.))
-                        .border_1()
-                        .border_color(line(0.2))
-                        .bg(rgb(PANEL))
-                        .children(options.into_iter().enumerate().map(|(at, option)| {
-                            h_flex()
-                                .id(("option", at))
-                                .h(px(28.))
-                                .px(px(10.))
-                                .cursor_pointer()
-                                .text_color(if at == current { accent } else { rgb(TEXT_2) })
-                                .hover(|style| style.bg(rgb(ROW_HOVER)))
-                                // Mouse down, not click: the outside-press close removes the list first.
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(move |page, _, window, cx| {
-                                        pick(page, at, window, cx);
-                                        page.menu = None;
-                                        cx.notify();
-                                    }),
-                                )
-                                .child(mono(option, 12.))
-                        })),
-                ))
+                // Spans the trigger, borders included.
+                trigger.child(deferred(self.picks(options, current, cx, pick).left(px(-1.)).right(px(-1.))))
             })
+    }
+
+    /// An open menu's list, under what opened it; the caller places it across.
+    pub(super) fn picks(
+        &self,
+        options: Vec<SharedString>,
+        current: usize,
+        cx: &mut Context<Self>,
+        pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
+    ) -> Div {
+        let accent = rgb(self.accent);
+        v_flex()
+            .occlude()
+            .absolute()
+            .top(relative(1.))
+            .mt(px(3.))
+            .py(px(4.))
+            .border_1()
+            .border_color(line(0.2))
+            .bg(rgb(PANEL))
+            .children(options.into_iter().enumerate().map(|(at, option)| {
+                h_flex()
+                    .id(("option", at))
+                    .h(px(28.))
+                    .px(px(10.))
+                    .cursor_pointer()
+                    .text_color(if at == current { accent } else { rgb(TEXT_2) })
+                    .hover(|style| style.bg(rgb(ROW_HOVER)))
+                    // Mouse down, not click: the outside-press close removes the list first.
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |page, _, window, cx| {
+                            pick(page, at, window, cx);
+                            page.menu = None;
+                            cx.notify();
+                        }),
+                    )
+                    .child(mono(option, 12.))
+            }))
     }
 }
 

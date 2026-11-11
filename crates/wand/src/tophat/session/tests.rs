@@ -188,6 +188,64 @@ async fn set_value_returns_the_trainers_verdict() {
     assert_eq!(outcome.unwrap(), Outcome::Changed);
 }
 
+impl Fake {
+    /// Takes one value from the session: the trainer pushes `own`, then gives `verdict`.
+    async fn take_value(&mut self, own: &[(&str, f64)], verdict: u64) -> (String, f64) {
+        let (seq, _, params) = self.command().await;
+        self.ok(seq);
+        for (name, value) in own {
+            let mut pushed = vec![0u8; 56];
+            pushed[16..16 + name.len()].copy_from_slice(name.as_bytes());
+            pushed[48..].copy_from_slice(&value.to_le_bytes());
+            self.event("trainer_value_request", &pushed);
+        }
+        let mut answer = vec![0u8; 24];
+        answer[8..16].copy_from_slice(&params["requestId"].as_u64().unwrap().to_le_bytes());
+        answer[16..].copy_from_slice(&verdict.to_le_bytes());
+        self.event("trainer_value_response", &answer);
+        (params["name"].as_str().unwrap().to_owned(), params["value"].as_f64().unwrap())
+    }
+}
+
+#[tokio::test]
+async fn position_is_what_the_trainer_pushes_for_this_request() {
+    let (session, mut fake, _events) = started().await;
+    let service = async {
+        let own = [("wm_coord_x", 1.5), ("wm_coord_y", -2.), ("wm_coord_z", 3.), ("wm_coord_get", 1.)];
+        assert_eq!(fake.take_value(&own, 1).await, ("wm_coord_get".to_owned(), -1.));
+    };
+    let (position, ()) = tokio::join!(session.position(), service);
+    assert_eq!(position.unwrap(), [1.5, -2., 3.]);
+    // The answer to the first request does not count for the second.
+    let (position, _) = tokio::join!(session.position(), fake.take_value(&[], 1));
+    assert!(position.unwrap_err().to_string().contains("wm_coord_get"));
+}
+
+#[tokio::test]
+async fn teleport_sets_the_axes_then_asks_the_trainer_to_move() {
+    let (session, mut fake, _events) = started().await;
+    let service = async {
+        let mut sent = Vec::new();
+        for _ in 0..3 {
+            sent.push(fake.take_value(&[], 0).await);
+        }
+        sent.push(fake.take_value(&[("wm_coord_set", 1.)], 1).await);
+        sent
+    };
+    let (moved, sent) = tokio::join!(session.teleport([7., 8., 9.]), service);
+    moved.unwrap();
+    let sent: Vec<_> = sent.iter().map(|(name, value)| (name.as_str(), *value)).collect();
+    assert_eq!(sent, [("wm_coord_x", 7.), ("wm_coord_y", 8.), ("wm_coord_z", 9.), ("wm_coord_set", -1.)]);
+    // A refused axis ends it before the trainer is asked to move.
+    let service = async {
+        for verdict in [0, 2, 0] {
+            fake.take_value(&[], verdict).await;
+        }
+    };
+    let (moved, ()) = tokio::join!(session.teleport([7., 8., 9.]), service);
+    assert!(moved.unwrap_err().to_string().contains("refused"));
+}
+
 #[tokio::test]
 async fn the_services_events_reach_the_consumer() {
     let (channel, fake) = link();

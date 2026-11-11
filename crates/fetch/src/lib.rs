@@ -12,6 +12,9 @@ static AGENT: LazyLock<Agent> = LazyLock::new(|| {
         .user_agent("Impulse")
         // Covers connecting and reading the body: a server that stalls must not hold a worker, or a run, forever.
         .timeout_global(Some(Duration::from_secs(120)))
+        // Map tiles load 6 at a time; a reopened connection costs a TLS handshake.
+        .max_idle_connections_per_host(6)
+        .max_idle_age(Duration::from_secs(90))
         .build()
         .into()
 });
