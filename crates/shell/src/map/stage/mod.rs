@@ -25,6 +25,7 @@ use super::{
 };
 use crate::{Load, widgets::notice};
 use camera::{Camera, Glide, Pixel, extent};
+use motion::Walk;
 use pins::Marker;
 use tiles::Tiles;
 
@@ -85,6 +86,8 @@ pub struct Stage {
     layers_open: bool,
     // The view moves with the player.
     follow: bool,
+    // The player as drawn, easing toward the board's fixes.
+    player: Option<Walk>,
     focus: FocusHandle,
     _chip: Task<()>,
 }
@@ -132,6 +135,7 @@ impl Stage {
             drag: None,
             layers_open: false,
             follow: false,
+            player: None,
             focus: cx.focus_handle(),
             _chip: Task::ready(()),
         }
@@ -149,7 +153,7 @@ impl Stage {
     /// Lets go of what only an open map needs.
     pub fn hide(&mut self, window: &mut Window) {
         // Markers are grouped again on the next frame.
-        (self.drag, self.layers_open, self.shown.markers) = (None, false, None);
+        (self.drag, self.layers_open, self.shown.markers, self.player) = (None, false, None, None);
         self.drop_tiles();
         self.stale.extend(self.images.clear());
         for image in self.stale.drain(..) {
@@ -200,18 +204,14 @@ impl Stage {
         (self.glide, self.follow) = (None, false);
     }
 
-    // A run that ended leaves nothing to follow.
+    // A run that ended leaves nothing to follow; the next frame moves the view with the player.
     fn followed(&mut self, board: &Board) {
         self.follow &= board.player.is_some();
-        if self.follow {
-            self.center_on_player(board);
-        }
     }
 
-    fn center_on_player(&mut self, board: &Board) {
-        let (Some(camera), Load::Ready(map), Some(position)) = (&mut self.camera, &board.map, board.player) else { return };
-        if let Some(frame) = &map.frame {
-            camera.center = frame.to_map(position);
+    fn center_on_player(&mut self) {
+        if let (Some(camera), Some(player)) = (&mut self.camera, self.player) {
+            camera.center = player.at;
         }
     }
 

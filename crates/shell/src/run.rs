@@ -8,10 +8,10 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use futures::{StreamExt, stream::BoxStream};
-use gpui_kit::{Context, Div, Task, Window, prelude::*, rgb};
+use gpui_kit::{Context, Div, Entity, Task, Window, prelude::*, rgb};
 use model::{Event, Live, Process, Rule, Session};
 
-use super::{Page, theme::*, widgets::mono};
+use super::{Page, map::Tracker, theme::*, widgets::mono};
 use play::{Request, Stage, run};
 
 pub(super) enum Play {
@@ -30,6 +30,8 @@ pub(super) enum Play {
         /// Its time and mods are kept.
         closed: bool,
         session: Arc<dyn Session>,
+        /// When the trainer can tell where the player is.
+        tracker: Option<Entity<Tracker>>,
         _events: Task<()>,
         /// Repaints the session clock.
         _clock: Task<()>,
@@ -164,9 +166,13 @@ impl Page {
             }
         });
         log::info!("trainer is live in {id}");
-        self.play = Play::Live { game: id, pid: process.pid, since: Instant::now(), closed: false, session: Arc::from(session), _events: watcher, _clock: clock };
+        let session: Arc<dyn Session> = Arc::from(session);
+        let located = self.trainer(Some(&id)).is_some_and(|loaded| loaded.location);
+        let tracker = located.then(|| cx.new(|_| Tracker::new(session.clone())));
+        self.play = Play::Live { game: id, pid: process.pid, since: Instant::now(), closed: false, session, tracker, _events: watcher, _clock: clock };
         self.open_session(window, cx);
         self.sync_map(cx);
+        self.layer.read(cx).recheck();
         self.arm_hotkeys(window, cx);
         cx.notify();
     }
@@ -179,6 +185,7 @@ impl Page {
             self.close_session();
             self.play = Play::Idle;
             self.sync_map(cx);
+            self.layer.read(cx).recheck();
             self.bindings.disarm();
             self.reset_values(&game);
             self.install_deferred();
@@ -219,6 +226,7 @@ impl Page {
             }
         }
         self.sync_map(cx);
+        self.layer.read(cx).recheck();
         self.install_deferred();
         cx.notify();
     }

@@ -6,14 +6,14 @@ use anyhow::Context as _;
 use blocking::unblock;
 use gpui_kit::{
     App, BorderStyle, Bounds, ContentMask, Context, Corners, DispatchPhase, Font, FontWeight, Hitbox, MouseMoveEvent, MouseUpEvent,
-    PathBuilder, Pixels, RenderImage, Rgba, SharedString, TextAlign, TextRun, TransformationMatrix, Window, font, point, px, quad, rgb,
-    size,
+    PathBuilder, Pixels, RenderImage, Rgba, SharedString, TextAlign, TextRun, TransformationMatrix, Window, font, point, px, quad, radians,
+    rgb, size,
 };
 use image::{DynamicImage, Frame, RgbaImage};
 use model::{Glyph, Map, Point};
 
 use super::{
-    Stage,
+    Stage, Walk,
     camera::{Camera, Pixel, extent},
     pins::{self, GROUP_RADIUS},
     tiles::Key,
@@ -23,6 +23,7 @@ use crate::{
     assets::Icon,
     map::{
         board::plane,
+        heading::Bearing,
         markers::{Look, Marker, SIZE, TIP, ink},
         state::Saved,
     },
@@ -30,6 +31,9 @@ use crate::{
 };
 
 const PLAYER: f32 = 34.;
+const CONE: f32 = 96.;
+// The way the player last went, while they stand.
+const STALE: f32 = 0.4;
 // Opacity of a region's fill while hovered, and of its outline at rest.
 const REGION_FILL: f32 = 0.16;
 const REGION_LINE: f32 = 0.7;
@@ -54,7 +58,8 @@ impl Stage {
         let (player, shot) = {
             let board = self.board.read(cx);
             let Load::Ready(map) = &board.map else { return };
-            (board.player, Shot { map: map.clone(), saved: board.saved.clone(), selected: board.selected, mark: board.mark, accent: board.accent })
+            let player = board.player.zip(map.frame.as_ref()).map(|(position, frame)| Walk { at: frame.to_map(position), bearing: board.bearing });
+            (player, Shot { map: map.clone(), saved: board.saved.clone(), selected: board.selected, mark: board.mark, accent: board.accent })
         };
         let (map, saved, selected, accent) = (shot.map.clone(), &shot.saved, shot.selected, shot.accent);
         // The overlays were laid out for the old size: one more frame places them.
@@ -67,7 +72,7 @@ impl Stage {
         if self.camera.is_none() {
             self.camera = Some(home(&map, area, &self.spans(&map)));
         }
-        self.animate(&map, selected, window);
+        self.animate(&map, selected, player, window);
         let Some(camera) = self.camera else { return };
 
         // On the window, not the element: a drag goes on outside the map.
@@ -158,10 +163,16 @@ impl Stage {
                 text(line.clone(), label.size.clamp(LABEL_SIZES.0, LABEL_SIZES.1), label.color, true, at, window, cx);
             }
 
-            if let (Some(position), Some(frame)) = (player, &map.frame) {
-                let center = place(camera.to_view(frame.to_map(position), area));
-                let (path, color) = (Icon::Player.path().into(), rgb(accent).into());
-                let _ = window.paint_svg(disc(center, PLAYER), path, None, TransformationMatrix::unit(), color, cx);
+            if let Some(Walk { at, bearing }) = self.player {
+                let (center, scale) = (place(camera.to_view(at, area)), window.scale_factor());
+                if let Some(Bearing { angle, fresh }) = bearing {
+                    // About the player, in device pixels; the icon points up.
+                    let turn = TransformationMatrix::unit().translate(center.scale(scale)).rotate(radians(angle as f32)).translate(center.scale(-scale));
+                    let color = alpha(accent, if fresh { 1. } else { STALE }).into();
+                    let _ = window.paint_svg(disc(center, CONE), Icon::Heading.path().into(), None, turn, color, cx);
+                }
+                let color = rgb(accent).into();
+                let _ = window.paint_svg(disc(center, PLAYER), Icon::Player.path().into(), None, TransformationMatrix::unit(), color, cx);
             }
         });
     }

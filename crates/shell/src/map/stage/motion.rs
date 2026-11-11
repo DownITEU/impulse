@@ -1,18 +1,33 @@
-//! What moves between frames: a zoom gliding to its end, markers growing and shrinking.
+//! What moves between frames: a zoom gliding to its end, markers growing and shrinking, the player walking.
 
 use std::time::Instant;
 
 use gpui_kit::{Context, Window};
-use model::Map;
+use model::{Map, Point};
 
 use super::{
     Stage,
     camera::{Glide, Pixel},
 };
-use crate::map::markers::Look;
+use crate::map::{
+    heading::{Bearing, JUMP, arc},
+    markers::Look,
+};
 
 // Seconds a marker takes to cover about two thirds of its change in size.
 const GROW: f64 = 0.05;
+// The same for the player toward a new fix: there in about 300 ms.
+const WALK: f64 = 0.1;
+// Closer than this (a fraction of a pixel at any zoom) or this turn is there.
+const NEAR: f64 = 1e-7;
+const TILT: f64 = 1e-3;
+
+/// The player as drawn: where on the plane, and which way they head.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) struct Walk {
+    pub at: Point,
+    pub bearing: Option<Bearing>,
+}
 
 impl Stage {
     /// Zooms by `factor` about `pixel`; a zoom on its way goes on from where it would end.
@@ -25,7 +40,7 @@ impl Stage {
     }
 
     /// Advances what moves by the time since the last frame; asks for the next frame while anything does.
-    pub(super) fn animate(&mut self, map: &Map, selected: Option<usize>, window: &mut Window) {
+    pub(super) fn animate(&mut self, map: &Map, selected: Option<usize>, player: Option<Walk>, window: &mut Window) {
         let now = Instant::now();
         // Long gaps (the first frame, a stall) do not jump.
         let seconds = self.clock.map_or(0., |last| (now - last).as_secs_f64().min(0.1));
@@ -36,10 +51,33 @@ impl Stage {
             self.glide = None;
         }
         let grown = self.grow(seconds, selected);
-        self.clock = (self.glide.is_some() || !grown).then_some(now);
+        let walked = self.walk(player, seconds);
+        if self.follow {
+            self.center_on_player();
+        }
+        self.clock = (self.glide.is_some() || !grown || !walked).then_some(now);
         if self.clock.is_some() {
             window.request_animation_frame();
         }
+    }
+
+    /// Eases the drawn player toward `target`; true once there. A teleport is not eased.
+    fn walk(&mut self, target: Option<Walk>, seconds: f64) -> bool {
+        let (Some(target), Some(shown)) = (target, &mut self.player) else {
+            self.player = target;
+            return true;
+        };
+        let part = 1. - (-seconds / WALK).exp();
+        let (dx, dy) = (target.at.x - shown.at.x, target.at.y - shown.at.y);
+        let length = dx.hypot(dy);
+        shown.at = if length < NEAR || length >= JUMP { target.at } else { Point { x: shown.at.x + dx * part, y: shown.at.y + dy * part } };
+        shown.bearing = match (shown.bearing, target.bearing) {
+            (Some(from), Some(to)) if arc(from.angle, to.angle).abs() >= TILT => {
+                Some(Bearing { angle: from.angle + arc(from.angle, to.angle) * part, ..to })
+            }
+            (_, to) => to,
+        };
+        *shown == target
     }
 
     /// Eases each lifted marker toward its look's size; true once all are there.

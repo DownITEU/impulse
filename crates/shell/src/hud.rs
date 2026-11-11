@@ -2,11 +2,11 @@
 //! the docks' toggles between them, and the docks with the page's own parts in them.
 
 use gpui_kit::{
-    AnyElement, App, Bounds, Context, Entity, IntoElement, KeyBinding, Pixels, Size, Window, actions,
+    AnyElement, App, Bounds, Context, Div, Entity, IntoElement, KeyBinding, Pixels, Size, Window, actions,
     component::{h_flex, scroll::ScrollableElement},
     div, point,
     prelude::*,
-    px, size,
+    px, rgb, size,
 };
 
 use super::{
@@ -15,7 +15,7 @@ use super::{
     docks::{self, Spec},
     layer::Layer,
     theme::*,
-    widgets::icon_button,
+    widgets::{icon, icon_button, mono},
 };
 
 actions!(hud, [LeaveOverlay]);
@@ -24,6 +24,7 @@ const CONTEXT: &str = "Hud";
 const MODS: &str = "mods";
 const MAP: &str = "map";
 const SESSION: &str = "session";
+const MINIMAP: &str = "minimap";
 // The top bar's height, where the docks start; the screen edge's margin; the first columns' widths.
 const TOP: f32 = 88.;
 const EDGE: f32 = 24.;
@@ -32,11 +33,15 @@ const LIST: f32 = 560.;
 const SIDE: f32 = 320.;
 
 /// The toolbar's order.
-pub(super) static DOCKS: [Spec; 3] = [
-    Spec { id: MODS, title: "MODS", icon: Icon::Mods, first: list_first, smallest: Some(size(px(420.), px(240.))) },
-    Spec { id: MAP, title: "MAP", icon: Icon::Map, first: map_first, smallest: Some(size(px(360.), px(280.))) },
-    Spec { id: SESSION, title: "SESSION", icon: Icon::Clock, first: side_first, smallest: None },
+pub(super) static DOCKS: [Spec; 4] = [
+    Spec { id: MODS, title: "MODS", icon: Icon::Mods, first: list_first, smallest: Some(size(px(420.), px(240.))), shown: true },
+    Spec { id: MAP, title: "MAP", icon: Icon::Map, first: map_first, smallest: Some(size(px(360.), px(280.))), shown: true },
+    Spec { id: SESSION, title: "SESSION", icon: Icon::Clock, first: side_first, smallest: None, shown: true },
+    // Also over the game while Impulse is behind it.
+    Spec { id: MINIMAP, title: "MINIMAP", icon: Icon::Player, first: minimap_first, smallest: Some(size(px(200.), px(200.))), shown: false },
 ];
+
+pub(super) static MINIMAP_DOCK: &Spec = &DOCKS[3];
 
 fn list_first(screen: Size<Pixels>) -> Bounds<Pixels> {
     Bounds::new(point(px(EDGE), px(TOP)), size(px(LIST), screen.height - px(TOP + EDGE)))
@@ -49,6 +54,23 @@ fn map_first(screen: Size<Pixels>) -> Bounds<Pixels> {
 
 fn side_first(screen: Size<Pixels>) -> Bounds<Pixels> {
     Bounds::new(point(screen.width - px(SIDE + EDGE), px(TOP)), size(px(SIDE), px(250.)))
+}
+
+fn minimap_first(screen: Size<Pixels>) -> Bounds<Pixels> {
+    Bounds::new(point(screen.width - px(SIDE + EDGE), screen.height - px(SIDE + EDGE)), size(px(SIDE), px(SIDE)))
+}
+
+/// The minimap's stand-in, in its dock and in the HUD.
+pub(super) fn minimap(accent: u32) -> Div {
+    div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(10.))
+        .child(icon(Icon::Player, 28., rgb(accent)))
+        .child(mono("MINIMAP", 11.).text_color(rgb(DIM)))
 }
 
 pub fn bind_keys(cx: &mut App) {
@@ -68,6 +90,7 @@ impl Page {
                     (MODS, Some(game)) => div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheats(game, cx)).into_any_element(),
                     (MODS, None) => div().p(px(16.)).child(self.vacant()).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
+                    (MINIMAP, Some(_)) if mapped => minimap(self.accent).into_any_element(),
                     (SESSION, Some(game)) => div().p(px(16.)).child(self.session_panel(game, running, false, cx)).into_any_element(),
                     _ => return None,
                 };
@@ -90,7 +113,7 @@ impl Page {
             .child(
                 h_flex()
                     .gap(px(4.))
-                    .child(docks::toolbar(&self.docks, self.accent, cx, |spec| spec.id != MAP || mapped))
+                    .child(docks::toolbar(&self.docks, self.accent, cx, |spec| !matches!(spec.id, MAP | MINIMAP) || mapped))
                     .child(div().w(px(1.)).h(px(24.)).mx(px(6.)).bg(line(0.16)))
                     .child(
                         icon_button("hud-close", Icon::Close, 40., 14.)

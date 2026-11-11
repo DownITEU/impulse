@@ -43,6 +43,7 @@ icons! {
     External = "external",
     More = "more",
     Player = "player",
+    Heading = "heading",
     Plus = "plus",
     Minus = "minus",
     Layers = "layers",

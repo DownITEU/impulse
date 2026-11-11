@@ -40,12 +40,8 @@ impl Page {
     pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
         let open = self.map.read(cx).is_open(cx);
         let run = match &self.play {
-            Play::Live { game, session, .. } if open && Some(game) == self.selected.as_ref() => {
-                self.trainer(Some(game)).map(|loaded| map::Run {
-                    session: session.clone(),
-                    location: loaded.location,
-                    teleport: loaded.teleport,
-                })
+            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected.as_ref() => {
+                self.trainer(Some(game)).map(|loaded| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: loaded.teleport })
             }
             _ => None,
         };

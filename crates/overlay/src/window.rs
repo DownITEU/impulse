@@ -11,12 +11,24 @@ use windows_sys::Win32::{
         Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow},
     },
     System::Threading::{AttachThreadInput, GetCurrentThreadId},
-    UI::WindowsAndMessaging::{
-        EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, HWND_NOTOPMOST,
-        HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, SW_RESTORE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-        SetForegroundWindow, SetWindowPos, ShowWindow, ShowWindowAsync, WS_EX_TOPMOST,
+    UI::{
+        HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+        WindowsAndMessaging::{
+            EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
+            HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, SW_HIDE, SW_RESTORE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow,
+            ShowWindowAsync, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+        },
     },
 };
+
+/// A monitor's top left and size in physical pixels, and its scale.
+#[derive(Clone, Copy)]
+pub struct Monitor {
+    pub origin: (i32, i32),
+    pub size: (i32, i32),
+    pub scale: f32,
+}
 
 /// The window in front, if any.
 pub fn foreground() -> Option<isize> {
@@ -120,6 +132,52 @@ pub fn lower(window: isize, below: Option<isize>) {
             SetWindowPos(window, below, 0, 0, 0, 0, flags);
         }
     }
+}
+
+/// The process that owns `window`; 0 for a gone one.
+pub fn owner(window: isize) -> u32 {
+    let mut pid = 0;
+    // SAFETY: `pid` outlives the call; a gone window fails it.
+    unsafe { GetWindowThreadProcessId(window as HWND, &mut pid) };
+    pid
+}
+
+/// The monitor `window` is on, or the nearest.
+pub fn monitor_of(window: isize) -> Option<Monitor> {
+    // SAFETY: plain Win32 calls; `info` and the DPIs outlive them.
+    unsafe {
+        let monitor = MonitorFromWindow(window as HWND, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..mem::zeroed() };
+        let (mut dpi, mut unused) = (0, 0);
+        if GetMonitorInfoW(monitor, &mut info) == 0 || GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi, &mut unused) != 0 {
+            return None;
+        }
+        let RECT { left, top, right, bottom } = info.rcMonitor;
+        Some(Monitor { origin: (left, top), size: (right - left, bottom - top), scale: dpi as f32 / 96. })
+    }
+}
+
+/// Lets every click and key through `window` to what is under it; it never takes the input.
+pub fn pass_through(window: isize) {
+    let window = window as HWND;
+    // SAFETY: plain Win32 calls; a gone window fails them.
+    unsafe {
+        let style = GetWindowLongW(window, GWL_EXSTYLE) as u32 | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
+        SetWindowLongW(window, GWL_EXSTYLE, style as i32);
+        // A layered window shows nothing until it has an opacity.
+        SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA);
+    }
+}
+
+/// Shows `window` topmost at `rect` (left, top, width, height in physical pixels), without the input.
+pub fn place(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
+    // SAFETY: a gone window fails it.
+    unsafe { SetWindowPos(window as HWND, HWND_TOPMOST, left, top, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
+}
+
+pub fn hide(window: isize) {
+    // SAFETY: a gone window fails it.
+    unsafe { ShowWindow(window as HWND, SW_HIDE) };
 }
 
 /// Gives the input back to `game`, restored if it minimized itself.

@@ -12,7 +12,7 @@ use std::{
 };
 
 pub use key::Key;
-pub use window::{cloak, foreground, give_back, is_window, lower, raise, unminimize, window_of};
+pub use window::{Monitor, cloak, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place, raise, unminimize, window_of};
 use windows_sys::Win32::{
     Foundation::HWND,
     System::Threading::GetCurrentThreadId,

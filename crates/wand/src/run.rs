@@ -88,6 +88,8 @@ impl Attach for Prepared {
             let (session, events) = attach(&self.server, &self.trainerlib, game).await?;
             let events = events.filter_map(|event| async move {
                 match event {
+                    // The trainer logs every position asked for, a line per variable.
+                    Event::Log(text) if text.contains("wm_coord_") => None,
                     Event::Log(text) => Some(model::Event::Log(text)),
                     Event::Status(text) => Some(model::Event::Status(text)),
                     _ => None,

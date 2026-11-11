@@ -93,8 +93,7 @@ impl Stage {
         let locate = board.player.filter(|_| map.frame.is_some()).map(|_| {
             control("map-follow", Icon::Player, self.follow, accent).on_click(cx.listener(|stage, _, _, cx| {
                 stage.follow ^= true;
-                let board = stage.board.clone();
-                stage.center_on_player(board.read(cx));
+                stage.center_on_player();
                 cx.notify();
             }))
         });

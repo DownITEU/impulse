@@ -22,6 +22,8 @@ pub(super) struct Spec {
     pub first: fn(Size<Pixels>) -> Bounds<Pixels>,
     /// `None`: it is only moved, and keeps its first size.
     pub smallest: Option<Size<Pixels>>,
+    /// Until the user toggles it.
+    pub shown: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -44,7 +46,7 @@ struct Grab {
 pub(super) struct Docks {
     file: PathBuf,
     specs: &'static [Spec],
-    /// Back to front; a dock without an entry is shown, behind the placed ones.
+    /// Back to front; a dock without an entry is as its spec says, behind the placed ones.
     placed: Vec<Placed>,
     grab: Option<Grab>,
 }
@@ -57,7 +59,7 @@ impl Docks {
     }
 
     pub fn is_shown(&self, spec: &Spec) -> bool {
-        self.find(spec.id).is_none_or(|placed| placed.shown)
+        self.find(spec.id).map_or(spec.shown, |placed| placed.shown)
     }
 
     /// The shown docks, back to front.
@@ -83,7 +85,7 @@ impl Docks {
         }
     }
 
-    fn bounds(&self, spec: &Spec, screen: Size<Pixels>) -> Bounds<Pixels> {
+    pub fn bounds(&self, spec: &Spec, screen: Size<Pixels>) -> Bounds<Pixels> {
         let kept = self.find(spec.id).and_then(|placed| placed.bounds).map(|[x, y, w, h]| Bounds::new(point(px(x), px(y)), size(px(w), px(h))));
         let first = (spec.first)(screen);
         let mut bounds = kept.unwrap_or(first);

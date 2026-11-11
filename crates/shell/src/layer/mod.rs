@@ -1,6 +1,7 @@
 //! The overlay's window: the hotkey turns Impulse's window into a transparent layer over the game in
 //! front, topmost on its monitor and with the input, and back into the window behind the game. Leaving the
-//! game for another window turns it back too, and the game in front again brings the overlay back.
+//! game for another window turns it back too, and the game in front again brings the overlay back. It also
+//! tells the HUD (`glance.rs`) whether the live game is in front.
 
 mod settings;
 mod store;
@@ -14,7 +15,8 @@ use futures::{
     future,
 };
 use gpui_kit::{
-    App, AsyncWindowContext, Context, Styled, Task, WeakEntity, Window, WindowBackgroundAppearance, base::Root as Surface, transparent_black,
+    App, AsyncWindowContext, Context, EventEmitter, Styled, Task, WeakEntity, Window, WindowBackgroundAppearance, base::Root as Surface,
+    transparent_black,
 };
 use overlay::{Event, Key, Watch};
 use store::Store;
@@ -41,10 +43,23 @@ enum Ask {
     Toggle,
     Leave,
     Foreground,
+    /// A run started or ended.
+    Recheck,
+}
+
+/// The live game as the HUD sees it; emitted on change.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Playing {
+    Idle,
+    /// The game runs behind another window, or under the overlay.
+    Away,
+    /// The game's window is in front.
+    Front(isize),
 }
 
 pub(super) struct Layer {
     mode: Mode,
+    playing: Playing,
     store: Store,
     asks: mpsc::UnboundedSender<Ask>,
     hwnd: Option<isize>,
@@ -71,7 +86,11 @@ impl Layer {
                 let _ = switch(layer, hwnd, asked, cx).await;
             }
         });
-        Self { mode: Mode::Window { armed: None }, store, asks, hwnd, watch, live: Box::new(live), _switches: switches }
+        Self { mode: Mode::Window { armed: None }, playing: Playing::Idle, store, asks, hwnd, watch, live: Box::new(live), _switches: switches }
+    }
+
+    pub fn recheck(&self) {
+        let _ = self.asks.unbounded_send(Ask::Recheck);
     }
 
     pub fn is_over(&self) -> bool {
@@ -107,7 +126,24 @@ impl Layer {
         self.mode = mode;
         cx.notify();
     }
+
+    fn seen(&mut self, front: Option<isize>, cx: &mut Context<Self>) {
+        let playing = match (self.live)(cx) {
+            None => Playing::Idle,
+            // Without the foreground hook the HUD would stay over whatever comes in front next.
+            Some(pid) => match front {
+                Some(front) if self.watch.is_some() && !self.is_over() && overlay::owner(front) == pid => Playing::Front(front),
+                _ => Playing::Away,
+            },
+        };
+        if playing != self.playing {
+            self.playing = playing;
+            cx.emit(playing);
+        }
+    }
 }
+
+impl EventEmitter<Playing> for Layer {}
 
 fn watch(key: Key, asks: &mpsc::UnboundedSender<Ask>) -> io::Result<Watch> {
     let asks = asks.clone();
@@ -152,6 +188,8 @@ async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::Unbounde
             }
             _ => {}
         }
+        let front = overlay::foreground();
+        layer.update(cx, |layer, cx| layer.seen(front, cx))?;
     }
     Ok(())
 }

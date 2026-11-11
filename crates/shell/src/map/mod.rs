@@ -3,12 +3,14 @@
 
 mod board;
 mod card;
+mod heading;
 mod keys;
 mod markers;
 mod picture;
 mod sidebar;
 mod stage;
 mod state;
+mod tracker;
 
 use std::{path::Path, sync::Arc, time::Duration};
 
@@ -37,6 +39,7 @@ use sidebar::Sidebar;
 use stage::Stage;
 /// The user's progress on each map.
 pub use state::dir as progress_dir;
+pub use tracker::Tracker;
 
 const CARD_WIDTH: f32 = 340.;
 // Between the map's edges and what floats over it.

@@ -3,23 +3,25 @@
 
 use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
-use gpui_kit::{Context, EventEmitter, Task};
+use gpui_kit::{Context, Entity, EventEmitter, Subscription};
 use model::{Map, Point, Session};
 
 use super::{
     group,
+    heading::Bearing,
     state::{self, Mark, PALETTE, Saved},
+    tracker::{Fix, Lease, Tracked, Tracker},
 };
 use crate::Load;
 
+// How often the open map wants the player's position.
 const EVERY: Duration = Duration::from_secs(1);
-// Failed answers in a row before the map stops asking.
-const GIVE_UP: usize = 3;
 
 /// A live run of the shown game, as far as the map uses it.
 pub struct Run {
     pub session: Arc<dyn Session>,
-    pub location: bool,
+    /// When the trainer can tell where the player is.
+    pub tracker: Option<Entity<Tracker>>,
     pub teleport: bool,
 }
 
@@ -60,11 +62,12 @@ pub struct Board {
     pub mark: Option<usize>,
     run: Option<Run>,
     pub player: Option<[f64; 3]>,
+    pub bearing: Option<Bearing>,
     // What went wrong last, shown on the map.
     pub note: Option<String>,
     // The player's position is asked for only while the map is on screen.
     open: bool,
-    _poll: Task<()>,
+    _fixes: Option<(Lease, Subscription)>,
 }
 
 impl Board {
@@ -83,9 +86,10 @@ impl Board {
             mark: None,
             run: None,
             player: None,
+            bearing: None,
             note: None,
             open: false,
-            _poll: Task::ready(()),
+            _fixes: None,
         }
     }
 
@@ -282,7 +286,7 @@ impl Board {
     pub fn set_run(&mut self, run: Option<Run>, cx: &mut Context<Self>) {
         self.run = run;
         if self.run.is_none() {
-            self.player = None;
+            (self.player, self.bearing) = (None, None);
         }
         self.watch(cx);
         cx.notify();
@@ -308,39 +312,47 @@ impl Board {
         self.watch(cx);
     }
 
-    /// Asks for the position while the map is open and both the trainer and the map can place the player.
+    /// Asks the run's tracker for fixes while the map is open and both the trainer and the map can place the player.
     fn watch(&mut self, cx: &mut Context<Self>) {
-        let placed = matches!(&self.map, Load::Ready(map) if map.frame.is_some());
-        let session = self.run.as_ref().filter(|run| run.location && placed && self.open).map(|run| run.session.clone());
-        let Some(session) = session else {
-            self._poll = Task::ready(());
+        let frame = match &self.map {
+            Load::Ready(map) => map.frame.clone(),
+            _ => None,
+        };
+        let tracker = self.run.as_ref().and_then(|run| run.tracker.clone()).filter(|_| self.open);
+        let (Some(tracker), Some(frame)) = (tracker, frame) else {
+            self._fixes = None;
             return;
         };
-        self._poll = cx.spawn(async move |board, cx| {
-            let mut failures = 0;
-            while failures < GIVE_UP {
-                match session.position().await {
-                    Ok(position) => {
-                        failures = 0;
-                        let located = board.update(cx, |board, cx| {
-                            if board.player.replace(position).is_none() {
-                                cx.notify();
-                            }
-                            cx.emit(BoardEvent::Moved);
-                        });
-                        if located.is_err() {
-                            return;
-                        }
-                    }
-                    Err(e) => {
-                        failures += 1;
-                        log::debug!("player position: {e:#}");
-                    }
-                }
-                cx.background_executor().timer(EVERY).await;
-            }
-            log::warn!("the trainer does not tell where the player is");
+        let lease = tracker.update(cx, |tracker, cx| tracker.lease(EVERY, &frame, cx));
+        // Where the player was and the way they last went, before the next fix.
+        match tracker.read(cx).last() {
+            Some(fix) => self.fixed(fix, cx),
+            None => self.lost(cx),
+        }
+        let fixes = cx.subscribe(&tracker, |board, _, tracked: &Tracked, cx| match tracked {
+            Tracked::Fix(fix) => board.fixed(*fix, cx),
+            Tracked::Lost => board.lost(cx),
         });
+        self._fixes = Some((lease, fixes));
+    }
+
+    /// The last position stays, to teleport from at its height; the way is no longer known.
+    fn lost(&mut self, cx: &mut Context<Self>) {
+        if self.bearing.take().is_some() {
+            cx.emit(BoardEvent::Moved);
+        }
+    }
+
+    /// Tells the stage only when the player or the bearing changed.
+    fn fixed(&mut self, fix: Fix, cx: &mut Context<Self>) {
+        if self.player == Some(fix.position) && self.bearing == fix.bearing {
+            return;
+        }
+        if self.player.replace(fix.position).is_none() {
+            cx.notify();
+        }
+        self.bearing = fix.bearing;
+        cx.emit(BoardEvent::Moved);
     }
 
     pub fn can_teleport(&self, map: &Map) -> bool {

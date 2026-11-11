@@ -11,6 +11,7 @@ mod controls;
 mod dialog;
 mod docks;
 mod folders;
+mod glance;
 mod header;
 mod hero;
 mod hud;
@@ -59,6 +60,7 @@ use bindings::Bindings;
 use collections::Editor;
 use docks::Docks;
 use folders::FolderRow;
+use glance::Glance;
 use layer::Layer;
 use library::{Game, Library};
 use loaded::Loaded;
@@ -159,6 +161,7 @@ pub struct Page {
     quit_on_close: bool,
     layer: Entity<Layer>,
     docks: Entity<Docks>,
+    _glance: Entity<Glance>,
     hud_focus: FocusHandle,
     dialog_focus: FocusHandle,
     menu: Option<Menu>,
@@ -218,6 +221,7 @@ impl Page {
         let layer = cx.new(|cx| Layer::new(&data_dir, move |cx| page.upgrade().and_then(|page| page.read(cx).play.pid()), window, cx));
         cx.observe_in(&layer, window, Self::overlay_changed).detach();
         let docks = cx.new(|_| Docks::load(&data_dir, &hud::DOCKS));
+        let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), accent, cx));
         cx.observe_in(&docks, window, |page, _, window, cx| {
             page.sync_map_dock(window, cx);
             cx.notify();
@@ -260,6 +264,7 @@ impl Page {
             quit_on_close: prefs.quit_on_close,
             layer,
             docks,
+            _glance: glance,
             hud_focus: cx.focus_handle(),
             dialog_focus: cx.focus_handle(),
             menu: None,
