@@ -29,6 +29,7 @@ mod saved;
 mod settings;
 mod side;
 mod sidebar;
+mod sources;
 mod status;
 mod store;
 mod theme;
@@ -68,6 +69,7 @@ use resources::{Resources, ResourcesEvent};
 pub use root::Root;
 use run::Play;
 use settings::Tab;
+use sources::{Picked, Picker};
 use theme::*;
 use widgets::grid;
 
@@ -101,6 +103,8 @@ enum Menu {
     Choices(usize),
     /// A collection chip's actions.
     Collection(usize),
+    /// The open game's sources.
+    Source,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -126,6 +130,9 @@ pub struct Page {
     play: Play,
     bindings: Bindings,
     profiles: Profiles,
+    picked: Picked,
+    // `+ ADD`'s choice of game.
+    picker: Option<Picker>,
     accent: u32,
     lead: Lead,
     panels: Panels,
@@ -213,6 +220,8 @@ impl Page {
         let page = Self {
             bindings: Bindings::load(&data_dir),
             profiles: Profiles::load(&data_dir),
+            picked: Picked::load(&data_dir),
+            picker: None,
             data_dir,
             provider,
             account: None,
@@ -351,6 +360,7 @@ impl Render for Page {
             .child(self.status_bar(cx))
             .when(self.settings, |page| page.child(self.settings_modal(cx)))
             .children(self.collection_editor(cx))
+            .children(self.game_picker(cx))
             .into_any_element()
     }
 }

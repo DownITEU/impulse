@@ -41,6 +41,7 @@ icons! {
     Close = "close",
     Folder = "folder",
     External = "external",
+    More = "more",
     Player = "player",
     Plus = "plus",
     Minus = "minus",

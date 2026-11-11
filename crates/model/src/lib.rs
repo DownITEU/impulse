@@ -7,7 +7,7 @@ mod provider;
 mod run;
 mod trainer;
 
-pub use game::{Game, Installation, Locator, Offer, Standalone};
+pub use game::{Game, Installation, Locator, Offer, Standalone, custom_exe, custom_store_id};
 pub use map::{Category, Frame, Glyph, Group, Label, Level, Map, MapOffer, PIN_LINK, Picture, Pin, Point, Region, Tiles};
 pub use process::{Process, Rule};
 pub use provider::{Account, Clear, Folder, Provider, SignIn, Snapshot, Store};

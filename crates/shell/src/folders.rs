@@ -19,6 +19,7 @@ use model::Folder;
 use super::{
     Menu, Page,
     assets::Icon,
+    controls::span,
     settings::label,
     theme::*,
     widgets::{icon_button, mono},
@@ -159,7 +160,7 @@ impl Page {
                     page.browse_folder(at, window, cx);
                 },
             )));
-        let field = self.dropdown(field, Menu::Choices(at), choices, current, cx, move |page, pick, window, cx| {
+        let field = self.dropdown(field, Menu::Choices(at), choices, current, span, cx, move |page, pick, window, cx| {
             if let Some((_, path)) = page.folders[at].folder.choices.get(pick) {
                 page.pick_folder(at, path.clone(), window, cx);
             }

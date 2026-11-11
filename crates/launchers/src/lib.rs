@@ -1,5 +1,6 @@
 //! Installed games, found through each launcher's own records.
 
+mod custom;
 mod ea;
 mod epic;
 mod gog;
@@ -18,14 +19,17 @@ use std::{
 
 use model::{Game, Installation};
 
+pub use custom::{Custom, install, owners};
+
 /// An install as a launcher reports it.
 struct App {
     store_id: String,
     location: PathBuf,
 }
 
-/// Scans every launcher for `games` (blocking: registry and file reads).
-pub fn scan(games: &[Game]) -> Vec<Installation> {
+/// Scans every launcher for `games`, then the executables the user picked (blocking: registry and
+/// file reads). A game has one launcher's install at most, and its picked one after it.
+pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
     // Several editions can share a store id.
     let mut by_store_id = HashMap::<String, Vec<&Game>>::new();
     for game in games {
@@ -47,23 +51,29 @@ pub fn scan(games: &[Game]) -> Vec<Installation> {
     let mut out = Vec::new();
     for app in apps.into_iter().flatten() {
         for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
-            if !seen.insert(game.id.as_str()) {
-                continue;
+            if seen.insert(game.id.as_str()) {
+                out.push(installation(game, &app));
             }
-            let build = game
-                .exe
-                .as_deref()
-                .and_then(|exe| pe::header(&app.location.join(exe)))
-                .map(|header| header.timestamp);
-            out.push(Installation {
-                game_id: game.id.clone(),
-                store_id: app.store_id.clone(),
-                location: app.location.clone(),
-                build,
-            });
         }
     }
+    let by_id: HashMap<&str, &Game> = games.iter().map(|game| (game.id.as_str(), game)).collect();
+    out.extend(custom.iter().filter_map(|picked| custom::install(by_id.get(picked.game_id.as_str())?, &picked.exe)));
     out
+}
+
+/// The build is the PE TimeDateStamp of the game's `exe` in the install.
+fn installation(game: &Game, app: &App) -> Installation {
+    let build = game
+        .exe
+        .as_deref()
+        .and_then(|exe| pe::header(&app.location.join(exe)))
+        .map(|header| header.timestamp);
+    Installation {
+        game_id: game.id.clone(),
+        store_id: app.store_id.clone(),
+        location: app.location.clone(),
+        build,
+    }
 }
 
 /// The launcher's name and the URI of the game's page in it, for the stores that have one.

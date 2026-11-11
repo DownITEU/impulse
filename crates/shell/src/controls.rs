@@ -221,6 +221,7 @@ impl Page {
                     Menu::Cheat(index),
                     options,
                     current,
+                    span,
                     cx,
                     move |page, option, _, cx| page.set_value(index, option as f64, cx),
                 )
@@ -317,13 +318,15 @@ impl Page {
             }))
     }
 
-    /// Makes `trigger` open a list of `options` under itself.
+    /// Makes `trigger` open a list of `options` under itself, set across by `place`.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn dropdown(
         &self,
         trigger: Stateful<Div>,
         menu: Menu,
         options: Vec<SharedString>,
         current: usize,
+        place: fn(Div) -> Div,
         cx: &mut Context<Self>,
         pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
     ) -> Stateful<Div> {
@@ -340,8 +343,7 @@ impl Page {
                 }
             }))
             .when(self.menu == Some(menu) && !options.is_empty(), |trigger| {
-                // Spans the trigger, borders included.
-                trigger.child(deferred(self.picks(options, current, cx, pick).left(px(-1.)).right(px(-1.))))
+                trigger.child(deferred(place(self.picks(options, current, cx, pick))))
             })
     }
 
@@ -383,6 +385,11 @@ impl Page {
                     .child(mono(option, 12.))
             }))
     }
+}
+
+/// A dropdown's list across its trigger, borders included.
+pub(super) fn span(list: Div) -> Div {
+    list.left(px(-1.)).right(px(-1.))
 }
 
 fn value_box(value: impl Into<SharedString>) -> Div {

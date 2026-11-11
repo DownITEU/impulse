@@ -100,6 +100,7 @@ impl Page {
                     .cursor_pointer()
                     .text_color(rgb(DIM))
                     .hover(|style| style.text_color(rgb(TEXT)))
+                    .on_click(cx.listener(|page, _, window, cx| page.add_game(window, cx)))
                     .child(mono("+ ADD", 11.)),
             )
     }

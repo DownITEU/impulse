@@ -1,29 +1,34 @@
-//! Starting a game through its launcher.
+//! Starting a game through its launcher, or the executable the user picked.
 
-use std::{io, ptr};
+use std::{ffi::OsStr, io, os::windows::ffi::OsStrExt, path::Path, ptr};
 
 use anyhow::{Result, ensure};
 use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
-/// Starts the game of `store_id` (`steam:<appid>`). `false`: no way to start this store's games
-/// from here, so the user starts the game and the run waits for it.
+/// Starts the game of `store_id`: a Steam app, or the executable the user picked, in its own folder.
+/// `false`: no way to start this store's games from here, so the user starts the game and the run waits for it.
 pub fn start(store_id: &str) -> Result<bool> {
+    if let Some(exe) = model::custom_exe(store_id) {
+        open(exe.as_os_str(), exe.parent())?;
+        return Ok(true);
+    }
     let Some(app) = store_id.strip_prefix("steam:") else {
         return Ok(false);
     };
     // The id comes from the catalog, a remote file: only digits reach the URI.
     ensure!(!app.is_empty() && app.bytes().all(|b| b.is_ascii_digit()), "unexpected Steam app id '{app}'");
-    open(&format!("steam://rungameid/{app}"))?;
+    open(OsStr::new(&format!("steam://rungameid/{app}")), None)?;
     Ok(true)
 }
 
-fn open(uri: &str) -> Result<()> {
-    let wide: Vec<u16> = uri.encode_utf16().chain([0]).collect();
-    let verb: Vec<u16> = "open\0".encode_utf16().collect();
-    // SAFETY: both strings are NUL-terminated and outlive the call.
-    let result = unsafe { ShellExecuteW(ptr::null_mut(), verb.as_ptr(), wide.as_ptr(), ptr::null(), ptr::null(), SW_SHOWNORMAL) };
+fn open(target: &OsStr, dir: Option<&Path>) -> Result<()> {
+    let wide = |text: &OsStr| text.encode_wide().chain([0]).collect::<Vec<u16>>();
+    let (target_w, verb, dir) = (wide(target), wide(OsStr::new("open")), dir.map(|dir| wide(dir.as_os_str())));
+    let dir_w = dir.as_ref().map_or(ptr::null(), |dir| dir.as_ptr());
+    // SAFETY: the strings are NUL-terminated and outlive the call.
+    let result = unsafe { ShellExecuteW(ptr::null_mut(), verb.as_ptr(), target_w.as_ptr(), ptr::null(), dir_w, SW_SHOWNORMAL) };
     // Values up to 32 are error codes.
-    ensure!(result as usize > 32, "cannot open {uri}: {}", io::Error::last_os_error());
+    ensure!(result as usize > 32, "cannot open {}: {}", target.display(), io::Error::last_os_error());
     Ok(())
 }
 

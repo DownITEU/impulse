@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::MapOffer;
 
@@ -47,7 +47,20 @@ pub struct Offer {
     pub revision: Option<String>,
 }
 
-/// An installed game, as a launcher reports it.
+const CUSTOM: &str = "custom:";
+
+/// The store id of an executable the user picked for a game, named as Wand names it.
+pub fn custom_store_id(exe: &Path) -> String {
+    format!("{CUSTOM}{}", exe.display())
+}
+
+/// The executable of a `custom_store_id`.
+pub fn custom_exe(store_id: &str) -> Option<&Path> {
+    store_id.strip_prefix(CUSTOM).map(Path::new)
+}
+
+/// An installed game, as a launcher reports it or the user picked it.
+#[derive(Clone)]
 pub struct Installation {
     pub game_id: String,
     pub store_id: String,

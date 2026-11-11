@@ -4,7 +4,7 @@ use gpui_kit::{
 };
 
 use super::{
-    Page,
+    Menu, Page,
     assets::Icon,
     library::{Game, Support},
     run::{Play, STOPPING, label},
@@ -120,6 +120,15 @@ impl Page {
                         .on_click(move |_, _, cx| cx.open_url(&uri))
                         .child(icon(Icon::External, 15., rgb(MUTED))),
                 )
+            })
+            // A run holds its install.
+            .when(self.play.game() != Some(&game.id) || !self.play.is_active(), |bar| {
+                let (options, current) = Page::source_options(game);
+                let more = icon_button("source", "Game source".into()).child(icon(Icon::More, 15., rgb(MUTED)));
+                let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
+                bar.child(self.dropdown(more, Menu::Source, options, current, place, cx, |page, at, window, cx| {
+                    page.source_picked(at, window, cx)
+                }))
             })
     }
 

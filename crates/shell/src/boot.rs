@@ -1,11 +1,11 @@
 //! Fills the page from the provider: disk copies first, the network only for what the open game lacks or holds stale.
 
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use blocking::unblock;
 use futures::StreamExt;
 use gpui_kit::{AsyncWindowContext, Context, WeakEntity, Window};
-use model::{SignIn, Snapshot};
+use model::{Provider, SignIn, Snapshot};
 
 use super::{
     Load, Page, art,
@@ -15,14 +15,14 @@ use super::{
 
 impl Page {
     pub(super) fn boot(&self, window: &Window, cx: &mut Context<Self>) {
-        let (mut games, art) = (self.provider.games(), art::Media::Pictures.dir(&self.data_dir));
+        let mut games = self.provider.games();
         cx.spawn_in(window, async move |page, cx| {
             let mut have_copy = false;
             while let Some(snapshot) = games.next().await {
                 match snapshot {
                     Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => {
                         have_copy = true;
-                        rescan(&page, all, art.clone(), cx).await;
+                        rescan(&page, all, cx).await;
                     }
                     Snapshot::Fresh(Err(e)) if !have_copy => {
                         page.update(cx, |page, cx| {
@@ -67,7 +67,7 @@ impl Page {
         cx.notify();
     }
 
-    fn set_library(&mut self, library: Library, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn set_library(&mut self, library: Library, window: &mut Window, cx: &mut Context<Self>) {
         let listed = |id: &Option<Arc<str>>| {
             id.as_ref()
                 .is_some_and(|id| library.games.iter().any(|game| game.id == *id))
@@ -118,8 +118,12 @@ impl Page {
                 })
                 .ok();
             }
-            page.update(cx, |page, cx| {
+            page.update_in(cx, |page, window, cx| {
                 page.loading.remove(&id);
+                // The source changed while it loaded: this trainer is for the old build.
+                if page.game().is_some_and(|game| game.id == id && game.stamp != stamp) {
+                    page.open_trainer(window, cx);
+                }
                 cx.notify();
             })
             .ok();
@@ -168,8 +172,41 @@ impl Page {
     }
 }
 
-async fn rescan(page: &WeakEntity<Page>, games: Vec<model::Game>, art: PathBuf, cx: &mut AsyncWindowContext) {
-    let library = unblock(move || library::scan(games, &art)).await;
-    page.update_in(cx, |page, window, cx| page.set_library(library, window, cx))
-        .ok();
+/// Lists the installed games of `games` anew, with the executables the user picked.
+pub(super) async fn rescan(page: &WeakEntity<Page>, mut games: Vec<model::Game>, cx: &mut AsyncWindowContext) {
+    loop {
+        let Ok((art, picked, provider)) =
+            page.read_with(cx, |page, _| (art::Media::Pictures.dir(&page.data_dir), page.picked.clone(), page.provider.clone()))
+        else {
+            return;
+        };
+        let version = picked.version();
+        let library = unblock(move || library::scan(games, &art, &picked)).await;
+        let current = page.update_in(cx, |page, window, cx| {
+            let current = page.picked.version() == version;
+            if current {
+                page.set_library(library, window, cx);
+            }
+            current
+        });
+        if !matches!(current, Ok(false)) {
+            return;
+        }
+        // A source changed while it scanned: again, with it.
+        let Some(all) = catalog(provider.as_ref()).await else { return };
+        games = all;
+    }
+}
+
+/// The provider's games, the disk copy when there is one.
+pub(super) async fn catalog(provider: &dyn Provider) -> Option<Vec<model::Game>> {
+    let mut snapshots = provider.games();
+    while let Some(snapshot) = snapshots.next().await {
+        match snapshot {
+            Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => return Some(all),
+            Snapshot::Fresh(Err(_)) => return None,
+            Snapshot::Cached(None) => {}
+        }
+    }
+    None
 }
