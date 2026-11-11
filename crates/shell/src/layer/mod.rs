@@ -17,7 +17,6 @@ use gpui_kit::{
     App, AsyncWindowContext, Context, Styled, Task, WeakEntity, Window, WindowBackgroundAppearance, base::Root as Surface, transparent_black,
 };
 use overlay::{Event, Key, Watch};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use store::Store;
 
 // GPUI switches fullscreen in a task of its own: how often and how long to look for it.
@@ -57,10 +56,7 @@ pub(super) struct Layer {
 impl Layer {
     pub fn new(data_dir: &Path, live: impl Fn(&App) -> Option<u32> + 'static, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (asks, asked) = mpsc::unbounded();
-        let hwnd = match window.window_handle().map(|handle| handle.as_raw()) {
-            Ok(RawWindowHandle::Win32(handle)) => Some(handle.hwnd.get()),
-            _ => None,
-        };
+        let hwnd = super::hwnd(window);
         let store = Store::load(data_dir);
         let watch = hwnd.and_then(|_| watch(store.hotkey(), &asks).inspect_err(|e| log::warn!("overlay hotkey: {e}")).ok());
         // A foreground event can be missed; the overlay losing the input is one too.

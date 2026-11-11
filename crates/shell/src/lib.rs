@@ -32,6 +32,7 @@ mod sidebar;
 mod sources;
 mod status;
 mod store;
+mod systray;
 mod theme;
 mod widgets;
 
@@ -74,6 +75,7 @@ use theme::*;
 use widgets::grid;
 
 use model::{Account, Provider};
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 const SIDEBAR_WIDTH: f32 = 248.;
 
@@ -86,6 +88,14 @@ pub fn init(data_dir: &Path, cx: &mut App) {
     map::bind_keys(cx);
     hud::bind_keys(cx);
     dialog::bind_keys(cx);
+}
+
+/// The window's Win32 handle.
+fn hwnd(window: &Window) -> Option<isize> {
+    match HasWindowHandle::window_handle(window).map(|handle| handle.as_raw()) {
+        Ok(RawWindowHandle::Win32(handle)) => Some(handle.hwnd.get()),
+        _ => None,
+    }
 }
 
 /// Something that arrives after the window opens.
@@ -144,6 +154,9 @@ pub struct Page {
     folders: Vec<FolderRow>,
     // The window is the overlay over a game: the HUD replaces the page.
     over: bool,
+    tray: Option<tray::Tray>,
+    // Off: the close button hides the window in the tray.
+    quit_on_close: bool,
     layer: Entity<Layer>,
     docks: Entity<Docks>,
     hud_focus: FocusHandle,
@@ -213,6 +226,7 @@ impl Page {
         // A run's time and mods are kept when it ends, and so does closing the window or quitting.
         cx.on_app_quit(|page, _| {
             page.close_session();
+            page.tray = None;
             async {}
         })
         .detach();
@@ -242,6 +256,8 @@ impl Page {
             settings: false,
             settings_tab: Tab::Appearance,
             over: false,
+            tray: Self::start_tray(window, cx),
+            quit_on_close: prefs.quit_on_close,
             layer,
             docks,
             hud_focus: cx.focus_handle(),

@@ -38,6 +38,8 @@ pub struct Prefs {
     pub reduce_motion: bool,
     /// The game open last.
     pub game: Option<String>,
+    /// Off, the default: the close button hides Impulse in the tray.
+    pub quit_on_close: bool,
 }
 
 impl Prefs {
@@ -59,6 +61,7 @@ impl Page {
             panels: self.panels,
             reduce_motion: self.reduce_motion,
             game: self.selected.as_deref().map(str::to_owned),
+            quit_on_close: self.quit_on_close,
         };
         store::save(&self.data_dir.join(FILE), &prefs);
     }

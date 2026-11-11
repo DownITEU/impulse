@@ -21,6 +21,7 @@ overlay = { path = "crates/overlay" }
 pe = { path = "crates/pe" }
 play = { path = "crates/play" }
 shell = { path = "crates/shell" }
+tray = { path = "crates/tray" }
 video = { path = "crates/video" }
 wand = { path = "crates/wand" }
 

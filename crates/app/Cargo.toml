@@ -12,6 +12,7 @@ path = "src/main.rs"
 journal.workspace = true
 model.workspace = true
 shell.workspace = true
+tray.workspace = true
 wand.workspace = true
 
 gpui-kit.workspace = true

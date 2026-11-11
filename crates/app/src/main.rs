@@ -8,6 +8,10 @@ use shell::Root;
 use wand::Wand;
 
 fn main() {
+    // One Impulse at a time: a second start shows the first, which may sit in the tray.
+    if !tray::claim() {
+        return;
+    }
     let data_dir =
         PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows"))
             .join("Impulse");

@@ -13,6 +13,7 @@ launchers.workspace = true
 model.workspace = true
 overlay.workspace = true
 play.workspace = true
+tray.workspace = true
 video.workspace = true
 
 anyhow.workspace = true

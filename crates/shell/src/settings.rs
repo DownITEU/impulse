@@ -93,6 +93,19 @@ impl Page {
             .px(px(18.))
             .py(px(6.))
             .children(self.folder_rows(cx))
+            .child(
+                row("CLOSE TO TRAY", "the close button hides Impulse; quit from the tray icon", 64.).mt(px(12.)).border_t_1().border_b_0().child(
+                    div()
+                        .id("close-to-tray")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            page.quit_on_close = !page.quit_on_close;
+                            page.save_prefs();
+                            cx.notify();
+                        }))
+                        .child(toggle(!self.quit_on_close, self.accent)),
+                ),
+            )
     }
 
     fn appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {
