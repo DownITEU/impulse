@@ -1,5 +1,5 @@
 use gpui_kit::{
-    Context, Div, FontWeight, IntoElement, ObjectFit, Stateful, component::h_flex,
+    Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex,
     div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb,
 };
 
@@ -9,7 +9,7 @@ use super::{
     library::{Game, Support},
     run::{Play, STOPPING, label},
     theme::*,
-    widgets::{icon, mono, square, tracked},
+    widgets::{icon, mono, square, tip, tracked},
 };
 
 impl Page {
@@ -80,7 +80,7 @@ impl Page {
         let accent = rgb(self.accent);
         let running = self.is_running();
         let favorite = self.profiles.of(&game.id).favorite;
-        let id = game.id.clone();
+        let (id, location) = (game.id.clone(), game.install.location.clone());
         let layer = self.layer.clone();
         h_flex()
             .relative()
@@ -99,9 +99,7 @@ impl Page {
                 )
             })
             .child(
-                action("favorite")
-                    .w(px(38.))
-                    .justify_center()
+                icon_button("favorite", "Star".into())
                     .on_click(cx.listener(move |page, _, _, cx| {
                         page.profiles.edit(&id, |profile| profile.favorite = !profile.favorite);
                         cx.notify();
@@ -111,6 +109,18 @@ impl Page {
                         false => icon(Icon::Star, 16., rgb(MUTED)),
                     }),
             )
+            .child(
+                icon_button("folder", "Open the game's folder".into())
+                    .on_click(move |_, _, cx| cx.open_with_system(&location))
+                    .child(icon(Icon::Folder, 15., rgb(MUTED))),
+            )
+            .when_some(launchers::page(&game.install.store_id), |bar, (launcher, uri)| {
+                bar.child(
+                    icon_button("launcher", format!("Open in {launcher}").into())
+                        .on_click(move |_, _, cx| cx.open_url(&uri))
+                        .child(icon(Icon::External, 15., rgb(MUTED))),
+                )
+            })
     }
 
     /// LAUNCH + ATTACH, the run's stage, or STOP.
@@ -221,6 +231,11 @@ fn played(secs: u64) -> String {
         0..3600 => format!("{} MIN PLAYED", secs / 60),
         _ => format!("{:.1} H PLAYED", secs as f64 / 3600.),
     }
+}
+
+/// A 38 px square button that names itself in a tip.
+fn icon_button(id: &'static str, text: SharedString) -> Stateful<Div> {
+    action(id).w(px(38.)).justify_center().tooltip(move |window, cx| tip(text.clone(), window, cx))
 }
 
 fn action(id: &'static str) -> Stateful<Div> {

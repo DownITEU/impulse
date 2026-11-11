@@ -66,6 +66,22 @@ pub fn scan(games: &[Game]) -> Vec<Installation> {
     out
 }
 
+/// The launcher's name and the URI of the game's page in it, for the stores that have one.
+pub fn page(store_id: &str) -> Option<(&'static str, String)> {
+    let (store, id) = store_id.split_once(':')?;
+    // Ids come from local records: only plain ones reach a URI.
+    let only = |ok: fn(u8) -> bool| !id.is_empty() && id.bytes().all(ok);
+    let digits = only(|b| b.is_ascii_digit());
+    match store {
+        "steam" if digits => Some(("Steam", format!("steam://nav/games/details/{id}"))),
+        "gog" if digits => Some(("GOG Galaxy", format!("goggalaxy://openGameView/{id}"))),
+        "uwp" if only(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)) => {
+            Some(("Microsoft Store", format!("ms-windows-store://pdp/?PFN={id}")))
+        }
+        _ => None,
+    }
+}
+
 fn same_path(a: &Path, b: &Path) -> bool {
     let norm = |p: &Path| {
         p.to_string_lossy()
@@ -74,4 +90,18 @@ fn same_path(a: &Path, b: &Path) -> bool {
             .to_lowercase()
     };
     norm(a) == norm(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pages_only_for_plain_ids_of_known_launchers() {
+        assert_eq!(page("steam:1203620").unwrap().1, "steam://nav/games/details/1203620");
+        assert_eq!(page("uwp:Game.Name_8wekyb3d8bbwe").unwrap().0, "Microsoft Store");
+        for id in ["steam:", "steam:12&x", "gog:1 2", "uwp:a/b", "epic:Fortnite", "custom:C:\\a.exe"] {
+            assert!(page(id).is_none(), "{id}");
+        }
+    }
 }

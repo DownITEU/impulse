@@ -40,6 +40,7 @@ icons! {
     WinRestore = "win-restore",
     Close = "close",
     Folder = "folder",
+    External = "external",
     Player = "player",
     Plus = "plus",
     Minus = "minus",
