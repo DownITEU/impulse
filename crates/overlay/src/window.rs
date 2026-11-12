@@ -16,8 +16,8 @@ use windows_sys::Win32::{
         WindowsAndMessaging::{
             EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
             HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, SW_HIDE, SW_RESTORE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE,
-            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow,
-            ShowWindowAsync, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowLongW, SetWindowPos, ShowWindow,
+            ShowWindowAsync, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
         },
     },
 };
@@ -74,6 +74,12 @@ pub fn cloak(window: isize, on: bool) {
     let on = i32::from(on);
     // SAFETY: `on` outlives the call; a gone window fails it.
     unsafe { DwmSetWindowAttribute(window as HWND, DWMWA_CLOAK as u32, (&raw const on).cast(), size_of::<i32>() as u32) };
+}
+
+/// Screenshots, recordings and streams show what is behind `window` instead.
+pub fn exclude_from_capture(window: isize, on: bool) {
+    // SAFETY: a gone window, or a Windows before 10 2004, fails it.
+    unsafe { SetWindowDisplayAffinity(window as HWND, if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE }) };
 }
 
 /// Shows `window` topmost over the whole monitor of `over`, with the input.

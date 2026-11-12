@@ -40,6 +40,8 @@ pub struct Prefs {
     pub game: Option<String>,
     /// Off, the default: the close button hides Impulse in the tray.
     pub quit_on_close: bool,
+    /// Screenshots, recordings and streams show no Impulse window.
+    pub hide_from_capture: bool,
 }
 
 impl Prefs {
@@ -62,6 +64,7 @@ impl Page {
             reduce_motion: self.reduce_motion,
             game: self.selected.as_deref().map(str::to_owned),
             quit_on_close: self.quit_on_close,
+            hide_from_capture: self.hide_from_capture,
         };
         store::save(&self.data_dir.join(FILE), &prefs);
     }

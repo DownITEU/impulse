@@ -1,4 +1,4 @@
-//! Docks: panels floating over the overlay, each moved by its header and, if it may be, sized by its
+//! Docks: panels floating over the overlay, each moved by its header (some by their content too) and, if it may be, sized by its
 //! corner, shown and hidden from a toolbar. One layout for all games, kept in `docks.json`.
 
 mod frame;
@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use gpui_kit::{Bounds, Context, MouseButton, MouseMoveEvent, Pixels, Point, Size, point, px, size};
 use serde::{Deserialize, Serialize};
 
-pub(super) use frame::{frame, input, toolbar};
+pub(super) use frame::{below_header, frame, input, toolbar};
+use frame::HEADER;
 
 use super::{assets::Icon, store};
 
@@ -24,6 +25,8 @@ pub(super) struct Spec {
     pub smallest: Option<Size<Pixels>>,
     /// Until the user toggles it.
     pub shown: bool,
+    /// Its content moves it too, so its header may leave the screen's top and the content reach the corner.
+    pub body_moves: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -92,7 +95,7 @@ impl Docks {
         if spec.smallest.is_none() {
             bounds.size = first.size;
         }
-        fit(bounds, spec.smallest.unwrap_or_default(), screen)
+        fit(bounds, spec, screen)
     }
 
     /// A press over a dock brings it to the front.
@@ -128,7 +131,7 @@ impl Docks {
             }
             false => Bounds::new(start.origin + shift, start.size),
         };
-        let Bounds { origin, size } = fit(bounds, spec.smallest.unwrap_or_default(), screen);
+        let Bounds { origin, size } = fit(bounds, spec, screen);
         self.entry(spec.id).bounds = Some([origin.x.into(), origin.y.into(), size.width.into(), size.height.into()]);
         cx.notify();
     }
@@ -166,10 +169,11 @@ impl Docks {
     }
 }
 
-/// On the screen, and no smaller than `smallest` or larger than the screen.
-fn fit(bounds: Bounds<Pixels>, smallest: Size<Pixels>, screen: Size<Pixels>) -> Bounds<Pixels> {
-    let size = bounds.size.max(&smallest).min(&screen);
+/// On the screen but for a header it may hide, and no smaller than its smallest or larger than the screen.
+fn fit(bounds: Bounds<Pixels>, spec: &Spec, screen: Size<Pixels>) -> Bounds<Pixels> {
+    let size = bounds.size.max(&spec.smallest.unwrap_or_default()).min(&screen);
+    let top = px(if spec.body_moves { -HEADER } else { 0. });
     let x = bounds.origin.x.clamp(px(0.), screen.width - size.width);
-    let y = bounds.origin.y.clamp(px(0.), screen.height - size.height);
+    let y = bounds.origin.y.clamp(top, screen.height - size.height);
     Bounds::new(point(x, y), size)
 }

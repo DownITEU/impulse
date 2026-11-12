@@ -56,8 +56,14 @@ impl Stage {
     }
 
     fn wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
-        let lines = event.delta.pixel_delta(px(20.)).y / px(20.);
-        self.zoom(2f64.powf(lines as f64 * WHEEL), self.pixel(event.position), cx);
+        self.zoom(2f64.powf(lines(event) * WHEEL), self.pixel(event.position), cx);
+    }
+
+    /// The minimap keeps its zoom with the live map, for both its views.
+    pub(super) fn mini_wheel(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(live) = &self.live {
+            live.update(cx, |live, cx| live.zoom_by(lines(event) * WHEEL, cx));
+        }
     }
 
     fn pressed(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -198,6 +204,10 @@ impl Stage {
             pins::on_head(camera.to_view(plane(board.saved.marks[index].at), size), self.mark_look(index, board.mark).scale(), pixel)
         })
     }
+}
+
+fn lines(event: &ScrollEvent) -> f64 {
+    (event.delta.pixel_delta(px(20.)).y / px(20.)).into()
 }
 
 /// Even-odd ray casting.

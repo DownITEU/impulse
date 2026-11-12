@@ -12,7 +12,10 @@ use std::{
 };
 
 pub use key::Key;
-pub use window::{Monitor, cloak, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place, raise, unminimize, window_of};
+pub use window::{
+    Monitor, cloak, exclude_from_capture, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place, raise, unminimize,
+    window_of,
+};
 use windows_sys::Win32::{
     Foundation::HWND,
     System::Threading::GetCurrentThreadId,
@@ -26,8 +29,14 @@ use windows_sys::Win32::{
     },
 };
 
+// Hotkey ids, and the thread message that sets the minimap's.
+const OVERLAY: usize = 1;
+const MINIMAP: usize = 2;
+const SET_MINIMAP: u32 = WM_USER + 1;
+
 pub enum Event {
     Hotkey,
+    Minimap,
     /// Another window came in front; read which with `foreground`, as the event may be late.
     Foreground,
 }
@@ -42,6 +51,8 @@ thread_local! {
 pub struct Watch {
     thread: u32,
     join: Option<JoinHandle<()>>,
+    // `set_minimap`'s answers.
+    set: mpsc::Receiver<io::Result<()>>,
 }
 
 impl Watch {
@@ -49,6 +60,7 @@ impl Watch {
     /// the watch's thread: forward it to a channel.
     pub fn start(key: Key, on_event: impl FnMut(Event) + Send + 'static) -> io::Result<Self> {
         let (ready, started) = mpsc::sync_channel(1);
+        let (answer, set) = mpsc::channel();
         let join = thread::Builder::new().name("overlay".into()).spawn(move || {
             SINK.set(Some(Box::new(on_event)));
             // SAFETY: plain Win32 calls on this thread; `msg` outlives them.
@@ -56,28 +68,46 @@ impl Watch {
                 let mut msg: MSG = mem::zeroed();
                 // Creates the queue `Drop` posts to.
                 PeekMessageW(&mut msg, ptr::null_mut(), WM_USER, WM_USER, PM_NOREMOVE);
-                if RegisterHotKey(ptr::null_mut(), 1, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0 {
+                if RegisterHotKey(ptr::null_mut(), OVERLAY as i32, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0 {
                     let _ = ready.send(Err(io::Error::last_os_error()));
                     return;
                 }
                 let hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, ptr::null_mut(), Some(foreground_changed), 0, 0, WINEVENT_OUTOFCONTEXT);
                 if hook.is_null() {
-                    UnregisterHotKey(ptr::null_mut(), 1);
+                    UnregisterHotKey(ptr::null_mut(), OVERLAY as i32);
                     let _ = ready.send(Err(io::Error::other("cannot watch the foreground window")));
                     return;
                 }
                 let _ = ready.send(Ok(GetCurrentThreadId()));
                 while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
-                    if msg.message == WM_HOTKEY {
-                        emit(Event::Hotkey);
+                    match (msg.message, msg.wParam) {
+                        (WM_HOTKEY, OVERLAY) => emit(Event::Hotkey),
+                        (WM_HOTKEY, MINIMAP) => emit(Event::Minimap),
+                        (SET_MINIMAP, packed) => {
+                            UnregisterHotKey(ptr::null_mut(), MINIMAP as i32);
+                            let key = Key::unpack(packed);
+                            let taken = key.is_some_and(|key| RegisterHotKey(ptr::null_mut(), MINIMAP as i32, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0);
+                            let _ = answer.send(if taken { Err(io::Error::last_os_error()) } else { Ok(()) });
+                        }
+                        _ => {}
                     }
                 }
                 UnhookWinEvent(hook);
-                UnregisterHotKey(ptr::null_mut(), 1);
+                UnregisterHotKey(ptr::null_mut(), OVERLAY as i32);
+                UnregisterHotKey(ptr::null_mut(), MINIMAP as i32);
             }
         })?;
         let thread = started.recv().map_err(|_| io::Error::other("the overlay thread ended"))??;
-        Ok(Self { thread, join: Some(join) })
+        Ok(Self { thread, join: Some(join), set })
+    }
+
+    /// The minimap's hotkey, or none; fails when another app holds it, which leaves none.
+    pub fn set_minimap(&self, key: Option<Key>) -> io::Result<()> {
+        // SAFETY: posts to the watch thread's queue, made before `start` returned.
+        if unsafe { PostThreadMessageW(self.thread, SET_MINIMAP, key.map_or(0, Key::pack), 0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        self.set.recv().map_err(|_| io::Error::other("the overlay thread ended"))?
     }
 }
 

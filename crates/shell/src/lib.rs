@@ -8,6 +8,7 @@ mod boot;
 mod cheats;
 mod collections;
 mod controls;
+mod crash;
 mod dialog;
 mod docks;
 mod folders;
@@ -61,11 +62,11 @@ use collections::Editor;
 use docks::Docks;
 use folders::FolderRow;
 use glance::Glance;
-use layer::Layer;
+use layer::{Layer, MinimapKey};
 use library::{Game, Library};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
-use map::{MapEvent, MapView};
+use map::{MapEvent, MapView, Minimap};
 use prefs::{Lead, Panels, Prefs};
 use profile::Profiles;
 use resources::{Resources, ResourcesEvent};
@@ -82,6 +83,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 const SIDEBAR_WIDTH: f32 = 248.;
 
 pub fn init(data_dir: &Path, cx: &mut App) {
+    crash::install();
     theme::init(cx);
     cx.set_http_client(Arc::new(art::CdnClient {
         cache: art::Media::Pictures.dir(data_dir),
@@ -159,9 +161,14 @@ pub struct Page {
     tray: Option<tray::Tray>,
     // Off: the close button hides the window in the tray.
     quit_on_close: bool,
+    // Impulse ends once the trainer is stopped.
+    quitting: bool,
+    hide_from_capture: bool,
     layer: Entity<Layer>,
     docks: Entity<Docks>,
-    _glance: Entity<Glance>,
+    glance: Entity<Glance>,
+    // The minimap in its dock over the game.
+    minimap: Entity<Minimap>,
     hud_focus: FocusHandle,
     dialog_focus: FocusHandle,
     menu: Option<Menu>,
@@ -220,13 +227,24 @@ impl Page {
         let page = cx.weak_entity();
         let layer = cx.new(|cx| Layer::new(&data_dir, move |cx| page.upgrade().and_then(|page| page.read(cx).play.pid()), window, cx));
         cx.observe_in(&layer, window, Self::overlay_changed).detach();
+        cx.subscribe(&layer, |page, _, _: &MinimapKey, cx| page.minimap_key(cx)).detach();
         let docks = cx.new(|_| Docks::load(&data_dir, &hud::DOCKS));
-        let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), accent, cx));
+        let live_map = map.read(cx).live_map().clone();
+        let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), live_map.clone(), prefs.hide_from_capture, cx));
+        if prefs.hide_from_capture
+            && let Some(hwnd) = hwnd(window)
+        {
+            overlay::exclude_from_capture(hwnd, true);
+        }
+        let minimap = cx.new(|cx| Minimap::new(live_map.clone(), cx));
         cx.observe_in(&docks, window, |page, _, window, cx| {
             page.sync_map_dock(window, cx);
+            page.sync_minimap(cx);
+            page.sync_minimap_dock(window, cx);
             cx.notify();
         })
         .detach();
+        cx.observe_in(&live_map, window, |page, _, window, cx| page.sync_minimap_dock(window, cx)).detach();
         // A run's time and mods are kept when it ends, and so does closing the window or quitting.
         cx.on_app_quit(|page, _| {
             page.close_session();
@@ -262,9 +280,12 @@ impl Page {
             over: false,
             tray: Self::start_tray(window, cx),
             quit_on_close: prefs.quit_on_close,
+            quitting: false,
+            hide_from_capture: prefs.hide_from_capture,
             layer,
             docks,
-            _glance: glance,
+            glance,
+            minimap,
             hud_focus: cx.focus_handle(),
             dialog_focus: cx.focus_handle(),
             menu: None,

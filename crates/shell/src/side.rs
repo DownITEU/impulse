@@ -11,11 +11,12 @@ use gpui_kit::{
 use super::{
     Page,
     assets::Icon,
+    hud::MINIMAP_DOCK,
     library::Game,
     map,
     run::Play,
     theme::*,
-    widgets::{grid, icon_button, mono, square, tracked},
+    widgets::{brackets, grid, icon_button, mono, square, tracked},
 };
 
 const MAP_HEIGHT: f32 = 204.;
@@ -36,7 +37,7 @@ impl Page {
         self.map.update(cx, |map, cx| map.hide(window, cx));
     }
 
-    /// Gives the open map the live run of its game, or takes it away.
+    /// Gives the open map the live run of its game, or takes it away; and the minimap its run.
     pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
         let open = self.map.read(cx).is_open(cx);
         let run = match &self.play {
@@ -53,12 +54,25 @@ impl Page {
             map.set_run(run, cx);
             map.set_live(live, cx);
         });
+        self.sync_minimap(cx);
+    }
+
+    /// The minimap follows a live run whose trainer can place the player, while its dock is shown.
+    pub(super) fn sync_minimap(&mut self, cx: &mut Context<Self>) {
+        let wanted = self.docks.read(cx).is_shown(MINIMAP_DOCK);
+        let minimap = match &self.play {
+            Play::Live { game, session, tracker: Some(tracker), .. } if wanted => {
+                let offers = self.games().iter().find(|known| known.id == *game).map(|known| known.source.maps.clone());
+                let teleport = self.trainer(Some(game)).is_some_and(|loaded| loaded.teleport);
+                offers.map(|offers| map::LiveRun { offers, run: map::Run { session: session.clone(), tracker: Some(tracker.clone()), teleport } })
+            }
+            _ => None,
+        };
+        self.map.update(cx, |map, cx| map.set_minimap(minimap, cx));
     }
 
     /// The caller gives it a width.
     pub(super) fn map_panel(&self, game: &Game, cx: &mut Context<Self>) -> Div {
-        let accent = rgb(self.accent);
-        let bracket = || div().absolute().size(px(10.)).border_color(accent);
         let offer = game.source.maps.first();
         let open = || cx.listener(|page, _, window, cx| page.open_map(window, cx));
         v_flex()
@@ -109,34 +123,7 @@ impl Page {
                     .child(mono("NO INTERACTIVE MAP FOR THIS GAME", 11.))
                     .into_any_element(),
             })
-            .child(
-                bracket()
-                    .left(px(-1.))
-                    .top(px(-1.))
-                    .border_l_2()
-                    .border_t_2(),
-            )
-            .child(
-                bracket()
-                    .right(px(-1.))
-                    .top(px(-1.))
-                    .border_r_2()
-                    .border_t_2(),
-            )
-            .child(
-                bracket()
-                    .left(px(-1.))
-                    .bottom(px(-1.))
-                    .border_l_2()
-                    .border_b_2(),
-            )
-            .child(
-                bracket()
-                    .right(px(-1.))
-                    .bottom(px(-1.))
-                    .border_r_2()
-                    .border_b_2(),
-            )
+            .children(brackets(self.accent))
     }
 
     /// The live run's clock, or the last run's time, over the active count and the hotkeys' scope.

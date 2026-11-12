@@ -55,6 +55,17 @@ pub fn square(side: f32, color: impl Into<Hsla>) -> Div {
     div().size(px(side)).flex_none().bg(color.into())
 }
 
+/// Over the corners of a `relative` box with a 1 px border.
+pub fn brackets(accent: u32) -> [Div; 4] {
+    let bracket = || div().absolute().size(px(10.)).border_color(rgb(accent));
+    [
+        bracket().left(px(-1.)).top(px(-1.)).border_l_2().border_t_2(),
+        bracket().right(px(-1.)).top(px(-1.)).border_r_2().border_t_2(),
+        bracket().left(px(-1.)).bottom(px(-1.)).border_l_2().border_b_2(),
+        bracket().right(px(-1.)).bottom(px(-1.)).border_r_2().border_b_2(),
+    ]
+}
+
 /// Shrinks with its row: the text is cut, and shown whole in a tooltip.
 pub fn keycap(id: impl Into<ElementId>, text: SharedString) -> Stateful<Div> {
     div()

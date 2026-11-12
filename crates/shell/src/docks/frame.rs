@@ -2,7 +2,7 @@
 //! one is moved or sized.
 
 use gpui_kit::{
-    AnyElement, App, CursorStyle, DispatchPhase, Entity, FontWeight, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Window,
+    AnyElement, App, Bounds, CursorStyle, DispatchPhase, Entity, FontWeight, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Window,
     canvas, component::h_flex, div, prelude::*, px, rgb,
 };
 
@@ -10,10 +10,10 @@ use super::{Docks, Spec};
 use crate::{
     assets::Icon,
     theme::*,
-    widgets::{icon, icon_button, square, tracked},
+    widgets::{icon, icon_button, square, tip, tracked},
 };
 
-const HEADER: f32 = 32.;
+pub(super) const HEADER: f32 = 32.;
 const GRIP: f32 = 14.;
 const TOGGLE: f32 = 40.;
 
@@ -67,11 +67,20 @@ pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, ac
                                 .on_click(move |_, _, cx| hide.update(cx, |docks, cx| docks.hide(spec, cx))),
                         ),
                 )
-                .child(div().flex_1().min_h_0().overflow_hidden().child(content))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_hidden()
+                        .when(spec.body_moves, |body| body.on_mouse_down(MouseButton::Left, grab(spec, false)))
+                        .child(content),
+                )
                 .when(spec.smallest.is_some(), |frame| {
                     frame.child(
+                        // Occluding, it keeps its press from a body that moves the dock.
                         div()
                             .id("grip")
+                            .occlude()
                             .absolute()
                             .right_0()
                             .bottom_0()
@@ -83,6 +92,13 @@ pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, ac
                 .into_any_element()
         })
         .collect()
+}
+
+/// A dock's frame below its header, the border it shares with the header included.
+pub fn below_header(mut bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+    bounds.origin.y += px(HEADER);
+    bounds.size.height -= px(HEADER);
+    bounds
 }
 
 /// A toggle per dock; `usable` says which may show for what is open.
@@ -105,6 +121,7 @@ pub fn toolbar(docks: &Entity<Docks>, accent: u32, cx: &App, usable: impl Fn(&Sp
             .border_1()
             .border_color(if usable && shown { alpha(accent, 0.6) } else { line(0.12) })
             .bg(alpha(BG, 0.85))
+            .tooltip(move |window, cx| tip(spec.title.into(), window, cx))
             .child(icon(spec.icon, 17., color))
             .when(usable, |toggle| {
                 toggle

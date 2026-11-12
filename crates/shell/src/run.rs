@@ -167,6 +167,7 @@ impl Page {
         });
         log::info!("trainer is live in {id}");
         let session: Arc<dyn Session> = Arc::from(session);
+        super::crash::follow(&session);
         let located = self.trainer(Some(&id)).is_some_and(|loaded| loaded.location);
         let tracker = located.then(|| cx.new(|_| Tracker::new(session.clone())));
         self.play = Play::Live { game: id, pid: process.pid, since: Instant::now(), closed: false, session, tracker, _events: watcher, _clock: clock };
@@ -232,6 +233,9 @@ impl Page {
     }
 
     fn run_stopped(&mut self, cx: &mut Context<Self>) {
+        if self.quitting {
+            return cx.quit();
+        }
         if matches!(self.play, Play::Stopping { .. }) {
             self.play = Play::Idle;
             cx.notify();

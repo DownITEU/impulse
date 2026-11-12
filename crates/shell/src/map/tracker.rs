@@ -13,9 +13,10 @@ use model::{Frame, Session};
 
 use super::heading::{Bearing, Heading};
 
-// Failed answers in a row before the player counts as lost; asking goes on, slower each time.
+// Failed answers in a row before the player counts as lost (a menu, a loading screen); asking goes on,
+// slower each time, but soon enough for the minimap to come back with the player.
 const GIVE_UP: u32 = 3;
-const SLOWEST: Duration = Duration::from_secs(60);
+const SLOWEST: Duration = Duration::from_secs(3);
 
 /// The player's position in the game's own coordinates, and which way they head.
 #[derive(Clone, Copy)]

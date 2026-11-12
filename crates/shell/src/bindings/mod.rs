@@ -1,4 +1,4 @@
-//! Trainer hotkeys: the live run's hook, rebinding a slot or the overlay hotkey by pressing its keys or
+//! Trainer hotkeys: the live run's hook, rebinding a slot or the overlay's or minimap's hotkey by pressing its keys or
 //! buttons, the saved choices and the Settings tab. Every hook is global: a capture's runs first and
 //! hides what it takes from every app.
 
@@ -27,11 +27,12 @@ pub(super) struct Bindings {
 }
 
 /// What a capture binds.
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(super) enum Target {
     // An id, not an index: a newer cheat list may arrive meanwhile.
     Slot { game: Arc<str>, cheat: String, slot: usize },
     Overlay,
+    Minimap,
 }
 
 struct Capturing {
@@ -75,8 +76,9 @@ impl Bindings {
         bound.then_some(capture.held)
     }
 
-    pub fn overlay_held(&self) -> Option<Option<Chord>> {
-        self.capture.as_ref().filter(|capture| capture.target == Target::Overlay).map(|capture| capture.held)
+    /// What the overlay's or the minimap's hotkey being bound holds so far.
+    pub fn layer_held(&self, target: &Target) -> Option<Option<Chord>> {
+        self.capture.as_ref().filter(|capture| capture.target == *target).map(|capture| capture.held)
     }
 }
 
@@ -196,6 +198,7 @@ impl Page {
                 match self.bindings.capture.take().map(|capture| capture.target) {
                     Some(Target::Slot { game, cheat, slot }) => self.rebind(game, &cheat, slot, outcome, window, cx),
                     Some(Target::Overlay) => self.rebind_overlay(outcome, cx),
+                    Some(Target::Minimap) => self.rebind_minimap(outcome, cx),
                     None => {}
                 }
             }
@@ -210,7 +213,7 @@ impl Page {
             Outcome::Unbound => Choice::Unbound,
             Outcome::Bound(chord) => Choice::Bound(chord),
         };
-        let overlay = self.layer.read(cx).hotkey();
+        let (overlay, minimap) = (self.layer.read(cx).hotkey(), self.layer.read(cx).minimap_hotkey());
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
         let Some(index) = loaded.cheats.iter().position(|found| found.id == cheat) else { return };
         let wanted = match choice {
@@ -218,10 +221,11 @@ impl Page {
             Choice::Unbound => None,
             Choice::Default => loaded.cheats[index].hotkeys.get(slot).copied().flatten(),
         };
-        // As in Wand, a cheat never holds one chord twice, nor the overlay's.
+        // As in Wand, a cheat never holds one chord twice, nor the overlay's or the minimap's.
         let taken = |chord: Chord| {
             let other = |(at, bound): (usize, &Option<Chord>)| at != slot && bound.is_some_and(|bound| bound.same_keys(chord));
-            overlay.fired_by(chord.vks()) || loaded.hotkeys[index].iter().enumerate().any(other)
+            let layer = overlay.fired_by(chord.vks()) || minimap.is_some_and(|key| key.fired_by(chord.vks()));
+            layer || loaded.hotkeys[index].iter().enumerate().any(other)
         };
         if wanted.is_some_and(taken) {
             return;
@@ -238,7 +242,7 @@ impl Page {
     pub(super) fn hotkeys_status(&self) -> Div {
         if let Some(capture) = &self.bindings.capture {
             let keys = match capture.target {
-                Target::Slot { .. } => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND",
+                Target::Slot { .. } | Target::Minimap => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND",
                 Target::Overlay => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT",
             };
             return mono(keys, 11.).text_color(rgb(self.accent));

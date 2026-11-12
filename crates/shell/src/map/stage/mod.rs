@@ -21,6 +21,7 @@ use rustc_hash::FxHashMap as HashMap;
 use super::{
     board::{Board, BoardEvent},
     keys::STAGE,
+    live::LiveMap,
     markers::Images,
 };
 use crate::{Load, widgets::notice};
@@ -88,12 +89,24 @@ pub struct Stage {
     follow: bool,
     // The player as drawn, easing toward the board's fixes.
     player: Option<Walk>,
+    // A minimap: it only follows the player at the live map's zoom, which the wheel changes.
+    live: Option<Entity<LiveMap>>,
     focus: FocusHandle,
     _chip: Task<()>,
 }
 
 impl Stage {
     pub fn new(board: Entity<Board>, tile_dir: PathBuf, cx: &mut Context<Self>) -> Self {
+        Self::with(board, tile_dir, None, cx)
+    }
+
+    pub fn mini(live: Entity<LiveMap>, cx: &mut Context<Self>) -> Self {
+        cx.observe(&live, |_, _, cx| cx.notify()).detach();
+        let (board, tile_dir) = (live.read(cx).board.clone(), live.read(cx).tile_dir.clone());
+        Self { tiles: Tiles::small(), follow: true, ..Self::with(board, tile_dir, Some(live), cx) }
+    }
+
+    fn with(board: Entity<Board>, tile_dir: PathBuf, live: Option<Entity<LiveMap>>, cx: &mut Context<Self>) -> Self {
         cx.observe(&board, |stage, board, cx| {
             stage.followed(board.read(cx));
             cx.notify();
@@ -119,6 +132,11 @@ impl Stage {
             }
         })
         .detach();
+        // A minimap made for a map already up missed its `Installed`.
+        let shown = match &board.read(cx).map {
+            Load::Ready(map) => Shown::of(map),
+            _ => Shown::default(),
+        };
         Self {
             board,
             tile_dir,
@@ -131,11 +149,12 @@ impl Stage {
             clock: None,
             bounds: Bounds::default(),
             tile: 256.,
-            shown: Shown::default(),
+            shown,
             drag: None,
             layers_open: false,
             follow: false,
             player: None,
+            live,
             focus: cx.focus_handle(),
             _chip: Task::ready(()),
         }
@@ -206,7 +225,7 @@ impl Stage {
 
     // A run that ended leaves nothing to follow; the next frame moves the view with the player.
     fn followed(&mut self, board: &Board) {
-        self.follow &= board.player.is_some();
+        self.follow = self.live.is_some() || self.follow && board.player.is_some();
     }
 
     fn center_on_player(&mut self) {
@@ -253,22 +272,17 @@ impl Render for Stage {
             Load::Failed(why) => return waiting("[ NO MAP ]", "THE MAP IS UNAVAILABLE", &format!("It could not be loaded: {why}.")),
         };
         let view = cx.entity();
-        let stage = div()
-            .id("map-stage")
-            .relative()
-            .size_full()
-            .overflow_hidden()
-            .bg(rgb(map.background))
-            .track_focus(&self.focus)
-            .key_context(STAGE);
-        self.bind_keys(stage, cx)
-            .child(
-                canvas(
-                    |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
-                    move |bounds, hitbox, window, cx| view.update(cx, |stage, cx| stage.paint(bounds, hitbox, window, cx)),
-                )
-                .size_full(),
-            )
+        let stage = div().id("map-stage").relative().size_full().overflow_hidden().bg(rgb(map.background));
+        let canvas = canvas(
+            |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+            move |bounds, hitbox, window, cx| view.update(cx, |stage, cx| stage.paint(bounds, hitbox, window, cx)),
+        )
+        .size_full();
+        if self.live.is_some() {
+            return stage.on_scroll(cx.listener(Self::mini_wheel)).child(canvas).into_any_element();
+        }
+        self.bind_keys(stage.track_focus(&self.focus).key_context(STAGE), cx)
+            .child(canvas)
             .children(self.chip(&map, board))
             .children(self.target_menu(&map, board, cx))
             .child(self.readout(board))

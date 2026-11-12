@@ -1,7 +1,7 @@
 //! The overlay's window: the hotkey turns Impulse's window into a transparent layer over the game in
 //! front, topmost on its monitor and with the input, and back into the window behind the game. Leaving the
 //! game for another window turns it back too, and the game in front again brings the overlay back. It also
-//! tells the HUD (`glance.rs`) whether the live game is in front.
+//! tells the HUD (`glance.rs`) whether the live game is in front, and holds the minimap's hotkey meanwhile.
 
 mod settings;
 mod store;
@@ -45,7 +45,11 @@ enum Ask {
     Foreground,
     /// A run started or ended.
     Recheck,
+    Minimap,
 }
+
+/// The minimap's hotkey was pressed.
+pub(super) struct MinimapKey;
 
 /// The live game as the HUD sees it; emitted on change.
 #[derive(Clone, Copy, PartialEq)]
@@ -64,6 +68,8 @@ pub(super) struct Layer {
     asks: mpsc::UnboundedSender<Ask>,
     hwnd: Option<isize>,
     watch: Option<Watch>,
+    // The minimap's hotkey as registered now.
+    minimap: Option<Key>,
     live: Live,
     _switches: Task<()>,
 }
@@ -86,7 +92,7 @@ impl Layer {
                 let _ = switch(layer, hwnd, asked, cx).await;
             }
         });
-        Self { mode: Mode::Window { armed: None }, playing: Playing::Idle, store, asks, hwnd, watch, live: Box::new(live), _switches: switches }
+        Self { mode: Mode::Window { armed: None }, playing: Playing::Idle, store, asks, hwnd, watch, minimap: None, live: Box::new(live), _switches: switches }
     }
 
     pub fn recheck(&self) {
@@ -118,8 +124,37 @@ impl Layer {
         // Registered before the old one goes, so a refused key leaves the old in place.
         self.watch = Some(watch(key, &self.asks)?);
         self.store.set_hotkey(key);
+        // The old watch took the minimap's with it.
+        self.minimap = None;
+        self.hold_minimap_key(cx);
         cx.notify();
         Ok(())
+    }
+
+    pub fn minimap_hotkey(&self) -> Option<Key> {
+        self.store.minimap()
+    }
+
+    pub fn set_minimap_hotkey(&mut self, key: Option<Key>, cx: &mut Context<Self>) {
+        self.store.set_minimap(key);
+        self.hold_minimap_key(cx);
+        cx.notify();
+    }
+
+    /// Taken from every app, so only while there is a minimap to toggle: the live game in front or under the overlay.
+    fn hold_minimap_key(&mut self, cx: &App) {
+        let under = match self.mode {
+            Mode::Over { game } => (self.live)(cx).is_some_and(|pid| overlay::owner(game) == pid),
+            Mode::Window { .. } => false,
+        };
+        let wanted = (matches!(self.playing, Playing::Front(_)) || under).then(|| self.store.minimap()).flatten();
+        let Some(watch) = &self.watch else { return };
+        if wanted != self.minimap {
+            self.minimap = wanted;
+            if let Err(e) = watch.set_minimap(wanted) {
+                log::warn!("minimap hotkey: {e}");
+            }
+        }
     }
 
     fn set(&mut self, mode: Mode, cx: &mut Context<Self>) {
@@ -140,16 +175,19 @@ impl Layer {
             self.playing = playing;
             cx.emit(playing);
         }
+        self.hold_minimap_key(cx);
     }
 }
 
 impl EventEmitter<Playing> for Layer {}
+impl EventEmitter<MinimapKey> for Layer {}
 
 fn watch(key: Key, asks: &mpsc::UnboundedSender<Ask>) -> io::Result<Watch> {
     let asks = asks.clone();
     Watch::start(key, move |event| {
         let _ = asks.unbounded_send(match event {
             Event::Hotkey => Ask::Toggle,
+            Event::Minimap => Ask::Minimap,
             Event::Foreground => Ask::Foreground,
         });
     })
@@ -162,6 +200,7 @@ async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::Unbounde
         let (mode, live) = layer.read_with(cx, |layer, cx| (layer.mode, (layer.live)(cx)))?;
         let front = overlay::foreground();
         match (mode, ask) {
+            (_, Ask::Minimap) => layer.update(cx, |_, cx| cx.emit(MinimapKey))?,
             (Mode::Window { armed }, Ask::Toggle) => {
                 let other = front.filter(|&front| front != hwnd);
                 if let Some(game) = other.or(armed.filter(|&game| overlay::is_window(game))).or_else(|| live.and_then(overlay::window_of)) {

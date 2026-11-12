@@ -69,28 +69,35 @@ impl Stage {
         self.bounds = bounds;
         self.tile = f64::from(map.tiles.size) / f64::from(window.scale_factor());
         let area = self.size();
+        let spans = self.spans(&map);
         if self.camera.is_none() {
-            self.camera = Some(home(&map, area, &self.spans(&map)));
+            self.camera = Some(home(&map, area, &spans));
+        }
+        let mini = self.live.as_ref().map(|live| live.read(cx).span(&map, self.tile).clamp(*spans.start(), *spans.end()));
+        if let (Some(span), Some(camera)) = (mini, &mut self.camera) {
+            camera.span = span;
         }
         self.animate(&map, selected, player, window);
         let Some(camera) = self.camera else { return };
 
-        // On the window, not the element: a drag goes on outside the map.
+        // On the window, not the element: a drag goes on outside the map. The minimap only zooms.
         let view = cx.entity();
-        window.on_mouse_event({
-            let view = view.clone();
-            move |event: &MouseMoveEvent, phase, window, cx| {
-                if phase == DispatchPhase::Bubble {
-                    let over = hitbox.is_hovered(window);
-                    view.update(cx, |stage, cx| stage.moved(event, over, cx));
+        if mini.is_none() {
+            window.on_mouse_event({
+                let view = view.clone();
+                move |event: &MouseMoveEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        let over = hitbox.is_hovered(window);
+                        view.update(cx, |stage, cx| stage.moved(event, over, cx));
+                    }
                 }
-            }
-        });
-        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
-            if phase == DispatchPhase::Bubble {
-                view.update(cx, |stage, cx| stage.released(event, cx));
-            }
-        });
+            });
+            window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                if phase == DispatchPhase::Bubble {
+                    view.update(cx, |stage, cx| stage.released(event, cx));
+                }
+            });
+        }
 
         let place = |(x, y): Pixel| bounds.origin + point(px(x as f32), px(y as f32));
         let disc = |center: gpui_kit::Point<Pixels>, side: f32| Bounds::new(center - point(px(side / 2.), px(side / 2.)), size(px(side), px(side)));

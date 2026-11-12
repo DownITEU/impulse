@@ -5,6 +5,7 @@ mod board;
 mod card;
 mod heading;
 mod keys;
+mod live;
 mod markers;
 mod picture;
 mod sidebar;
@@ -12,7 +13,7 @@ mod stage;
 mod state;
 mod tracker;
 
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{path::Path, rc::Rc, sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use gpui_kit::{
@@ -25,7 +26,7 @@ use gpui_kit::{
 use model::{Group, Map, MapOffer, Pin, Provider, Snapshot};
 
 use crate::{
-    art,
+    Load, art,
     assets::Icon,
     theme::*,
     widgets::{icon_button, mono},
@@ -35,6 +36,7 @@ pub use board::Run;
 use card::Card;
 pub use keys::bind_keys;
 use keys::{CONTEXT, CloseMap, FindPlace};
+pub use live::{LiveMap, LiveRun};
 use sidebar::Sidebar;
 use stage::Stage;
 /// The user's progress on each map.
@@ -71,6 +73,7 @@ pub struct MapView {
     sidebar_open: bool,
     // In a dock, whose frame closes it.
     docked: bool,
+    live_map: Entity<LiveMap>,
     focus: FocusHandle,
     _load: Task<()>,
     _forget: Task<()>,
@@ -80,7 +83,10 @@ impl MapView {
     pub fn new(provider: Arc<dyn Provider>, data_dir: &Path, accent: u32, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let board = cx.new(|_| Board::new(state::dir(data_dir), accent));
         cx.observe(&board, |_, _, cx| cx.notify()).detach();
-        let stage = cx.new(|cx| Stage::new(board.clone(), art::Media::Tiles.dir(data_dir), cx));
+        let live_board = cx.new(|_| Board::live(state::dir(data_dir), accent));
+        let tile_dir = art::Media::Tiles.dir(data_dir);
+        let live_map = cx.new(|cx| LiveMap::new(provider.clone(), live_board, board.clone(), tile_dir.clone(), data_dir, cx));
+        let stage = cx.new(|cx| Stage::new(board.clone(), tile_dir, cx));
         let sidebar = cx.new(|cx| Sidebar::new(board.clone(), window, cx));
         let card = cx.new(|cx| Card::new(board.clone(), art::Media::Videos.dir(data_dir), window, cx));
         Self {
@@ -95,6 +101,7 @@ impl MapView {
             chosen: 0,
             sidebar_open: true,
             docked: false,
+            live_map,
             focus: cx.focus_handle(),
             _load: Task::ready(()),
             _forget: Task::ready(()),
@@ -107,6 +114,16 @@ impl MapView {
 
     pub fn set_accent(&mut self, accent: u32, cx: &mut Context<Self>) {
         self.board.update(cx, |board, cx| board.set_accent(accent, cx));
+        self.live_map.update(cx, |live, cx| live.set_accent(accent, cx));
+    }
+
+    pub fn live_map(&self) -> &Entity<LiveMap> {
+        &self.live_map
+    }
+
+    /// The live run the minimap follows, while it is wanted.
+    pub fn set_minimap(&mut self, run: Option<LiveRun>, cx: &mut Context<Self>) {
+        self.live_map.update(cx, |live, cx| live.set_run(run, cx));
     }
 
     pub fn set_docked(&mut self, docked: bool, cx: &mut Context<Self>) {
@@ -187,13 +204,21 @@ impl MapView {
         self.keep_view(cx);
         self.chosen = index;
         let Some(offer) = self.offers.get(index) else { return };
+        let shared = self.live_map.read(cx).board.read(cx).loaded(&offer.id);
         self.board.update(cx, |board, cx| board.pending(offer.id.clone(), cx));
+        // The minimap's copy, when it shows this map.
+        if let Some(map) = shared {
+            self._load = Task::ready(());
+            return self.board.update(cx, |board, cx| board.install(map, cx));
+        }
         let mut snapshots = self.provider.map(offer);
         let board = self.board.downgrade();
         self._load = cx.spawn(async move |_, cx| {
             while let Some(snapshot) = snapshots.next().await {
                 let shown = board.update(cx, |board, cx| match snapshot {
-                    Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(map, cx),
+                    // The minimap shared its copy meanwhile.
+                    Snapshot::Cached(Some(_)) if matches!(board.map, Load::Ready(_)) => {}
+                    Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
                     // The network is next.
                     Snapshot::Cached(None) => {}
                     Snapshot::Fresh(Err(e)) => board.fail(format!("{e:#}"), cx),
@@ -265,6 +290,29 @@ impl MapView {
             cx.notify();
         }
         self.sidebar.update(cx, |sidebar, cx| sidebar.focus_search(window, cx));
+    }
+}
+
+/// The live map following the player, small: in the HUD over the game and in the overlay's dock. Each
+/// window keeps its own tiles and images.
+pub struct Minimap {
+    stage: Entity<Stage>,
+}
+
+impl Minimap {
+    pub fn new(live: Entity<LiveMap>, cx: &mut Context<Self>) -> Self {
+        Self { stage: cx.new(|cx| Stage::mini(live, cx)) }
+    }
+
+    /// Lets go of its tiles and images; `window` is the one it was drawn in.
+    pub fn hide(&self, window: &mut Window, cx: &mut App) {
+        self.stage.update(cx, |stage, _| stage.hide(window));
+    }
+}
+
+impl Render for Minimap {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        self.stage.clone()
     }
 }
 

@@ -1,4 +1,4 @@
-//! The overlay hotkey as Windows registers it: modifiers and one key.
+//! A hotkey as Windows registers it: modifiers and one key.
 
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN};
 
@@ -17,6 +17,17 @@ pub struct Key {
 impl Key {
     /// Ctrl+Shift+O.
     pub const DEFAULT: Self = Self { modifiers: MOD_CONTROL | MOD_SHIFT, vk: b'O' };
+    /// Ctrl+Shift+M.
+    pub const MINIMAP: Self = Self { modifiers: MOD_CONTROL | MOD_SHIFT, vk: b'M' };
+
+    /// For a thread message; never 0, which is no key.
+    pub(crate) fn pack(self) -> usize {
+        (self.modifiers as usize) << 8 | usize::from(self.vk)
+    }
+
+    pub(crate) fn unpack(packed: usize) -> Option<Self> {
+        (packed != 0).then_some(Self { modifiers: (packed >> 8) as HOT_KEY_MODIFIERS, vk: packed as u8 })
+    }
 
     /// `None` without a modifier and exactly one key, or with a mouse button or wheel notch: a lone key
     /// would be taken from every app.
@@ -64,5 +75,12 @@ mod tests {
         assert_eq!(Key::from_vks([0xA2, 4]), None);
         assert!(Key::DEFAULT.fired_by([0xA3, 0xA1, b'O']));
         assert!(!Key::DEFAULT.fired_by([0xA3, 0xA1, 0xA4, b'O']));
+    }
+
+    #[test]
+    fn packed_for_a_thread_message() {
+        assert_eq!(Key::unpack(Key::MINIMAP.pack()), Some(Key::MINIMAP));
+        assert_eq!(Key::unpack(Key { modifiers: MOD_WIN | MOD_ALT, vk: 0xFE }.pack()), Some(Key { modifiers: MOD_WIN | MOD_ALT, vk: 0xFE }));
+        assert_eq!(Key::unpack(0), None);
     }
 }

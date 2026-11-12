@@ -94,7 +94,7 @@ impl Page {
             .py(px(6.))
             .children(self.folder_rows(cx))
             .child(
-                row("CLOSE TO TRAY", "the close button hides Impulse; quit from the tray icon", 64.).mt(px(12.)).border_t_1().border_b_0().child(
+                row("CLOSE TO TRAY", "the close button hides Impulse; quit from the tray icon", 64.).mt(px(12.)).border_t_1().child(
                     div()
                         .id("close-to-tray")
                         .cursor_pointer()
@@ -106,6 +106,26 @@ impl Page {
                         .child(toggle(!self.quit_on_close, self.accent)),
                 ),
             )
+            .child(
+                row("HIDE FROM CAPTURE", "screenshots, recordings and streams show no Impulse window", 64.).border_b_0().child(
+                    div()
+                        .id("hide-from-capture")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|page, _, window, cx| page.set_hide_from_capture(!page.hide_from_capture, window, cx)))
+                        .child(toggle(self.hide_from_capture, self.accent)),
+                ),
+            )
+    }
+
+    /// The HUD's window too.
+    fn set_hide_from_capture(&mut self, on: bool, window: &Window, cx: &mut Context<Self>) {
+        self.hide_from_capture = on;
+        if let Some(hwnd) = super::hwnd(window) {
+            overlay::exclude_from_capture(hwnd, on);
+        }
+        self.glance.update(cx, |glance, _| glance.set_hidden(on));
+        self.save_prefs();
+        cx.notify();
     }
 
     fn appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {

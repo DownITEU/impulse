@@ -1,18 +1,21 @@
 //! The HUD over the game while Impulse is behind it: one small topmost window that never takes the input,
-//! at the minimap dock's place on the game's monitor. Hidden while the game is not in front, gone with the run.
+//! with the minimap at its dock's place on the game's monitor. Shown while the game is in front and its live
+//! map is up, gone with the run.
 
 use anyhow::Result;
 use futures::{StreamExt, channel::mpsc};
 use gpui_kit::{
-    App, AsyncApp, Context, Entity, IntoElement, Render, Subscription, Task, WeakEntity, Window, WindowHandle, WindowKind, WindowOptions,
-    prelude::*, px, rgb, size,
+    App, AsyncApp, Context, Entity, IntoElement, Render, Task, WeakEntity, Window, WindowHandle, WindowKind, WindowOptions, div,
+    prelude::*, px, size,
 };
 
 use super::{
-    docks::Docks,
-    hud::{MINIMAP_DOCK, minimap},
+    docks::{self, Docks},
+    hud::MINIMAP_DOCK,
     layer::{Layer, Playing},
+    map::{LiveMap, Minimap},
     theme::*,
+    widgets::brackets,
 };
 
 /// Left, top, width, height in physical pixels.
@@ -33,51 +36,87 @@ struct Hud {
 
 pub(super) struct Glance {
     docks: Entity<Docks>,
-    accent: u32,
+    live: Entity<LiveMap>,
     playing: Playing,
+    // The live map follows the player while the HUD could show, so it shows once they are placed again.
+    following: bool,
+    // From screen capture.
+    hidden: bool,
     hud: Option<Hud>,
-    _playing: Subscription,
     _calls: Task<()>,
 }
 
 impl Glance {
-    pub fn new(layer: &Entity<Layer>, docks: Entity<Docks>, accent: u32, cx: &mut Context<Self>) -> Self {
+    pub fn new(layer: &Entity<Layer>, docks: Entity<Docks>, live: Entity<LiveMap>, hidden: bool, cx: &mut Context<Self>) -> Self {
         let (wake, woken) = mpsc::unbounded();
-        let playing = cx.subscribe(layer, move |glance, _, playing: &Playing, _| {
-            glance.playing = *playing;
+        cx.subscribe(layer, {
+            let wake = wake.clone();
+            move |glance, _, playing: &Playing, _| {
+                glance.playing = *playing;
+                let _ = wake.unbounded_send(());
+            }
+        })
+        .detach();
+        // The live map comes up or goes after the game is in front.
+        cx.observe(&live, move |_, _, _| {
             let _ = wake.unbounded_send(());
-        });
+        })
+        .detach();
         // The app quits once its last window closes.
         cx.on_release(|glance, cx| glance.close(cx)).detach();
         let calls = cx.spawn(async move |glance, cx| {
             let _ = calls(glance, woken, cx).await;
         });
-        Self { docks, accent, playing: Playing::Idle, hud: None, _playing: playing, _calls: calls }
+        Self { docks, live, playing: Playing::Idle, following: false, hidden, hud: None, _calls: calls }
+    }
+
+    pub fn set_hidden(&mut self, hidden: bool) {
+        self.hidden = hidden;
+        if let Some(hud) = &self.hud {
+            overlay::exclude_from_capture(hud.hwnd, hidden);
+        }
     }
 
     /// Settles what an update can; the rest is the next window call.
     fn next(&mut self, cx: &mut App) -> Option<Call> {
-        let want = match self.playing {
+        let game = match self.playing {
             Playing::Idle => {
                 self.close(cx);
                 return None;
             }
-            Playing::Front(game) if self.docks.read(cx).is_shown(MINIMAP_DOCK) => overlay::monitor_of(game).map(|monitor| {
-                let screen = size(px(monitor.size.0 as f32 / monitor.scale), px(monitor.size.1 as f32 / monitor.scale));
-                let bounds = self.docks.read(cx).bounds(MINIMAP_DOCK, screen).to_device_pixels(monitor.scale);
-                (monitor.origin.0 + bounds.origin.x.0, monitor.origin.1 + bounds.origin.y.0, bounds.size.width.0, bounds.size.height.0)
-            }),
+            Playing::Front(game) if self.docks.read(cx).is_shown(MINIMAP_DOCK) && self.live.read(cx).ready(cx) => Some(game),
             Playing::Front(_) | Playing::Away => None,
         };
+        self.follow(game.is_some(), cx);
+        // Where the dock's minimap is.
+        let want = game.filter(|_| self.live.read(cx).placed()).and_then(|game| {
+            let monitor = overlay::monitor_of(game)?;
+            let screen = size(px(monitor.size.0 as f32 / monitor.scale), px(monitor.size.1 as f32 / monitor.scale));
+            let bounds = docks::below_header(self.docks.read(cx).bounds(MINIMAP_DOCK, screen)).to_device_pixels(monitor.scale);
+            Some((monitor.origin.0 + bounds.origin.x.0, monitor.origin.1 + bounds.origin.y.0, bounds.size.width.0, bounds.size.height.0))
+        });
         let Some(hud) = &mut self.hud else { return want.map(|_| Call::Open) };
         if hud.placed == want {
             return None;
         }
+        let (window, hwnd) = (hud.window, hud.hwnd);
         hud.placed = want;
-        Some(want.map_or(Call::Hide(hud.hwnd), |rect| Call::Place(hud.hwnd, rect)))
+        // Hidden, it lets go of its tiles.
+        if want.is_none() {
+            window.update(cx, |card, window, cx| card.minimap.update(cx, |minimap, cx| minimap.hide(window, cx))).ok();
+        }
+        Some(want.map_or(Call::Hide(hwnd), |rect| Call::Place(hwnd, rect)))
+    }
+
+    fn follow(&mut self, follow: bool, cx: &mut App) {
+        if follow != self.following {
+            self.following = follow;
+            self.live.update(cx, |live, cx| live.set_shown(follow, cx));
+        }
     }
 
     fn close(&mut self, cx: &mut App) {
+        self.follow(false, cx);
         if let Some(hud) = self.hud.take() {
             hud.window.update(cx, |_, window, _| window.remove_window()).ok();
         }
@@ -90,10 +129,11 @@ async fn calls(glance: WeakEntity<Glance>, mut woken: mpsc::UnboundedReceiver<()
         while let Some(call) = glance.update(cx, |glance, cx| glance.next(cx))? {
             match call {
                 Call::Open => {
-                    let accent = glance.read_with(cx, |glance, _| glance.accent)?;
-                    let hud = open(accent, cx)?;
+                    let (live, hidden) = glance.read_with(cx, |glance, _| (glance.live.clone(), glance.hidden))?;
+                    let hud = open(live, cx)?;
                     // Before the first show, so it never takes the input.
                     overlay::pass_through(hud.hwnd);
+                    overlay::exclude_from_capture(hud.hwnd, hidden);
                     glance.update(cx, |glance, _| glance.hud = Some(hud))?;
                 }
                 Call::Place(hwnd, rect) => overlay::place(hwnd, rect),
@@ -104,7 +144,7 @@ async fn calls(glance: WeakEntity<Glance>, mut woken: mpsc::UnboundedReceiver<()
     Ok(())
 }
 
-fn open(accent: u32, cx: &mut AsyncApp) -> Result<Hud> {
+fn open(live: Entity<LiveMap>, cx: &mut AsyncApp) -> Result<Hud> {
     let options = WindowOptions {
         titlebar: None,
         focus: false,
@@ -115,17 +155,33 @@ fn open(accent: u32, cx: &mut AsyncApp) -> Result<Hud> {
         is_minimizable: false,
         ..Default::default()
     };
-    let window = cx.update(|cx| cx.open_window(options, |_, cx| cx.new(|_| Card { accent })))?;
+    let window = cx.update(|cx| {
+        cx.open_window(options, |_, cx| {
+            let minimap = cx.new(|cx| Minimap::new(live.clone(), cx));
+            cx.new(|cx| {
+                // For the accent.
+                cx.observe(&live, |_, _, cx| cx.notify()).detach();
+                Card { live, minimap }
+            })
+        })
+    })?;
     let hwnd = window.update(cx, |_, window, _| super::hwnd(window))?.ok_or_else(|| anyhow::anyhow!("the HUD has no window handle"))?;
     Ok(Hud { window, hwnd, placed: None })
 }
 
 struct Card {
-    accent: u32,
+    live: Entity<LiveMap>,
+    minimap: Entity<Minimap>,
 }
 
 impl Render for Card {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        minimap(self.accent).bg(rgb(BG)).border_1().border_color(line(0.14))
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .relative()
+            .size_full()
+            .border_1()
+            .border_color(line(0.14))
+            .child(self.minimap.clone())
+            .children(brackets(self.live.read(cx).accent(cx)))
     }
 }

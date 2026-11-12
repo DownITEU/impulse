@@ -145,6 +145,12 @@ impl Page {
         let launchable = !self.play.is_active() && self.trainer(Some(&game.id)).is_some();
         h_flex()
             .gap(px(8.))
+            .when_some(starting, |bar, stage| {
+                bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent))
+            })
+            .when(stopping, |bar| {
+                bar.child(tracked(STOPPING, 12.5, 0.14).text_color(accent))
+            })
             .when(running || starting.is_some(), |bar| {
                 bar.child(
                     action("stop")
@@ -155,12 +161,6 @@ impl Page {
                         .child(square(9., accent))
                         .child(tracked("STOP", 12.5, 0.14)),
                 )
-            })
-            .when_some(starting, |bar, stage| {
-                bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent))
-            })
-            .when(stopping, |bar| {
-                bar.child(tracked(STOPPING, 12.5, 0.14).text_color(accent))
             })
             .when(launchable, |bar| {
                 bar.child(

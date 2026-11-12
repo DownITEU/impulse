@@ -14,8 +14,9 @@ use super::{
 };
 use crate::Load;
 
-// How often the open map wants the player's position.
+// How often the open map wants the player's position, and the minimap, which follows the player.
 const EVERY: Duration = Duration::from_secs(1);
+const LIVE_EVERY: Duration = Duration::from_millis(250);
 
 /// A live run of the shown game, as far as the map uses it.
 pub struct Run {
@@ -65,13 +66,25 @@ pub struct Board {
     pub bearing: Option<Bearing>,
     // What went wrong last, shown on the map.
     pub note: Option<String>,
-    // The player's position is asked for only while the map is on screen.
+    // The player's position is asked for only while the map is on screen, this often.
     open: bool,
+    every: Duration,
+    // Off for the minimap's board: the user's state of a map is written by the board they change it on.
+    saves: bool,
     _fixes: Option<(Lease, Subscription)>,
 }
 
 impl Board {
     pub fn new(state_dir: PathBuf, accent: u32) -> Self {
+        Self::with(state_dir, accent, EVERY, true)
+    }
+
+    /// The minimap's: it follows the player closely and never writes the user's state.
+    pub fn live(state_dir: PathBuf, accent: u32) -> Self {
+        Self::with(state_dir, accent, LIVE_EVERY, false)
+    }
+
+    fn with(state_dir: PathBuf, accent: u32, every: Duration, saves: bool) -> Self {
         Self {
             accent,
             state_dir,
@@ -89,7 +102,21 @@ impl Board {
             bearing: None,
             note: None,
             open: false,
+            every,
+            saves,
             _fixes: None,
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// The map `id`, when this board holds it.
+    pub fn loaded(&self, id: &str) -> Option<Rc<Map>> {
+        match &self.map {
+            Load::Ready(map) if self.id == id => Some(map.clone()),
+            _ => None,
         }
     }
 
@@ -108,8 +135,9 @@ impl Board {
     }
 
     /// A fresh copy of the map on screen keeps the user's state, not what refers to its pins.
-    pub fn install(&mut self, map: Map, cx: &mut Context<Self>) {
-        let first = matches!(self.map, Load::Pending);
+    pub fn install(&mut self, map: Rc<Map>, cx: &mut Context<Self>) {
+        // A copy shared after this board's own load failed is a first one too.
+        let first = !matches!(self.map, Load::Ready(_));
         let retiled = !matches!(&self.map, Load::Ready(shown) if shown.tiles == map.tiles);
         if first {
             self.saved = Rc::new(state::load(&self.state_dir, &self.id).unwrap_or_else(|| Saved::first(&map)));
@@ -118,7 +146,7 @@ impl Board {
         for pin in &map.pins {
             self.counts[pin.group.0][pin.group.1] += 1;
         }
-        (self.map, self.selected, self.mark, self.haystacks) = (Load::Ready(Rc::new(map)), None, None, Vec::new());
+        (self.map, self.selected, self.mark, self.haystacks) = (Load::Ready(map), None, None, Vec::new());
         self.index();
         self.recount();
         self.watch(cx);
@@ -149,9 +177,17 @@ impl Board {
 
     /// Keeps the user's state of the map on screen; blocking, so saves land in order (small, on a click).
     pub fn save(&self) {
-        if let Load::Ready(_) = self.map {
+        if self.saves && matches!(self.map, Load::Ready(_)) {
             state::store(&self.state_dir, &self.id, &self.saved);
         }
+    }
+
+    /// The user's state of this map as another board changed it.
+    pub fn adopt(&mut self, saved: Rc<Saved>, cx: &mut Context<Self>) {
+        self.saved = saved;
+        self.recount();
+        cx.emit(BoardEvent::Filtered);
+        cx.notify();
     }
 
     pub fn saved_mut(&mut self) -> &mut Saved {
@@ -312,23 +348,28 @@ impl Board {
         self.watch(cx);
     }
 
-    /// Asks the run's tracker for fixes while the map is open and both the trainer and the map can place the player.
+    /// Asks the run's tracker for fixes while the map is open and both the trainer and the map can place the player;
+    /// closed, it shows where the player last was.
     fn watch(&mut self, cx: &mut Context<Self>) {
         let frame = match &self.map {
             Load::Ready(map) => map.frame.clone(),
             _ => None,
         };
-        let tracker = self.run.as_ref().and_then(|run| run.tracker.clone()).filter(|_| self.open);
+        let tracker = self.run.as_ref().and_then(|run| run.tracker.clone());
         let (Some(tracker), Some(frame)) = (tracker, frame) else {
             self._fixes = None;
             return;
         };
-        let lease = tracker.update(cx, |tracker, cx| tracker.lease(EVERY, &frame, cx));
+        let lease = self.open.then(|| tracker.update(cx, |tracker, cx| tracker.lease(self.every, &frame, cx)));
         // Where the player was and the way they last went, before the next fix.
         match tracker.read(cx).last() {
             Some(fix) => self.fixed(fix, cx),
             None => self.lost(cx),
         }
+        let Some(lease) = lease else {
+            self._fixes = None;
+            return;
+        };
         let fixes = cx.subscribe(&tracker, |board, _, tracked: &Tracked, cx| match tracked {
             Tracked::Fix(fix) => board.fixed(*fix, cx),
             Tracked::Lost => board.lost(cx),

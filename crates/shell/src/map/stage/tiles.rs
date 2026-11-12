@@ -12,6 +12,8 @@ pub type Key = (u8, u32, u32);
 const KEPT: usize = 2;
 // A zoomed out view draws a few tiles, and a burst of loads must not push its stand-ins out.
 const FLOOR: usize = 64;
+// The minimap never zooms far: its view draws a handful.
+const SMALL: usize = 16;
 const AT_ONCE: usize = 6;
 // How many levels up a missing tile looks for a stand-in, and down (a zoom out just left those).
 const STAND_INS: u8 = 4;
@@ -25,19 +27,33 @@ enum Slot {
     Missing,
 }
 
-#[derive(Default)]
 pub struct Tiles {
     slots: HashMap<Key, Slot>,
     loading: usize,
     frame: u64,
     // Tiles drawn in this frame, each once.
     shown: usize,
+    floor: usize,
+}
+
+impl Default for Tiles {
+    fn default() -> Self {
+        Self::new(FLOOR)
+    }
 }
 
 impl Tiles {
+    fn new(floor: usize) -> Self {
+        Self { slots: HashMap::default(), loading: 0, frame: 0, shown: 0, floor }
+    }
+
+    pub fn small() -> Self {
+        Self::new(SMALL)
+    }
+
     /// Starts a frame; the caller drops the returned images from the atlas.
     pub fn begin_frame(&mut self) -> Vec<Arc<RenderImage>> {
-        let (last, kept) = (self.frame, (self.shown * KEPT).max(FLOOR));
+        let (last, kept) = (self.frame, (self.shown * KEPT).max(self.floor));
         (self.frame, self.shown) = (self.frame + 1, 0);
         let ready = self.slots.values().filter(|slot| matches!(slot, Slot::Ready(..))).count();
         if ready <= kept {

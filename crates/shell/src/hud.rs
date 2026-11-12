@@ -2,11 +2,11 @@
 //! the docks' toggles between them, and the docks with the page's own parts in them.
 
 use gpui_kit::{
-    AnyElement, App, Bounds, Context, Div, Entity, IntoElement, KeyBinding, Pixels, Size, Window, actions,
+    AnyElement, App, Bounds, Context, Entity, IntoElement, KeyBinding, Pixels, Size, Window, actions,
     component::{h_flex, scroll::ScrollableElement},
     div, point,
     prelude::*,
-    px, rgb, size,
+    px, size,
 };
 
 use super::{
@@ -15,7 +15,7 @@ use super::{
     docks::{self, Spec},
     layer::Layer,
     theme::*,
-    widgets::{icon, icon_button, mono},
+    widgets::{icon_button, notice},
 };
 
 actions!(hud, [LeaveOverlay]);
@@ -34,11 +34,11 @@ const SIDE: f32 = 320.;
 
 /// The toolbar's order.
 pub(super) static DOCKS: [Spec; 4] = [
-    Spec { id: MODS, title: "MODS", icon: Icon::Mods, first: list_first, smallest: Some(size(px(420.), px(240.))), shown: true },
-    Spec { id: MAP, title: "MAP", icon: Icon::Map, first: map_first, smallest: Some(size(px(360.), px(280.))), shown: true },
-    Spec { id: SESSION, title: "SESSION", icon: Icon::Clock, first: side_first, smallest: None, shown: true },
+    Spec { id: MODS, title: "MODS", icon: Icon::Mods, first: list_first, smallest: Some(size(px(420.), px(240.))), shown: true, body_moves: false },
+    Spec { id: MAP, title: "MAP", icon: Icon::Map, first: map_first, smallest: Some(size(px(360.), px(280.))), shown: true, body_moves: false },
+    Spec { id: SESSION, title: "SESSION", icon: Icon::Clock, first: side_first, smallest: None, shown: true, body_moves: false },
     // Also over the game while Impulse is behind it.
-    Spec { id: MINIMAP, title: "MINIMAP", icon: Icon::Player, first: minimap_first, smallest: Some(size(px(200.), px(200.))), shown: false },
+    Spec { id: MINIMAP, title: "MINIMAP", icon: Icon::Player, first: minimap_first, smallest: Some(size(px(200.), px(200.))), shown: false, body_moves: true },
 ];
 
 pub(super) static MINIMAP_DOCK: &Spec = &DOCKS[3];
@@ -60,19 +60,6 @@ fn minimap_first(screen: Size<Pixels>) -> Bounds<Pixels> {
     Bounds::new(point(screen.width - px(SIDE + EDGE), screen.height - px(SIDE + EDGE)), size(px(SIDE), px(SIDE)))
 }
 
-/// The minimap's stand-in, in its dock and in the HUD.
-pub(super) fn minimap(accent: u32) -> Div {
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .items_center()
-        .justify_center()
-        .gap(px(10.))
-        .child(icon(Icon::Player, 28., rgb(accent)))
-        .child(mono("MINIMAP", 11.).text_color(rgb(DIM)))
-}
-
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", LeaveOverlay, Some(CONTEXT))]);
 }
@@ -90,7 +77,11 @@ impl Page {
                     (MODS, Some(game)) => div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheats(game, cx)).into_any_element(),
                     (MODS, None) => div().p(px(16.)).child(self.vacant()).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
-                    (MINIMAP, Some(_)) if mapped => minimap(self.accent).into_any_element(),
+                    (MINIMAP, Some(_)) if mapped && self.map.read(cx).live_map().read(cx).ready(cx) => self.minimap.clone().into_any_element(),
+                    (MINIMAP, Some(_)) if mapped => div()
+                        .p(px(16.))
+                        .child(notice("[ MINIMAP ]", "NO LIVE MAP", "It follows the player while a trainer that can place them runs in a game with a map."))
+                        .into_any_element(),
                     (SESSION, Some(game)) => div().p(px(16.)).child(self.session_panel(game, running, false, cx)).into_any_element(),
                     _ => return None,
                 };
@@ -151,6 +142,7 @@ impl Page {
     fn switched(&mut self, over: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.over = over;
         self.map.update(cx, |map, cx| map.set_docked(over, cx));
+        self.sync_minimap_dock(window, cx);
         if over {
             // What belongs to the window closes, and the docks show the running game.
             self.menu = None;
@@ -166,6 +158,23 @@ impl Page {
         // An open map keeps the focus: its Escape closes its own things first, then leaves.
         if over && !self.map.read(cx).is_open(cx) {
             self.hud_focus.focus(window, cx);
+        }
+    }
+
+    /// Only a live game with a map has a minimap to toggle.
+    pub(super) fn minimap_key(&mut self, cx: &mut Context<Self>) {
+        let live = self.play.live().and_then(|live| self.games().iter().find(|game| game.id == *live));
+        if live.is_some_and(|game| !game.source.maps.is_empty()) {
+            self.docks.update(cx, |docks, cx| docks.toggle(MINIMAP_DOCK, cx));
+        }
+    }
+
+    /// The dock's minimap lets go of its tiles once it is not drawn: out of the overlay (the HUD's own draws),
+    /// its dock closed, or no live map.
+    pub(super) fn sync_minimap_dock(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let drawn = self.over && self.docks.read(cx).is_shown(MINIMAP_DOCK) && self.map.read(cx).live_map().read(cx).ready(cx);
+        if !drawn {
+            self.minimap.update(cx, |minimap, cx| minimap.hide(window, cx));
         }
     }
 
