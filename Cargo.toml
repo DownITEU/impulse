@@ -57,6 +57,17 @@ windows-registry = "0.6"
 windows-sys = "0.61"
 wry = "0.57.2"
 
+# Every crate opts in with `[lints] workspace = true`; `scripts/check.ps1` denies warnings.
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+# Logs go through `journal`.
+print_stdout = "warn"
+print_stderr = "warn"
+# Skips drops: a live trainer would stay in the game.
+exit = "warn"
+
 [patch.crates-io]
 gpui-pre = { path = "vendor/gpui-pre" }
 gpui-pre-windows = { path = "vendor/gpui-pre-windows" }
