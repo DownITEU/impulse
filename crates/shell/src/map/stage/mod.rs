@@ -24,7 +24,7 @@ use super::{
     live::LiveMap,
     markers::Images,
 };
-use crate::{Load, widgets::notice};
+use crate::{Load, theme::Look, widgets::notice};
 use camera::{Camera, Glide, Pixel, extent};
 use motion::Walk;
 use pins::Marker;
@@ -122,7 +122,6 @@ impl Stage {
                 stage.shown.markers = None;
                 stage.hover(None, cx);
             }
-            BoardEvent::Restyled => stage.stale.extend(stage.images.clear()),
             BoardEvent::Selected => (stage.shown.target, stage.shown.hovered_mark) = (None, None),
             BoardEvent::MarkAdded => {}
             BoardEvent::Bring { to, close } => {
@@ -132,6 +131,8 @@ impl Stage {
             }
         })
         .detach();
+        // Markers are drawn in the accent.
+        cx.observe_global::<Look>(|stage, _| stage.stale.extend(stage.images.clear())).detach();
         // A minimap made for a map already up missed its `Installed`.
         let shown = match &board.read(cx).map {
             Load::Ready(map) => Shown::of(map),
@@ -285,9 +286,9 @@ impl Render for Stage {
         }
         self.bind_keys(stage.track_focus(&self.focus).key_context(STAGE), cx)
             .child(canvas)
-            .children(self.chip(&map, board))
+            .children(self.chip(&map, board, cx))
             .children(self.target_menu(&map, board, cx))
-            .child(self.readout(board))
+            .child(self.readout(board, cx))
             .child(self.buttons(&map, board, cx))
             .into_any_element()
     }

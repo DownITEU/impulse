@@ -113,7 +113,7 @@ impl Page {
     pub(super) fn control(&self, index: usize, loaded: &Loaded, running: bool, live: bool, cx: &mut Context<Self>) -> AnyElement {
         let cheat = &loaded.cheats[index];
         let value = loaded.values[index];
-        let value_color = if live { rgb(self.accent) } else { rgb(DIM) };
+        let value_color = if live { rgb(accent(cx)) } else { rgb(DIM) };
         match cheat.kind {
             Kind::Toggle => div()
                 .id(("toggle", index))
@@ -123,7 +123,7 @@ impl Page {
                         page.set_value(index, if value == 0. { 1. } else { 0. }, cx);
                     }
                 }))
-                .child(toggle(live, self.accent))
+                .child(toggle(live, cx))
                 .into_any_element(),
             Kind::Slider => {
                 let span = Span::of(&cheat.args);
@@ -197,7 +197,7 @@ impl Page {
 
     /// A button with no state of its own: it confirms the press for a moment.
     fn press(&self, index: usize, label: &str, done: &str, running: bool, cx: &mut Context<Self>) -> Stateful<Div> {
-        flash_button(label, done, self.is_flashed(Flash::Cheat(index)), self.accent).id(("press", index)).on_click(cx.listener(
+        flash_button(label, done, self.is_flashed(Flash::Cheat(index)), cx).id(("press", index)).on_click(cx.listener(
             move |page, _, _, cx| {
                 if !running {
                     return;
@@ -222,7 +222,7 @@ impl Page {
 
     /// Ten ticks: click or drag across them, or use the wheel.
     fn ticks(&self, index: usize, span: Span, value: f64, running: bool, live: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let lit = if live { self.accent } else { TICK_IDLE };
+        let lit = if live { accent(cx) } else { TICK_IDLE };
         let level = span.tick(value);
         h_flex()
             .when(running, |ticks| {
@@ -255,7 +255,7 @@ impl Page {
     }
 
     /// Makes `trigger` open a list of `options` under itself, set across by `place`.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "a menu's trigger, options, placement and pick")]
     pub(super) fn dropdown(
         &self,
         trigger: Stateful<Div>,
@@ -291,7 +291,7 @@ impl Page {
         cx: &mut Context<Self>,
         pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
     ) -> Div {
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         v_flex().occlude().absolute().top(relative(1.)).mt(px(3.)).py(px(4.)).border_1().border_color(line(0.2)).bg(rgb(PANEL)).children(
             options.into_iter().enumerate().map(|(at, option)| {
                 h_flex()

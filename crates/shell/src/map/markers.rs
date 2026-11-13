@@ -60,11 +60,11 @@ pub struct Images {
 
 impl Images {
     /// `scale` is the window's: images are made at device pixels.
-    pub fn marker(&mut self, marker: Marker, glyph: Option<&Glyph>, accent: u32, scale: f32, cx: &App) -> Option<Arc<RenderImage>> {
+    pub fn marker(&mut self, marker: Marker, glyph: Option<&Glyph>, scale: f32, cx: &App) -> Option<Arc<RenderImage>> {
         let factor = f64::from(scale) * marker.look.scale();
         let (width, height) = ((SIZE.0 * factor).round() as u32, (SIZE.1 * factor).round() as u32);
         let key = Key::Marker(marker, height);
-        self.made.entry(key).or_insert_with(|| render(&marker_svg(marker, glyph, accent), width, height, cx)).clone()
+        self.made.entry(key).or_insert_with(|| render(&marker_svg(marker, glyph, accent(cx)), width, height, cx)).clone()
     }
 
     /// A group's glyph alone, `side` view pixels square.

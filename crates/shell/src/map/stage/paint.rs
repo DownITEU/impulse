@@ -60,10 +60,7 @@ impl Stage {
             let Load::Ready(map) = &board.map else { return };
             let player =
                 board.player.zip(map.frame.as_ref()).map(|(position, frame)| Walk { at: frame.to_map(position), bearing: board.bearing });
-            (
-                player,
-                Shot { map: map.clone(), saved: board.saved.clone(), selected: board.selected, mark: board.mark, accent: board.accent },
-            )
+            (player, Shot { map: map.clone(), saved: board.saved.clone(), selected: board.selected, mark: board.mark, accent: accent(cx) })
         };
         let (map, saved, selected, accent) = (shot.map.clone(), &shot.saved, shot.selected, shot.accent);
         // The overlays were laid out for the old size: one more frame places them.
@@ -168,7 +165,7 @@ impl Stage {
             for index in mark_order(saved, shot.mark).collect::<Vec<_>>() {
                 let look = self.mark_look(index, shot.mark);
                 let marker = Marker { group: None, fill: saved.marks[index].color, look, found: false, level: None };
-                self.paint_look(marker, None, look.scale(), camera.to_view(plane(saved.marks[index].at), area), accent, window, cx);
+                self.paint_look(marker, None, look.scale(), camera.to_view(plane(saved.marks[index].at), area), window, cx);
             }
 
             // Over the pins, as place names are on a map.
@@ -215,15 +212,14 @@ impl Stage {
         let look = self.look(index, shot.selected);
         let marker =
             Marker { group: Some(pin.group), fill: category.color, look, found: shot.saved.found.contains(&pin.id), level: pin.level };
-        self.paint_look(marker, category.groups[pin.group.1].icon.as_ref(), scale, tip, shot.accent, window, cx);
+        self.paint_look(marker, category.groups[pin.group.1].icon.as_ref(), scale, tip, window, cx);
     }
 
     /// A marker `scale` times its size with its tip on `tip`, on whole device pixels so the image stays sharp.
     /// The image is made at the look's own scale; other sizes are passing ones.
-    #[allow(clippy::too_many_arguments)]
-    fn paint_look(&mut self, marker: Marker, glyph: Option<&Glyph>, scale: f64, tip: Pixel, accent: u32, window: &mut Window, cx: &App) {
+    fn paint_look(&mut self, marker: Marker, glyph: Option<&Glyph>, scale: f64, tip: Pixel, window: &mut Window, cx: &App) {
         let (look, device) = (marker.look, window.scale_factor());
-        let Some(image) = self.images.marker(marker, glyph, accent, device, cx) else { return };
+        let Some(image) = self.images.marker(marker, glyph, device, cx) else { return };
         let snap = |at: f64| ((at * f64::from(device)).round() / f64::from(device)) as f32;
         let corner = self.bounds.origin + point(px(snap(tip.0 - TIP.0 * scale)), px(snap(tip.1 - TIP.1 * scale)));
         let (pixels, shrink) = (image.size(0), (scale / look.scale()) as f32 / device);

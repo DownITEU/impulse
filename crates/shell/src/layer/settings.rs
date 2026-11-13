@@ -24,8 +24,8 @@ impl Page {
                 row("MODE", "in-game, drawn inside the game: later", 64.).child(
                     segmented()
                         .h(px(26.))
-                        .child(choice("overlay-over", "OVER THE GAME", true, self.accent))
-                        .child(choice("overlay-in-game", "IN-GAME", false, self.accent).cursor_default().opacity(0.4)),
+                        .child(choice("overlay-over", "OVER THE GAME", true, cx))
+                        .child(choice("overlay-in-game", "IN-GAME", false, cx).cursor_default().opacity(0.4)),
                 ),
             )
             .child(row("HOTKEY", "modifiers and one key, free in other apps and mods", 64.).child(self.hotkey_cap(
@@ -47,7 +47,7 @@ impl Page {
             Some(held) => held.map_or_else(|| PRESS_KEYS.into(), |chord| chord.to_string().into()),
             None => key_text(key),
         };
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         keycap(id, text)
             // A long preview while binding truncates instead of covering the label.
             .max_w(px(220.))

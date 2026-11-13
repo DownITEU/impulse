@@ -13,9 +13,10 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Page`: the combined page, one `impl Page` block per region file (`header`, `sidebar`, `hero`, `pane`, `cheats`, `controls`, `run`, `boot`, ...).
 
 ## Rules
-- Colors and fonts come only from `theme.rs`; a new token goes there.
+- Colors and fonts come only from `theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
 - Use the `widgets.rs` primitives (`button`, `icon_button`, `toggle`, `choice`, `notice`, `tip`, `keycap`, `mono`, `tracked`); never a raw `div` styled as one.
-- App files are read with `store::load` and written with `store::save` (`disk::replace`): blocking, tiny files only. Missing or damaged means the defaults, so a new field is `#[serde(default)]`.
+- An app file is a `Stored<T>` (`storage.rs`) opened from its `Paths` entry by the slice that owns it; a constructor takes `&Paths`, never the data folder. `edit` saves at once, blocking, in place and in order: tiny files only. Missing or damaged means the defaults, so a new field is `#[serde(default)]`.
+- `Settings` (`settings/`) owns the prefs: read them with `settings.read(cx).prefs()`, change them with `Settings::edit`. It sets `Look` and GPUI's reduce motion; whoever reacts to a pref observes it.
 - Provider streams are consumed in `boot.rs`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
 - `open_trainer` serves the open game only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
 - A newer trainer copy for a game with a run `Busy` or `Live` waits in `deferred` (`Play::holds`); every path that ends a run calls `install_deferred`.
@@ -29,7 +30,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - What repaints often is its own entity (`LogView`, `Resources`, the map parts); never `cx.notify()` the page from a per-frame or per-record path.
 
 ## Traps
-- `Page` is drawn cached: it re-renders only when it notifies, so an entity it reads must be observed. The session clock notifies it once a second while a run is live.
+- `Page` is drawn cached: it re-renders only when it notifies, so an entity it reads must be observed. The session clock notifies it once a second while a run is live. A changed global reaches cached views only through `cx.refresh_windows()`.
 - `Menu::Cheat(i)` and `Flash::Cheat(i)` hold a cheat index: `drop_cheat_state` whenever the trainer or game changes. A capture targets a cheat by id, not index: a newer list may arrive meanwhile.
 - `reload` (caches cleared) stops the run first: it keeps what the run leaves on, from trainers about to go.
 - `tracked` lays out one element per `char`: short captions only. `keycap` and `fitted` cut text only inside a parent with `min_w_0`.

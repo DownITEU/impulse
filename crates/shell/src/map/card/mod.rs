@@ -197,8 +197,8 @@ impl Card {
             let choices = segmented()
                 .h(px(26.))
                 .bg(alpha(PANEL, 0.9))
-                .child(choice("lightbox-video", "VIDEO", !self.photo, board.accent).on_click(pick(false)))
-                .child(choice("lightbox-photo", "PHOTO", self.photo, board.accent).on_click(pick(true)));
+                .child(choice("lightbox-video", "VIDEO", !self.photo, cx).on_click(pick(false)))
+                .child(choice("lightbox-photo", "PHOTO", self.photo, cx).on_click(pick(true)));
             h_flex().absolute().top(px(LIGHTBOX_PADDING / 2.)).left_0().w_full().justify_center().child(choices)
         });
         let shut = cx.listener(|card, _, _, cx| {

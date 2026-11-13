@@ -98,7 +98,7 @@ impl Page {
 
     fn chip(&self, at: usize, collection: &Collection, running: bool, on: bool, cx: &mut Context<Self>) -> Stateful<Div> {
         let color = rgb(match (on, running) {
-            (true, _) => self.accent,
+            (true, _) => accent(cx),
             (false, true) => MUTED,
             (false, false) => FAINT,
         });
@@ -215,7 +215,7 @@ impl Page {
 
     pub(super) fn collection_editor(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let editor = self.editor.as_ref()?;
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         let named = !editor.name.read(cx).value().trim().is_empty();
         let tiles = ICONS.map(|(key, glyph)| {
             let current = key == editor.icon;

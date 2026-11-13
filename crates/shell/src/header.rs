@@ -10,7 +10,7 @@ use super::{
 impl Page {
     /// The custom title bar: gaps drag the window, controls occlude the drag area.
     pub(super) fn header(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         let maximize = if window.is_maximized() { Icon::WinRestore } else { Icon::WinMax };
         let search = match &self.library {
             Load::Ready(library) => {
@@ -96,7 +96,7 @@ impl Page {
     fn open_settings(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         // A focused filter would keep taking keys behind the modal, and Escape closes it.
         self.dialog_focus.focus(window, cx);
-        self.settings = true;
+        self.settings_open = true;
         // An update may have installed a newer version since the last look.
         self.scan_folders(window, cx);
         self.resources.update(cx, |resources, cx| resources.measure(cx));

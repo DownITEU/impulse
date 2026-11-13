@@ -7,7 +7,8 @@ use model::Map;
 use rustc_hash::FxHashSet as HashSet;
 use serde::{Deserialize, Serialize};
 
-const DIR: &str = "map-state";
+use crate::storage;
+
 /// Colors of the user's own pins, new ones taking the next.
 pub const PALETTE: [u32; 6] = [0x10BDDB, 0xF5C542, 0xFF6B6B, 0x7BD88F, 0xB28DFF, 0xF2F5EE];
 
@@ -68,18 +69,14 @@ impl Saved {
     }
 }
 
-pub fn dir(data_dir: &Path) -> PathBuf {
-    data_dir.join(DIR)
-}
-
 /// The copy on disk (blocking).
 pub fn load(dir: &Path, id: &str) -> Option<Saved> {
-    crate::store::load(&file(dir, id))
+    storage::read(&file(dir, id))
 }
 
 /// Blocking.
 pub fn store(dir: &Path, id: &str, saved: &Saved) {
-    crate::store::save(&file(dir, id), saved);
+    storage::write(&file(dir, id), saved);
 }
 
 // Ids come from the provider: only letters and digits reach a file name.

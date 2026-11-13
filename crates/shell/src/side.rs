@@ -126,13 +126,13 @@ impl Page {
                     .child(mono("NO INTERACTIVE MAP FOR THIS GAME", 11.))
                     .into_any_element(),
             })
-            .children(brackets(self.accent))
+            .children(brackets(cx))
     }
 
     /// The live run's clock, or the last run's time, over the active count and the hotkeys' scope.
     /// `strip`: all of it in one line that wraps.
     pub(super) fn session_panel(&self, game: &Game, running: bool, strip: bool, cx: &mut Context<Self>) -> Div {
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         let last = self.profiles.of(&game.id).last;
         let (title, time) = match self.play.since().filter(|_| running) {
             Some(since) => ("SESSION", since.elapsed()),
@@ -194,7 +194,7 @@ impl Page {
             .when(enabled, |stat| {
                 stat.cursor_pointer().on_click(cx.listener(move |page, _, window, cx| page.set_game_only(!game_only, window, cx)))
             })
-            .child(square(7., rgb(if enabled { self.accent } else { GHOST })))
+            .child(square(7., rgb(if enabled { accent(cx) } else { GHOST })))
             .child(tracked(scope, 12., 0.12).font_weight(FontWeight::BOLD).when(!enabled, |text| text.text_color(rgb(GHOST))))
     }
 }

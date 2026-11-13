@@ -1,30 +1,21 @@
 //! The media limit: kept in `resources.json`, held by dropping the least recently used files.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::SystemTime,
-};
+use std::{fs, path::PathBuf, time::SystemTime};
 
 use serde::{Deserialize, Serialize};
 
-const FILE: &str = "resources.json";
-pub const DEFAULT: Option<u64> = Some(2 << 30);
+const DEFAULT: Option<u64> = Some(2 << 30);
 
 #[derive(Serialize, Deserialize)]
-struct Stored {
+pub struct Kept {
     /// Bytes; `None`: no limit.
-    limit: Option<u64>,
+    pub limit: Option<u64>,
 }
 
-/// Blocking; a missing or damaged file means the default.
-pub fn load(data_dir: &Path) -> Option<u64> {
-    crate::store::load::<Stored>(&data_dir.join(FILE)).map_or(DEFAULT, |stored| stored.limit)
-}
-
-/// Blocking.
-pub fn store(data_dir: &Path, limit: Option<u64>) {
-    crate::store::save(&data_dir.join(FILE), &Stored { limit });
+impl Default for Kept {
+    fn default() -> Self {
+        Self { limit: DEFAULT }
+    }
 }
 
 /// Deletes the least recently used files in `dirs` until they hold at most `limit` bytes (blocking).
@@ -60,6 +51,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::storage::{Paths, Stored};
 
     #[test]
     fn the_oldest_files_go_first_and_the_limit_survives_a_restart() {
@@ -75,9 +67,10 @@ mod tests {
         sweep(&[pictures.clone(), videos.clone()], 150);
         assert!(!videos.join("old").exists() && !pictures.join("mid").exists() && videos.join("new").exists());
 
-        assert_eq!(load(&dir), DEFAULT);
-        store(&dir, None);
-        assert_eq!(load(&dir), None);
+        let paths = Paths::new(dir.clone());
+        assert_eq!(Stored::<Kept>::load(paths.resources()).limit, DEFAULT);
+        Stored::<Kept>::load(paths.resources()).edit(|kept| kept.limit = None);
+        assert_eq!(Stored::<Kept>::load(paths.resources()).limit, None);
         let _ = fs::remove_dir_all(&dir);
     }
 }

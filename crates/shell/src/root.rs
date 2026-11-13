@@ -9,6 +9,7 @@ use model::Provider;
 use super::{
     Page,
     map::{MapEvent, MapView},
+    storage::Paths,
     theme::*,
 };
 
@@ -22,7 +23,7 @@ pub struct Root {
 
 impl Root {
     pub fn new(provider: Arc<dyn Provider>, data_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let page = cx.new(|cx| Page::new(provider, data_dir, window, cx));
+        let page = cx.new(|cx| Page::new(provider, Paths::new(data_dir), window, cx));
         let map = page.read(cx).map.clone();
         cx.observe(&map, |_, _, cx| cx.notify()).detach();
         Self { page, map }

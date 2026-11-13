@@ -100,7 +100,7 @@ impl Page {
                         cx.notify();
                     }))
                     .child(mono(label, 10.5).text_color(rgb(if save { MUTED } else { GHOST })))
-                    .child(toggle(save, self.accent)),
+                    .child(toggle(save, cx)),
             )
             .child(
                 button("RESET")

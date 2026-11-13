@@ -173,7 +173,7 @@ impl Page {
 pub(super) async fn rescan(page: &WeakEntity<Page>, mut games: Vec<model::Game>, cx: &mut AsyncWindowContext) {
     loop {
         let Ok((art, picked, provider)) =
-            page.read_with(cx, |page, _| (art::Media::Pictures.dir(&page.data_dir), page.picked.clone(), page.provider.clone()))
+            page.read_with(cx, |page, _| (art::Media::Pictures.dir(&page.paths), page.picked.clone(), page.provider.clone()))
         else {
             return;
         };

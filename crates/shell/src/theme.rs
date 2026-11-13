@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use gpui_kit::{
-    App, Rgba,
+    App, Global, Rgba,
     component::{Theme, ThemeMode},
     px, rgb,
 };
@@ -38,6 +38,17 @@ pub const TICK_IDLE: u32 = 0x5A6155;
 const SCROLL_THUMB: u32 = 0x2A2F28;
 
 pub const ACCENTS: [(&str, u32); 4] = [("LIME", 0xC6FF3D), ("AMBER", 0xFFB020), ("CYAN", 0x4DE2FF), ("WHITE", 0xF2F2F2)];
+
+/// The look the user chose, for every widget to read; set by `Settings`.
+pub struct Look {
+    pub accent: u32,
+}
+
+impl Global for Look {}
+
+pub fn accent(cx: &App) -> u32 {
+    cx.global::<Look>().accent
+}
 
 pub fn alpha(hex: u32, a: f32) -> Rgba {
     Rgba { a, ..rgb(hex) }

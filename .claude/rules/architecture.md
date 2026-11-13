@@ -14,7 +14,7 @@
 - A reaction in another feature subscribes to an event; it is never a call someone must remember to make.
 - A view renders and sends commands: it does not await a provider, write a file or call Win32.
 - Operations on a game's process go in `agent`, with data in and data out; Win32 calls go in a leaf crate behind a data-only interface.
-- Every file the app keeps is written through `disk::replace`; a missing or damaged file means the defaults.
+- Every file the app keeps is written through `disk::replace`; a missing or damaged file means the defaults. In `shell`: a `Stored<T>` at a path named in `Paths` (`storage.rs`).
 
 ## Standing goals
 

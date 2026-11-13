@@ -9,7 +9,7 @@ The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD vie
 
 ## Surface
 - `Layer`: `toggle`, `leave`, `recheck`, `is_over`, `hotkey`, `minimap_hotkey`, setters. Emits `Playing` and `MinimapKey`.
-- `Glance`: the HUD minimap window; `set_hidden` for capture exclusion.
+- `Glance`: the HUD minimap window; it observes `Settings` for capture exclusion.
 - `Docks`, `Spec`: floating panels; `DOCKS` and `MINIMAP_DOCK` live in `hud.rs`.
 - `Page::hud`: draws the overlay in place of the page while `over`.
 
@@ -22,7 +22,7 @@ The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD vie
 - `Glance` is a `PopUp` that never takes input: `focus: false`, `show: false`, `pass_through` before the first show. It is placed over the MINIMAP dock's minimap on the game's monitor, hidden (tiles dropped) when the live map is not placed, closed on `Playing::Idle` and on release. It honours `hide_from_capture`.
 - Entering the overlay closes what belongs to the window (menu, editor, settings, log, capture) and selects the live game. Escape closes the editor, then the menu, then leaves.
 - The map in the MAP dock is the page's `MapView`: `sync_map_dock` opens and hides it, and the focus must not stay in a gone map.
-- Dock layout is one for all games, in `docks.json`, saved blocking on toggle and release. A missing or damaged file means each `Spec`'s first bounds. `fit` keeps a dock on screen.
+- Dock layout is one for all games, in `docks.json`, saved blocking on toggle, raise and release; a drag's bounds stay in its `Grab` until the release. A missing or damaged file means each `Spec`'s first bounds. `fit` keeps a dock on screen.
 
 ## Traps
 - `MINIMAP_DOCK` is `DOCKS[3]`: keep the order. A new dock is a `Spec` in `DOCKS` and an arm in `Page::hud`.

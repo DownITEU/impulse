@@ -65,7 +65,7 @@ impl Page {
 
     /// `false` keeps the window: hidden in the tray, or back from over a game, where the overlay has the input.
     fn may_close(&mut self, hwnd: isize, cx: &mut Context<Self>) -> bool {
-        if self.quit_on_close || self.tray.is_none() {
+        if self.settings.read(cx).prefs().quit_on_close || self.tray.is_none() {
             if !self.play.is_active() {
                 return true;
             }

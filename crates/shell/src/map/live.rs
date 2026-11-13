@@ -1,12 +1,7 @@
 //! The live game's map for the minimap, whatever page is open: picked, loaded and followed on a board of its
 //! own, which shares the big map's copy and the user's state of it when both show the same map.
 
-use std::{
-    path::{Path, PathBuf},
-    rc::Rc,
-    sync::Arc,
-    time::Duration,
-};
+use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -18,9 +13,11 @@ use super::{
     board::{Board, BoardEvent, Run},
     tracker::{Tracked, Tracker},
 };
-use crate::{Load, store};
+use crate::{
+    Load,
+    storage::{Paths, Stored},
+};
 
-const FILE: &str = "minimap.json";
 // Tile levels above the map's deepest: where the minimap starts and how far the wheel takes it.
 const ZOOM: f64 = 1.;
 const ZOOMS: (f64, f64) = (-1., 6.);
@@ -38,12 +35,18 @@ struct Kept {
     zoom: f64,
 }
 
+impl Default for Kept {
+    fn default() -> Self {
+        Self { zoom: ZOOM }
+    }
+}
+
 pub struct LiveMap {
     provider: Arc<dyn Provider>,
     pub(super) board: Entity<Board>,
     big: Entity<Board>,
     pub(super) tile_dir: PathBuf,
-    file: PathBuf,
+    kept: Stored<Kept>,
     offers: Vec<MapOffer>,
     // The run's tracker.
     following: Option<EntityId>,
@@ -61,7 +64,7 @@ impl LiveMap {
         board: Entity<Board>,
         big: Entity<Board>,
         tile_dir: PathBuf,
-        data_dir: &Path,
+        paths: &Paths,
         cx: &mut Context<Self>,
     ) -> Self {
         // Every change to the big board's state of a map makes a new copy, and comes with a notify.
@@ -82,14 +85,14 @@ impl LiveMap {
             }
         })
         .detach();
-        let file = data_dir.join(FILE);
-        let zoom = store::load::<Kept>(&file).map_or(ZOOM, |kept| kept.zoom);
+        let kept = Stored::<Kept>::load(paths.minimap());
+        let zoom = kept.zoom;
         Self {
             provider,
             board,
             big,
             tile_dir,
-            file,
+            kept,
             offers: Vec::new(),
             following: None,
             placed: false,
@@ -108,10 +111,6 @@ impl LiveMap {
     /// Known only while some map follows the player.
     pub fn placed(&self) -> bool {
         self.placed
-    }
-
-    pub fn accent(&self, cx: &App) -> u32 {
-        self.board.read(cx).accent
     }
 
     /// While shown over the game, the minimap follows the player closely.
@@ -191,16 +190,11 @@ impl LiveMap {
     /// Closer for more `levels`, further for fewer.
     pub(super) fn zoom_by(&mut self, levels: f64, cx: &mut Context<Self>) {
         self.zoom = (self.zoom - levels).clamp(ZOOMS.0, ZOOMS.1);
-        let (file, kept) = (self.file.clone(), Kept { zoom: self.zoom });
-        self._save = cx.spawn(async move |_, cx| {
+        let zoom = self.zoom;
+        self._save = cx.spawn(async move |live, cx| {
             cx.background_executor().timer(SETTLE).await;
-            store::save(&file, &kept);
+            let _ = live.update(cx, |live, _| live.kept.edit(|kept| kept.zoom = zoom));
         });
-        cx.notify();
-    }
-
-    pub(super) fn set_accent(&self, accent: u32, cx: &mut Context<Self>) {
-        self.board.update(cx, |board, cx| board.set_accent(accent, cx));
         cx.notify();
     }
 }

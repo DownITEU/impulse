@@ -65,7 +65,7 @@ impl Render for Resources {
                         .on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id], cx)))
                         .into_any_element(),
                 ),
-                Clear::NextStart { asked: true } => Some(mono("CLEARS ON RESTART", 10.5).text_color(rgb(self.accent)).into_any_element()),
+                Clear::NextStart { asked: true } => Some(mono("CLEARS ON RESTART", 10.5).text_color(rgb(accent(cx))).into_any_element()),
             };
             entry(Some(color(index)), store.name, store.hint, store.bytes).children(action)
         });
@@ -78,9 +78,7 @@ impl Render for Resources {
         let clear_all = row("CLEAR ALL CACHES", "your data below stays", 64.)
             .child(button("CLEAR ALL").id("clear-all").on_click(cx.listener(move |view, _, _, cx| view.clear(clearable.clone(), cx))));
         let limits = segmented().w_full().h(px(28.)).children(LIMITS.map(|(id, name, limit)| {
-            choice(id, name, self.limit == limit, self.accent)
-                .flex_1()
-                .on_click(cx.listener(move |view, _, _, cx| view.set_limit(limit, cx)))
+            choice(id, name, self.kept.limit == limit, cx).flex_1().on_click(cx.listener(move |view, _, _, cx| view.set_limit(limit, cx)))
         }));
         let limit = v_flex()
             .gap(px(10.))

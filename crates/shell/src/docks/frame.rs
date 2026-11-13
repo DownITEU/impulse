@@ -18,7 +18,7 @@ const GRIP: f32 = 14.;
 const TOGGLE: f32 = 40.;
 
 /// The frames around `docked`, the shown docks back to front with their content.
-pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, accent: u32, window: &Window, cx: &App) -> Vec<AnyElement> {
+pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, window: &Window, cx: &App) -> Vec<AnyElement> {
     let state = docks.read(cx);
     let screen = window.viewport_size();
     let grab = |spec: &'static Spec, resize| {
@@ -57,7 +57,7 @@ pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, ac
                         .border_b_1()
                         .border_color(line(0.09))
                         .on_mouse_down(MouseButton::Left, grab(spec, false))
-                        .child(square(7., rgb(accent)))
+                        .child(square(7., rgb(accent(cx))))
                         .child(tracked(spec.title, 11., 0.2).font_weight(FontWeight::BOLD))
                         .child(div().flex_1())
                         // Occluding, it keeps its press from the header's drag.
@@ -102,7 +102,8 @@ pub fn below_header(mut bounds: Bounds<Pixels>) -> Bounds<Pixels> {
 }
 
 /// A toggle per dock; `usable` says which may show for what is open.
-pub fn toolbar(docks: &Entity<Docks>, accent: u32, cx: &App, usable: impl Fn(&Spec) -> bool) -> impl IntoElement {
+pub fn toolbar(docks: &Entity<Docks>, cx: &App, usable: impl Fn(&Spec) -> bool) -> impl IntoElement {
+    let accent = accent(cx);
     let state = docks.read(cx);
     h_flex().gap(px(4.)).children(state.specs.iter().map(|spec| {
         let (usable, shown) = (usable(spec), state.is_shown(spec));

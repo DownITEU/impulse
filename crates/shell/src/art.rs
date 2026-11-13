@@ -10,6 +10,8 @@ use anyhow::{Result, bail};
 use futures::future::BoxFuture;
 use gpui_kit::http_client::{AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
 
+use crate::storage::Paths;
+
 /// Lets `img(url)` load public art through the disk cache and the native CDN client.
 pub struct CdnClient {
     pub cache: PathBuf,
@@ -45,12 +47,12 @@ pub enum Media {
 impl Media {
     pub const ALL: [Self; 3] = [Self::Pictures, Self::Tiles, Self::Videos];
 
-    pub fn dir(self, data_dir: &Path) -> PathBuf {
-        data_dir.join(match self {
-            Self::Pictures => "art",
-            Self::Tiles => "tiles",
-            Self::Videos => "videos",
-        })
+    pub fn dir(self, paths: &Paths) -> PathBuf {
+        match self {
+            Self::Pictures => paths.pictures(),
+            Self::Tiles => paths.tiles(),
+            Self::Videos => paths.videos(),
+        }
     }
 }
 

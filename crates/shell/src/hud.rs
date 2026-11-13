@@ -120,7 +120,7 @@ impl Page {
                 Some((spec, content))
             })
             .collect();
-        let frames = docks::frame(&self.docks, docked, self.accent, window, cx);
+        let frames = docks::frame(&self.docks, docked, window, cx);
         let layer = self.layer.clone();
         let bar = h_flex()
             .absolute()
@@ -131,12 +131,14 @@ impl Page {
             .px(px(EDGE))
             .gap(px(GAP))
             .child(h_flex().flex_1().min_w_0().when_some(game, |left, game| {
-                left.child(self.title(game, 24.).max_w_full().px(px(14.)).py(px(8.)).bg(alpha(BG, 0.85)).border_1().border_color(line(0.1)))
+                left.child(
+                    self.title(game, 24., cx).max_w_full().px(px(14.)).py(px(8.)).bg(alpha(BG, 0.85)).border_1().border_color(line(0.1)),
+                )
             }))
             .child(
                 h_flex()
                     .gap(px(4.))
-                    .child(docks::toolbar(&self.docks, self.accent, cx, |spec| !matches!(spec.id, MAP | MINIMAP) || mapped))
+                    .child(docks::toolbar(&self.docks, cx, |spec| !matches!(spec.id, MAP | MINIMAP) || mapped))
                     .child(div().w(px(1.)).h(px(24.)).mx(px(6.)).bg(line(0.16)))
                     .child(
                         icon_button("hud-close", Icon::Close, 40., 14.)
@@ -179,7 +181,7 @@ impl Page {
             // What belongs to the window closes, and the docks show the running game.
             self.menu = None;
             self.editor = None;
-            self.settings = false;
+            self.settings_open = false;
             self.log_open = false;
             self.cancel_capture(cx);
             if let Some(live) = self.play.live().filter(|&live| self.selected.as_ref() != Some(live)).cloned() {

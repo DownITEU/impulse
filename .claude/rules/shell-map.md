@@ -12,7 +12,7 @@ The map modal, the minimap and their parts: `MapView`, `Board`, `Stage`, `Sideba
 - `Minimap`: a mini `Stage` over the live board, one per window; `hide(window)` lets go of its tiles.
 - `LiveMap`, `LiveRun`, `Run`: the live game's map for the minimap and the run it follows.
 - `Tracker`: one per live run whose trainer can place the player; `Page` makes it.
-- `bind_keys`, `progress_dir`.
+- `bind_keys`.
 
 ## Rules
 - Each part is its own entity drawn with `cached`, observing the shared `Board`. The board notifies on what a person does, never per frame; the player's moves are `BoardEvent::Moved`, which only the stage hears.

@@ -1,16 +1,11 @@
 //! `games.json`: what the user keeps about a game: the star, the play time, the mods a run starts with,
 //! their collections, the pins and the folded sections.
 
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    path::{Path, PathBuf},
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 
-use super::store;
-
-const FILE: &str = "games.json";
+use super::storage::{Paths, Stored};
 
 /// Cheat values by cheat id.
 pub type Values = BTreeMap<String, f64>;
@@ -56,15 +51,13 @@ static BLANK: Profile = Profile {
 };
 
 pub struct Profiles {
-    file: PathBuf,
     /// By game id.
-    games: HashMap<String, Profile>,
+    games: Stored<HashMap<String, Profile>>,
 }
 
 impl Profiles {
-    pub fn load(data_dir: &Path) -> Self {
-        let file = data_dir.join(FILE);
-        Self { games: store::load(&file).unwrap_or_default(), file }
+    pub fn load(paths: &Paths) -> Self {
+        Self { games: Stored::load(paths.games()) }
     }
 
     pub fn of(&self, game: &str) -> &Profile {
@@ -73,9 +66,7 @@ impl Profiles {
 
     /// Changes a game's profile and saves.
     pub fn edit<R>(&mut self, game: &str, change: impl FnOnce(&mut Profile) -> R) -> R {
-        let changed = change(self.games.entry(game.to_owned()).or_default());
-        store::save(&self.file, &self.games);
-        changed
+        self.games.edit(|games| change(games.entry(game.to_owned()).or_default()))
     }
 }
 
@@ -89,8 +80,9 @@ mod tests {
     fn profiles_survive_a_reload_and_older_files() {
         let dir = std::env::temp_dir().join(format!("impulse-profiles-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join(FILE), br#"{"old":{"favorite":true}}"#).unwrap();
-        let mut profiles = Profiles::load(&dir);
+        let paths = Paths::new(dir.clone());
+        fs::write(paths.games(), br#"{"old":{"favorite":true}}"#).unwrap();
+        let mut profiles = Profiles::load(&paths);
         assert!(profiles.of("old").favorite && profiles.of("old").pinned.is_none());
         assert!(!profiles.of("new").favorite);
         profiles.edit("new", |profile| {
@@ -101,7 +93,7 @@ mod tests {
                 mods: Values::from([("a".to_owned(), 1.)]),
             });
         });
-        let back = Profiles::load(&dir);
+        let back = Profiles::load(&paths);
         assert!(back.of("old").favorite && back.of("new").sessions == 1);
         assert_eq!(back.of("new").collections[0].mods["a"], 1.);
         fs::remove_dir_all(&dir).unwrap();

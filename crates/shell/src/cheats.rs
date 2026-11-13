@@ -46,7 +46,7 @@ impl Page {
         };
         column
             .when(game.support == Support::UpdatePending, |column| column.child(update_callout()))
-            .when(!running, |column| column.child(self.run_note(&game.id)))
+            .when(!running, |column| column.child(self.run_note(&game.id, cx)))
             .child(self.cheat_list(loaded, running, cx))
     }
 
@@ -98,7 +98,7 @@ impl Page {
             .bg(alpha(BG, 0.78))
             .child(self.collections_bar(loaded, running, cx))
             .child(
-                filter(&self.mod_filter, self.accent)
+                filter(&self.mod_filter, cx)
                     .h(px(38.))
                     .pl(px(14.))
                     .pr(px(8.))
@@ -152,7 +152,7 @@ impl Page {
             .border_b_1()
             .when(divided, |header| header.border_t_1())
             .border_color(line(0.08))
-            .when(at == 0, |header| header.child(icon(Icon::Pin, 13., rgb(self.accent))))
+            .when(at == 0, |header| header.child(icon(Icon::Pin, 13., rgb(accent(cx)))))
             .child(tracked(&title, 13., 0.16).font_weight(FontWeight::BOLD))
             .child(mono(format!("{count:02}"), 11.).text_color(rgb(FAINT)))
             .child(div().flex_1())
@@ -163,7 +163,8 @@ impl Page {
     }
 
     fn cheat_row(&self, number: usize, index: usize, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = rgb(self.accent);
+        let lit = accent(cx);
+        let accent = rgb(lit);
         let row = &loaded.rows[index];
         let live = running && loaded.is_live(index);
         let pinned = loaded.pinned.contains(&index);
@@ -182,7 +183,7 @@ impl Page {
             .border_b_1()
             .border_color(line(0.045))
             .map(|row| match live {
-                true => row.bg(alpha(self.accent, 0.05)),
+                true => row.bg(alpha(lit, 0.05)),
                 false => row.hover(|style| style.bg(rgb(ROW_HOVER))),
             })
             .child(

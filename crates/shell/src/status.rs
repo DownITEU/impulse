@@ -14,7 +14,7 @@ impl Page {
         let problem = |count: usize, color: u32| {
             h_flex().gap(px(6.)).child(square(7., rgb(color))).child(mono(count.to_string(), 11.).text_color(rgb(color)))
         };
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         let running = self.games().iter().find(|game| Some(&game.id) == self.play.live());
         h_flex()
             .h(px(30.))
@@ -54,7 +54,7 @@ impl Page {
                     .when(errors > 0, |item| item.child(problem(errors, DANGER)))
                     .when(warnings > 0, |item| item.child(problem(warnings, WARN))),
             )
-            .child(self.hotkeys_status())
+            .child(self.hotkeys_status(cx))
             .child(mono("IMPULSE 0.1", 11.).text_color(rgb(GHOST)))
     }
 }

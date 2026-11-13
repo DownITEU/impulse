@@ -48,7 +48,6 @@ pub enum LogEvent {
 }
 
 pub struct LogView {
-    pub(super) accent: u32,
     // Mirrors the journal's buffer, so filtering never holds its lock.
     all: VecDeque<Arc<Record>>,
     next_seq: u64,
@@ -84,7 +83,7 @@ fn look(level: Level) -> (&'static str, u32) {
 }
 
 impl LogView {
-    pub fn new(accent: u32, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let filter = cx.new(|cx| InputState::new(window, cx).placeholder("filter log"));
         cx.subscribe(&filter, |view, filter, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
@@ -102,7 +101,6 @@ impl LogView {
             }
         });
         Self {
-            accent,
             all: VecDeque::new(),
             next_seq: 0,
             counts: [0; LEVELS.len()],
@@ -254,8 +252,8 @@ impl LogView {
             .border_color(line(0.09))
             .child(tracked("LOG", 13., 0.16).font_weight(FontWeight::BOLD))
             .children(chips)
-            .child(filter(&self.filter, self.accent).flex_1().min_w(px(120.)).h(px(28.)).px(px(10.)).border_1().border_color(line(0.1)))
-            .child(button("FOLLOW").id("follow").when(self.follow, |button| button.child(square(7., rgb(self.accent)))).on_click(
+            .child(filter(&self.filter, cx).flex_1().min_w(px(120.)).h(px(28.)).px(px(10.)).border_1().border_color(line(0.1)))
+            .child(button("FOLLOW").id("follow").when(self.follow, |button| button.child(square(7., rgb(accent(cx))))).on_click(
                 cx.listener(|view, _, _, cx| {
                     view.follow = !view.follow;
                     if view.follow {
@@ -265,9 +263,7 @@ impl LogView {
                 }),
             ))
             .child(
-                flash_button(&copy, "COPIED", self.copied.is_some(), self.accent)
-                    .id("copy")
-                    .on_click(cx.listener(|view, _, _, cx| view.copy(cx))),
+                flash_button(&copy, "COPIED", self.copied.is_some(), cx).id("copy").on_click(cx.listener(|view, _, _, cx| view.copy(cx))),
             )
             .child(button("CLEAR").id("clear").on_click(cx.listener(|view, _, _, cx| view.clear(cx))))
             .child(button("FOLDER").id("folder").on_click(|_, _, cx| {

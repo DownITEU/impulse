@@ -22,7 +22,6 @@ mod loaded;
 mod log_view;
 mod map;
 mod pane;
-mod prefs;
 mod profile;
 mod resources;
 mod root;
@@ -33,14 +32,14 @@ mod side;
 mod sidebar;
 mod sources;
 mod status;
-mod store;
+mod storage;
 mod systray;
 mod theme;
 mod widgets;
 
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
@@ -67,13 +66,13 @@ use library::{Game, Library};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
 use map::{MapEvent, MapView, Minimap};
-use prefs::{Lead, Panels, Prefs};
 use profile::Profiles;
 use resources::{Resources, ResourcesEvent};
 pub use root::Root;
 use run::Play;
-use settings::Tab;
+use settings::{Settings, Tab};
 use sources::{Picked, Picker};
+use storage::Paths;
 use theme::*;
 use widgets::grid;
 
@@ -85,7 +84,7 @@ const SIDEBAR_WIDTH: f32 = 248.;
 pub fn init(data_dir: &Path, cx: &mut App) {
     crash::install();
     theme::init(cx);
-    cx.set_http_client(Arc::new(art::CdnClient { cache: art::Media::Pictures.dir(data_dir) }));
+    cx.set_http_client(Arc::new(art::CdnClient { cache: art::Media::Pictures.dir(&Paths::new(data_dir.to_owned())) }));
     log_view::bind_keys(cx);
     map::bind_keys(cx);
     hud::bind_keys(cx);
@@ -125,7 +124,7 @@ enum Flash {
 }
 
 pub struct Page {
-    data_dir: PathBuf,
+    paths: Paths,
     provider: Arc<dyn Provider>,
     account: Option<Account>,
     // No session: the header says so when no account is known.
@@ -145,26 +144,21 @@ pub struct Page {
     picked: Picked,
     // `+ ADD`'s choice of game.
     picker: Option<Picker>,
-    accent: u32,
-    lead: Lead,
-    panels: Panels,
-    reduce_motion: bool,
+    settings: Entity<Settings>,
     // The collection being named.
     editor: Option<Editor>,
-    settings: bool,
+    settings_open: bool,
     settings_tab: Tab,
     folders: Vec<FolderRow>,
     // The window is the overlay over a game: the HUD replaces the page.
     over: bool,
     tray: Option<tray::Tray>,
-    // Off: the close button hides the window in the tray.
-    quit_on_close: bool,
     // Impulse ends once the trainer is stopped.
     quitting: bool,
-    hide_from_capture: bool,
     layer: Entity<Layer>,
     docks: Entity<Docks>,
-    glance: Entity<Glance>,
+    // The HUD window over the game; it lives as long as the page.
+    _glance: Entity<Glance>,
     // The minimap in its dock over the game.
     minimap: Entity<Minimap>,
     hud_focus: FocusHandle,
@@ -181,10 +175,25 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new(provider: Arc<dyn Provider>, data_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let prefs = Prefs::load(&data_dir);
-        let accent = prefs.accent();
-        let log = cx.new(|cx| LogView::new(accent, window, cx));
+    pub fn new(provider: Arc<dyn Provider>, paths: Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let settings = cx.new(|cx| Settings::new(&paths, cx));
+        let (game, hidden) = {
+            let prefs = settings.read(cx).prefs();
+            (prefs.game.as_deref().map(Arc::from), prefs.hide_from_capture)
+        };
+        let mut excluded = hidden;
+        cx.observe_in(&settings, window, move |_, settings, window, cx| {
+            let hidden = settings.read(cx).prefs().hide_from_capture;
+            if hidden != excluded
+                && let Some(hwnd) = hwnd(window)
+            {
+                overlay::exclude_from_capture(hwnd, hidden);
+            }
+            excluded = hidden;
+            cx.notify();
+        })
+        .detach();
+        let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
             if matches!(event, LogEvent::Close) {
                 page.log_open = false;
@@ -192,9 +201,9 @@ impl Page {
             cx.notify();
         })
         .detach();
-        let map = cx.new(|cx| MapView::new(provider.clone(), &data_dir, accent, window, cx));
+        let map = cx.new(|cx| MapView::new(provider.clone(), &paths, window, cx));
         cx.subscribe_in(&map, window, |page, _, _: &MapEvent, window, cx| page.close_map(window, cx)).detach();
-        let resources = cx.new(|cx| Resources::new(provider.clone(), data_dir.clone(), accent, cx));
+        let resources = cx.new(|cx| Resources::new(provider.clone(), &paths, cx));
         cx.subscribe_in(&resources, window, |page, _, event: &ResourcesEvent, window, cx| match event {
             ResourcesEvent::Cleared => page.reload(window, cx),
         })
@@ -218,15 +227,13 @@ impl Page {
         })
         .detach();
         let page = cx.weak_entity();
-        let layer = cx.new(|cx| Layer::new(&data_dir, move |cx| page.upgrade().and_then(|page| page.read(cx).play.pid()), window, cx));
+        let layer = cx.new(|cx| Layer::new(&paths, move |cx| page.upgrade().and_then(|page| page.read(cx).play.pid()), window, cx));
         cx.observe_in(&layer, window, Self::overlay_changed).detach();
         cx.subscribe(&layer, |page, _, _: &MinimapKey, cx| page.minimap_key(cx)).detach();
-        let docks = cx.new(|_| Docks::load(&data_dir, &hud::DOCKS));
+        let docks = cx.new(|_| Docks::load(&paths, &hud::DOCKS));
         let live_map = map.read(cx).live_map().clone();
-        let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), live_map.clone(), prefs.hide_from_capture, cx));
-        if prefs.hide_from_capture
-            && let Some(hwnd) = hwnd(window)
-        {
+        let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), live_map.clone(), &settings, cx));
+        if hidden && let Some(hwnd) = hwnd(window) {
             overlay::exclude_from_capture(hwnd, true);
         }
         let minimap = cx.new(|cx| Minimap::new(live_map.clone(), cx));
@@ -247,11 +254,11 @@ impl Page {
         .detach();
         cx.on_release(|page, _| page.close_session()).detach();
         let page = Self {
-            bindings: Bindings::load(&data_dir),
-            profiles: Profiles::load(&data_dir),
-            picked: Picked::load(&data_dir),
+            bindings: Bindings::load(&paths),
+            profiles: Profiles::load(&paths),
+            picked: Picked::load(&paths),
             picker: None,
-            data_dir,
+            paths,
             provider,
             account: None,
             signed_out: false,
@@ -261,23 +268,18 @@ impl Page {
             loading: HashSet::new(),
             deferred: None,
             // Opens once the library lists it.
-            selected: prefs.game.as_deref().map(Arc::from),
+            selected: game,
             play: Play::Idle,
-            accent,
-            lead: prefs.lead,
-            panels: prefs.panels,
-            reduce_motion: prefs.reduce_motion,
+            settings,
             editor: None,
-            settings: false,
+            settings_open: false,
             settings_tab: Tab::Appearance,
             over: false,
             tray: Self::start_tray(window, cx),
-            quit_on_close: prefs.quit_on_close,
             quitting: false,
-            hide_from_capture: prefs.hide_from_capture,
             layer,
             docks,
-            glance,
+            _glance: glance,
             minimap,
             hud_focus: cx.focus_handle(),
             dialog_focus: cx.focus_handle(),
@@ -329,8 +331,8 @@ impl Page {
     fn select(&mut self, id: Arc<str>, window: &mut Window, cx: &mut Context<Self>) {
         self.cancel_capture(cx);
         self.map.update(cx, |map, cx| map.hide(window, cx));
+        self.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.game = Some(id.to_string()), cx));
         self.selected = Some(id);
-        self.save_prefs();
         // Another trainer's names: the old filter would hide them.
         self.mod_filter.update(cx, |filter, cx| filter.set_value("", window, cx));
         self.drop_cheat_state();
@@ -385,7 +387,7 @@ impl Render for Page {
                     }),
             )
             .child(self.status_bar(cx))
-            .when(self.settings, |page| page.child(self.settings_modal(cx)))
+            .when(self.settings_open, |page| page.child(self.settings_modal(cx)))
             .children(self.collection_editor(cx))
             .children(self.game_picker(cx))
             .into_any_element()

@@ -3,17 +3,16 @@
 
 mod frame;
 
-use std::path::{Path, PathBuf};
-
 use gpui_kit::{Bounds, Context, MouseButton, MouseMoveEvent, Pixels, Point, Size, point, px, size};
 use serde::{Deserialize, Serialize};
 
 use frame::HEADER;
 pub(super) use frame::{below_header, frame, input, toolbar};
 
-use super::{assets::Icon, store};
-
-const FILE: &str = "docks.json";
+use super::{
+    assets::Icon,
+    storage::{Paths, Stored},
+};
 
 pub(super) struct Spec {
     pub id: &'static str,
@@ -44,21 +43,21 @@ struct Grab {
     resize: bool,
     from: Point<Pixels>,
     start: Bounds<Pixels>,
+    /// Where the drag has it: saved on release.
+    now: Option<[f32; 4]>,
 }
 
 pub(super) struct Docks {
-    file: PathBuf,
     specs: &'static [Spec],
     /// Back to front; a dock without an entry is as its spec says, behind the placed ones.
-    placed: Vec<Placed>,
+    placed: Stored<Vec<Placed>>,
     grab: Option<Grab>,
 }
 
 impl Docks {
-    /// A missing or damaged file means the first layout. Blocking, like the saves: the file is tiny.
-    pub fn load(data_dir: &Path, specs: &'static [Spec]) -> Self {
-        let file = data_dir.join(FILE);
-        Self { placed: store::load(&file).unwrap_or_default(), file, specs, grab: None }
+    /// A missing or damaged file means the first layout.
+    pub fn load(paths: &Paths, specs: &'static [Spec]) -> Self {
+        Self { placed: Stored::load(paths.docks()), specs, grab: None }
     }
 
     pub fn is_shown(&self, spec: &Spec) -> bool {
@@ -74,11 +73,12 @@ impl Docks {
 
     pub fn toggle(&mut self, spec: &Spec, cx: &mut Context<Self>) {
         let shown = !self.is_shown(spec);
-        self.entry(spec.id).shown = shown;
-        if shown {
-            self.raise(spec.id);
-        }
-        self.save();
+        self.placed.edit(|placed| {
+            entry(placed, spec.id).shown = shown;
+            if shown {
+                raise(placed, spec.id);
+            }
+        });
         cx.notify();
     }
 
@@ -89,8 +89,10 @@ impl Docks {
     }
 
     pub fn bounds(&self, spec: &Spec, screen: Size<Pixels>) -> Bounds<Pixels> {
-        let kept =
-            self.find(spec.id).and_then(|placed| placed.bounds).map(|[x, y, w, h]| Bounds::new(point(px(x), px(y)), size(px(w), px(h))));
+        let dragged = self.grab.filter(|grab| grab.spec.id == spec.id).and_then(|grab| grab.now);
+        let kept = dragged
+            .or_else(|| self.find(spec.id).and_then(|placed| placed.bounds))
+            .map(|[x, y, w, h]| Bounds::new(point(px(x), px(y)), size(px(w), px(h))));
         let first = (spec.first)(screen);
         let mut bounds = kept.unwrap_or(first);
         if spec.smallest.is_none() {
@@ -106,18 +108,18 @@ impl Docks {
             return;
         };
         if shown.last().is_some_and(|top| top.id != spec.id) {
-            self.raise(spec.id);
+            self.placed.edit(|placed| raise(placed, spec.id));
             cx.notify();
         }
     }
 
     fn grab(&mut self, spec: &'static Spec, resize: bool, at: Point<Pixels>, screen: Size<Pixels>, cx: &mut Context<Self>) {
-        self.grab = Some(Grab { spec, resize, from: at, start: self.bounds(spec, screen) });
+        self.grab = Some(Grab { spec, resize, from: at, start: self.bounds(spec, screen), now: None });
         cx.notify();
     }
 
     fn follow(&mut self, event: &MouseMoveEvent, screen: Size<Pixels>, cx: &mut Context<Self>) {
-        let Some(Grab { spec, resize, from, start }) = self.grab else {
+        let Some(Grab { spec, resize, from, start, .. }) = self.grab else {
             return;
         };
         // Its release happened outside the window.
@@ -133,13 +135,15 @@ impl Docks {
             false => Bounds::new(start.origin + shift, start.size),
         };
         let Bounds { origin, size } = fit(bounds, spec, screen);
-        self.entry(spec.id).bounds = Some([origin.x.into(), origin.y.into(), size.width.into(), size.height.into()]);
+        if let Some(grab) = &mut self.grab {
+            grab.now = Some([origin.x.into(), origin.y.into(), size.width.into(), size.height.into()]);
+        }
         cx.notify();
     }
 
     fn release(&mut self, cx: &mut Context<Self>) {
-        if self.grab.take().is_some() {
-            self.save();
+        if let Some(Grab { spec, now: Some(now), .. }) = self.grab.take() {
+            self.placed.edit(|placed| entry(placed, spec.id).bounds = Some(now));
             cx.notify();
         }
     }
@@ -147,27 +151,23 @@ impl Docks {
     fn find(&self, id: &str) -> Option<&Placed> {
         self.placed.iter().find(|placed| placed.id == id)
     }
+}
 
-    fn entry(&mut self, id: &str) -> &mut Placed {
-        let index = match self.placed.iter().position(|placed| placed.id == id) {
-            Some(index) => index,
-            None => {
-                self.placed.push(Placed { id: id.to_owned(), shown: true, bounds: None });
-                self.placed.len() - 1
-            }
-        };
-        &mut self.placed[index]
-    }
+fn entry<'a>(placed: &'a mut Vec<Placed>, id: &str) -> &'a mut Placed {
+    let index = match placed.iter().position(|placed| placed.id == id) {
+        Some(index) => index,
+        None => {
+            placed.push(Placed { id: id.to_owned(), shown: true, bounds: None });
+            placed.len() - 1
+        }
+    };
+    &mut placed[index]
+}
 
-    fn raise(&mut self, id: &str) {
-        let index = self.placed.iter().position(|placed| placed.id == id);
-        let placed = index.map(|index| self.placed.remove(index)).unwrap_or(Placed { id: id.to_owned(), shown: true, bounds: None });
-        self.placed.push(placed);
-    }
-
-    fn save(&self) {
-        store::save(&self.file, &self.placed);
-    }
+fn raise(placed: &mut Vec<Placed>, id: &str) {
+    let index = placed.iter().position(|placed| placed.id == id);
+    let raised = index.map(|index| placed.remove(index)).unwrap_or(Placed { id: id.to_owned(), shown: true, bounds: None });
+    placed.push(raised);
 }
 
 /// On the screen but for a header it may hide, and no smaller than its smallest or larger than the screen.

@@ -4,13 +4,16 @@
 mod limit;
 mod view;
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use blocking::unblock;
 use gpui_kit::{Context, EventEmitter, Task};
 use model::{Clear, Provider, Store};
 
-use crate::{art::Media, bindings, map};
+use crate::{
+    art::Media,
+    storage::{Paths, Stored},
+};
 
 const SWEEP_EVERY: Duration = Duration::from_secs(600);
 
@@ -29,10 +32,9 @@ struct Usage {
 
 pub struct Resources {
     provider: Arc<dyn Provider>,
-    data_dir: PathBuf,
-    accent: u32,
+    paths: Paths,
     usage: Option<Usage>,
-    limit: Option<u64>,
+    kept: Stored<limit::Kept>,
     _measure: Task<()>,
     _sweep: Task<()>,
 }
@@ -40,28 +42,24 @@ pub struct Resources {
 impl EventEmitter<ResourcesEvent> for Resources {}
 
 impl Resources {
-    pub fn new(provider: Arc<dyn Provider>, data_dir: PathBuf, accent: u32, cx: &mut Context<Self>) -> Self {
-        let limit = limit::load(&data_dir);
-        let mut resources = Self { provider, data_dir, accent, usage: None, limit, _measure: Task::ready(()), _sweep: Task::ready(()) };
+    pub fn new(provider: Arc<dyn Provider>, paths: &Paths, cx: &mut Context<Self>) -> Self {
+        let kept = Stored::load(paths.resources());
+        let mut resources = Self { provider, paths: paths.clone(), usage: None, kept, _measure: Task::ready(()), _sweep: Task::ready(()) };
         resources.keep_limit(cx);
         resources
     }
 
-    pub fn set_accent(&mut self, accent: u32) {
-        self.accent = accent;
-    }
-
     /// Reads every size again.
     pub fn measure(&mut self, cx: &mut Context<Self>) {
-        let (stores, data_dir) = (self.provider.stores(), self.data_dir.clone());
+        let (stores, paths) = (self.provider.stores(), self.paths.clone());
         self._measure = cx.spawn(async move |view, cx| {
             let own = unblock(move || {
                 let media = Media::ALL.map(|media| {
                     let (id, name, hint) = describe(media);
-                    Store { id, name, hint, bytes: disk::size(&media.dir(&data_dir)), clear: Clear::Now }
+                    Store { id, name, hint, bytes: disk::size(&media.dir(&paths)), clear: Clear::Now }
                 });
                 let logs = journal::dir().map_or(0, disk::size);
-                (media, disk::size(&map::progress_dir(&data_dir)), disk::size(&bindings::file(&data_dir)), logs)
+                (media, disk::size(&paths.map_state()), disk::size(&paths.hotkeys()), logs)
             });
             let ((media, progress, hotkeys, logs), provided) = (own.await, stores.await);
             let usage = Usage { caches: media.into_iter().chain(provided).collect(), progress, hotkeys, logs };
@@ -75,13 +73,13 @@ impl Resources {
 
     /// Empties the stores `ids` name, then reads the sizes again.
     fn clear(&mut self, ids: Vec<&'static str>, cx: &mut Context<Self>) {
-        let (provider, data_dir) = (self.provider.clone(), self.data_dir.clone());
+        let (provider, paths) = (self.provider.clone(), self.paths.clone());
         cx.spawn(async move |view, cx| {
             let mut provided = false;
             for id in ids {
                 match Media::ALL.into_iter().find(|media| describe(*media).0 == id) {
                     Some(media) => {
-                        let dir = media.dir(&data_dir);
+                        let dir = media.dir(&paths);
                         unblock(move || std::fs::remove_dir_all(dir)).await.ok();
                     }
                     None => {
@@ -102,20 +100,18 @@ impl Resources {
     }
 
     fn set_limit(&mut self, limit: Option<u64>, cx: &mut Context<Self>) {
-        self.limit = limit;
-        // Blocking: a small file, on a click, so saves stay in order.
-        limit::store(&self.data_dir, limit);
+        self.kept.edit(|kept| kept.limit = limit);
         self.keep_limit(cx);
         cx.notify();
     }
 
     /// Holds the media under the limit: now, then every few minutes, and measures again after.
     fn keep_limit(&mut self, cx: &mut Context<Self>) {
-        let Some(limit) = self.limit else {
+        let Some(limit) = self.kept.limit else {
             self._sweep = Task::ready(());
             return;
         };
-        let dirs = Media::ALL.map(|media| media.dir(&self.data_dir));
+        let dirs = Media::ALL.map(|media| media.dir(&self.paths));
         self._sweep = cx.spawn(async move |view, cx| {
             loop {
                 let dirs = dirs.clone();

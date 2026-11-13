@@ -8,7 +8,7 @@ use gpui_kit::{
     px,
 };
 
-use super::{Load, Page, SIDEBAR_WIDTH, prefs::Panels, widgets::notice};
+use super::{Load, Page, SIDEBAR_WIDTH, settings::Panels, widgets::notice};
 
 // Below this pane width the side panels drop under the cheat list.
 const WIDE_PANE: f32 = 900.;
@@ -23,7 +23,7 @@ impl Page {
         let cheats = self.cheats(game, cx).into_any_element();
         let (running, mapped) = (self.is_running(), !game.source.maps.is_empty());
         let body = div().flex().gap(px(20.)).px(px(24.)).pt(px(20.)).pb(px(28.));
-        let body = match self.panels {
+        let body = match self.settings.read(cx).prefs().panels {
             // Without a map the session takes the row alone, as a strip.
             Panels::Top if !mapped => body.flex_col().child(self.session_panel(game, running, true, cx)).child(cheats),
             Panels::Top => {

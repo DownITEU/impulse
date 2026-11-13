@@ -101,7 +101,7 @@ impl Sidebar {
     }
 
     fn filters(&mut self, map: &Map, board: &Board, window: &Window, cx: &Context<Self>) -> Vec<AnyElement> {
-        let mut rows = vec![progress(map, board).into_any_element()];
+        let mut rows = vec![progress(map, board, cx).into_any_element()];
         if map.unfinished {
             let notice = h_flex().gap(px(8.)).mx(px(14.)).mb(px(8.)).child(icon(Icon::Warn, 12., rgb(WARN)));
             let text = div().text_size(px(11.5)).text_color(rgb(MUTED)).child("Still being mapped: pins may be missing or move.");
@@ -129,12 +129,11 @@ impl Sidebar {
             return Vec::new();
         }
         let open = self.regions_open;
-        let header = section("map-regions", open, board.accent, "REGIONS", names.len().to_string(), None).on_click(cx.listener(
-            |sidebar, _, _, cx| {
+        let header =
+            section("map-regions", open, "REGIONS", names.len().to_string(), None, cx).on_click(cx.listener(|sidebar, _, _, cx| {
                 sidebar.regions_open ^= true;
                 cx.notify();
-            },
-        ));
+            }));
         let mut rows = vec![header.into_any_element()];
         if open {
             for (index, (name, color)) in names.into_iter().enumerate() {
@@ -186,13 +185,14 @@ impl Sidebar {
             toggle(event, window, cx);
         });
         let title = category.name.to_uppercase();
-        let header = section(("map-category", index), open, board.accent, &title, tally(found, total), Some(mark.into_any_element()))
-            .on_click(cx.listener(move |sidebar, _, _, cx| {
+        let header = section(("map-category", index), open, &title, tally(found, total), Some(mark.into_any_element()), cx).on_click(
+            cx.listener(move |sidebar, _, _, cx| {
                 if !sidebar.folded.remove(&index) {
                     sidebar.folded.insert(index);
                 }
                 cx.notify();
-            }));
+            }),
+        );
         let mut rows = vec![header.into_any_element()];
         if open {
             let cells: Vec<_> = (0..category.groups.len()).map(|group| self.group_cell(map, board, (index, group), window, cx)).collect();
@@ -278,7 +278,7 @@ impl Sidebar {
                         .child(div().truncate().text_size(px(13.5)).text_color(rgb(TEXT_2)).child(pin.name.clone()))
                         .child(mono(kind(map, pin), 10.).truncate().text_color(rgb(FAINT))),
                 )
-                .when(board.saved.found.contains(&pin.id), |row| row.child(icon(Icon::Check, 12., rgb(board.accent))))
+                .when(board.saved.found.contains(&pin.id), |row| row.child(icon(Icon::Check, 12., rgb(accent(cx)))))
                 .on_click(cx.listener(move |sidebar, _, _, cx| sidebar.board.update(cx, |board, cx| board.select(index, true, cx))));
             rows.push(row.into_any_element());
         }
@@ -315,12 +315,12 @@ impl Render for Sidebar {
             .border_r_1()
             .border_color(line(0.09))
             .bg(rgb(PANEL))
-            .child(filter(&self.search, board.accent).h(px(40.)).flex_none().px(px(14.)).border_b_1().border_color(line(0.09)))
+            .child(filter(&self.search, cx).h(px(40.)).flex_none().px(px(14.)).border_b_1().border_color(line(0.09)))
             .child(v_flex().id("map-sidebar").flex_1().min_h_0().pb(px(10.)).overflow_y_scroll().children(body))
     }
 }
 
-fn progress(map: &Map, board: &Board) -> Div {
+fn progress(map: &Map, board: &Board, cx: &App) -> Div {
     let (found, total) = (board.found_counts.iter().flatten().sum::<usize>(), map.pins.len());
     let share = if total == 0 { 0. } else { found as f32 / total as f32 };
     v_flex()
@@ -332,9 +332,9 @@ fn progress(map: &Map, board: &Board) -> Div {
             h_flex()
                 .justify_between()
                 .child(mono("FOUND", 10.5).text_color(rgb(DIM)))
-                .child(mono(format!("{found} / {total}"), 11.).text_color(rgb(if found > 0 { board.accent } else { MUTED }))),
+                .child(mono(format!("{found} / {total}"), 11.).text_color(rgb(if found > 0 { accent(cx) } else { MUTED }))),
         )
-        .child(div().h(px(3.)).bg(line(0.08)).child(div().h_full().w(relative(share)).bg(rgb(board.accent))))
+        .child(div().h(px(3.)).bg(line(0.08)).child(div().h_full().w(relative(share)).bg(rgb(accent(cx)))))
 }
 
 fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoElement {
@@ -355,7 +355,7 @@ fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoEl
             .justify_center()
             .border_1()
             .border_color(line(0.14))
-            .when(on && enabled, |cell| cell.bg(rgb(board.accent)).border_color(rgb(board.accent)))
+            .when(on && enabled, |cell| cell.bg(rgb(accent(cx))).border_color(rgb(accent(cx))))
             .when(enabled, |cell| cell.cursor_pointer().hover(|style| style.border_color(line(0.3))))
             .child(mono(label, 10.).font_weight(FontWeight::BOLD).text_color(rgb(color)))
     };
@@ -393,7 +393,7 @@ fn check(color: u32, on: bool) -> Div {
 }
 
 /// A foldable section's header: chevron, title, a note, and an optional control on the right.
-fn section(id: impl Into<ElementId>, open: bool, accent: u32, title: &str, note: String, control: Option<AnyElement>) -> Stateful<Div> {
+fn section(id: impl Into<ElementId>, open: bool, title: &str, note: String, control: Option<AnyElement>, cx: &App) -> Stateful<Div> {
     h_flex()
         .id(id)
         .h(px(34.))
@@ -401,7 +401,7 @@ fn section(id: impl Into<ElementId>, open: bool, accent: u32, title: &str, note:
         .gap(px(8.))
         .cursor_pointer()
         .hover(|style| style.bg(rgb(ROW_HOVER)))
-        .child(icon(if open { Icon::ChevronDown } else { Icon::ChevronRight }, 11., rgb(if open { accent } else { DIM })))
+        .child(icon(if open { Icon::ChevronDown } else { Icon::ChevronRight }, 11., rgb(if open { accent(cx) } else { DIM })))
         .child(
             div()
                 .flex_1()

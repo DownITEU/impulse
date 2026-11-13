@@ -14,6 +14,7 @@ use super::{
     hud::MINIMAP_DOCK,
     layer::{Layer, Playing},
     map::{LiveMap, Minimap},
+    settings::Settings,
     theme::*,
     widgets::brackets,
 };
@@ -47,7 +48,21 @@ pub(super) struct Glance {
 }
 
 impl Glance {
-    pub fn new(layer: &Entity<Layer>, docks: Entity<Docks>, live: Entity<LiveMap>, hidden: bool, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        layer: &Entity<Layer>,
+        docks: Entity<Docks>,
+        live: Entity<LiveMap>,
+        settings: &Entity<Settings>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        cx.observe(settings, |glance, settings, cx| {
+            let hidden = settings.read(cx).prefs().hide_from_capture;
+            if hidden != glance.hidden {
+                glance.set_hidden(hidden);
+            }
+        })
+        .detach();
+        let hidden = settings.read(cx).prefs().hide_from_capture;
         let (wake, woken) = mpsc::unbounded();
         cx.subscribe(layer, {
             let wake = wake.clone();
@@ -70,7 +85,7 @@ impl Glance {
         Self { docks, live, playing: Playing::Idle, following: false, hidden, hud: None, _calls: calls }
     }
 
-    pub fn set_hidden(&mut self, hidden: bool) {
+    fn set_hidden(&mut self, hidden: bool) {
         self.hidden = hidden;
         if let Some(hud) = &self.hud {
             overlay::exclude_from_capture(hud.hwnd, hidden);
@@ -158,11 +173,7 @@ fn open(live: Entity<LiveMap>, cx: &mut AsyncApp) -> Result<Hud> {
     let window = cx.update(|cx| {
         cx.open_window(options, |_, cx| {
             let minimap = cx.new(|cx| Minimap::new(live.clone(), cx));
-            cx.new(|cx| {
-                // For the accent.
-                cx.observe(&live, |_, _, cx| cx.notify()).detach();
-                Card { live, minimap }
-            })
+            cx.new(|_| Card { minimap })
         })
     })?;
     let hwnd = window.update(cx, |_, window, _| super::hwnd(window))?.ok_or_else(|| anyhow::anyhow!("the HUD has no window handle"))?;
@@ -170,18 +181,11 @@ fn open(live: Entity<LiveMap>, cx: &mut AsyncApp) -> Result<Hud> {
 }
 
 struct Card {
-    live: Entity<LiveMap>,
     minimap: Entity<Minimap>,
 }
 
 impl Render for Card {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .relative()
-            .size_full()
-            .border_1()
-            .border_color(line(0.14))
-            .child(self.minimap.clone())
-            .children(brackets(self.live.read(cx).accent(cx)))
+        div().relative().size_full().border_1().border_color(line(0.14)).child(self.minimap.clone()).children(brackets(cx))
     }
 }

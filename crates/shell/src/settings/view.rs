@@ -1,20 +1,20 @@
 use gpui_kit::{
-    Context, Div, FontWeight, IntoElement, Window,
+    App, Context, Div, FontWeight, IntoElement, Window,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div,
     prelude::*,
     px, rgb,
 };
 
-use super::{
+use super::{Lead, Panels, Prefs};
+use crate::{
     Page,
-    prefs::{Lead, Panels},
     theme::*,
     widgets::{choice, mono, segmented, square, toggle, tracked},
 };
 
 #[derive(Clone, Copy, PartialEq)]
-pub(super) enum Tab {
+pub enum Tab {
     Appearance,
     Overlay,
     Hotkeys,
@@ -33,7 +33,7 @@ const TABS: [(&str, Option<Tab>); 6] = [
 ];
 
 impl Page {
-    pub(super) fn settings_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn settings_modal(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let body = h_flex().items_stretch().min_h(px(300.)).child(self.tabs(cx)).child(
             div().id("settings-page").flex_1().min_w_0().overflow_y_scrollbar().child(match self.settings_tab {
                 Tab::Appearance => self.appearance(cx).into_any_element(),
@@ -47,8 +47,12 @@ impl Page {
     }
 
     fn close_settings(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.settings = false;
+        self.settings_open = false;
         cx.notify();
+    }
+
+    fn edit_prefs(&self, change: impl FnOnce(&mut Prefs), cx: &mut App) {
+        self.settings.update(cx, |settings, cx| settings.edit(change, cx));
     }
 
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -70,13 +74,15 @@ impl Page {
                             cx.notify();
                         }))
                     })
-                    .child(div().w(px(6.)).when(current, |cell| cell.child(square(6., rgb(self.accent)))))
+                    .child(div().w(px(6.)).when(current, |cell| cell.child(square(6., rgb(accent(cx))))))
                     .child(tracked(name, 12., 0.12))
             },
         ))
     }
 
     fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let prefs = self.settings.read(cx).prefs();
+        let (close_to_tray, hidden) = (!prefs.quit_on_close, prefs.hide_from_capture);
         v_flex()
             .flex_1()
             .min_w_0()
@@ -88,12 +94,8 @@ impl Page {
                     div()
                         .id("close-to-tray")
                         .cursor_pointer()
-                        .on_click(cx.listener(|page, _, _, cx| {
-                            page.quit_on_close = !page.quit_on_close;
-                            page.save_prefs();
-                            cx.notify();
-                        }))
-                        .child(toggle(!self.quit_on_close, self.accent)),
+                        .on_click(cx.listener(move |page, _, _, cx| page.edit_prefs(|prefs| prefs.quit_on_close = close_to_tray, cx)))
+                        .child(toggle(close_to_tray, cx)),
                 ),
             )
             .child(
@@ -101,42 +103,23 @@ impl Page {
                     div()
                         .id("hide-from-capture")
                         .cursor_pointer()
-                        .on_click(cx.listener(|page, _, window, cx| page.set_hide_from_capture(!page.hide_from_capture, window, cx)))
-                        .child(toggle(self.hide_from_capture, self.accent)),
+                        .on_click(cx.listener(move |page, _, _, cx| page.edit_prefs(|prefs| prefs.hide_from_capture = !hidden, cx)))
+                        .child(toggle(hidden, cx)),
                 ),
             )
     }
 
-    /// The HUD's window too.
-    fn set_hide_from_capture(&mut self, on: bool, window: &Window, cx: &mut Context<Self>) {
-        self.hide_from_capture = on;
-        if let Some(hwnd) = super::hwnd(window) {
-            overlay::exclude_from_capture(hwnd, on);
-        }
-        self.glance.update(cx, |glance, _| glance.set_hidden(on));
-        self.save_prefs();
-        cx.notify();
-    }
-
     fn appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let prefs = self.settings.read(cx).prefs();
+        let (accent, lead, panels, reduce_motion) = (prefs.accent(), prefs.lead, prefs.panels, prefs.reduce_motion);
         let swatches = ACCENTS.map(|(name, color)| {
-            let current = color == self.accent;
+            let current = color == accent;
             v_flex()
                 .id(name)
                 .items_center()
                 .gap(px(5.))
                 .cursor_pointer()
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    page.accent = color;
-                    page.log.update(cx, |log, cx| {
-                        log.accent = color;
-                        cx.notify();
-                    });
-                    page.map.update(cx, |map, cx| map.set_accent(color, cx));
-                    page.resources.update(cx, |resources, _| resources.set_accent(color));
-                    page.save_prefs();
-                    cx.notify();
-                }))
+                .on_click(cx.listener(move |page, _, _, cx| page.edit_prefs(|prefs| prefs.set_accent(color), cx)))
                 .child(
                     div()
                         .size(px(28.))
@@ -147,19 +130,13 @@ impl Page {
                 )
                 .child(mono(name, 9.5).text_color(rgb(if current { TEXT } else { FAINT })))
         });
-        let lead = |id: &'static str, label: &'static str, lead: Lead| {
-            choice(id, label, self.lead == lead, self.accent).on_click(cx.listener(move |page, _, _, cx| {
-                page.lead = lead;
-                page.save_prefs();
-                cx.notify();
-            }))
+        let lead = |id: &'static str, label: &'static str, choose: Lead| {
+            choice(id, label, lead == choose, cx)
+                .on_click(cx.listener(move |page, _, _, cx| page.edit_prefs(|prefs| prefs.lead = choose, cx)))
         };
-        let panels = |id: &'static str, label: &'static str, panels: Panels| {
-            choice(id, label, self.panels == panels, self.accent).on_click(cx.listener(move |page, _, _, cx| {
-                page.panels = panels;
-                page.save_prefs();
-                cx.notify();
-            }))
+        let panels = |id: &'static str, label: &'static str, choose: Panels| {
+            choice(id, label, panels == choose, cx)
+                .on_click(cx.listener(move |page, _, _, cx| page.edit_prefs(|prefs| prefs.panels = choose, cx)))
         };
         v_flex()
             .flex_1()
@@ -181,19 +158,15 @@ impl Page {
                     div()
                         .id("reduce-motion")
                         .cursor_pointer()
-                        .on_click(cx.listener(|page, _, _, cx| {
-                            page.reduce_motion = !page.reduce_motion;
-                            page.save_prefs();
-                            cx.notify();
-                        }))
-                        .child(toggle(self.reduce_motion, self.accent)),
+                        .on_click(cx.listener(move |page, _, _, cx| page.edit_prefs(|prefs| prefs.reduce_motion = !reduce_motion, cx)))
+                        .child(toggle(reduce_motion, cx)),
                 ),
             )
     }
 }
 
 /// A setting's name with what it does under it.
-pub(super) fn label(title: &'static str, hint: &'static str) -> Div {
+pub fn label(title: &'static str, hint: &'static str) -> Div {
     v_flex()
         .gap(px(4.))
         .child(tracked(title, 13., 0.1).font_weight(FontWeight::SEMIBOLD))
@@ -201,6 +174,6 @@ pub(super) fn label(title: &'static str, hint: &'static str) -> Div {
 }
 
 /// The control the caller adds keeps its width; a long hint wraps.
-pub(super) fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
+pub fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
     h_flex().min_h(px(height)).gap(px(16.)).border_b_1().border_color(line(0.07)).child(label(title, hint).flex_1().min_w_0())
 }

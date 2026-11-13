@@ -49,7 +49,7 @@ impl Card {
         let category = &map.categories[pin.group.0];
         let found = board.saved.found.contains(&pin.id);
         let teleport = pin.position.filter(|_| board.can_teleport(map));
-        let accent = rgb(board.accent);
+        let accent = rgb(accent(cx));
         let badge = h_flex()
             .size(px(BADGE))
             .flex_none()
@@ -241,7 +241,7 @@ mod tests {
             teleport: false,
             unfinished: false,
         };
-        let mut board = Board::new(PathBuf::new(), 0);
+        let mut board = Board::new(PathBuf::new());
         board.map = Load::Ready(Rc::new(map));
         assert!(nearest(&board).is_empty());
         board.selected = Some(0);

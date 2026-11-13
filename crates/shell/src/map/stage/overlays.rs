@@ -2,7 +2,7 @@
 //! the buttons and layers, the player's readout.
 
 use gpui_kit::{
-    AnyElement, Context, Div, FontWeight, IntoElement, Stateful,
+    AnyElement, App, Context, Div, FontWeight, IntoElement, Stateful,
     component::{h_flex, v_flex},
     div, img,
     prelude::*,
@@ -35,7 +35,7 @@ const CHIP_TEXT: f32 = 76.;
 
 impl Stage {
     /// The pin the cursor rests on, beside it: its picture across the top, then what it is.
-    pub(super) fn chip(&self, map: &Map, board: &Board) -> Option<AnyElement> {
+    pub(super) fn chip(&self, map: &Map, board: &Board, cx: &App) -> Option<AnyElement> {
         let (index, camera) = (self.shown.chip.filter(|pin| board.selected != Some(*pin))?, self.camera?);
         let pin = &map.pins[index];
         let ((x, y), (width, height)) = (camera.to_view(pin.at, self.size()), self.size());
@@ -52,7 +52,7 @@ impl Stage {
                 text.child(div().pt(px(3.)).line_clamp(2).text_size(px(12.)).text_color(rgb(TEXT_2)).child(about))
             })
             .when(board.saved.found.contains(&pin.id), |text| {
-                let accent = rgb(board.accent);
+                let accent = rgb(accent(cx));
                 text.child(
                     h_flex().pt(px(3.)).gap(px(5.)).child(icon(Icon::Check, 10., accent)).child(mono("FOUND", 9.5).text_color(accent)),
                 )
@@ -79,7 +79,7 @@ impl Stage {
         // Inside the view near its right and bottom edges.
         let (x, y) = (x.min(width - MENU.0).max(0.), y.min(height - MENU.1).max(0.));
         let teleport = board.can_teleport_to_plane(map).then(|| {
-            button("TELEPORT HERE").id("map-teleport").border_color(rgb(board.accent)).on_click(cx.listener(move |stage, _, _, cx| {
+            button("TELEPORT HERE").id("map-teleport").border_color(rgb(accent(cx))).on_click(cx.listener(move |stage, _, _, cx| {
                 stage.shown.target = None;
                 stage.board.update(cx, |board, cx| board.teleport_to_plane(target, cx));
             }))
@@ -93,19 +93,17 @@ impl Stage {
 
     /// Bottom right: follow the player, zoom, layers.
     pub(super) fn buttons(&self, map: &Map, board: &Board, cx: &Context<Self>) -> impl IntoElement {
-        let accent = board.accent;
         let locate = board.player.filter(|_| map.frame.is_some()).map(|_| {
-            control("map-follow", Icon::Player, self.follow, accent).on_click(cx.listener(|stage, _, _, cx| {
+            control("map-follow", Icon::Player, self.follow, cx).on_click(cx.listener(|stage, _, _, cx| {
                 stage.follow ^= true;
                 stage.center_on_player();
                 cx.notify();
             }))
         });
-        let zoom_in =
-            control("map-zoom-in", Icon::Plus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(KEY_ZOOM, cx)));
+        let zoom_in = control("map-zoom-in", Icon::Plus, false, cx).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(KEY_ZOOM, cx)));
         let zoom_out =
-            control("map-zoom-out", Icon::Minus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(1. / KEY_ZOOM, cx)));
-        let layers = control("map-layers", Icon::Layers, self.layers_open, accent).on_click(cx.listener(|stage, _, _, cx| {
+            control("map-zoom-out", Icon::Minus, false, cx).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(1. / KEY_ZOOM, cx)));
+        let layers = control("map-layers", Icon::Layers, self.layers_open, cx).on_click(cx.listener(|stage, _, _, cx| {
             stage.layers_open ^= true;
             cx.notify();
         }));
@@ -116,12 +114,12 @@ impl Stage {
             .bottom(px(MARGIN))
             .items_end()
             .gap(px(8.))
-            .when(self.layers_open, |row| row.child(layers_menu(map, &board.saved, accent, cx)))
+            .when(self.layers_open, |row| row.child(layers_menu(map, &board.saved, cx)))
             .child(v_flex().gap(px(8.)).children(locate).child(v_flex().child(zoom_in).child(zoom_out.border_t_0())).child(layers))
     }
 
     /// Where the player is, and what went wrong last.
-    pub(super) fn readout(&self, board: &Board) -> impl IntoElement {
+    pub(super) fn readout(&self, board: &Board, cx: &App) -> impl IntoElement {
         let chip = |text: String, color: u32| {
             mono(text, 10.5).px(px(7.)).py(px(3.)).border_1().border_color(alpha(color, 0.4)).bg(alpha(BG, 0.85)).text_color(rgb(color))
         };
@@ -130,12 +128,13 @@ impl Stage {
             .left(px(MARGIN))
             .bottom(px(MARGIN))
             .gap(px(8.))
-            .when_some(board.player, |strip, [x, y, z]| strip.child(chip(format!("X {x:.0} · Y {y:.0} · Z {z:.0}"), board.accent)))
+            .when_some(board.player, |strip, [x, y, z]| strip.child(chip(format!("X {x:.0} · Y {y:.0} · Z {z:.0}"), accent(cx))))
             .when_some(board.note.clone(), |strip, note| strip.child(chip(note, WARN)))
     }
 }
 
-fn layers_menu(map: &Map, saved: &Saved, accent: u32, cx: &Context<Stage>) -> impl IntoElement {
+fn layers_menu(map: &Map, saved: &Saved, cx: &Context<Stage>) -> impl IntoElement {
+    let accent = accent(cx);
     let row = |id: &'static str, label: &'static str, on: bool, flip: fn(&mut Saved)| {
         h_flex()
             .id(id)
@@ -160,7 +159,8 @@ fn layers_menu(map: &Map, saved: &Saved, accent: u32, cx: &Context<Stage>) -> im
 }
 
 /// A square map button; `on` lights it in the accent.
-fn control(id: &'static str, glyph: Icon, on: bool, accent: u32) -> Stateful<Div> {
+fn control(id: &'static str, glyph: Icon, on: bool, cx: &App) -> Stateful<Div> {
+    let accent = accent(cx);
     div()
         .id(id)
         .size(px(BUTTON))

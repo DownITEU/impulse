@@ -28,30 +28,22 @@ pub struct Run {
 
 pub enum BoardEvent {
     /// A map went up; `first`: another map than the one shown, not a fresher copy of it; `retiled`: its tiles differ.
-    Installed {
-        first: bool,
-        retiled: bool,
-    },
+    Installed { first: bool, retiled: bool },
     /// The player moved; only the stage draws where. A notify tells whether there is a player at all.
     Moved,
     /// What shows changed: filters, layers, the search, found pins.
     Filtered,
-    Restyled,
     /// A pin or a mark of the user's was opened or closed.
     Selected,
     /// A mark of the user's was added and opened.
     MarkAdded,
     /// The view should show `to`; `close`: near enough to tell pins apart.
-    Bring {
-        to: Point,
-        close: bool,
-    },
+    Bring { to: Point, close: bool },
 }
 
 impl EventEmitter<BoardEvent> for Board {}
 
 pub struct Board {
-    pub accent: u32,
     state_dir: PathBuf,
     // The shown map's id, which its saved state is kept under.
     id: String,
@@ -81,18 +73,17 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new(state_dir: PathBuf, accent: u32) -> Self {
-        Self::with(state_dir, accent, EVERY, true)
+    pub fn new(state_dir: PathBuf) -> Self {
+        Self::with(state_dir, EVERY, true)
     }
 
     /// The minimap's: it follows the player closely and never writes the user's state.
-    pub fn live(state_dir: PathBuf, accent: u32) -> Self {
-        Self::with(state_dir, accent, LIVE_EVERY, false)
+    pub fn live(state_dir: PathBuf) -> Self {
+        Self::with(state_dir, LIVE_EVERY, false)
     }
 
-    fn with(state_dir: PathBuf, accent: u32, every: Duration, saves: bool) -> Self {
+    fn with(state_dir: PathBuf, every: Duration, saves: bool) -> Self {
         Self {
-            accent,
             state_dir,
             id: String::new(),
             map: Load::Pending,
@@ -124,12 +115,6 @@ impl Board {
             Load::Ready(map) if self.id == id => Some(map.clone()),
             _ => None,
         }
-    }
-
-    pub fn set_accent(&mut self, accent: u32, cx: &mut Context<Self>) {
-        self.accent = accent;
-        cx.emit(BoardEvent::Restyled);
-        cx.notify();
     }
 
     /// Waits for the map `id`; the one shown keeps its state on disk first.

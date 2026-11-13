@@ -13,7 +13,7 @@ mod stage;
 mod state;
 mod tracker;
 
-use std::{path::Path, rc::Rc, sync::Arc, time::Duration};
+use std::{rc::Rc, sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use gpui_kit::{
@@ -28,6 +28,7 @@ use model::{Group, Map, MapOffer, Pin, Provider, Snapshot};
 use crate::{
     Load, art,
     assets::Icon,
+    storage::Paths,
     theme::*,
     widgets::{icon_button, mono},
 };
@@ -40,7 +41,6 @@ pub use live::{LiveMap, LiveRun};
 use sidebar::Sidebar;
 use stage::Stage;
 /// The user's progress on each map.
-pub use state::dir as progress_dir;
 pub use tracker::Tracker;
 
 const CARD_WIDTH: f32 = 340.;
@@ -80,15 +80,15 @@ pub struct MapView {
 }
 
 impl MapView {
-    pub fn new(provider: Arc<dyn Provider>, data_dir: &Path, accent: u32, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let board = cx.new(|_| Board::new(state::dir(data_dir), accent));
+    pub fn new(provider: Arc<dyn Provider>, paths: &Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let board = cx.new(|_| Board::new(paths.map_state()));
         cx.observe(&board, |_, _, cx| cx.notify()).detach();
-        let live_board = cx.new(|_| Board::live(state::dir(data_dir), accent));
-        let tile_dir = art::Media::Tiles.dir(data_dir);
-        let live_map = cx.new(|cx| LiveMap::new(provider.clone(), live_board, board.clone(), tile_dir.clone(), data_dir, cx));
+        let live_board = cx.new(|_| Board::live(paths.map_state()));
+        let tile_dir = art::Media::Tiles.dir(paths);
+        let live_map = cx.new(|cx| LiveMap::new(provider.clone(), live_board, board.clone(), tile_dir.clone(), paths, cx));
         let stage = cx.new(|cx| Stage::new(board.clone(), tile_dir, cx));
         let sidebar = cx.new(|cx| Sidebar::new(board.clone(), window, cx));
-        let card = cx.new(|cx| Card::new(board.clone(), art::Media::Videos.dir(data_dir), window, cx));
+        let card = cx.new(|cx| Card::new(board.clone(), art::Media::Videos.dir(paths), window, cx));
         Self {
             provider,
             board,
@@ -110,11 +110,6 @@ impl MapView {
 
     pub fn is_open(&self, cx: &App) -> bool {
         self.board.read(cx).is_open()
-    }
-
-    pub fn set_accent(&mut self, accent: u32, cx: &mut Context<Self>) {
-        self.board.update(cx, |board, cx| board.set_accent(accent, cx));
-        self.live_map.update(cx, |live, cx| live.set_accent(accent, cx));
     }
 
     pub fn live_map(&self) -> &Entity<LiveMap> {
@@ -230,7 +225,8 @@ impl MapView {
         });
     }
 
-    fn toolbar(&self, accent: u32, cx: &Context<Self>) -> impl IntoElement {
+    fn toolbar(&self, cx: &Context<Self>) -> impl IntoElement {
+        let accent = accent(cx);
         let tab = |(index, offer): (usize, &MapOffer)| {
             let chosen = index == self.chosen;
             div()
@@ -335,7 +331,6 @@ fn kind(map: &Map, pin: &Pin) -> String {
 
 impl Render for MapView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = self.board.read(cx).accent;
         let sidebar =
             self.sidebar_open.then(|| self.sidebar.clone().cached(StyleRefinement::default().w(px(sidebar::WIDTH)).h_full().flex_none()));
         let map = div()
@@ -352,7 +347,7 @@ impl Render for MapView {
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::back))
             .on_action(cx.listener(Self::find_place))
-            .child(self.toolbar(accent, cx))
+            .child(self.toolbar(cx))
             .child(h_flex().flex_1().min_h_0().items_start().children(sidebar).child(map))
     }
 }

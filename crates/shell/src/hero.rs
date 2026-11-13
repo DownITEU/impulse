@@ -1,5 +1,5 @@
 use gpui_kit::{
-    Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex, div, img, linear_color_stop,
+    App, Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex, div, img, linear_color_stop,
     linear_gradient, prelude::*, px, relative, rgb,
 };
 
@@ -42,11 +42,11 @@ impl Page {
             .child(cover().bg(linear_gradient(90., linear_color_stop(alpha(BG, 0.94), 0.), linear_color_stop(alpha(BG, 0.15), 0.8))))
             .child(cover().bg(linear_gradient(180., linear_color_stop(alpha(BG, 0.), 0.4), linear_color_stop(rgb(BG), 1.))))
             .child(self.actions(game, cx))
-            .child(self.title(game, 56.).relative())
+            .child(self.title(game, 56., cx).relative())
     }
 
     /// The game's name over its mods, version and store.
-    pub(super) fn title(&self, game: &Game, size: f32) -> Div {
+    pub(super) fn title(&self, game: &Game, size: f32, cx: &App) -> Div {
         let has_trainer = game.support != Support::NoTrainer;
         div()
             .flex()
@@ -59,11 +59,11 @@ impl Page {
                     MUTED
                 })),
             )
-            .child(self.meta(game))
+            .child(self.meta(game, cx))
     }
 
     fn actions(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         let running = self.is_running();
         let favorite = self.profiles.of(&game.id).favorite;
         let (id, location) = (game.id.clone(), game.install.location.clone());
@@ -124,7 +124,7 @@ impl Page {
 
     /// LAUNCH + ATTACH, the run's stage, or STOP.
     pub(super) fn run_button(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         let running = self.is_running();
         let starting = match &self.play {
             Play::Busy { game: busy, stage, .. } if *busy == game.id => Some(*stage),
@@ -171,7 +171,7 @@ impl Page {
             })
     }
 
-    fn meta(&self, game: &Game) -> impl IntoElement {
+    fn meta(&self, game: &Game, cx: &App) -> impl IntoElement {
         let slash = || mono("/", 12.).text_color(rgb(GHOST));
         let mods = match game.support {
             Support::NoTrainer => "NO TRAINER".to_owned(),
@@ -197,7 +197,7 @@ impl Page {
                 h_flex()
                     .gap(px(6.))
                     .child(mono(version, 12.))
-                    .when(game.support == Support::Ready, |version| version.child(icon(Icon::Check, 13., rgb(self.accent))))
+                    .when(game.support == Support::Ready, |version| version.child(icon(Icon::Check, 13., rgb(accent(cx)))))
                     .when(game.support == Support::UpdatePending, |version| {
                         version.child(mono("UPDATE PENDING", 12.).text_color(rgb(WARN)))
                     }),

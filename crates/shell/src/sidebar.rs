@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    Animation, AnimationExt, Context, FontWeight, IntoElement, ObjectFit,
+    Animation, AnimationExt, App, Context, FontWeight, IntoElement, ObjectFit,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div, img,
     prelude::*,
@@ -12,7 +12,7 @@ use super::{
     Page, SIDEBAR_WIDTH,
     assets::Icon,
     library::{Game, Support},
-    prefs::Lead,
+    settings::Lead,
     theme::*,
     widgets::{filter, icon, icon_button, mono, square},
 };
@@ -69,7 +69,7 @@ impl Page {
                     .child(icon_button("sort", Icon::Sort, 30., 15.)),
             )
             .child(
-                filter(&self.game_filter, self.accent)
+                filter(&self.game_filter, cx)
                     .h(px(34.))
                     .flex_none()
                     .mx(px(12.))
@@ -97,7 +97,7 @@ impl Page {
     }
 
     fn game_row(&self, index: usize, number: usize, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = rgb(self.accent);
+        let accent = rgb(accent(cx));
         let current = Some(&game.id) == self.selected.as_ref();
         let no_trainer = game.support == Support::NoTrainer;
         let name_color = match (current, no_trainer) {
@@ -105,7 +105,7 @@ impl Page {
             (false, true) => rgb(FAINT),
             (false, false) => rgb(TEXT_2),
         };
-        let lead = match self.lead {
+        let lead = match self.settings.read(cx).prefs().lead {
             Lead::Number => mono(format!("{number:02}"), 11.)
                 .w(px(22.))
                 .flex_none()
@@ -148,15 +148,12 @@ impl Page {
                     .text_color(name_color)
                     .child(game.name.clone()),
             )
-            .when(Some(&game.id) == self.play.live(), |row| row.child(self.live()))
+            .when(Some(&game.id) == self.play.live(), |row| row.child(self.live(cx)))
             .when(game.support == Support::UpdatePending, |row| row.child(icon(Icon::Warn, 14., rgb(WARN))))
     }
 
-    fn live(&self) -> impl IntoElement {
-        let label = mono("LIVE", 10.).font_weight(FontWeight::BOLD).text_color(rgb(self.accent));
-        if self.reduce_motion {
-            return label.into_any_element();
-        }
+    fn live(&self, cx: &App) -> impl IntoElement {
+        let label = mono("LIVE", 10.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx)));
         label
             .with_animation("live", Animation::new(Duration::from_millis(1200)).repeat(), |label, t| {
                 label.opacity(if t < 0.5 { 1. } else { 0.35 })

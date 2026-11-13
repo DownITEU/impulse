@@ -1,17 +1,12 @@
 //! `hotkeys.json`: the user's own hotkey choices over the provider's, and whether and where hotkeys fire.
 
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::{Path, PathBuf},
-};
+use std::collections::{BTreeMap, HashMap};
 
 use hotkeys::Chord;
 use model::Cheat;
 use serde::{Deserialize, Serialize};
 
-use super::super::store;
-
-const FILE: &str = "hotkeys.json";
+use crate::storage::{Paths, Stored};
 
 /// Slot: VKs, or `null` for unbound; a missing slot is the provider's.
 type Slots = BTreeMap<usize, Option<Vec<u16>>>;
@@ -42,21 +37,13 @@ impl Default for Saved {
 }
 
 pub struct Store {
-    file: PathBuf,
-    saved: Saved,
-}
-
-/// Where the user's choices are kept.
-pub fn file(data_dir: &Path) -> PathBuf {
-    data_dir.join(FILE)
+    saved: Stored<Saved>,
 }
 
 impl Store {
-    /// A missing or damaged file means no choices. Blocking, and so are the saves: the file is small
-    /// and changes only on a click, and writing in place keeps the saves in order.
-    pub fn load(data_dir: &Path) -> Self {
-        let file = file(data_dir);
-        Self { saved: store::load(&file).unwrap_or_default(), file }
+    /// A missing or damaged file means no choices.
+    pub fn load(paths: &Paths) -> Self {
+        Self { saved: Stored::load(paths.hotkeys()) }
     }
 
     pub fn enabled(&self) -> bool {
@@ -64,8 +51,7 @@ impl Store {
     }
 
     pub fn set_enabled(&mut self, on: bool) {
-        self.saved.enabled = on;
-        self.save();
+        self.saved.edit(|saved| saved.enabled = on);
     }
 
     pub fn game_only(&self) -> bool {
@@ -73,8 +59,7 @@ impl Store {
     }
 
     pub fn set_game_only(&mut self, on: bool) {
-        self.saved.game_only = on;
-        self.save();
+        self.saved.edit(|saved| saved.game_only = on);
     }
 
     /// The cheat's slots: the provider's bindings with the user's choices laid over them. A default
@@ -95,24 +80,21 @@ impl Store {
     }
 
     pub fn choose(&mut self, game: &str, cheat: &str, slot: usize, choice: Choice) {
-        let cheats = self.saved.games.entry(game.to_owned()).or_default();
-        let slots = cheats.entry(cheat.to_owned()).or_default();
-        match choice {
-            Choice::Bound(chord) => slots.insert(slot, Some(chord.vks().map(u16::from).collect())),
-            Choice::Unbound => slots.insert(slot, None),
-            Choice::Default => slots.remove(&slot),
-        };
-        if slots.is_empty() {
-            cheats.remove(cheat);
-        }
-        if cheats.is_empty() {
-            self.saved.games.remove(game);
-        }
-        self.save();
-    }
-
-    fn save(&self) {
-        store::save(&self.file, &self.saved);
+        self.saved.edit(|saved| {
+            let cheats = saved.games.entry(game.to_owned()).or_default();
+            let slots = cheats.entry(cheat.to_owned()).or_default();
+            match choice {
+                Choice::Bound(chord) => slots.insert(slot, Some(chord.vks().map(u16::from).collect())),
+                Choice::Unbound => slots.insert(slot, None),
+                Choice::Default => slots.remove(&slot),
+            };
+            if slots.is_empty() {
+                cheats.remove(cheat);
+            }
+            if cheats.is_empty() {
+                saved.games.remove(game);
+            }
+        });
     }
 }
 
@@ -142,19 +124,20 @@ mod tests {
     fn choices_lay_over_the_provider_and_survive_a_reload() {
         let dir = std::env::temp_dir().join(format!("impulse-hotkeys-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
-        let mut store = Store::load(&dir);
+        let paths = Paths::new(dir.clone());
+        let mut store = Store::load(&paths);
         assert!(store.enabled());
         assert_eq!(store.slots("g", &cheat()), [Chord::from_vks(&[112]), None]);
         store.choose("g", "a", 0, Choice::Unbound);
         store.choose("g", "a", 1, Choice::Bound(Chord::from_vks(&[17, 113]).unwrap()));
         store.set_game_only(true);
         store.set_enabled(false);
-        let reloaded = Store::load(&dir);
+        let reloaded = Store::load(&paths);
         assert_eq!(reloaded.slots("g", &cheat()), [None, Chord::from_vks(&[17, 113])]);
         assert!(reloaded.game_only() && !reloaded.enabled());
         store.choose("g", "a", 0, Choice::Default);
         store.choose("g", "a", 1, Choice::Default);
-        assert!(Store::load(&dir).saved.games.is_empty());
+        assert!(Store::load(&paths).saved.games.is_empty());
         store.choose("g", "a", 1, Choice::Bound(Chord::from_vks(&[112]).unwrap()));
         assert_eq!(store.slots("g", &cheat()), [None, Chord::from_vks(&[112])]);
         fs::remove_dir_all(&dir).unwrap();

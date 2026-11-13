@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use futures::{StreamExt, stream::BoxStream};
-use gpui_kit::{Context, Div, Entity, Task, Window, prelude::*, rgb};
+use gpui_kit::{App, Context, Div, Entity, Task, Window, prelude::*, rgb};
 use model::{Event, Live, Process, Rule, Session};
 
 use super::{Page, map::Tracker, theme::*, widgets::mono};
@@ -271,11 +271,11 @@ impl Page {
     }
 
     /// The line above the cheat list while the trainer is not live.
-    pub(super) fn run_note(&self, id: &Arc<str>) -> Div {
+    pub(super) fn run_note(&self, id: &Arc<str>, cx: &App) -> Div {
         match &self.play {
             Play::Failed { game, error } if game == id => mono(error.clone(), 11.).text_color(rgb(WARN)),
-            Play::Busy { game, stage, .. } if game == id => mono(label(*stage), 11.).text_color(rgb(self.accent)),
-            Play::Stopping { game, .. } if game == id => mono(STOPPING, 11.).text_color(rgb(self.accent)),
+            Play::Busy { game, stage, .. } if game == id => mono(label(*stage), 11.).text_color(rgb(accent(cx))),
+            Play::Stopping { game, .. } if game == id => mono(STOPPING, 11.).text_color(rgb(accent(cx))),
             _ => mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),
         }
     }

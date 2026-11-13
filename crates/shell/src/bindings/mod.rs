@@ -6,15 +6,14 @@ mod caps;
 mod settings;
 mod store;
 
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use futures::{StreamExt, channel::mpsc};
-use gpui_kit::{Context, Div, Task, Window, prelude::*, rgb};
+use gpui_kit::{App, Context, Div, Task, Window, prelude::*, rgb};
 use hotkeys::{Binding, Capture, Chord, Fired, Hook, Matcher, Outcome, Step};
 use model::Cheat;
 
-use super::{Load, Page, run::Play, theme::*, widgets::mono};
-pub(super) use store::file;
+use super::{Load, Page, run::Play, storage::Paths, theme::*, widgets::mono};
 use store::{Choice, Store};
 
 pub(super) const PRESS_KEYS: &str = "PRESS KEYS";
@@ -43,8 +42,8 @@ struct Capturing {
 }
 
 impl Bindings {
-    pub fn load(data_dir: &Path) -> Self {
-        Self { store: Store::load(data_dir), armed: None, capture: None }
+    pub fn load(paths: &Paths) -> Self {
+        Self { store: Store::load(paths), armed: None, capture: None }
     }
 
     /// Each cheat's slots, with the user's choices laid over the provider's.
@@ -238,13 +237,13 @@ impl Page {
     }
 
     /// The status bar's hotkey note; while binding, the keys that end it.
-    pub(super) fn hotkeys_status(&self) -> Div {
+    pub(super) fn hotkeys_status(&self, cx: &App) -> Div {
         if let Some(capture) = &self.bindings.capture {
             let keys = match capture.target {
                 Target::Slot { .. } | Target::Minimap => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND",
                 Target::Overlay => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT",
             };
-            return mono(keys, 11.).text_color(rgb(self.accent));
+            return mono(keys, 11.).text_color(rgb(accent(cx)));
         }
         match self.bindings.armed.is_some() {
             true => mono("HOTKEYS ON", 11.),

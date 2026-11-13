@@ -12,7 +12,7 @@ impl Page {
     pub(in super::super) fn hotkey_settings(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (enabled, game_only) = (self.bindings.enabled(), self.bindings.game_only());
         let scope = |id, label, value: bool| {
-            choice(id, label, game_only == value, self.accent)
+            choice(id, label, game_only == value, cx)
                 .on_click(cx.listener(move |page, _, window, cx| page.set_game_only(value, window, cx)))
         };
         v_flex()
@@ -25,7 +25,7 @@ impl Page {
                         .id("hotkeys-enabled")
                         .cursor_pointer()
                         .on_click(cx.listener(move |page, _, window, cx| page.set_hotkeys_enabled(!enabled, window, cx)))
-                        .child(toggle(enabled, self.accent)),
+                        .child(toggle(enabled, cx)),
                 ),
             )
             .child(row("WORKS IN", "in game: only while the game is in front", 64.).border_b_0().child(

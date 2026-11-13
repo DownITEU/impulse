@@ -43,7 +43,8 @@ pub fn square(side: f32, color: impl Into<Hsla>) -> Div {
 }
 
 /// Over the corners of a `relative` box with a 1 px border.
-pub fn brackets(accent: u32) -> [Div; 4] {
+pub fn brackets(cx: &App) -> [Div; 4] {
+    let accent = accent(cx);
     let bracket = || div().absolute().size(px(10.)).border_color(rgb(accent));
     [
         bracket().left(px(-1.)).top(px(-1.)).border_l_2().border_t_2(),
@@ -99,7 +100,8 @@ pub fn segmented() -> Div {
 }
 
 /// One option of a `segmented` choice; the caller adds the click.
-pub fn choice(id: &'static str, label: &'static str, current: bool, accent: u32) -> Stateful<Div> {
+pub fn choice(id: &'static str, label: &'static str, current: bool, cx: &App) -> Stateful<Div> {
+    let accent = accent(cx);
     div()
         .id(id)
         .h_full()
@@ -107,7 +109,8 @@ pub fn choice(id: &'static str, label: &'static str, current: bool, accent: u32)
         .child(segment(label, current.then_some(accent), if current { BG } else { SEGMENT_IDLE }).px(px(12.)))
 }
 
-pub fn toggle(on: bool, accent: u32) -> Div {
+pub fn toggle(on: bool, cx: &App) -> Div {
+    let accent = accent(cx);
     let (off_color, on_color) = if on { (SEGMENT_IDLE, BG) } else { (TEXT, SEGMENT_IDLE) };
     segmented()
         .h(px(24.))
@@ -151,15 +154,15 @@ pub fn button(label: &str) -> Div {
 }
 
 /// A press-only button's confirmation: `done` in the accent color while `flashed`.
-pub fn flash_button(label: &str, done: &str, flashed: bool, accent: u32) -> Div {
+pub fn flash_button(label: &str, done: &str, flashed: bool, cx: &App) -> Div {
     if !flashed {
         return button(label);
     }
     let overlay = h_flex().absolute().top_0().left_0().size_full();
     button_frame()
         .relative()
-        .border_color(rgb(accent))
-        .text_color(rgb(accent))
+        .border_color(rgb(accent(cx)))
+        .text_color(rgb(accent(cx)))
         // The hidden label keeps the button's width.
         .child(tracked(label, 11., 0.12).invisible())
         .child(overlay.justify_center().child(tracked(done, 11., 0.12)))
@@ -193,11 +196,11 @@ fn button_frame() -> Div {
 }
 
 /// `/ filter` field: the accent slash and a bare mono input.
-pub fn filter(state: &Entity<InputState>, accent: u32) -> Div {
+pub fn filter(state: &Entity<InputState>, cx: &App) -> Div {
     h_flex()
         .gap(px(8.))
         .bg(rgb(SUNKEN))
-        .child(mono("/", 12.).font_weight(FontWeight::BOLD).text_color(rgb(accent)))
+        .child(mono("/", 12.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx))))
         .child(div().flex_1().min_w_0().child(Input::new(state).appearance(false).px_0().font_family(MONO).text_size(px(12.5))))
 }
 

@@ -6,7 +6,7 @@
 mod settings;
 mod store;
 
-use std::{io, path::Path, pin::pin, time::Duration};
+use std::{io, pin::pin, time::Duration};
 
 use anyhow::Result;
 use futures::{
@@ -20,6 +20,8 @@ use gpui_kit::{
 };
 use overlay::{Event, Key, Watch};
 use store::Store;
+
+use crate::storage::Paths;
 
 // GPUI switches fullscreen in a task of its own: how often and how long to look for it.
 const TICK: Duration = Duration::from_millis(8);
@@ -75,10 +77,10 @@ pub(super) struct Layer {
 }
 
 impl Layer {
-    pub fn new(data_dir: &Path, live: impl Fn(&App) -> Option<u32> + 'static, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(paths: &Paths, live: impl Fn(&App) -> Option<u32> + 'static, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (asks, asked) = mpsc::unbounded();
         let hwnd = super::hwnd(window);
-        let store = Store::load(data_dir);
+        let store = Store::load(paths);
         let watch = hwnd.and_then(|_| watch(store.hotkey(), &asks).inspect_err(|e| log::warn!("overlay hotkey: {e}")).ok());
         // A foreground event can be missed; the overlay losing the input is one too.
         cx.observe_window_activation(window, |layer, window, _| {

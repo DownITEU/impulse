@@ -158,7 +158,7 @@ impl Page {
             }
         });
         let status = match &folder.status {
-            Ok(found) => mono(found.clone(), 11.).text_color(rgb(self.accent)),
+            Ok(found) => mono(found.clone(), 11.).text_color(rgb(accent(cx))),
             Err(why) => mono(why.clone(), 11.).text_color(rgb(WARN)),
         };
         v_flex().gap(px(8.)).py(px(12.)).child(label(folder.label, folder.hint)).child(field).child(status)
