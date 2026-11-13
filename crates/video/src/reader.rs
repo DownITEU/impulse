@@ -68,6 +68,7 @@ impl Reader {
     pub fn read(&mut self) -> Result<Option<Frame>> {
         loop {
             let (mut flags, mut ticks, mut sample) = (0u32, 0i64, None::<IMFSample>);
+            // SAFETY: the reader is live; `flags`, `ticks` and `sample` are valid outputs that outlive the call.
             unsafe { self.reader.ReadSample(VIDEO, 0, None, Some(&mut flags), Some(&mut ticks), Some(&mut sample)) }
                 .context("cannot read a video sample")?;
             if flags & MF_SOURCE_READERF_ERROR.0 as u32 != 0 {
@@ -89,11 +90,13 @@ impl Reader {
     /// Back to the first frame.
     pub fn rewind(&mut self) -> Result<()> {
         let start = PROPVARIANT::from(0i64);
+        // SAFETY: the reader is live; the GUID and the variant outlive the call.
         unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &start) }.context("cannot seek to the start")
     }
 
     fn picture(&mut self, sample: &IMFSample, at: Duration) -> Result<Frame> {
         let area = self.layout.area;
+        // SAFETY: `sample` is a live COM object.
         let buffer = unsafe { sample.ConvertToContiguousBuffer() }?;
         let texture = match buffer.cast::<IMFDXGIBuffer>() {
             Ok(on_gpu) => self.pool.copy_decoded(&on_gpu, area)?,
@@ -108,15 +111,21 @@ impl Reader {
         let texture = match buffer.cast::<IMF2DBuffer>() {
             Ok(buffer2d) => {
                 let (mut top, mut pitch) = (std::ptr::null_mut(), 0i32);
+                // SAFETY: `top` and `pitch` are valid outputs; the buffer stays locked until the Unlock2D below.
                 unsafe { buffer2d.Lock2D(&mut top, &mut pitch) }?;
-                let texture = self.pool.upload(top, pitch as u32, size, area);
+                // SAFETY: the buffer is locked and holds the decoder's NV12 picture of `size`; NV12 is top-down, so `pitch` is positive.
+                let texture = unsafe { self.pool.upload(top, pitch as u32, size, area) };
+                // SAFETY: pairs with the Lock2D above, and `top` is not used after it.
                 let _ = unsafe { buffer2d.Unlock2D() };
                 texture
             }
             Err(_) => {
                 let mut top = std::ptr::null_mut();
+                // SAFETY: `top` is a valid output; the buffer stays locked until the Unlock below.
                 unsafe { buffer.Lock(&mut top, None, None) }?;
-                let texture = self.pool.upload(top, stride, size, area);
+                // SAFETY: the buffer is locked and holds the decoder's NV12 picture of `size` at the media type's stride.
+                let texture = unsafe { self.pool.upload(top, stride, size, area) };
+                // SAFETY: pairs with the Lock above, and `top` is not used after it.
                 let _ = unsafe { buffer.Unlock() };
                 texture
             }
@@ -129,29 +138,38 @@ impl Reader {
 fn configure(file: &Path, gpu: Option<&IMFDXGIDeviceManager>) -> Result<IMFSourceReader> {
     let reader = create(file, gpu).with_context(|| format!("cannot open {}", file.display()))?;
     // A selected stream nobody reads (audio) queues its samples.
+    // SAFETY: `reader` is a live COM object; the calls take plain values.
     unsafe { reader.SetStreamSelection(ALL_STREAMS, false).and_then(|()| reader.SetStreamSelection(VIDEO, true)) }
         .context("no video stream")?;
     let out = nv12().context("cannot describe the output type")?;
+    // SAFETY: `reader` and `out` are live COM objects.
     unsafe { reader.SetCurrentMediaType(VIDEO, None, &out) }.context("no decoder for this video")?;
     Ok(reader)
 }
 
 fn create(file: &Path, gpu: Option<&IMFDXGIDeviceManager>) -> windows::core::Result<IMFSourceReader> {
     let mut attributes = None;
+    // SAFETY: `attributes` is a valid output; Media Foundation is started by the caller's Runtime.
     unsafe { MFCreateAttributes(&mut attributes, 3) }?;
     let attributes = attributes.ok_or_else(windows::core::Error::empty)?;
     // H.264 decodes to NV12; this converts any other kind of clip.
+    // SAFETY: `attributes` is a live COM object and the key outlives the call.
     unsafe { attributes.SetUINT32(&MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1) }?;
     // The decoder holds fewer frames: a 1080p clip takes about half the memory, its frames unchanged.
+    // SAFETY: `attributes` is a live COM object and the key outlives the call.
     unsafe { attributes.SetUINT32(&MF_LOW_LATENCY, 1) }?;
     if let Some(gpu) = gpu {
+        // SAFETY: `attributes` and the device manager are live COM objects; the attribute store takes its own reference.
         unsafe { attributes.SetUnknown(&MF_SOURCE_READER_D3D_MANAGER, gpu) }?;
     }
+    // SAFETY: the HSTRING is NUL terminated and lives to the end of the call, as does `attributes`.
     unsafe { MFCreateSourceReaderFromURL(&HSTRING::from(file.as_os_str()), &attributes) }
 }
 
 fn nv12() -> windows::core::Result<IMFMediaType> {
+    // SAFETY: no arguments; Media Foundation is started by the caller's Runtime.
     let media_type = unsafe { MFCreateMediaType() }?;
+    // SAFETY: `media_type` is a live COM object and both GUIDs are statics.
     unsafe {
         media_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
         media_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
@@ -161,10 +179,13 @@ fn nv12() -> windows::core::Result<IMFMediaType> {
 
 /// What the reader really delivers: a decoder pads its pictures (1080 rows to 1088), the aperture says what shows.
 fn layout_of(reader: &IMFSourceReader) -> Result<Layout> {
+    // SAFETY: `reader` is a live COM object.
     let media_type = unsafe { reader.GetCurrentMediaType(VIDEO) }?;
+    // SAFETY: `media_type` is a live COM object.
     let packed = unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) }.context("no frame size")?;
     let size = ((packed >> 32) as u32, packed as u32);
     let mut aperture = MFVideoArea::default();
+    // SAFETY: the slice covers exactly `aperture`, which outlives the call; MFVideoArea is plain integers, so any bytes are valid.
     let shown = unsafe {
         media_type.GetBlob(
             &MF_MT_MINIMUM_DISPLAY_APERTURE,
@@ -182,6 +203,7 @@ fn layout_of(reader: &IMFSourceReader) -> Result<Layout> {
         Err(_) => Area { left: 0, top: 0, width: size.0, height: size.1 },
     };
     let area = even(area, size).context("no picture in the frame")?;
+    // SAFETY: `media_type` is a live COM object.
     let stride = unsafe { media_type.GetUINT32(&MF_MT_DEFAULT_STRIDE) }.unwrap_or(size.0);
     Ok(Layout { size, area, stride })
 }
@@ -195,6 +217,7 @@ fn even(area: Area, size: (u32, u32)) -> Option<Area> {
 }
 
 fn duration_of(reader: &IMFSourceReader) -> Result<Duration> {
+    // SAFETY: `reader` is a live COM object and the key is a static.
     let value = unsafe { reader.GetPresentationAttribute(MEDIA_SOURCE, &MF_PD_DURATION) }.context("the clip has no duration")?;
     let ticks = u64::try_from(&value).context("the clip has no duration")?;
     if ticks == 0 {

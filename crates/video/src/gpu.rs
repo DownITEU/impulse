@@ -13,8 +13,10 @@ use windows::core::{Error, Interface, Result};
 /// Hands `device` to Media Foundation; it must be multithread protected, as GPUI's is.
 pub fn manager(device: &ID3D11Device) -> Result<IMFDXGIDeviceManager> {
     let (mut token, mut manager) = (0, None);
+    // SAFETY: `token` and `manager` are valid outputs that live through the call.
     unsafe { MFCreateDXGIDeviceManager(&mut token, &mut manager) }?;
     let manager = manager.ok_or_else(Error::empty)?;
+    // SAFETY: `manager` is live, `device` is a live device and `token` came from creating this manager.
     unsafe { manager.ResetDevice(device, token) }?;
     Ok(manager)
 }
@@ -40,6 +42,7 @@ pub struct Pool {
 
 impl Pool {
     pub fn new(device: &ID3D11Device) -> Result<Pool> {
+        // SAFETY: `device` is a live COM object.
         let context = unsafe { device.GetImmediateContext() }?;
         let (back, free) = channel();
         Ok(Pool { device: device.clone(), context, free, back, upload: None })
@@ -47,21 +50,27 @@ impl Pool {
 
     /// The GPU decoder's picture in `buffer`.
     pub fn copy_decoded(&mut self, buffer: &IMFDXGIBuffer, area: Area) -> Result<Texture> {
+        // SAFETY: `raw` is a valid output; `from_raw` only runs after `?` shows GetResource succeeded, so it owns a live texture.
         let source = unsafe {
             let mut raw = std::ptr::null_mut();
             buffer.GetResource(&ID3D11Texture2D::IID, &mut raw)?;
             ID3D11Texture2D::from_raw(raw)
         };
+        // SAFETY: `buffer` is a live COM object.
         let index = unsafe { buffer.GetSubresourceIndex() }?;
         self.copy(&source, index, area)
     }
 
     /// The software decoder's picture of `size`: rows `pitch` bytes apart from `top`, the chroma after the luma.
-    pub fn upload(&mut self, top: *const u8, pitch: u32, size: (u32, u32), area: Area) -> Result<Texture> {
+    ///
+    /// # Safety
+    /// `top` points to an NV12 picture of `size` at `pitch`, readable for the whole call.
+    pub unsafe fn upload(&mut self, top: *const u8, pitch: u32, size: (u32, u32), area: Area) -> Result<Texture> {
         let upload = match &self.upload {
             Some(upload) if size_of(upload) == size => upload.clone(),
             _ => self.upload.insert(self.create(size, 0)?).clone(),
         };
+        // SAFETY: `upload` is a live texture of this device and `top` is as the caller promised.
         unsafe { self.context.UpdateSubresource(&upload, 0, None, top.cast(), pitch, 0) };
         self.copy(&upload, 0, area)
     }
@@ -71,6 +80,7 @@ impl Pool {
         let part =
             D3D11_BOX { left: area.left, top: area.top, front: 0, right: area.left + area.width, bottom: area.top + area.height, back: 1 };
         // On the immediate context, so a draw issued after it sees the copy done.
+        // SAFETY: both textures are live on this device, `index` is the source's own subresource and `part` lies inside the picture.
         unsafe { self.context.CopySubresourceRegion(&texture, 0, 0, 0, 0, source, index, Some(&part)) };
         Ok(Texture { texture: Some(texture), back: self.back.clone() })
     }
@@ -99,6 +109,7 @@ impl Pool {
             MiscFlags: 0,
         };
         let mut texture = None;
+        // SAFETY: `desc` and `texture` are valid for the call and no initial data is passed.
         unsafe { self.device.CreateTexture2D(&desc, None, Some(&mut texture)) }?;
         texture.ok_or_else(Error::empty)
     }
@@ -106,6 +117,7 @@ impl Pool {
 
 fn size_of(texture: &ID3D11Texture2D) -> (u32, u32) {
     let mut desc = D3D11_TEXTURE2D_DESC::default();
+    // SAFETY: `texture` is a live COM object and `desc` a valid output.
     unsafe { texture.GetDesc(&mut desc) };
     (desc.Width, desc.Height)
 }

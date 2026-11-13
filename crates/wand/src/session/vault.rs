@@ -41,6 +41,7 @@ fn dpapi(data: &[u8], seal: bool) -> Option<Vec<u8>> {
     }
     // SAFETY: on success `out` points to `cbData` bytes owned by us.
     let bytes = unsafe { slice::from_raw_parts(out.pbData, out.cbData as usize) }.to_vec();
+    // SAFETY: `pbData` was allocated by DPAPI for us, and `bytes` is a copy, so nothing reads it after this.
     unsafe { LocalFree(out.pbData.cast()) };
     Some(bytes)
 }

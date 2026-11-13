@@ -49,6 +49,7 @@ pub fn window_of(pid: u32) -> Option<isize> {
         // SAFETY: `found` is the `(pid, best)` below, alive for the whole enumeration.
         let (pid, best) = unsafe { &mut *(found as *mut (u32, Option<(i64, isize)>)) };
         let mut owner = 0;
+        // SAFETY: RECT is plain integers, so all zeros is a valid value.
         let mut rect: RECT = unsafe { mem::zeroed() };
         // SAFETY: plain Win32 calls on a window Windows just named; `owner` and `rect` outlive them.
         let ours = unsafe {

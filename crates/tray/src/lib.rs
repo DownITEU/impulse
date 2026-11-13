@@ -171,6 +171,7 @@ pub fn show(window: isize) {
 unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     // SAFETY: the pointer is set right after the window is made and the window goes before it is freed.
     let Some(inner) = (unsafe { (GetWindowLongPtrW(window, GWLP_USERDATA) as *const Inner).as_ref() }) else {
+        // SAFETY: forwards the arguments Windows gave this procedure, for the window it is running for.
         return unsafe { DefWindowProcW(window, message, wparam, lparam) };
     };
     match message {
@@ -186,6 +187,7 @@ unsafe extern "system" fn procedure(window: HWND, message: u32, wparam: WPARAM, 
         WAKE => (inner.on_event)(Event::Open),
         // SAFETY: the icon's data is whole.
         _ if message == inner.taskbar_created => drop(unsafe { Shell_NotifyIconW(NIM_ADD, &inner.icon) }),
+        // SAFETY: forwards the arguments Windows gave this procedure, for the window it is running for.
         _ => return unsafe { DefWindowProcW(window, message, wparam, lparam) },
     }
     0

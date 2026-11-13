@@ -101,6 +101,7 @@ fn candidate(pid: u32) -> Option<Candidate> {
     // SAFETY: zeroed counters of the declared size.
     let mut memory: PROCESS_MEMORY_COUNTERS = unsafe { mem::zeroed() };
     memory.cb = size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+    // SAFETY: the guard holds a live process handle and `memory` is a valid output of size `cb`.
     let known = unsafe { GetProcessMemoryInfo(process.0, &mut memory, memory.cb) } != 0;
     let working_set = if known { memory.WorkingSetSize } else { 0 };
     Some(Candidate { process: Process { pid, path, created }, age, working_set })
@@ -131,8 +132,8 @@ fn identity(process: &Handle) -> Option<(PathBuf, u64)> {
     let path = PathBuf::from(String::from_utf16_lossy(&name[..len as usize]));
 
     let mut times = [FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 }; 4];
-    // SAFETY: the four outputs are distinct, valid FILETIMEs.
     let [created, exited, kernel, user] = &mut times;
+    // SAFETY: the guard holds a live process handle and the four outputs are distinct, valid FILETIMEs.
     if unsafe { GetProcessTimes(process.0, created, exited, kernel, user) } == 0 {
         return None;
     }
