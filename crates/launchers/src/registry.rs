@@ -31,7 +31,5 @@ pub fn children(key: &Key, view: View) -> Vec<(String, Key)> {
     let Ok(names) = key.keys() else {
         return Vec::new();
     };
-    names
-        .filter_map(|name| open(key, &name, view).map(|k| (name, k)))
-        .collect()
+    names.filter_map(|name| open(key, &name, view).map(|k| (name, k))).collect()
 }

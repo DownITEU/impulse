@@ -56,9 +56,7 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     .await?;
 
     let dialed = server.runtime.spawn(async move { tokio::time::timeout(DIAL_IN_WITHIN, waiting).await }).await?;
-    let channel = dialed
-        .context("the service did not dial in")?
-        .context("the server dropped the service")?;
+    let channel = dialed.context("the service did not dial in")?.context("the server dropped the service")?;
     let (session, events) = Session::open(server.runtime.clone(), channel, &client_id);
     let run = Run { process_id: game.process.pid, game_version: version, trainer, variables: game.variables };
     session.start(plugin, run).await?;

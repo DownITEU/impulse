@@ -24,7 +24,8 @@ pub const CAPACITY: usize = 5000;
 const FILE_LIMIT: u64 = 2 << 20;
 const APP: &str = "impulse";
 /// The workspace's crates: their records are kept from Debug up, the others' from Warn.
-const OURS: [&str; 15] = [APP, "agent", "disk", "fetch", "hotkeys", "journal", "launchers", "model", "overlay", "pe", "play", "shell", "tray", "video", "wand"];
+const OURS: [&str; 15] =
+    [APP, "agent", "disk", "fetch", "hotkeys", "journal", "launchers", "model", "overlay", "pe", "play", "shell", "tray", "video", "wand"];
 
 pub struct Record {
     /// Grows by one per record; unique within a run.
@@ -38,13 +39,7 @@ pub struct Record {
 
 impl Record {
     pub fn line(&self) -> String {
-        format!(
-            "{} {:<5} {} - {}",
-            self.time.format("%Y-%m-%d %H:%M:%S%.3f"),
-            self.level,
-            self.source,
-            self.message
-        )
+        format!("{} {:<5} {} - {}", self.time.format("%Y-%m-%d %H:%M:%S%.3f"), self.level, self.source, self.message)
     }
 }
 
@@ -66,17 +61,10 @@ static CLOSING: AtomicBool = AtomicBool::new(false);
 /// Installs the logger and the panic hook. Call once, before anything logs.
 pub fn init(data_dir: &Path) {
     let dir = data_dir.join("logs");
-    let file = file::Sink::open(&dir, FILE_LIMIT)
-        .inspect_err(|e| mirror(&format!("log file unavailable: {e}")))
-        .ok();
+    let file = file::Sink::open(&dir, FILE_LIMIT).inspect_err(|e| mirror(&format!("log file unavailable: {e}"))).ok();
     let journal = JOURNAL.get_or_init(|| Journal {
         dir,
-        state: Mutex::new(State {
-            records: VecDeque::with_capacity(CAPACITY),
-            next_seq: 0,
-            file,
-            listener: None,
-        }),
+        state: Mutex::new(State { records: VecDeque::with_capacity(CAPACITY), next_seq: 0, file, listener: None }),
     });
     if log::set_logger(journal).is_ok() {
         log::set_max_level(LevelFilter::Debug);
@@ -166,13 +154,7 @@ impl Log for Journal {
         let message = scrub(&record.args().to_string());
         let time = Local::now();
         let mut state = self.lock();
-        let record = Arc::new(Record {
-            seq: state.next_seq,
-            time,
-            level: record.level(),
-            source: source.to_owned(),
-            message,
-        });
+        let record = Arc::new(Record { seq: state.next_seq, time, level: record.level(), source: source.to_owned(), message });
         state.next_seq += 1;
         let line = record.line();
         if let Some(file) = &mut state.file
@@ -218,11 +200,7 @@ fn location(record: &log::Record) -> String {
 // One line per record, and no Windows user name from paths under the profile.
 fn scrub(message: &str) -> String {
     static HOME: OnceLock<Option<String>> = OnceLock::new();
-    let home = HOME.get_or_init(|| {
-        std::env::var("USERPROFILE")
-            .ok()
-            .filter(|home| !home.is_empty())
-    });
+    let home = HOME.get_or_init(|| std::env::var("USERPROFILE").ok().filter(|home| !home.is_empty()));
     let line = message.replace(['\r', '\n'], " ");
     match home {
         Some(home) => line.replace(home.as_str(), "%USERPROFILE%"),
@@ -231,20 +209,9 @@ fn scrub(message: &str) -> String {
 }
 
 fn windows_build() -> String {
-    let version =
-        windows_registry::LOCAL_MACHINE.open(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
-    let value = |name| {
-        version
-            .as_ref()
-            .ok()
-            .and_then(|key| key.get_string(name).ok())
-            .unwrap_or_else(|| "?".to_owned())
-    };
-    format!(
-        "{} build {}",
-        value("DisplayVersion"),
-        value("CurrentBuild")
-    )
+    let version = windows_registry::LOCAL_MACHINE.open(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+    let value = |name| version.as_ref().ok().and_then(|key| key.get_string(name).ok()).unwrap_or_else(|| "?".to_owned());
+    format!("{} build {}", value("DisplayVersion"), value("CurrentBuild"))
 }
 
 #[cfg(test)]

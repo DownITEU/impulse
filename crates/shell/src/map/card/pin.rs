@@ -230,7 +230,17 @@ mod tests {
         };
         let tiles = Tiles { template: String::new(), flipped: false, size: 256, min_zoom: 0, max_zoom: 0 };
         let pins = [0.5, 0.9, 0.52, 0.3, 0.45, 0.6, 0.51].map(pin).into();
-        let map = Map { tiles, background: 0, categories: Vec::new(), pins, regions: Vec::new(), labels: Vec::new(), frame: None, teleport: false, unfinished: false };
+        let map = Map {
+            tiles,
+            background: 0,
+            categories: Vec::new(),
+            pins,
+            regions: Vec::new(),
+            labels: Vec::new(),
+            frame: None,
+            teleport: false,
+            unfinished: false,
+        };
         let mut board = Board::new(PathBuf::new(), 0);
         board.map = Load::Ready(Rc::new(map));
         assert!(nearest(&board).is_empty());

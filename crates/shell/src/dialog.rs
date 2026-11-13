@@ -27,7 +27,15 @@ type Close = fn(&mut Page, &mut Window, &mut Context<Page>);
 
 impl Page {
     /// `close` runs on a press beside the box, on its × and on Escape while the focus is in it.
-    pub(super) fn dialog(&self, id: &'static str, title: &str, width: f32, close: Close, body: impl IntoElement, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn dialog(
+        &self,
+        id: &'static str,
+        title: &str,
+        width: f32,
+        close: Close,
+        body: impl IntoElement,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         div()
             .id((id, 0usize))
             .occlude()

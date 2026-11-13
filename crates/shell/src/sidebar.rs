@@ -79,16 +79,7 @@ impl Page {
                     .border_1()
                     .border_color(line(0.1)),
             )
-            .child(
-                v_flex()
-                    .id("games")
-                    .flex_1()
-                    .min_h_0()
-                    .pt(px(4.))
-                    .pb(px(12.))
-                    .children(rows)
-                    .overflow_y_scrollbar(),
-            )
+            .child(v_flex().id("games").flex_1().min_h_0().pt(px(4.)).pb(px(12.)).children(rows).overflow_y_scrollbar())
             .child(
                 h_flex()
                     .id("add")
@@ -125,12 +116,7 @@ impl Page {
                 .flex_none()
                 .bg(rgb(AVATAR))
                 .when_some(game.thumbnail.clone(), |lead, url| {
-                    lead.child(
-                        img(url)
-                            .size_full()
-                            .object_fit(ObjectFit::Cover)
-                            .grayscale(no_trainer),
-                    )
+                    lead.child(img(url).size_full().object_fit(ObjectFit::Cover).grayscale(no_trainer))
                 })
                 .into_any_element(),
         };
@@ -150,12 +136,7 @@ impl Page {
                 let id = game.id.clone();
                 move |page, _, window, cx| page.select(id.clone(), window, cx)
             }))
-            .child(
-                div()
-                    .w(px(8.))
-                    .flex_none()
-                    .when(current, |cell| cell.child(square(6., accent))),
-            )
+            .child(div().w(px(8.)).flex_none().when(current, |cell| cell.child(square(6., accent))))
             .child(lead)
             .child(
                 div()
@@ -167,27 +148,19 @@ impl Page {
                     .text_color(name_color)
                     .child(game.name.clone()),
             )
-            .when(Some(&game.id) == self.play.live(), |row| {
-                row.child(self.live())
-            })
-            .when(game.support == Support::UpdatePending, |row| {
-                row.child(icon(Icon::Warn, 14., rgb(WARN)))
-            })
+            .when(Some(&game.id) == self.play.live(), |row| row.child(self.live()))
+            .when(game.support == Support::UpdatePending, |row| row.child(icon(Icon::Warn, 14., rgb(WARN))))
     }
 
     fn live(&self) -> impl IntoElement {
-        let label = mono("LIVE", 10.)
-            .font_weight(FontWeight::BOLD)
-            .text_color(rgb(self.accent));
+        let label = mono("LIVE", 10.).font_weight(FontWeight::BOLD).text_color(rgb(self.accent));
         if self.reduce_motion {
             return label.into_any_element();
         }
         label
-            .with_animation(
-                "live",
-                Animation::new(Duration::from_millis(1200)).repeat(),
-                |label, t| label.opacity(if t < 0.5 { 1. } else { 0.35 }),
-            )
+            .with_animation("live", Animation::new(Duration::from_millis(1200)).repeat(), |label, t| {
+                label.opacity(if t < 0.5 { 1. } else { 0.35 })
+            })
             .into_any_element()
     }
 }

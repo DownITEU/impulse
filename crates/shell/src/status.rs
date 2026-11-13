@@ -12,16 +12,10 @@ impl Page {
     pub(super) fn status_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (errors, warnings) = self.log.read(cx).problems();
         let problem = |count: usize, color: u32| {
-            h_flex()
-                .gap(px(6.))
-                .child(square(7., rgb(color)))
-                .child(mono(count.to_string(), 11.).text_color(rgb(color)))
+            h_flex().gap(px(6.)).child(square(7., rgb(color))).child(mono(count.to_string(), 11.).text_color(rgb(color)))
         };
         let accent = rgb(self.accent);
-        let running = self
-            .games()
-            .iter()
-            .find(|game| Some(&game.id) == self.play.live());
+        let running = self.games().iter().find(|game| Some(&game.id) == self.play.live());
         h_flex()
             .h(px(30.))
             .flex_none()
@@ -33,17 +27,10 @@ impl Page {
             .text_color(rgb(DIM))
             .map(|bar| match running {
                 Some(game) => {
-                    let (active, total) = self
-                        .trainer(Some(&game.id))
-                        .map_or((0, 0), |loaded| (loaded.active(), loaded.cheats.len()));
-                    bar.child(
-                        h_flex()
-                            .gap(px(8.))
-                            .child(square(7., accent))
-                            .child(mono("LIVE", 11.).text_color(accent)),
-                    )
-                    .child(mono(game.name.clone(), 11.))
-                    .child(mono(format!("{active}/{total} ACTIVE"), 11.))
+                    let (active, total) = self.trainer(Some(&game.id)).map_or((0, 0), |loaded| (loaded.active(), loaded.cheats.len()));
+                    bar.child(h_flex().gap(px(8.)).child(square(7., accent)).child(mono("LIVE", 11.).text_color(accent)))
+                        .child(mono(game.name.clone(), 11.))
+                        .child(mono(format!("{active}/{total} ACTIVE"), 11.))
                 }
                 None => bar.child(mono("IDLE", 11.)),
             })

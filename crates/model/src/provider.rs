@@ -34,7 +34,9 @@ pub struct Store {
 pub enum Clear {
     Now,
     /// Only while nothing uses it: at the next start. `asked` once it is due.
-    NextStart { asked: bool },
+    NextStart {
+        asked: bool,
+    },
 }
 
 /// A snapshot stream yields `Cached` first, then `Fresh` only when the copy was missing or stale.

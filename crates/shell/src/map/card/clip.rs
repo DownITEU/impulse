@@ -75,7 +75,9 @@ impl Render for ClipView {
         let Some(frame) = &self.shown else { return div().into_any_element() };
         let (texture, frame_size) = (frame.texture.get().clone(), (frame.width, frame.height));
         // The box around clips it to its own bounds.
-        canvas(|_, _, _| {}, move |bounds, _, window, _| window.paint_surface(cover(bounds, frame_size), texture)).size_full().into_any_element()
+        canvas(|_, _, _| {}, move |bounds, _, window, _| window.paint_surface(cover(bounds, frame_size), texture))
+            .size_full()
+            .into_any_element()
     }
 }
 

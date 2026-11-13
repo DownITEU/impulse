@@ -42,10 +42,7 @@ pub type Custom = HashMap<String, HashMap<String, Slots>>;
 /// Reads Wand's access token from a copy of its localStorage leveldb (blocking).
 pub fn read() -> Result<WandToken> {
     let found = stores()?.iter().filter_map(token).collect();
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs_f64();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64();
     newest(found, now)
 }
 
@@ -86,10 +83,8 @@ fn stores() -> Result<Vec<Value>> {
 }
 
 fn newest(found: Vec<(f64, String)>, now: f64) -> Result<WandToken> {
-    let (expires_at, access_token) = found
-        .into_iter()
-        .max_by(|a, b| a.0.total_cmp(&b.0))
-        .context("Wand session not found: install Wand and sign in")?;
+    let (expires_at, access_token) =
+        found.into_iter().max_by(|a, b| a.0.total_cmp(&b.0)).context("Wand session not found: install Wand and sign in")?;
     if expires_at <= now {
         bail!("Wand session expired: open Wand and sign in");
     }
@@ -124,10 +119,7 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
 }
 
 fn read_db(dir: &Path) -> Result<Option<Value>> {
-    let opt = Options {
-        create_if_missing: false,
-        ..Options::default()
-    };
+    let opt = Options { create_if_missing: false, ..Options::default() };
     let mut db = DB::open(dir, opt).context("open Wand store copy")?;
     db.get(KEY).map(|raw| parse(&raw)).transpose()
 }
@@ -164,12 +156,7 @@ fn custom(store: &Value) -> Result<Custom> {
 fn decode(raw: &[u8]) -> Result<String> {
     match raw.split_first() {
         Some((0, rest)) => {
-            let units: Vec<u16> = rest
-                .as_chunks::<2>()
-                .0
-                .iter()
-                .map(|&c| u16::from_le_bytes(c))
-                .collect();
+            let units: Vec<u16> = rest.as_chunks::<2>().0.iter().map(|&c| u16::from_le_bytes(c)).collect();
             Ok(String::from_utf16_lossy(&units))
         }
         Some((1, rest)) => Ok(rest.iter().map(|&b| b as char).collect()),
@@ -184,9 +171,7 @@ mod tests {
     const JSON: &str = r#"{"token":{"accessToken":"tok-1","expiresAt":2000.5}}"#;
 
     fn utf16(s: &str) -> Vec<u8> {
-        std::iter::once(0)
-            .chain(s.encode_utf16().flat_map(u16::to_le_bytes))
-            .collect()
+        std::iter::once(0).chain(s.encode_utf16().flat_map(u16::to_le_bytes)).collect()
     }
 
     fn latin1(s: &str) -> Vec<u8> {
@@ -204,10 +189,8 @@ mod tests {
 
     #[test]
     fn custom_hotkeys_lay_over_the_trainer_and_null_unbinds() {
-        let store: Value = serde_json::from_str(
-            r#"{"gamePreferences":{"g":{"customHotkeys":{"a":{"1":[17,113],"0":null,"7":[65]}}},"h":{}}}"#,
-        )
-        .unwrap();
+        let store: Value =
+            serde_json::from_str(r#"{"gamePreferences":{"g":{"customHotkeys":{"a":{"1":[17,113],"0":null,"7":[65]}}},"h":{}}}"#).unwrap();
         let custom = custom(&store).unwrap();
         assert_eq!(custom.keys().collect::<Vec<_>>(), ["g"]);
         let mut cheats = vec![model::Cheat {
@@ -227,33 +210,21 @@ mod tests {
 
     #[test]
     fn picks_newest_expiry() {
-        let found = vec![
-            (100.0, "old".to_owned()),
-            (300.0, "new".to_owned()),
-            (200.0, "mid".to_owned()),
-        ];
+        let found = vec![(100.0, "old".to_owned()), (300.0, "new".to_owned()), (200.0, "mid".to_owned())];
         assert_eq!(newest(found, 50.0).unwrap().expose(), "new");
     }
 
     #[test]
     fn rejects_expired_and_missing() {
         let expired = newest(vec![(100.0, "old".to_owned())], 100.0).unwrap_err();
-        assert_eq!(
-            expired.to_string(),
-            "Wand session expired: open Wand and sign in"
-        );
+        assert_eq!(expired.to_string(), "Wand session expired: open Wand and sign in");
         let missing = newest(vec![], 0.0).unwrap_err();
-        assert_eq!(
-            missing.to_string(),
-            "Wand session not found: install Wand and sign in"
-        );
+        assert_eq!(missing.to_string(), "Wand session not found: install Wand and sign in");
     }
 
     #[test]
     fn debug_is_redacted() {
-        let token = WandToken {
-            access_token: "secret-value".to_owned(),
-        };
+        let token = WandToken { access_token: "secret-value".to_owned() };
         assert!(!format!("{token:?}").contains("secret-value"));
     }
 }

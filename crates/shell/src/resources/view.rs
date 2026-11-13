@@ -43,26 +43,44 @@ impl Render for Resources {
             .pb(px(14.))
             .border_b_1()
             .border_color(line(0.07))
-            .child(row("IN USE", "everything Impulse keeps on this PC", 52.).border_b_0().child(mono(size(total), 18.).font_weight(FontWeight::BOLD).text_color(rgb(TEXT_BRIGHT))))
+            .child(
+                row("IN USE", "everything Impulse keeps on this PC", 52.)
+                    .border_b_0()
+                    .child(mono(size(total), 18.).font_weight(FontWeight::BOLD).text_color(rgb(TEXT_BRIGHT))),
+            )
             .child(bar);
         let caches = usage.caches.iter().enumerate().map(|(index, store)| {
             let id = store.id;
             let action = match store.clear {
                 _ if store.bytes == 0 => None,
-                Clear::Now => Some(button("CLEAR").id(("clear", index)).on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id], cx))).into_any_element()),
-                Clear::NextStart { asked: false } => {
-                    Some(button("ON RESTART").id(("clear", index)).on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id], cx))).into_any_element())
-                }
+                Clear::Now => Some(
+                    button("CLEAR")
+                        .id(("clear", index))
+                        .on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id], cx)))
+                        .into_any_element(),
+                ),
+                Clear::NextStart { asked: false } => Some(
+                    button("ON RESTART")
+                        .id(("clear", index))
+                        .on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id], cx)))
+                        .into_any_element(),
+                ),
                 Clear::NextStart { asked: true } => Some(mono("CLEARS ON RESTART", 10.5).text_color(rgb(self.accent)).into_any_element()),
             };
             entry(Some(color(index)), store.name, store.hint, store.bytes).children(action)
         });
-        let clearable: Vec<&'static str> = usage.caches.iter().filter(|store| store.bytes > 0 && store.clear != Clear::NextStart { asked: true }).map(|store| store.id).collect();
-        let clear_all = row("CLEAR ALL CACHES", "your data below stays", 64.).child(
-            button("CLEAR ALL").id("clear-all").on_click(cx.listener(move |view, _, _, cx| view.clear(clearable.clone(), cx))),
-        );
+        let clearable: Vec<&'static str> = usage
+            .caches
+            .iter()
+            .filter(|store| store.bytes > 0 && store.clear != Clear::NextStart { asked: true })
+            .map(|store| store.id)
+            .collect();
+        let clear_all = row("CLEAR ALL CACHES", "your data below stays", 64.)
+            .child(button("CLEAR ALL").id("clear-all").on_click(cx.listener(move |view, _, _, cx| view.clear(clearable.clone(), cx))));
         let limits = segmented().w_full().h(px(28.)).children(LIMITS.map(|(id, name, limit)| {
-            choice(id, name, self.limit == limit, self.accent).flex_1().on_click(cx.listener(move |view, _, _, cx| view.set_limit(limit, cx)))
+            choice(id, name, self.limit == limit, self.accent)
+                .flex_1()
+                .on_click(cx.listener(move |view, _, _, cx| view.set_limit(limit, cx)))
         }));
         let limit = v_flex()
             .gap(px(10.))

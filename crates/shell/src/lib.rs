@@ -85,9 +85,7 @@ const SIDEBAR_WIDTH: f32 = 248.;
 pub fn init(data_dir: &Path, cx: &mut App) {
     crash::install();
     theme::init(cx);
-    cx.set_http_client(Arc::new(art::CdnClient {
-        cache: art::Media::Pictures.dir(data_dir),
-    }));
+    cx.set_http_client(Arc::new(art::CdnClient { cache: art::Media::Pictures.dir(data_dir) }));
     log_view::bind_keys(cx);
     map::bind_keys(cx);
     hud::bind_keys(cx);
@@ -183,12 +181,7 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new(
-        provider: Arc<dyn Provider>,
-        data_dir: PathBuf,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(provider: Arc<dyn Provider>, data_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let prefs = Prefs::load(&data_dir);
         let accent = prefs.accent();
         let log = cx.new(|cx| LogView::new(accent, window, cx));
@@ -388,15 +381,7 @@ impl Render for Page {
                     .child(self.sidebar(cx))
                     .child(self.pane(window, cx))
                     .when(self.log_open, |body| {
-                        body.child(
-                            div()
-                                .occlude()
-                                .absolute()
-                                .top_0()
-                                .left_0()
-                                .size_full()
-                                .child(self.log.clone()),
-                        )
+                        body.child(div().occlude().absolute().top_0().left_0().size_full().child(self.log.clone()))
                     }),
             )
             .child(self.status_bar(cx))

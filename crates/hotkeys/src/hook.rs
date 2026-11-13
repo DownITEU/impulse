@@ -12,9 +12,9 @@ use windows_sys::Win32::{
     Foundation::{LPARAM, LRESULT, WPARAM},
     System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId},
     UI::WindowsAndMessaging::{
-        CallNextHookEx, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, HC_ACTION, HHOOK, HOOKPROC, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE,
-        PeekMessageW, PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WINDOWS_HOOK_ID, WM_KEYDOWN, WM_MOUSEMOVE, WM_QUIT,
-        WM_SYSKEYDOWN, WM_USER,
+        CallNextHookEx, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, HC_ACTION, HHOOK, HOOKPROC, KBDLLHOOKSTRUCT, MSG,
+        MSLLHOOKSTRUCT, PM_NOREMOVE, PeekMessageW, PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL,
+        WINDOWS_HOOK_ID, WM_KEYDOWN, WM_MOUSEMOVE, WM_QUIT, WM_SYSKEYDOWN, WM_USER,
     },
 };
 
@@ -212,7 +212,10 @@ mod tests {
             ours
         })
         .unwrap();
-        let key = |flags| INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VK_F24, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } } };
+        let key = |flags| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VK_F24, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } },
+        };
         let notch = MOUSEINPUT { dx: 0, dy: 0, mouseData: 120, dwFlags: MOUSEEVENTF_WHEEL, time: 0, dwExtraInfo: 0 };
         let inputs = [key(0), key(KEYEVENTF_KEYUP), INPUT { r#type: INPUT_MOUSE, Anonymous: INPUT_0 { mi: notch } }];
         // SAFETY: a valid array of `INPUT`.

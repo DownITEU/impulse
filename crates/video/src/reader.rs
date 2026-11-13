@@ -4,13 +4,11 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use windows::Win32::Graphics::Direct3D11::ID3D11Device;
 use windows::Win32::Media::MediaFoundation::{
-    IMF2DBuffer, IMFDXGIBuffer, IMFDXGIDeviceManager, IMFMediaBuffer, IMFMediaType, IMFSample,
-    IMFSourceReader, MF_LOW_LATENCY, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE,
-    MF_MT_MINIMUM_DISPLAY_APERTURE, MF_MT_SUBTYPE, MF_PD_DURATION, MF_SOURCE_READER_ALL_STREAMS,
-    MF_SOURCE_READER_D3D_MANAGER, MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING,
-    MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE,
-    MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
-    MF_SOURCE_READERF_ERROR, MFCreateAttributes, MFCreateMediaType, MFCreateSourceReaderFromURL,
+    IMF2DBuffer, IMFDXGIBuffer, IMFDXGIDeviceManager, IMFMediaBuffer, IMFMediaType, IMFSample, IMFSourceReader, MF_LOW_LATENCY,
+    MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE, MF_MT_MINIMUM_DISPLAY_APERTURE, MF_MT_SUBTYPE, MF_PD_DURATION,
+    MF_SOURCE_READER_ALL_STREAMS, MF_SOURCE_READER_D3D_MANAGER, MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING,
+    MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE, MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED,
+    MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR, MFCreateAttributes, MFCreateMediaType, MFCreateSourceReaderFromURL,
     MFMediaType_Video, MFVideoArea, MFVideoFormat_NV12,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
@@ -48,9 +46,7 @@ impl Reader {
     pub fn open(file: &Path, device: &ID3D11Device) -> Result<Reader> {
         let runtime = Runtime::start().context("cannot start Media Foundation")?;
         // The GPU's video engine leaves the CPU to the game; the software decoder is the fallback.
-        let on_gpu = gpu::manager(device)
-            .map_err(anyhow::Error::from)
-            .and_then(|manager| configure(file, Some(&manager)));
+        let on_gpu = gpu::manager(device).map_err(anyhow::Error::from).and_then(|manager| configure(file, Some(&manager)));
         let reader = match on_gpu {
             Ok(reader) => reader,
             Err(e) => {
@@ -60,13 +56,7 @@ impl Reader {
         };
         let layout = layout_of(&reader)?;
         let duration = duration_of(&reader)?;
-        Ok(Reader {
-            reader,
-            pool: Pool::new(device).context("cannot use the window's device")?,
-            layout,
-            duration,
-            _runtime: runtime,
-        })
+        Ok(Reader { reader, pool: Pool::new(device).context("cannot use the window's device")?, layout, duration, _runtime: runtime })
     }
 
     /// The length of one pass over the clip.
@@ -78,17 +68,8 @@ impl Reader {
     pub fn read(&mut self) -> Result<Option<Frame>> {
         loop {
             let (mut flags, mut ticks, mut sample) = (0u32, 0i64, None::<IMFSample>);
-            unsafe {
-                self.reader.ReadSample(
-                    VIDEO,
-                    0,
-                    None,
-                    Some(&mut flags),
-                    Some(&mut ticks),
-                    Some(&mut sample),
-                )
-            }
-            .context("cannot read a video sample")?;
+            unsafe { self.reader.ReadSample(VIDEO, 0, None, Some(&mut flags), Some(&mut ticks), Some(&mut sample)) }
+                .context("cannot read a video sample")?;
             if flags & MF_SOURCE_READERF_ERROR.0 as u32 != 0 {
                 bail!("the source reader reported an error");
             }
@@ -108,8 +89,7 @@ impl Reader {
     /// Back to the first frame.
     pub fn rewind(&mut self) -> Result<()> {
         let start = PROPVARIANT::from(0i64);
-        unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &start) }
-            .context("cannot seek to the start")
+        unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &start) }.context("cannot seek to the start")
     }
 
     fn picture(&mut self, sample: &IMFSample, at: Duration) -> Result<Frame> {
@@ -119,12 +99,7 @@ impl Reader {
             Ok(on_gpu) => self.pool.copy_decoded(&on_gpu, area)?,
             Err(_) => self.uploaded(&buffer)?,
         };
-        Ok(Frame {
-            texture,
-            width: area.width,
-            height: area.height,
-            at,
-        })
+        Ok(Frame { texture, width: area.width, height: area.height, at })
     }
 
     /// The software decoder's picture, from memory onto the device.
@@ -154,22 +129,14 @@ impl Reader {
 fn configure(file: &Path, gpu: Option<&IMFDXGIDeviceManager>) -> Result<IMFSourceReader> {
     let reader = create(file, gpu).with_context(|| format!("cannot open {}", file.display()))?;
     // A selected stream nobody reads (audio) queues its samples.
-    unsafe {
-        reader
-            .SetStreamSelection(ALL_STREAMS, false)
-            .and_then(|()| reader.SetStreamSelection(VIDEO, true))
-    }
-    .context("no video stream")?;
+    unsafe { reader.SetStreamSelection(ALL_STREAMS, false).and_then(|()| reader.SetStreamSelection(VIDEO, true)) }
+        .context("no video stream")?;
     let out = nv12().context("cannot describe the output type")?;
-    unsafe { reader.SetCurrentMediaType(VIDEO, None, &out) }
-        .context("no decoder for this video")?;
+    unsafe { reader.SetCurrentMediaType(VIDEO, None, &out) }.context("no decoder for this video")?;
     Ok(reader)
 }
 
-fn create(
-    file: &Path,
-    gpu: Option<&IMFDXGIDeviceManager>,
-) -> windows::core::Result<IMFSourceReader> {
+fn create(file: &Path, gpu: Option<&IMFDXGIDeviceManager>) -> windows::core::Result<IMFSourceReader> {
     let mut attributes = None;
     unsafe { MFCreateAttributes(&mut attributes, 3) }?;
     let attributes = attributes.ok_or_else(windows::core::Error::empty)?;
@@ -212,12 +179,7 @@ fn layout_of(reader: &IMFSourceReader) -> Result<Layout> {
             width: aperture.Area.cx.max(0) as u32,
             height: aperture.Area.cy.max(0) as u32,
         },
-        Err(_) => Area {
-            left: 0,
-            top: 0,
-            width: size.0,
-            height: size.1,
-        },
+        Err(_) => Area { left: 0, top: 0, width: size.0, height: size.1 },
     };
     let area = even(area, size).context("no picture in the frame")?;
     let stride = unsafe { media_type.GetUINT32(&MF_MT_DEFAULT_STRIDE) }.unwrap_or(size.0);
@@ -229,24 +191,16 @@ fn even(area: Area, size: (u32, u32)) -> Option<Area> {
     let (left, top) = (area.left & !1, area.top & !1);
     let width = area.width.min(size.0.saturating_sub(left)) & !1;
     let height = area.height.min(size.1.saturating_sub(top)) & !1;
-    (width > 0 && height > 0).then_some(Area {
-        left,
-        top,
-        width,
-        height,
-    })
+    (width > 0 && height > 0).then_some(Area { left, top, width, height })
 }
 
 fn duration_of(reader: &IMFSourceReader) -> Result<Duration> {
-    let value = unsafe { reader.GetPresentationAttribute(MEDIA_SOURCE, &MF_PD_DURATION) }
-        .context("the clip has no duration")?;
+    let value = unsafe { reader.GetPresentationAttribute(MEDIA_SOURCE, &MF_PD_DURATION) }.context("the clip has no duration")?;
     let ticks = u64::try_from(&value).context("the clip has no duration")?;
     if ticks == 0 {
         bail!("the clip has no duration");
     }
-    Ok(Duration::from_nanos(
-        ticks * (1_000_000_000 / TICKS_PER_SECOND),
-    ))
+    Ok(Duration::from_nanos(ticks * (1_000_000_000 / TICKS_PER_SECOND)))
 }
 
 #[cfg(test)]
@@ -254,28 +208,14 @@ mod tests {
     use super::*;
 
     fn area(left: u32, top: u32, width: u32, height: u32) -> Area {
-        Area {
-            left,
-            top,
-            width,
-            height,
-        }
+        Area { left, top, width, height }
     }
 
     #[test]
     fn the_shown_area_is_even_and_inside_the_picture() {
-        assert_eq!(
-            even(area(0, 0, 1920, 1080), (1920, 1088)),
-            Some(area(0, 0, 1920, 1080))
-        );
-        assert_eq!(
-            even(area(1, 3, 641, 361), (642, 364)),
-            Some(area(0, 2, 640, 360))
-        );
-        assert_eq!(
-            even(area(0, 0, 2000, 2000), (1280, 720)),
-            Some(area(0, 0, 1280, 720))
-        );
+        assert_eq!(even(area(0, 0, 1920, 1080), (1920, 1088)), Some(area(0, 0, 1920, 1080)));
+        assert_eq!(even(area(1, 3, 641, 361), (642, 364)), Some(area(0, 2, 640, 360)));
+        assert_eq!(even(area(0, 0, 2000, 2000), (1280, 720)), Some(area(0, 0, 1280, 720)));
         assert_eq!(even(area(0, 0, 1, 1), (1280, 720)), None);
     }
 }

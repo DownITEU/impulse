@@ -268,7 +268,15 @@ impl MapView {
                 cx.notify();
             })))
             .child(mono("MAP", 10.5).text_color(rgb(DIM)))
-            .child(h_flex().id("map-tabs").flex_1().min_w_0().gap(px(6.)).overflow_x_scroll().children(self.offers.iter().enumerate().map(tab)))
+            .child(
+                h_flex()
+                    .id("map-tabs")
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(6.))
+                    .overflow_x_scroll()
+                    .children(self.offers.iter().enumerate().map(tab)),
+            )
             .when(!self.docked, |bar| {
                 bar.child(icon_button("map-close", Icon::Close, 32., 12.).on_click(cx.listener(|_, _, _, cx| cx.emit(MapEvent::Close))))
             })
@@ -328,7 +336,8 @@ fn kind(map: &Map, pin: &Pin) -> String {
 impl Render for MapView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = self.board.read(cx).accent;
-        let sidebar = self.sidebar_open.then(|| self.sidebar.clone().cached(StyleRefinement::default().w(px(sidebar::WIDTH)).h_full().flex_none()));
+        let sidebar =
+            self.sidebar_open.then(|| self.sidebar.clone().cached(StyleRefinement::default().w(px(sidebar::WIDTH)).h_full().flex_none()));
         let map = div()
             .relative()
             .flex_1()

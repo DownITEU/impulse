@@ -10,11 +10,11 @@ use windows_sys::Win32::{
     UI::{
         Shell::{NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, Shell_NotifyIconW},
         WindowsAndMessaging::{
-            AllowSetForegroundWindow, AppendMenuW, ChangeWindowMessageFilterEx, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
-            FindWindowW, GWLP_USERDATA, GetCursorPos, GetWindowLongPtrW, GetWindowThreadProcessId, IsIconic, LoadIconW, MF_CHECKED,
-            MF_GRAYED, MF_SEPARATOR, MF_STRING, MSGFLT_ALLOW, PostMessageW, RegisterClassW, RegisterWindowMessageW, SW_HIDE, SW_RESTORE, SW_SHOW,
-            SetForegroundWindow, SetMenuDefaultItem, SetWindowLongPtrW, ShowWindow, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu,
-            WM_APP, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WNDCLASSW,
+            AllowSetForegroundWindow, AppendMenuW, ChangeWindowMessageFilterEx, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
+            DestroyMenu, DestroyWindow, FindWindowW, GWLP_USERDATA, GetCursorPos, GetWindowLongPtrW, GetWindowThreadProcessId, IsIconic,
+            LoadIconW, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSGFLT_ALLOW, PostMessageW, RegisterClassW, RegisterWindowMessageW,
+            SW_HIDE, SW_RESTORE, SW_SHOW, SetForegroundWindow, SetMenuDefaultItem, SetWindowLongPtrW, ShowWindow, TPM_RETURNCMD,
+            TPM_RIGHTBUTTON, TrackPopupMenu, WM_APP, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WNDCLASSW,
         },
     },
 };
@@ -70,7 +70,8 @@ impl Tray {
             window_class.lpszClassName = class.as_ptr();
             // Fails harmlessly once the class exists.
             RegisterClassW(&window_class);
-            let window = CreateWindowExW(0, class.as_ptr(), class.as_ptr(), 0, 0, 0, 0, 0, ptr::null_mut(), ptr::null_mut(), instance, ptr::null());
+            let window =
+                CreateWindowExW(0, class.as_ptr(), class.as_ptr(), 0, 0, 0, 0, 0, ptr::null_mut(), ptr::null_mut(), instance, ptr::null());
             if window.is_null() {
                 return Err(io::Error::last_os_error());
             }

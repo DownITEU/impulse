@@ -64,11 +64,8 @@ mod tests {
         let server = Server::start().unwrap();
         let client_id = uuid::Uuid::new_v4().to_string();
         let waiting = server.expect(&client_id);
-        let mut target = Command::new(r"C:\Windows\System32\PING.EXE")
-            .args(["-n", "120", "127.0.0.1"])
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
+        let mut target =
+            Command::new(r"C:\Windows\System32\PING.EXE").args(["-n", "120", "127.0.0.1"]).stdout(Stdio::null()).spawn().unwrap();
 
         let outcome = (|| -> Result<()> {
             let startup = Startup { wand_port: server.port, client_id: &client_id, trainer_session_id: &uuid::Uuid::new_v4().to_string() };

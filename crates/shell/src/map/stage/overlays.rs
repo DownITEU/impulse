@@ -48,10 +48,14 @@ impl Stage {
             .gap(px(3.))
             .child(div().truncate().text_size(px(13.5)).font_weight(FontWeight::BOLD).text_color(rgb(TEXT_BRIGHT)).child(pin.name.clone()))
             .child(mono(kind(map, pin), 9.5).truncate().text_color(rgb(DIM)))
-            .when(!about.is_empty(), |text| text.child(div().pt(px(3.)).line_clamp(2).text_size(px(12.)).text_color(rgb(TEXT_2)).child(about)))
+            .when(!about.is_empty(), |text| {
+                text.child(div().pt(px(3.)).line_clamp(2).text_size(px(12.)).text_color(rgb(TEXT_2)).child(about))
+            })
             .when(board.saved.found.contains(&pin.id), |text| {
                 let accent = rgb(board.accent);
-                text.child(h_flex().pt(px(3.)).gap(px(5.)).child(icon(Icon::Check, 10., accent)).child(mono("FOUND", 9.5).text_color(accent)))
+                text.child(
+                    h_flex().pt(px(3.)).gap(px(5.)).child(icon(Icon::Check, 10., accent)).child(mono("FOUND", 9.5).text_color(accent)),
+                )
             });
         let chip = v_flex()
             .absolute()
@@ -97,8 +101,10 @@ impl Stage {
                 cx.notify();
             }))
         });
-        let zoom_in = control("map-zoom-in", Icon::Plus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(KEY_ZOOM, cx)));
-        let zoom_out = control("map-zoom-out", Icon::Minus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(1. / KEY_ZOOM, cx)));
+        let zoom_in =
+            control("map-zoom-in", Icon::Plus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(KEY_ZOOM, cx)));
+        let zoom_out =
+            control("map-zoom-out", Icon::Minus, false, accent).on_click(cx.listener(|stage, _, _, cx| stage.key_zoom(1. / KEY_ZOOM, cx)));
         let layers = control("map-layers", Icon::Layers, self.layers_open, accent).on_click(cx.listener(|stage, _, _, cx| {
             stage.layers_open ^= true;
             cx.notify();
@@ -199,8 +205,13 @@ fn closing(text: &str) -> Option<usize> {
 mod tests {
     #[test]
     fn plain_text_keeps_what_links_say() {
-        assert_eq!(super::plain("
+        assert_eq!(
+            super::plain(
+                "
 **Read** [Fallout](https://w/Fallout_(series)) or [Gate](pin:a).
-More"), "Read Fallout or Gate.");
+More"
+            ),
+            "Read Fallout or Gate."
+        );
     }
 }

@@ -135,10 +135,7 @@ impl model::Provider for Wand {
 
     /// The API is asked only when the disk copy is missing or was fetched for another trainer or build.
     fn trainer(&self, game: &Game, install: &Installation) -> BoxStream<'static, Snapshot<model::Trainer>> {
-        let stamp = Stamp {
-            updated_at: game.trainer.as_ref().and_then(|offer| offer.revision.clone()),
-            version: install.build,
-        };
+        let stamp = Stamp { updated_at: game.trainer.as_ref().and_then(|offer| offer.revision.clone()), version: install.build };
         let (dir, id, session, host) = (self.data_dir.clone(), game.id.clone(), self.session(), self.host.clone());
         let hotkeys = self.hotkeys.clone();
         channel(|tx| async move {
@@ -190,7 +187,9 @@ impl model::Provider for Wand {
                 send(&tx, Snapshot::Fresh(fetched.map(|copy| copy.map)));
             }
             // The map shows first; icons it misses follow.
-            if let Some(icons) = icons && let Some(map) = unblock(move || icons.download(&dir)).await {
+            if let Some(icons) = icons
+                && let Some(map) = unblock(move || icons.download(&dir)).await
+            {
                 send(&tx, Snapshot::Fresh(Ok(map)));
             }
         })
@@ -245,8 +244,7 @@ impl model::Provider for Wand {
 fn snapshot(trainer: Trainer, host: &Host, custom: Option<&HashMap<String, store::Slots>>) -> model::Trainer {
     let plan = trainer.plan();
     let runner = host.runner(&plan);
-    let mut trainer =
-        trainer.into_model(model::Plan { image: plan.image, minimum_age: plan.minimum_age, launch: plan.launch, runner });
+    let mut trainer = trainer.into_model(model::Plan { image: plan.image, minimum_age: plan.minimum_age, launch: plan.launch, runner });
     if let Some(custom) = custom {
         store::customize(&mut trainer.cheats, custom);
     }

@@ -94,12 +94,7 @@ impl<'a> Table<'a> {
         let back = read::<4>(buf, start).map(i32::from_le_bytes)?;
         let vtable = usize::try_from(start as i64 - i64::from(back)).ok()?;
         let vtable_len = read::<2>(buf, vtable).map(u16::from_le_bytes)? as usize;
-        Some(Self {
-            buf,
-            start,
-            vtable,
-            vtable_len,
-        })
+        Some(Self { buf, start, vtable, vtable_len })
     }
 
     fn field(&self, slot: usize) -> Option<usize> {
@@ -112,9 +107,7 @@ impl<'a> Table<'a> {
     }
 
     fn scalar<const N: usize>(&self, slot: usize) -> [u8; N] {
-        self.field(slot)
-            .and_then(|at| read(self.buf, at))
-            .unwrap_or([0; N])
+        self.field(slot).and_then(|at| read(self.buf, at)).unwrap_or([0; N])
     }
 
     pub fn u64(&self, slot: usize) -> u64 {
@@ -184,10 +177,9 @@ mod tests {
     #[test]
     fn reads_the_reference_builder() {
         let raw = [
-            0x14, 0, 0, 0, 0x10, 0, 0x1c, 0, 0x18, 0, 0, 0, 0x0c, 0, 0, 0, 0x08, 0, 0x07, 0, 0x10,
-            0, 0, 0, 0, 0, 0, 0x01, 0x14, 0, 0, 0, 0x2a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0c, 0,
-            0, 0, 0x03, 0, 0, 0, b'a', b'b', b'c', 0, 0x08, 0, 0, 0, b'r', b'e', b'g', b'i', b's',
-            b't', b'e', b'r', 0, 0, 0, 0,
+            0x14, 0, 0, 0, 0x10, 0, 0x1c, 0, 0x18, 0, 0, 0, 0x0c, 0, 0, 0, 0x08, 0, 0x07, 0, 0x10, 0, 0, 0, 0, 0, 0, 0x01, 0x14, 0, 0, 0,
+            0x2a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0c, 0, 0, 0, 0x03, 0, 0, 0, b'a', b'b', b'c', 0, 0x08, 0, 0, 0, b'r', b'e', b'g',
+            b'i', b's', b't', b'e', b'r', 0, 0, 0, 0,
         ];
         let table = Table::root(&raw).unwrap();
         assert_eq!(table.text(0), "register");

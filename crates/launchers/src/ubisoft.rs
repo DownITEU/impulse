@@ -15,10 +15,7 @@ pub fn apps() -> Vec<App> {
         .into_iter()
         .filter_map(|(id, key)| {
             let location = install_dir(&id, &key)?;
-            Some(App {
-                store_id: format!("uplay:{id}"),
-                location,
-            })
+            Some(App { store_id: format!("uplay:{id}"), location })
         })
         .collect()
 }

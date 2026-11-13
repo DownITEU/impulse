@@ -10,12 +10,7 @@ use crate::reader::Reader;
 
 /// The decoder thread: reports whether the file opened, then decodes
 /// until the `Playback` is dropped.
-pub fn run(
-    file: &Path,
-    device: &ID3D11Device,
-    frames: SyncSender<Frame>,
-    ready: Sender<Result<()>>,
-) {
+pub fn run(file: &Path, device: &ID3D11Device, frames: SyncSender<Frame>, ready: Sender<Result<()>>) {
     let mut reader = match Reader::open(file, device) {
         Ok(reader) => reader,
         Err(e) => {

@@ -8,10 +8,7 @@ pub enum Node {
 impl Node {
     /// Case-insensitive child lookup: Valve files mix `AppState` and `appstate`.
     pub fn get(&self, key: &str) -> Option<&Node> {
-        self.entries()
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case(key))
-            .map(|(_, v)| v)
+        self.entries().iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v)
     }
 
     pub fn str(&self, key: &str) -> Option<&str> {
@@ -85,9 +82,7 @@ impl Lexer<'_> {
                 }
             }
             _ => {
-                let end = rest
-                    .find(|c: char| c.is_whitespace() || matches!(c, '{' | '}' | '"'))
-                    .unwrap_or(rest.len());
+                let end = rest.find(|c: char| c.is_whitespace() || matches!(c, '{' | '}' | '"')).unwrap_or(rest.len());
                 self.i += end;
                 Some(Token::Str(rest[..end].to_owned()))
             }
@@ -120,20 +115,18 @@ mod tests {
 
     #[test]
     fn parses_manifest_and_library_folders() {
-        let acf = "\"AppState\"\n{\n\t\"appid\"\t\t\"1203620\"\n\t\"StateFlags\"\t\"4\"\n\t// note\n\t\"installdir\"\t\t\"Enshrouded\"\n}\n";
+        let acf =
+            "\"AppState\"\n{\n\t\"appid\"\t\t\"1203620\"\n\t\"StateFlags\"\t\"4\"\n\t// note\n\t\"installdir\"\t\t\"Enshrouded\"\n}\n";
         let root = parse(acf).unwrap();
         let state = root.get("appstate").unwrap();
         assert_eq!(state.str("APPID"), Some("1203620"));
         assert_eq!(state.str("installdir"), Some("Enshrouded"));
 
-        let lf = r#""libraryfolders" { "0" { "path" "C:\\Program Files (x86)\\Steam" "apps" { "1203620" "123" } } "1" { "path" "D:\\Games" } }"#;
+        let lf =
+            r#""libraryfolders" { "0" { "path" "C:\\Program Files (x86)\\Steam" "apps" { "1203620" "123" } } "1" { "path" "D:\\Games" } }"#;
         let folders = parse(lf).unwrap();
         let folders = folders.get("libraryfolders").unwrap();
-        let paths: Vec<_> = folders
-            .entries()
-            .iter()
-            .filter_map(|(_, f)| f.str("path"))
-            .collect();
+        let paths: Vec<_> = folders.entries().iter().filter_map(|(_, f)| f.str("path")).collect();
         assert_eq!(paths, [r"C:\Program Files (x86)\Steam", r"D:\Games"]);
     }
 

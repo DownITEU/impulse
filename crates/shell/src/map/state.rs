@@ -97,7 +97,13 @@ mod tests {
     fn state_survives_a_round_trip_and_older_files() {
         let dir = std::env::temp_dir().join(format!("impulse-map-state-{}", std::process::id()));
         let mark = Mark { at: (0.5, 0.5), name: "Camp".to_owned(), note: String::new(), color: 0xFF0000 };
-        let saved = Saved { found: HashSet::from_iter(["p1".to_owned()]), clusters: false, view: Some((0.5, 0.25, 4096.)), marks: vec![mark], ..Saved::default() };
+        let saved = Saved {
+            found: HashSet::from_iter(["p1".to_owned()]),
+            clusters: false,
+            view: Some((0.5, 0.25, 4096.)),
+            marks: vec![mark],
+            ..Saved::default()
+        };
         store(&dir, "../ab", &saved);
         let back = load(&dir, "ab").unwrap();
         assert_eq!((back.found, back.clusters, back.view, back.labels), (saved.found, false, saved.view, true));

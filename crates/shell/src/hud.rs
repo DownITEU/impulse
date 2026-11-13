@@ -34,11 +34,35 @@ const SIDE: f32 = 320.;
 
 /// The toolbar's order.
 pub(super) static DOCKS: [Spec; 4] = [
-    Spec { id: MODS, title: "MODS", icon: Icon::Mods, first: list_first, smallest: Some(size(px(420.), px(240.))), shown: true, body_moves: false },
-    Spec { id: MAP, title: "MAP", icon: Icon::Map, first: map_first, smallest: Some(size(px(360.), px(280.))), shown: true, body_moves: false },
+    Spec {
+        id: MODS,
+        title: "MODS",
+        icon: Icon::Mods,
+        first: list_first,
+        smallest: Some(size(px(420.), px(240.))),
+        shown: true,
+        body_moves: false,
+    },
+    Spec {
+        id: MAP,
+        title: "MAP",
+        icon: Icon::Map,
+        first: map_first,
+        smallest: Some(size(px(360.), px(280.))),
+        shown: true,
+        body_moves: false,
+    },
     Spec { id: SESSION, title: "SESSION", icon: Icon::Clock, first: side_first, smallest: None, shown: true, body_moves: false },
     // Also over the game while Impulse is behind it.
-    Spec { id: MINIMAP, title: "MINIMAP", icon: Icon::Player, first: minimap_first, smallest: Some(size(px(200.), px(200.))), shown: false, body_moves: true },
+    Spec {
+        id: MINIMAP,
+        title: "MINIMAP",
+        icon: Icon::Player,
+        first: minimap_first,
+        smallest: Some(size(px(200.), px(200.))),
+        shown: false,
+        body_moves: true,
+    },
 ];
 
 pub(super) static MINIMAP_DOCK: &Spec = &DOCKS[3];
@@ -74,13 +98,21 @@ impl Page {
             .into_iter()
             .filter_map(|spec| {
                 let content = match (spec.id, game) {
-                    (MODS, Some(game)) => div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheats(game, cx)).into_any_element(),
+                    (MODS, Some(game)) => {
+                        div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheats(game, cx)).into_any_element()
+                    }
                     (MODS, None) => div().p(px(16.)).child(self.vacant()).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
-                    (MINIMAP, Some(_)) if mapped && self.map.read(cx).live_map().read(cx).ready(cx) => self.minimap.clone().into_any_element(),
+                    (MINIMAP, Some(_)) if mapped && self.map.read(cx).live_map().read(cx).ready(cx) => {
+                        self.minimap.clone().into_any_element()
+                    }
                     (MINIMAP, Some(_)) if mapped => div()
                         .p(px(16.))
-                        .child(notice("[ MINIMAP ]", "NO LIVE MAP", "It follows the player while a trainer that can place them runs in a game with a map."))
+                        .child(notice(
+                            "[ MINIMAP ]",
+                            "NO LIVE MAP",
+                            "It follows the player while a trainer that can place them runs in a game with a map.",
+                        ))
                         .into_any_element(),
                     (SESSION, Some(game)) => div().p(px(16.)).child(self.session_panel(game, running, false, cx)).into_any_element(),
                     _ => return None,

@@ -138,14 +138,8 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
     Library { games, trainers }
 }
 
-fn game(
-    entry: model::Game,
-    found: Installation,
-    steam_apps: &HashMap<String, u32>,
-    art_cache: &Path,
-) -> Game {
-    let app =
-        steam_app(&found.store_id).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
+fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u32>, art_cache: &Path) -> Game {
+    let app = steam_app(&found.store_id).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
     let mut game = Game {
         id: found.game_id.as_str().into(),
         name: entry.name.to_uppercase().into(),
@@ -155,10 +149,7 @@ fn game(
         mods: entry.trainer.as_ref().map_or(0, |offer| offer.cheats),
         stamp: (None, None),
         // Not every Steam app has hero art.
-        hero: app
-            .map(art::steam_hero)
-            .filter(|url| !art::known_missing(art_cache, url))
-            .or_else(|| entry.cover.clone()),
+        hero: app.map(art::steam_hero).filter(|url| !art::known_missing(art_cache, url)).or_else(|| entry.cover.clone()),
         thumbnail: entry.thumbnail.clone(),
         source: entry,
         install: found,

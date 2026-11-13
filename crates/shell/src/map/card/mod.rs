@@ -181,7 +181,8 @@ impl Card {
             let preview = img(image.preview.clone());
             let shown = match clip {
                 Some(_) => preview,
-                None => img(image.full).with_loading(move || img(image.preview.clone()).size_full().object_fit(ObjectFit::Cover).into_any_element()),
+                None => img(image.full)
+                    .with_loading(move || img(image.preview.clone()).size_full().object_fit(ObjectFit::Cover).into_any_element()),
             };
             fill(shown, ("pin-media", index))
         });

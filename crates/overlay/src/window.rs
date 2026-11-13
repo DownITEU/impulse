@@ -15,9 +15,10 @@ use windows_sys::Win32::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
         WindowsAndMessaging::{
             EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
-            HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, SW_HIDE, SW_RESTORE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE,
-            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowLongW, SetWindowPos, ShowWindow,
-            ShowWindowAsync, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, SW_HIDE, SW_RESTORE, SW_SHOWNOACTIVATE,
+            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetLayeredWindowAttributes,
+            SetWindowDisplayAffinity, SetWindowLongW, SetWindowPos, ShowWindow, ShowWindowAsync, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+            WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
         },
     },
 };
@@ -134,7 +135,9 @@ pub fn lower(window: isize, below: Option<isize>) {
     unsafe {
         SetWindowPos(window, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
         // Behind a topmost window it would turn topmost itself; out of the band it is behind that already.
-        if let Some(below) = below.map(|below| below as HWND).filter(|&below| GetWindowLongW(below, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST == 0) {
+        if let Some(below) =
+            below.map(|below| below as HWND).filter(|&below| GetWindowLongW(below, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST == 0)
+        {
             SetWindowPos(window, below, 0, 0, 0, 0, flags);
         }
     }

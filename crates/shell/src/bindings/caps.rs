@@ -17,12 +17,8 @@ impl Page {
         let cheat = &loaded.cheats[index];
         let game = self.selected.as_deref().unwrap_or_default();
         let accent = rgb(self.accent);
-        h_flex()
-            .flex_initial()
-            .min_w_0()
-            .justify_end()
-            .gap(px(4.))
-            .children(loaded.rows[index].keys.iter().enumerate().map(|(slot, label)| {
+        h_flex().flex_initial().min_w_0().justify_end().gap(px(4.)).children(loaded.rows[index].keys.iter().enumerate().map(
+            |(slot, label)| {
                 let held = self.bindings.held(game, &cheat.id, slot);
                 let text = match held {
                     Some(held) => cap(cheat.kind, slot, &held.map_or_else(|| PRESS_KEYS.to_owned(), |chord| chord.to_string())),
@@ -34,11 +30,10 @@ impl Page {
                     .hover(|style| style.border_color(line(0.3)))
                     .when(unbound, |cap| cap.text_color(rgb(GHOST)))
                     .when(held.is_some(), |cap| {
-                        cap.border_color(accent)
-                            .text_color(accent)
-                            .on_mouse_down_out(cx.listener(|page, _, _, cx| page.cancel_capture(cx)))
+                        cap.border_color(accent).text_color(accent).on_mouse_down_out(cx.listener(|page, _, _, cx| page.cancel_capture(cx)))
                     })
                     .on_click(cx.listener(move |page, _, window, cx| page.capture(index, slot, window, cx)))
-            }))
+            },
+        ))
     }
 }

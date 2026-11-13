@@ -37,11 +37,7 @@ impl Fake {
         let raw = soon(self.from_session.next()).await.expect("session closed");
         let message = Table::root(&raw).unwrap();
         assert_eq!((message.text(4), message.bool(5)), ("server".to_owned(), true));
-        Request {
-            kind: message.text(0),
-            seq: message.u64(2),
-            payload: message.bytes(1).to_vec(),
-        }
+        Request { kind: message.text(0), seq: message.u64(2), payload: message.bytes(1).to_vec() }
     }
 
     /// A command request: its name and JSON parameters.

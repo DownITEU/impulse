@@ -80,7 +80,10 @@ mod tests {
     #[test]
     fn packed_for_a_thread_message() {
         assert_eq!(Key::unpack(Key::MINIMAP.pack()), Some(Key::MINIMAP));
-        assert_eq!(Key::unpack(Key { modifiers: MOD_WIN | MOD_ALT, vk: 0xFE }.pack()), Some(Key { modifiers: MOD_WIN | MOD_ALT, vk: 0xFE }));
+        assert_eq!(
+            Key::unpack(Key { modifiers: MOD_WIN | MOD_ALT, vk: 0xFE }.pack()),
+            Some(Key { modifiers: MOD_WIN | MOD_ALT, vk: 0xFE })
+        );
         assert_eq!(Key::unpack(0), None);
     }
 }

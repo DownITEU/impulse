@@ -53,7 +53,16 @@ impl EventEmitter<Tracked> for Tracker {}
 
 impl Tracker {
     pub fn new(session: Arc<dyn Session>) -> Self {
-        Self { session, frame: None, heading: Heading::default(), last: None, leases: Vec::new(), asking: false, failures: 0, _asks: Task::ready(()) }
+        Self {
+            session,
+            frame: None,
+            heading: Heading::default(),
+            last: None,
+            leases: Vec::new(),
+            asking: false,
+            failures: 0,
+            _asks: Task::ready(()),
+        }
     }
 
     /// `frame`: the leaseholder's map; another one starts the heading over. A rate change applies after the

@@ -24,10 +24,7 @@ impl HttpClient for CdnClient {
         None
     }
 
-    fn send(
-        &self,
-        req: Request<AsyncBody>,
-    ) -> BoxFuture<'static, anyhow::Result<Response<AsyncBody>>> {
+    fn send(&self, req: Request<AsyncBody>) -> BoxFuture<'static, anyhow::Result<Response<AsyncBody>>> {
         let url = req.uri().to_string();
         let cache = self.cache.clone();
         Box::pin(async move {
@@ -114,11 +111,7 @@ fn download(file: &Path, url: &str) -> Result<Vec<u8>> {
 
 fn file(cache: &Path, url: &str) -> PathBuf {
     let keep = |c: char| c.is_ascii_alphanumeric() || c == '.';
-    let name: String = url
-        .trim_start_matches("https://")
-        .chars()
-        .map(|c| if keep(c) { c } else { '_' })
-        .collect();
+    let name: String = url.trim_start_matches("https://").chars().map(|c| if keep(c) { c } else { '_' }).collect();
     cache.join(name)
 }
 

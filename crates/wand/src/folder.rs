@@ -35,9 +35,9 @@ impl Setting {
     /// A missing or damaged file means the default: settings never stop the app.
     pub fn load(data_dir: &Path) -> Self {
         let file = data_dir.join(FILE);
-        let saved = fs::read(&file).ok().and_then(|bytes| {
-            serde_json::from_slice::<Saved>(&bytes).inspect_err(|e| log::warn!("{FILE} ignored: {e}")).ok()
-        });
+        let saved = fs::read(&file)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Saved>(&bytes).inspect_err(|e| log::warn!("{FILE} ignored: {e}")).ok());
         let choice = Choice { dir: saved.unwrap_or_default().wand_dir, written: true };
         Self { file, chosen: Mutex::new(choice), calls: AtomicU64::new(0) }
     }
@@ -100,7 +100,10 @@ fn describe(path: Option<PathBuf>, found: Option<Install>, installs: Vec<Install
         label: "WAND FOLDER",
         hint: "where the trainer binaries are read from",
         path,
-        status: found.as_ref().map(|found| format!("WAND {}", found.label())).ok_or_else(|| "NO WAND TRAINER FILES IN THIS FOLDER".to_owned()),
+        status: found
+            .as_ref()
+            .map(|found| format!("WAND {}", found.label()))
+            .ok_or_else(|| "NO WAND TRAINER FILES IN THIS FOLDER".to_owned()),
         choices: installs.iter().map(|install| (install.label(), install.root.clone())).collect(),
         selected: found.map(|found| found.root),
     }

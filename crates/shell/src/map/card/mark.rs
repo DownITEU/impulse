@@ -38,7 +38,12 @@ pub(super) fn inputs(window: &mut Window, cx: &mut Context<Card>) -> (Entity<Inp
     (name, note)
 }
 
-fn edits<T: EventEmitter<InputEvent>>(input: &Entity<T>, text: fn(&T) -> String, field: fn(&mut Mark) -> &mut String, cx: &mut Context<Card>) {
+fn edits<T: EventEmitter<InputEvent>>(
+    input: &Entity<T>,
+    text: fn(&T) -> String,
+    field: fn(&mut Mark) -> &mut String,
+    cx: &mut Context<Card>,
+) {
     cx.subscribe(input, move |card, input, event: &InputEvent, cx| match event {
         InputEvent::Change => {
             let text = text(input.read(cx));
@@ -81,9 +86,10 @@ impl Card {
                 }))
         });
         let teleport = board.can_teleport_to_plane(map).then(|| {
-            button("TELEPORT").id("mark-teleport").flex_1().on_click(cx.listener(move |card, _, _, cx| {
-                card.board.update(cx, |board, cx| board.teleport_to_plane(plane(at), cx))
-            }))
+            button("TELEPORT")
+                .id("mark-teleport")
+                .flex_1()
+                .on_click(cx.listener(move |card, _, _, cx| card.board.update(cx, |board, cx| board.teleport_to_plane(plane(at), cx))))
         });
         let delete = button("DELETE")
             .id("mark-delete")

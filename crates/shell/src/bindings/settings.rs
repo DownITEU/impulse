@@ -28,13 +28,8 @@ impl Page {
                         .child(toggle(enabled, self.accent)),
                 ),
             )
-            .child(
-                row("WORKS IN", "in game: only while the game is in front", 64.).border_b_0().child(
-                    segmented()
-                        .h(px(26.))
-                        .child(scope("hotkeys-global", "GLOBAL", false))
-                        .child(scope("hotkeys-in-game", "IN GAME", true)),
-                ),
-            )
+            .child(row("WORKS IN", "in game: only while the game is in front", 64.).border_b_0().child(
+                segmented().h(px(26.)).child(scope("hotkeys-global", "GLOBAL", false)).child(scope("hotkeys-in-game", "IN GAME", true)),
+            ))
     }
 }

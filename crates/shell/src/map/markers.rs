@@ -71,13 +71,16 @@ impl Images {
     pub fn icon(&mut self, group: (usize, usize), glyph: &Glyph, color: u32, side: f32, scale: f32, cx: &App) -> Option<Arc<RenderImage>> {
         let pixels = (side * scale).round() as u32;
         let key = Key::Icon(group, pixels, color);
-        let svg = || format!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="{}" fill="{}"/></svg>"#, glyph.path, hex(color));
+        let svg = || {
+            format!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="{}" fill="{}"/></svg>"#, glyph.path, hex(color))
+        };
         self.made.entry(key).or_insert_with(|| render(&svg(), pixels, pixels, cx)).clone()
     }
 
     /// A group's icon in `color`; a small square where the provider has none.
     pub fn glyph(&mut self, map: &Map, at: (usize, usize), color: u32, side: f32, window: &Window, cx: &App) -> AnyElement {
-        let image = map.categories[at.0].groups[at.1].icon.as_ref().and_then(|glyph| self.icon(at, glyph, color, side, window.scale_factor(), cx));
+        let image =
+            map.categories[at.0].groups[at.1].icon.as_ref().and_then(|glyph| self.icon(at, glyph, color, side, window.scale_factor(), cx));
         match image {
             Some(image) => img(image).size(px(side)).flex_none().into_any_element(),
             None => h_flex().size(px(side)).flex_none().justify_center().child(square(side * 0.45, rgb(color))).into_any_element(),
@@ -104,7 +107,12 @@ fn marker_svg(marker: Marker, glyph: Option<&Glyph>, accent: u32) -> String {
         None => "",
     };
     let check = if marker.found {
-        format!(r#"<circle cx="20" cy="4" r="4.6" fill="{}" stroke="{}"/><path d="M17.8 4.1l1.5 1.5 2.9-3" fill="none" stroke="{}" stroke-width="1.5"/>"#, hex(TEXT_BRIGHT), hex(BG), hex(BG))
+        format!(
+            r#"<circle cx="20" cy="4" r="4.6" fill="{}" stroke="{}"/><path d="M17.8 4.1l1.5 1.5 2.9-3" fill="none" stroke="{}" stroke-width="1.5"/>"#,
+            hex(TEXT_BRIGHT),
+            hex(BG),
+            hex(BG)
+        )
     } else {
         String::new()
     };

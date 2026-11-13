@@ -24,10 +24,7 @@ pub fn apps() -> Vec<App> {
             let id = title["ti"].as_str().filter(|id| *id != "launcher")?;
             let location = title["il"].as_str().filter(|l| !l.is_empty())?;
             title["if"].as_i64().filter(|flags| *flags != 0)?;
-            Some(App {
-                store_id: format!("rockstar:{id}"),
-                location: location.into(),
-            })
+            Some(App { store_id: format!("rockstar:{id}"), location: location.into() })
         })
         .collect()
 }
@@ -35,8 +32,5 @@ pub fn apps() -> Vec<App> {
 // AES-256-CBC with an all-zero key; the first 16 bytes are the IV.
 fn decrypt(raw: &[u8]) -> Option<Vec<u8>> {
     let (iv, data) = raw.split_at_checked(16)?;
-    cbc::Decryptor::<aes::Aes256>::new_from_slices(&[0; 32], iv)
-        .ok()?
-        .decrypt_padded_vec_mut::<Pkcs7>(data)
-        .ok()
+    cbc::Decryptor::<aes::Aes256>::new_from_slices(&[0; 32], iv).ok()?.decrypt_padded_vec_mut::<Pkcs7>(data).ok()
 }

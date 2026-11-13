@@ -28,7 +28,12 @@ impl Page {
                         .child(choice("overlay-in-game", "IN-GAME", false, self.accent).cursor_default().opacity(0.4)),
                 ),
             )
-            .child(row("HOTKEY", "modifiers and one key, free in other apps and mods", 64.).child(self.hotkey_cap("overlay-hotkey", Target::Overlay, overlay, cx)))
+            .child(row("HOTKEY", "modifiers and one key, free in other apps and mods", 64.).child(self.hotkey_cap(
+                "overlay-hotkey",
+                Target::Overlay,
+                overlay,
+                cx,
+            )))
             .child(
                 row("MINIMAP HOTKEY", "shows or hides the minimap; held only while the game is in front", 64.)
                     .border_b_0()
@@ -52,9 +57,7 @@ impl Page {
             .cursor_pointer()
             .hover(|style| style.border_color(line(0.3)))
             .when(held.is_some(), |cap| {
-                cap.border_color(accent)
-                    .text_color(accent)
-                    .on_mouse_down_out(cx.listener(|page, _, _, cx| page.cancel_capture(cx)))
+                cap.border_color(accent).text_color(accent).on_mouse_down_out(cx.listener(|page, _, _, cx| page.cancel_capture(cx)))
             })
             .on_click(cx.listener(move |page, _, window, cx| page.start_capture(target.clone(), window, cx)))
     }

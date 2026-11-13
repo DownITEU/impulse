@@ -63,17 +63,8 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
 
 /// The build is the PE TimeDateStamp of the game's `exe` in the install.
 fn installation(game: &Game, app: &App) -> Installation {
-    let build = game
-        .exe
-        .as_deref()
-        .and_then(|exe| pe::header(&app.location.join(exe)))
-        .map(|header| header.timestamp);
-    Installation {
-        game_id: game.id.clone(),
-        store_id: app.store_id.clone(),
-        location: app.location.clone(),
-        build,
-    }
+    let build = game.exe.as_deref().and_then(|exe| pe::header(&app.location.join(exe))).map(|header| header.timestamp);
+    Installation { game_id: game.id.clone(), store_id: app.store_id.clone(), location: app.location.clone(), build }
 }
 
 /// The launcher's name and the URI of the game's page in it, for the stores that have one.
@@ -93,12 +84,7 @@ pub fn page(store_id: &str) -> Option<(&'static str, String)> {
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
-    let norm = |p: &Path| {
-        p.to_string_lossy()
-            .replace('/', "\\")
-            .trim_end_matches('\\')
-            .to_lowercase()
-    };
+    let norm = |p: &Path| p.to_string_lossy().replace('/', "\\").trim_end_matches('\\').to_lowercase();
     norm(a) == norm(b)
 }
 

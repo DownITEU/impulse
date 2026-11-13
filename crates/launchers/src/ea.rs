@@ -27,9 +27,7 @@ fn install_folders() -> Vec<PathBuf> {
                 continue;
             };
             let dir = PathBuf::from(dir.trim_matches('"'));
-            if dir.join(r"__Installer\installerdata.xml").is_file()
-                && !folders.iter().any(|f| super::same_path(f, &dir))
-            {
+            if dir.join(r"__Installer\installerdata.xml").is_file() && !folders.iter().any(|f| super::same_path(f, &dir)) {
                 folders.push(dir);
             }
         }
@@ -48,13 +46,7 @@ fn match_folders(games: &[Game], folders: &[PathBuf]) -> Vec<App> {
     folders
         .iter()
         .flat_map(|dir| {
-            games
-                .iter()
-                .filter(|(_, exe)| dir.join(exe).is_file())
-                .map(|(id, _)| App {
-                    store_id: (*id).to_owned(),
-                    location: dir.clone(),
-                })
+            games.iter().filter(|(_, exe)| dir.join(exe).is_file()).map(|(id, _)| App { store_id: (*id).to_owned(), location: dir.clone() })
         })
         .collect()
 }
@@ -65,11 +57,7 @@ mod tests {
 
     #[test]
     fn matches_origin_games_by_version_path() {
-        let game = |store_id: &str, exe: &str| Game {
-            store_ids: vec![store_id.to_owned()],
-            exe: Some(exe.to_owned()),
-            ..Game::default()
-        };
+        let game = |store_id: &str, exe: &str| Game { store_ids: vec![store_id.to_owned()], exe: Some(exe.to_owned()), ..Game::default() };
         let games = [
             game("origin:Origin.OFR.50.0000001", r"bin\game.exe"),
             game("steam:1", r"bin\game.exe"),

@@ -37,12 +37,7 @@ pub const TICK: u32 = 0x1E221D;
 pub const TICK_IDLE: u32 = 0x5A6155;
 const SCROLL_THUMB: u32 = 0x2A2F28;
 
-pub const ACCENTS: [(&str, u32); 4] = [
-    ("LIME", 0xC6FF3D),
-    ("AMBER", 0xFFB020),
-    ("CYAN", 0x4DE2FF),
-    ("WHITE", 0xF2F2F2),
-];
+pub const ACCENTS: [(&str, u32); 4] = [("LIME", 0xC6FF3D), ("AMBER", 0xFFB020), ("CYAN", 0x4DE2FF), ("WHITE", 0xF2F2F2)];
 
 pub fn alpha(hex: u32, a: f32) -> Rgba {
     Rgba { a, ..rgb(hex) }

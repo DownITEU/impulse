@@ -48,10 +48,7 @@ impl Tiles {
     /// `column` and `row` count from the top left, below `2^zoom`.
     pub fn url(&self, zoom: u8, column: u32, row: u32) -> String {
         let row = if self.flipped { (1u32 << zoom) - 1 - row } else { row };
-        self.template
-            .replace("{z}", &zoom.to_string())
-            .replace("{x}", &column.to_string())
-            .replace("{y}", &row.to_string())
+        self.template.replace("{z}", &zoom.to_string()).replace("{x}", &column.to_string()).replace("{y}", &row.to_string())
     }
 }
 
@@ -139,10 +136,7 @@ pub struct Frame {
 
 impl Frame {
     pub fn to_map(&self, position: [f64; 3]) -> Point {
-        Point {
-            x: self.origin.x + position[self.axes[0]] * self.scale.0,
-            y: self.origin.y + position[self.axes[1]] * self.scale.1,
-        }
+        Point { x: self.origin.x + position[self.axes[0]] * self.scale.0, y: self.origin.y + position[self.axes[1]] * self.scale.1 }
     }
 
     /// `height` is the game's up coordinate, which the plane does not hold.
@@ -165,8 +159,7 @@ mod tests {
 
     #[test]
     fn tile_urls_follow_the_template_and_the_row_order() {
-        let mut tiles =
-            Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 0, max_zoom: 8 };
+        let mut tiles = Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 0, max_zoom: 8 };
         assert_eq!(tiles.url(3, 5, 1), "https://cdn/3/1/5.webp");
         tiles.flipped = true;
         assert_eq!(tiles.url(3, 5, 1), "https://cdn/3/6/5.webp");

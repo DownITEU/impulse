@@ -64,7 +64,10 @@ impl Page {
         let collections = &self.profiles.of(self.selected.as_deref().unwrap_or_default()).collections;
         // A new one is made of the mods that are on.
         let addable = running && loaded.active() > 0;
-        let chips = collections.iter().enumerate().map(|(at, collection)| self.chip(at, collection, running, running && loaded.holds(&collection.mods), cx));
+        let chips = collections
+            .iter()
+            .enumerate()
+            .map(|(at, collection)| self.chip(at, collection, running, running && loaded.holds(&collection.mods), cx));
         h_flex()
             .h(px(40.))
             .flex_none()
@@ -237,9 +240,13 @@ impl Page {
                 }))
                 .child(icon(glyph, 18., if current { accent } else { rgb(MUTED) }))
         });
-        let field = h_flex().h(px(36.)).px(px(10.)).border_1().border_color(line(0.14)).bg(rgb(SUNKEN)).child(
-            Input::new(&editor.name).appearance(false).px_0().font_family(MONO).text_size(px(12.5)),
-        );
+        let field = h_flex()
+            .h(px(36.))
+            .px(px(10.))
+            .border_1()
+            .border_color(line(0.14))
+            .bg(rgb(SUNKEN))
+            .child(Input::new(&editor.name).appearance(false).px_0().font_family(MONO).text_size(px(12.5)));
         let buttons = h_flex()
             .gap(px(8.))
             .child(button("CANCEL").id("collection-cancel").on_click(cx.listener(|page, _, window, cx| page.close_editor(window, cx))))
@@ -256,7 +263,12 @@ impl Page {
             .gap(px(16.))
             .child(part("NAME").child(field))
             .child(part("ICON").child(h_flex().flex_wrap().gap(px(TILE_GAP)).children(tiles)))
-            .child(h_flex().justify_between().child(mono(format!("{:02} MODS", editor.mods.len()), 10.5).text_color(rgb(FAINT))).child(buttons));
+            .child(
+                h_flex()
+                    .justify_between()
+                    .child(mono(format!("{:02} MODS", editor.mods.len()), 10.5).text_color(rgb(FAINT)))
+                    .child(buttons),
+            );
         let title = if editor.at.is_some() { "EDIT COLLECTION" } else { "NEW COLLECTION" };
         // Six tiles across, inside the padding and the borders.
         let width = 6. * TILE + 5. * TILE_GAP + 34.;

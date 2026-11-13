@@ -1,7 +1,4 @@
-use gpui_kit::{
-    ClickEvent, Context, FontWeight, IntoElement, Window, WindowControlArea, component::h_flex,
-    div, prelude::*, px, rgb,
-};
+use gpui_kit::{ClickEvent, Context, FontWeight, IntoElement, Window, WindowControlArea, component::h_flex, div, prelude::*, px, rgb};
 
 use super::{
     Load, Page,
@@ -14,11 +11,7 @@ impl Page {
     /// The custom title bar: gaps drag the window, controls occlude the drag area.
     pub(super) fn header(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
-        let maximize = if window.is_maximized() {
-            Icon::WinRestore
-        } else {
-            Icon::WinMax
-        };
+        let maximize = if window.is_maximized() { Icon::WinRestore } else { Icon::WinMax };
         let search = match &self.library {
             Load::Ready(library) => {
                 let count = library.trainers;
@@ -40,12 +33,7 @@ impl Page {
             .border_color(line(0.09))
             .bg(alpha(BG, 0.94))
             .window_control_area(WindowControlArea::Drag)
-            .child(
-                h_flex()
-                    .gap(px(10.))
-                    .child(square(9., accent))
-                    .child(tracked("IMPULSE", 16., 0.22).font_weight(FontWeight::BOLD)),
-            )
+            .child(h_flex().gap(px(10.)).child(square(9., accent)).child(tracked("IMPULSE", 16., 0.22).font_weight(FontWeight::BOLD)))
             .child(
                 h_flex()
                     .id("search")
@@ -62,11 +50,7 @@ impl Page {
                     .border_color(line(0.12))
                     .cursor_pointer()
                     .text_color(rgb(DIM))
-                    .child(
-                        mono(">", 13.)
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(accent),
-                    )
+                    .child(mono(">", 13.).font_weight(FontWeight::BOLD).text_color(accent))
                     .child(mono(search, 13.).font_weight(FontWeight::NORMAL).flex_1())
                     .child(
                         mono("CTRL K", 10.5)
@@ -94,17 +78,9 @@ impl Page {
                             .cursor_pointer()
                             .hover(|style| style.bg(rgb(RAISED_HOVER)))
                             .on_click(cx.listener(Self::open_settings))
-                            .child(
-                                icon(Icon::Settings, 16., rgb(DIM))
-                                    .group_hover("settings", |style| style.text_color(rgb(TEXT))),
-                            )
+                            .child(icon(Icon::Settings, 16., rgb(DIM)).group_hover("settings", |style| style.text_color(rgb(TEXT))))
                             .when(!name.is_empty(), |button| {
-                                button.child(
-                                    div()
-                                        .text_size(px(13.))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child(name),
-                                )
+                                button.child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).child(name))
                             }),
                     )
                     .child(
@@ -129,9 +105,5 @@ impl Page {
 }
 
 fn caption(id: &'static str, glyph: Icon, area: WindowControlArea) -> impl IntoElement {
-    icon_button(id, glyph, 12., 12.)
-        .w(px(44.))
-        .h_full()
-        .occlude()
-        .window_control_area(area)
+    icon_button(id, glyph, 12., 12.).w(px(44.)).h_full().occlude().window_control_area(area)
 }

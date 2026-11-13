@@ -80,7 +80,9 @@ impl Tiles {
             paint((level, column, row), image);
             return true;
         }
-        let above = (1..=level.min(STAND_INS)).map(|up| (level - up, column >> up, row >> up)).find_map(|key| self.touch(key).map(|image| (key, image)));
+        let above = (1..=level.min(STAND_INS))
+            .map(|up| (level - up, column >> up, row >> up))
+            .find_map(|key| self.touch(key).map(|image| (key, image)));
         if let Some((key, image)) = above {
             paint(key, image);
         }

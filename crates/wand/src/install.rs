@@ -60,10 +60,7 @@ pub fn resolve(path: &Path) -> Option<Install> {
     if !path.is_absolute() {
         return None;
     }
-    path.ancestors()
-        .take(DEPTH)
-        .find_map(|dir| complete(dir, version_of(dir)))
-        .or_else(|| versions(path).into_iter().next())
+    path.ancestors().take(DEPTH).find_map(|dir| complete(dir, version_of(dir))).or_else(|| versions(path).into_iter().next())
 }
 
 fn versions(squirrel_root: &Path) -> Vec<Install> {

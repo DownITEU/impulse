@@ -12,16 +12,12 @@ use futures::channel::oneshot;
 use serde::{Deserialize, Serialize};
 use tao::{
     event::{Event, StartCause},
-    event_loop::{
-        ControlFlow, DeviceEventFilter, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget,
-    },
+    event_loop::{ControlFlow, DeviceEventFilter, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget},
     platform::windows::{EventLoopBuilderExtWindows, WindowBuilderExtWindows},
     window::{Window, WindowBuilder},
 };
 use webview2_com::Error::WindowsError;
-use wry::{
-    WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, http::Response as HttpResponse,
-};
+use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, http::Response as HttpResponse};
 
 use super::{Cmd, Request, Response};
 
@@ -52,10 +48,7 @@ struct Reply {
 }
 
 pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
-    let event_loop = EventLoopBuilder::<Cmd>::with_user_event()
-        .with_any_thread(true)
-        .with_dpi_aware(false)
-        .build();
+    let event_loop = EventLoopBuilder::<Cmd>::with_user_event().with_any_thread(true).with_dpi_aware(false).build();
     let proxy = event_loop.create_proxy();
     let _ = started.send(proxy.clone());
     let pending = Pending::default();
@@ -71,10 +64,7 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
             Event::UserEvent(Cmd::Ready) => ready = true,
             Event::UserEvent(Cmd::Fetch(request, tx)) => {
                 last = Instant::now();
-                let built = bridge.take().map_or_else(
-                    || build_retrying(&data_dir, target, proxy.clone(), pending.clone()),
-                    Ok,
-                );
+                let built = bridge.take().map_or_else(|| build_retrying(&data_dir, target, proxy.clone(), pending.clone()), Ok);
                 match built {
                     Ok(built) => {
                         bridge = Some(built);
@@ -105,11 +95,8 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
         for (request, tx) in queue.drain(..) {
             next_id += 1;
             pending.lock().unwrap().insert(next_id, tx);
-            let sent = serde_json::to_string(&Call {
-                id: next_id,
-                request: &request,
-            })
-            .is_ok_and(|json| webview.evaluate_script(&format!("impulse({json})")).is_ok());
+            let sent = serde_json::to_string(&Call { id: next_id, request: &request })
+                .is_ok_and(|json| webview.evaluate_script(&format!("impulse({json})")).is_ok());
             if !sent && let Some(tx) = pending.lock().unwrap().remove(&next_id) {
                 let _ = tx.send(Err(anyhow!("webview dispatch failed")));
             }
@@ -118,12 +105,7 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
 }
 
 // After some hard kills WebView2 keeps the profile busy for about 50 s; a clean exit frees it at once.
-fn build_retrying(
-    data_dir: &Path,
-    target: &EventLoopWindowTarget<Cmd>,
-    proxy: EventLoopProxy<Cmd>,
-    pending: Pending,
-) -> Result<Bridge> {
+fn build_retrying(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopProxy<Cmd>, pending: Pending) -> Result<Bridge> {
     const ERROR_BUSY: i32 = 0x800700AA_u32 as i32;
     let deadline = Instant::now() + Duration::from_secs(90);
     let mut busy = false;
@@ -151,19 +133,10 @@ fn build_retrying(
 }
 
 // COM: WebViewBuilder::build runs CoInitializeEx(STA) on this thread, and tao skips OLE with drag and drop off.
-fn build(
-    data_dir: &Path,
-    target: &EventLoopWindowTarget<Cmd>,
-    proxy: EventLoopProxy<Cmd>,
-    pending: Pending,
-) -> Result<Bridge> {
-    let window = WindowBuilder::new()
-        .with_visible(false)
-        .with_drag_and_drop(false)
-        .build(target)?;
+fn build(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopProxy<Cmd>, pending: Pending) -> Result<Bridge> {
+    let window = WindowBuilder::new().with_visible(false).with_drag_and_drop(false).build(target)?;
     let mut context = WebContext::new(Some(data_dir.join(super::PROFILE)));
-    let url = url::Url::from_file_path(data_dir.join("bridge.html"))
-        .map_err(|()| anyhow!("data dir is not an absolute path"))?;
+    let url = url::Url::from_file_path(data_dir.join("bridge.html")).map_err(|()| anyhow!("data dir is not an absolute path"))?;
     let webview = WebViewBuilder::new_with_web_context(&mut context)
         .with_custom_protocol("impulse".into(), move |_, request| {
             match request.uri().path() {
@@ -173,11 +146,7 @@ fn build(
                 "/response" => reply(&pending, request.body()),
                 _ => {}
             }
-            HttpResponse::builder()
-                .status(204)
-                .header("Access-Control-Allow-Origin", "*")
-                .body(Cow::Borrowed(&[][..]))
-                .unwrap()
+            HttpResponse::builder().status(204).header("Access-Control-Allow-Origin", "*").body(Cow::Borrowed(&[][..])).unwrap()
         })
         .with_url(url.as_str())
         .with_additional_browser_args(BROWSER_ARGS)
@@ -190,10 +159,7 @@ fn reply(pending: &Pending, raw: &[u8]) {
         return;
     };
     let result = match reply.status {
-        Some(status) => Ok(Response {
-            status,
-            body: reply.body.unwrap_or_default(),
-        }),
+        Some(status) => Ok(Response { status, body: reply.body.unwrap_or_default() }),
         None => Err(anyhow!("fetch failed: {}", reply.error.unwrap_or_default())),
     };
     if let Some(tx) = pending.lock().unwrap().remove(&reply.id) {

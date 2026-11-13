@@ -2,8 +2,8 @@
 //! one is moved or sized.
 
 use gpui_kit::{
-    AnyElement, App, Bounds, CursorStyle, DispatchPhase, Entity, FontWeight, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Window,
-    canvas, component::h_flex, div, prelude::*, px, rgb,
+    AnyElement, App, Bounds, CursorStyle, DispatchPhase, Entity, FontWeight, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Window, canvas, component::h_flex, div, prelude::*, px, rgb,
 };
 
 use super::{Docks, Spec};
@@ -21,7 +21,7 @@ const TOGGLE: f32 = 40.;
 pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, accent: u32, window: &Window, cx: &App) -> Vec<AnyElement> {
     let state = docks.read(cx);
     let screen = window.viewport_size();
-    let grab =|spec: &'static Spec, resize| {
+    let grab = |spec: &'static Spec, resize| {
         let docks = docks.clone();
         move |event: &MouseDownEvent, window: &mut Window, cx: &mut App| {
             let screen = window.viewport_size();

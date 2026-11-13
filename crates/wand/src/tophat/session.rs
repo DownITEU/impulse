@@ -172,14 +172,11 @@ impl Session {
     }
 
     async fn load_and_run(&self, plugin_path: &str, params: Value) -> Result<()> {
-        let reply = self
-            .call("LoadPlugin", &proto::load_plugin(PLUGIN, plugin_path), LOAD_PLUGIN_WITHIN)
-            .await?;
+        let reply = self.call("LoadPlugin", &proto::load_plugin(PLUGIN, plugin_path), LOAD_PLUGIN_WITHIN).await?;
         *self.plugin.lock().unwrap() = Some(proto::plugin_handle(&reply).map_err(|err| anyhow!("LoadPlugin: {err}"))?);
         self.execute("trainer_run_mod_json", Some(params), COMMAND_WITHIN).await?;
         let mut phase = self.phase.clone();
-        let Some(settled) = self.within(READY_WITHIN, phase.wait_for(|phase| *phase != Phase::Starting)).await
-        else {
+        let Some(settled) = self.within(READY_WITHIN, phase.wait_for(|phase| *phase != Phase::Starting)).await else {
             bail!("the trainer was not ready in {READY_WITHIN:?}");
         };
         let settled = settled.map_err(|_| closed())?;
@@ -196,10 +193,7 @@ impl Session {
         });
         let params = json!({"requestId": id, "name": name, "value": value});
         self.execute("trainer_push_client_req_from_json", Some(params), COMMAND_WITHIN).await?;
-        let code = self
-            .within(COMMAND_WITHIN, verdicts)
-            .await
-            .ok_or_else(|| anyhow!("no verdict for {name} in {COMMAND_WITHIN:?}"))?;
+        let code = self.within(COMMAND_WITHIN, verdicts).await.ok_or_else(|| anyhow!("no verdict for {name} in {COMMAND_WITHIN:?}"))?;
         Ok(match code.map_err(|_| closed())? {
             0 => Outcome::Set,
             1 => Outcome::Changed,
@@ -406,4 +400,3 @@ async fn drive(
         }
     }
 }
-

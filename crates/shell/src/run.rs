@@ -52,9 +52,7 @@ impl Play {
     pub fn game(&self) -> Option<&Arc<str>> {
         match self {
             Self::Idle => None,
-            Self::Busy { game, .. } | Self::Live { game, .. } | Self::Stopping { game, .. } | Self::Failed { game, .. } => {
-                Some(game)
-            }
+            Self::Busy { game, .. } | Self::Live { game, .. } | Self::Stopping { game, .. } | Self::Failed { game, .. } => Some(game),
         }
     }
 
@@ -170,7 +168,16 @@ impl Page {
         super::crash::follow(&session);
         let located = self.trainer(Some(&id)).is_some_and(|loaded| loaded.location);
         let tracker = located.then(|| cx.new(|_| Tracker::new(session.clone())));
-        self.play = Play::Live { game: id, pid: process.pid, since: Instant::now(), closed: false, session, tracker, _events: watcher, _clock: clock };
+        self.play = Play::Live {
+            game: id,
+            pid: process.pid,
+            since: Instant::now(),
+            closed: false,
+            session,
+            tracker,
+            _events: watcher,
+            _clock: clock,
+        };
         self.open_session(window, cx);
         self.sync_map(cx);
         self.layer.read(cx).recheck();

@@ -20,12 +20,7 @@ impl Sink {
         fs::create_dir_all(dir)?;
         let file = append(dir)?;
         let written = file.metadata()?.len();
-        Ok(Self {
-            dir: dir.to_owned(),
-            file,
-            written,
-            limit,
-        })
+        Ok(Self { dir: dir.to_owned(), file, written, limit })
     }
 
     pub fn write(&mut self, line: &str) -> io::Result<()> {
@@ -48,10 +43,7 @@ impl Sink {
 }
 
 fn append(dir: &Path) -> io::Result<File> {
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(dir.join(CURRENT))
+    OpenOptions::new().create(true).append(true).open(dir.join(CURRENT))
 }
 
 #[cfg(test)]

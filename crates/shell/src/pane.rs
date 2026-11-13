@@ -44,15 +44,7 @@ impl Page {
                     .child(side.gap(px(16.)).child(self.map_panel(game, cx).w(px(SIDE_WIDTH)).flex_none()).child(session))
             }
         };
-        v_flex()
-            .id("pane")
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .child(self.hero(game, cx))
-            .child(body)
-            .overflow_y_scrollbar()
-            .into_any_element()
+        v_flex().id("pane").flex_1().min_w_0().h_full().child(self.hero(game, cx)).child(body).overflow_y_scrollbar().into_any_element()
     }
 
     // The pane before there is a game to open.

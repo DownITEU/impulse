@@ -13,8 +13,8 @@ use windows_sys::Win32::{
         Memory::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx},
         ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_ALL},
         Threading::{
-            CreateRemoteThread, IsWow64Process, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
-            PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
+            CreateRemoteThread, IsWow64Process, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION,
+            PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
         },
     },
 };
@@ -139,7 +139,13 @@ fn module_base(process: &Handle, pid: u32, image: &Image) -> Result<usize> {
         let mut needed = 0;
         // SAFETY: `modules` is valid for the byte length passed and `needed` outlives the call.
         let listed = unsafe {
-            EnumProcessModulesEx(process.0, modules.as_mut_ptr(), (modules.len() * size_of::<HMODULE>()) as u32, &mut needed, LIST_MODULES_ALL)
+            EnumProcessModulesEx(
+                process.0,
+                modules.as_mut_ptr(),
+                (modules.len() * size_of::<HMODULE>()) as u32,
+                &mut needed,
+                LIST_MODULES_ALL,
+            )
         };
         ensure!(listed != 0, "cannot list the modules of process {pid}: {}", io::Error::last_os_error());
         let count = needed as usize / size_of::<HMODULE>();

@@ -24,17 +24,11 @@ impl Camera {
     }
 
     pub fn to_plane(self, pixel: Pixel, size: Pixel) -> Point {
-        Point {
-            x: self.center.x + (pixel.0 - size.0 / 2.) / self.span,
-            y: self.center.y + (pixel.1 - size.1 / 2.) / self.span,
-        }
+        Point { x: self.center.x + (pixel.0 - size.0 / 2.) / self.span, y: self.center.y + (pixel.1 - size.1 / 2.) / self.span }
     }
 
     pub fn pan(&mut self, by: Pixel) {
-        self.center = Point {
-            x: (self.center.x - by.0 / self.span).clamp(0., 1.),
-            y: (self.center.y - by.1 / self.span).clamp(0., 1.),
-        };
+        self.center = Point { x: (self.center.x - by.0 / self.span).clamp(0., 1.), y: (self.center.y - by.1 / self.span).clamp(0., 1.) };
     }
 
     /// Scales by `factor` within `spans`; the plane point under `pixel` stays under it.

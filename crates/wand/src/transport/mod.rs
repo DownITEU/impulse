@@ -74,10 +74,7 @@ impl Transport {
 
     pub async fn fetch(&self, request: Request) -> Result<Response> {
         let (tx, rx) = oneshot::channel();
-        self.proxy
-            .send_event(Cmd::Fetch(request, tx))
-            .map_err(|_| anyhow!("transport is closed"))?;
-        rx.await
-            .map_err(|_| anyhow!("transport dropped the request"))?
+        self.proxy.send_event(Cmd::Fetch(request, tx)).map_err(|_| anyhow!("transport is closed"))?;
+        rx.await.map_err(|_| anyhow!("transport dropped the request"))?
     }
 }

@@ -20,31 +20,16 @@ pub(super) async fn call<T: DeserializeOwned>(
     parse(res.status, &res.body, expect)
 }
 
-fn request(
-    method: &str,
-    path: &str,
-    bearer: Option<&str>,
-    form: Option<&[(&str, &str)]>,
-) -> Request {
+fn request(method: &str, path: &str, bearer: Option<&str>, form: Option<&[(&str, &str)]>) -> Request {
     let mut headers = vec![("Accept".to_owned(), "application/json".to_owned())];
     if let Some(token) = bearer {
         headers.push(("Authorization".to_owned(), format!("Bearer {token}")));
     }
     let body = form.map(|pairs| {
-        headers.push((
-            "Content-Type".to_owned(),
-            "application/x-www-form-urlencoded".to_owned(),
-        ));
-        form_urlencoded::Serializer::new(String::new())
-            .extend_pairs(pairs)
-            .finish()
+        headers.push(("Content-Type".to_owned(), "application/x-www-form-urlencoded".to_owned()));
+        form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish()
     });
-    Request {
-        method: method.to_owned(),
-        url: format!("{BASE}{path}"),
-        headers,
-        body,
-    }
+    Request { method: method.to_owned(), url: format!("{BASE}{path}"), headers, body }
 }
 
 // Never put the body in an error: it can hold tokens. Only the status and the JSON `error` field.
@@ -65,15 +50,12 @@ impl std::error::Error for HttpError {}
 
 /// The server refused the credentials (OAuth `invalid_grant` is 400), as opposed to a network or server failure.
 pub(super) fn is_rejected(e: &anyhow::Error) -> bool {
-    e.downcast_ref::<HttpError>()
-        .is_some_and(|h| matches!(h.status, 400 | 401))
+    e.downcast_ref::<HttpError>().is_some_and(|h| matches!(h.status, 400 | 401))
 }
 
 fn parse<T: DeserializeOwned>(status: u16, body: &str, expect: u16) -> Result<T> {
     if !(200..300).contains(&status) {
-        let error = serde_json::from_str::<Value>(body)
-            .ok()
-            .and_then(|v| v["error"].as_str().map(str::to_owned));
+        let error = serde_json::from_str::<Value>(body).ok().and_then(|v| v["error"].as_str().map(str::to_owned));
         return Err(HttpError { status, error }.into());
     }
     if status != expect {
@@ -88,12 +70,7 @@ mod tests {
 
     #[test]
     fn error_has_status_and_error_field_only() {
-        let err = parse::<Value>(
-            401,
-            r#"{"error":"invalid_grant","access_token":"S3CRET"}"#,
-            200,
-        )
-        .unwrap_err();
+        let err = parse::<Value>(401, r#"{"error":"invalid_grant","access_token":"S3CRET"}"#, 200).unwrap_err();
         assert_eq!(err.to_string(), "HTTP 401: invalid_grant");
         assert!(is_rejected(&err));
         let err = parse::<Value>(502, "<html>S3CRET</html>", 200).unwrap_err();

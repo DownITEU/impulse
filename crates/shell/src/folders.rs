@@ -129,11 +129,7 @@ impl Page {
     fn folder_row(&self, at: usize, cx: &mut Context<Self>) -> Div {
         let FolderRow { folder, input, .. } = &self.folders[at];
         let choices: Vec<SharedString> = folder.choices.iter().map(|(label, _)| label.clone().into()).collect();
-        let current = folder
-            .choices
-            .iter()
-            .position(|(_, path)| Some(path) == folder.selected.as_ref())
-            .unwrap_or(usize::MAX);
+        let current = folder.choices.iter().position(|(_, path)| Some(path) == folder.selected.as_ref()).unwrap_or(usize::MAX);
         let edge = |button: Stateful<Div>| button.border_l_1().border_color(line(0.14));
         let field = h_flex()
             .id(("folder", at))
@@ -151,15 +147,11 @@ impl Page {
                     .on_click(|_, _, cx| cx.stop_propagation())
                     .child(Input::new(input).appearance(false).px_0().font_family(MONO).text_size(px(12.5))),
             )
-            .when(!choices.is_empty(), |field| {
-                field.child(edge(icon_button(("folder-choices", at), Icon::ChevronDown, 30., 12.)))
-            })
-            .child(edge(icon_button(("folder-browse", at), Icon::Folder, 30., 14.)).on_click(cx.listener(
-                move |page, _, window, cx| {
-                    cx.stop_propagation();
-                    page.browse_folder(at, window, cx);
-                },
-            )));
+            .when(!choices.is_empty(), |field| field.child(edge(icon_button(("folder-choices", at), Icon::ChevronDown, 30., 12.))))
+            .child(edge(icon_button(("folder-browse", at), Icon::Folder, 30., 14.)).on_click(cx.listener(move |page, _, window, cx| {
+                cx.stop_propagation();
+                page.browse_folder(at, window, cx);
+            })));
         let field = self.dropdown(field, Menu::Choices(at), choices, current, span, cx, move |page, pick, window, cx| {
             if let Some((_, path)) = page.folders[at].folder.choices.get(pick) {
                 page.pick_folder(at, path.clone(), window, cx);

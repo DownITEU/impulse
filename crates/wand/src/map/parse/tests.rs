@@ -120,7 +120,8 @@ fn categories_follow_their_order_and_pins_their_group() {
     assert_eq!(map.categories[0].groups[1].name, "C");
     assert_eq!(icons[0][1], "i-c");
     assert!(map.categories[0].groups[1].icon.is_none());
-    let pins: Vec<_> = map.pins.iter().map(|pin| (pin.name.as_str(), pin.group, pin.image.as_ref().map(|image| image.preview.as_str()))).collect();
+    let pins: Vec<_> =
+        map.pins.iter().map(|pin| (pin.name.as_str(), pin.group, pin.image.as_ref().map(|image| image.preview.as_str()))).collect();
     assert_eq!(
         pins,
         [
@@ -166,10 +167,7 @@ fn links_to_pins_stay_inside_and_other_wand_links_lose_their_target() {
     let pins = HashSet::from(["COEX".to_owned()]);
     let text = "Go to [Glenwood's End](wemod://maps/75523/590?location=COEX), then [elsewhere](wemod://maps/1/2?location=gone) \
                 or [the wiki](https://w.x/a) and [an app](wemod://titles/9).";
-    assert_eq!(
-        relink(text, &pins),
-        "Go to [Glenwood's End](pin:COEX), then elsewhere or [the wiki](https://w.x/a) and an app."
-    );
+    assert_eq!(relink(text, &pins), "Go to [Glenwood's End](pin:COEX), then elsewhere or [the wiki](https://w.x/a) and an app.");
     assert_eq!(relink("[broken](wemod://x", &pins), "[broken](wemod://x");
     assert_eq!(relink("See [Gate [North]](wemod://maps/1/2?location=gone).", &pins), "See Gate [North].");
 }

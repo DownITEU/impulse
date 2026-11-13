@@ -50,10 +50,7 @@ pub fn install(game: &Game, exe: &Path) -> Option<Installation> {
     if !exe.is_file() {
         return None;
     }
-    let location = owners(slice::from_ref(game), exe)
-        .pop()
-        .map(|(_, dir)| dir)
-        .or_else(|| exe.parent().map(Path::to_owned))?;
+    let location = owners(slice::from_ref(game), exe).pop().map(|(_, dir)| dir).or_else(|| exe.parent().map(Path::to_owned))?;
     Some(installation(game, &App { store_id: model::custom_store_id(exe), location }))
 }
 

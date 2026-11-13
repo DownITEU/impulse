@@ -12,8 +12,8 @@ mod tiles;
 use std::{ops::RangeInclusive, path::PathBuf, rc::Rc, sync::Arc, time::Instant};
 
 use gpui_kit::{
-    AnyElement, App, Bounds, Context, Entity, FocusHandle, HitboxBehavior, IntoElement, Pixels, Render, RenderImage, SharedString, Task, Window,
-    canvas, div, prelude::*, px, rgb,
+    AnyElement, App, Bounds, Context, Entity, FocusHandle, HitboxBehavior, IntoElement, Pixels, Render, RenderImage, SharedString, Task,
+    Window, canvas, div, prelude::*, px, rgb,
 };
 use model::{Map, Point};
 use rustc_hash::FxHashMap as HashMap;
@@ -265,7 +265,9 @@ impl Render for Stage {
         let board = self.board.clone();
         let board = board.read(cx);
         // Keeps the focus in the map, so Escape still closes it.
-        let waiting = |tag, title, text: &str| -> AnyElement { div().size_full().p(px(24.)).track_focus(&self.focus).child(notice(tag, title, text)).into_any_element() };
+        let waiting = |tag, title, text: &str| -> AnyElement {
+            div().size_full().p(px(24.)).track_focus(&self.focus).child(notice(tag, title, text)).into_any_element()
+        };
         let map = match &board.map {
             Load::Ready(map) => map.clone(),
             Load::Pending => return waiting("[ LOADING ]", "LOADING THE MAP", "Pins and tiles are kept on disk after the first time."),

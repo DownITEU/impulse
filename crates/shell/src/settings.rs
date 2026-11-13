@@ -52,14 +52,8 @@ impl Page {
     }
 
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .w(px(168.))
-            .flex_none()
-            .py(px(8.))
-            .border_r_1()
-            .border_color(line(0.07))
-            .bg(rgb(SUNKEN))
-            .children(TABS.map(|(name, tab)| {
+        v_flex().w(px(168.)).flex_none().py(px(8.)).border_r_1().border_color(line(0.07)).bg(rgb(SUNKEN)).children(TABS.map(
+            |(name, tab)| {
                 let current = tab == Some(self.settings_tab);
                 h_flex()
                     .id(name)
@@ -70,20 +64,16 @@ impl Page {
                     .text_color(rgb(if current { TEXT_BRIGHT } else { DIM }))
                     .when(current, |tab| tab.bg(rgb(ROW_SELECTED)))
                     .when_some(tab, |item, tab| {
-                        item.cursor_pointer()
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                page.settings_tab = tab;
-                                page.resources.update(cx, |resources, cx| resources.measure(cx));
-                                cx.notify();
-                            }))
+                        item.cursor_pointer().on_click(cx.listener(move |page, _, _, cx| {
+                            page.settings_tab = tab;
+                            page.resources.update(cx, |resources, cx| resources.measure(cx));
+                            cx.notify();
+                        }))
                     })
-                    .child(
-                        div()
-                            .w(px(6.))
-                            .when(current, |cell| cell.child(square(6., rgb(self.accent)))),
-                    )
+                    .child(div().w(px(6.)).when(current, |cell| cell.child(square(6., rgb(self.accent)))))
                     .child(tracked(name, 12., 0.12))
-            }))
+            },
+        ))
     }
 
     fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -175,26 +165,17 @@ impl Page {
             .flex_1()
             .px(px(18.))
             .py(px(6.))
-            .child(
-                row("ACCENT", "marks live state only", 72.)
-                    .child(h_flex().gap(px(10.)).children(swatches)),
-            )
-            .child(
-                row("SIDEBAR", "leading item of a game row", 64.).child(
-                    segmented()
-                        .h(px(26.))
-                        .child(lead("lead-number", "NUMBER", Lead::Number))
-                        .child(lead("lead-thumbnail", "THUMBNAIL", Lead::Thumbnail)),
-                ),
-            )
-            .child(
-                row("PANELS", "map and session over the mods, or beside them", 64.).child(
-                    segmented()
-                        .h(px(26.))
-                        .child(panels("panels-top", "TOP", Panels::Top))
-                        .child(panels("panels-side", "SIDE", Panels::Side)),
-                ),
-            )
+            .child(row("ACCENT", "marks live state only", 72.).child(h_flex().gap(px(10.)).children(swatches)))
+            .child(row("SIDEBAR", "leading item of a game row", 64.).child(
+                segmented().h(px(26.)).child(lead("lead-number", "NUMBER", Lead::Number)).child(lead(
+                    "lead-thumbnail",
+                    "THUMBNAIL",
+                    Lead::Thumbnail,
+                )),
+            ))
+            .child(row("PANELS", "map and session over the mods, or beside them", 64.).child(
+                segmented().h(px(26.)).child(panels("panels-top", "TOP", Panels::Top)).child(panels("panels-side", "SIDE", Panels::Side)),
+            ))
             .child(
                 row("REDUCE MOTION", "no blinking LIVE, no transitions", 64.).border_b_0().child(
                     div()
@@ -216,19 +197,10 @@ pub(super) fn label(title: &'static str, hint: &'static str) -> Div {
     v_flex()
         .gap(px(4.))
         .child(tracked(title, 13., 0.1).font_weight(FontWeight::SEMIBOLD))
-        .child(
-            mono(hint, 11.)
-                .font_weight(FontWeight::NORMAL)
-                .text_color(rgb(FAINT)),
-        )
+        .child(mono(hint, 11.).font_weight(FontWeight::NORMAL).text_color(rgb(FAINT)))
 }
 
 /// The control the caller adds keeps its width; a long hint wraps.
 pub(super) fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
-    h_flex()
-        .min_h(px(height))
-        .gap(px(16.))
-        .border_b_1()
-        .border_color(line(0.07))
-        .child(label(title, hint).flex_1().min_w_0())
+    h_flex().min_h(px(height)).gap(px(16.)).border_b_1().border_color(line(0.07)).child(label(title, hint).flex_1().min_w_0())
 }

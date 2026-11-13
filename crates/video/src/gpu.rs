@@ -4,13 +4,10 @@
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11_BIND_SHADER_RESOURCE, D3D11_BOX, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, ID3D11Device,
-    ID3D11DeviceContext, ID3D11Texture2D,
+    D3D11_BIND_SHADER_RESOURCE, D3D11_BOX, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
-use windows::Win32::Media::MediaFoundation::{
-    IMFDXGIBuffer, IMFDXGIDeviceManager, MFCreateDXGIDeviceManager,
-};
+use windows::Win32::Media::MediaFoundation::{IMFDXGIBuffer, IMFDXGIDeviceManager, MFCreateDXGIDeviceManager};
 use windows::core::{Error, Interface, Result};
 
 /// Hands `device` to Media Foundation; it must be multithread protected, as GPUI's is.
@@ -45,13 +42,7 @@ impl Pool {
     pub fn new(device: &ID3D11Device) -> Result<Pool> {
         let context = unsafe { device.GetImmediateContext() }?;
         let (back, free) = channel();
-        Ok(Pool {
-            device: device.clone(),
-            context,
-            free,
-            back,
-            upload: None,
-        })
+        Ok(Pool { device: device.clone(), context, free, back, upload: None })
     }
 
     /// The GPU decoder's picture in `buffer`.
@@ -66,43 +57,22 @@ impl Pool {
     }
 
     /// The software decoder's picture of `size`: rows `pitch` bytes apart from `top`, the chroma after the luma.
-    pub fn upload(
-        &mut self,
-        top: *const u8,
-        pitch: u32,
-        size: (u32, u32),
-        area: Area,
-    ) -> Result<Texture> {
+    pub fn upload(&mut self, top: *const u8, pitch: u32, size: (u32, u32), area: Area) -> Result<Texture> {
         let upload = match &self.upload {
             Some(upload) if size_of(upload) == size => upload.clone(),
             _ => self.upload.insert(self.create(size, 0)?).clone(),
         };
-        unsafe {
-            self.context
-                .UpdateSubresource(&upload, 0, None, top.cast(), pitch, 0)
-        };
+        unsafe { self.context.UpdateSubresource(&upload, 0, None, top.cast(), pitch, 0) };
         self.copy(&upload, 0, area)
     }
 
     fn copy(&mut self, source: &ID3D11Texture2D, index: u32, area: Area) -> Result<Texture> {
         let texture = self.take((area.width, area.height))?;
-        let part = D3D11_BOX {
-            left: area.left,
-            top: area.top,
-            front: 0,
-            right: area.left + area.width,
-            bottom: area.top + area.height,
-            back: 1,
-        };
+        let part =
+            D3D11_BOX { left: area.left, top: area.top, front: 0, right: area.left + area.width, bottom: area.top + area.height, back: 1 };
         // On the immediate context, so a draw issued after it sees the copy done.
-        unsafe {
-            self.context
-                .CopySubresourceRegion(&texture, 0, 0, 0, 0, source, index, Some(&part))
-        };
-        Ok(Texture {
-            texture: Some(texture),
-            back: self.back.clone(),
-        })
+        unsafe { self.context.CopySubresourceRegion(&texture, 0, 0, 0, 0, source, index, Some(&part)) };
+        Ok(Texture { texture: Some(texture), back: self.back.clone() })
     }
 
     fn take(&self, size: (u32, u32)) -> Result<ID3D11Texture2D> {
@@ -122,10 +92,7 @@ impl Pool {
             MipLevels: 1,
             ArraySize: 1,
             Format: DXGI_FORMAT_NV12,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             Usage: D3D11_USAGE_DEFAULT,
             BindFlags: bind,
             CPUAccessFlags: 0,

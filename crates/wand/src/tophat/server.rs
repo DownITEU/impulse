@@ -31,10 +31,7 @@ use tokio::{
 use super::wire::Table;
 
 const SESSION: &str = "/tophat.TophatService/Session";
-const SIDE_STREAMS: [&str; 2] = [
-    "/tophat.TophatService/TelemetrySession",
-    "/tophat.TophatService/EventsSession",
-];
+const SIDE_STREAMS: [&str; 2] = ["/tophat.TophatService/TelemetrySession", "/tophat.TophatService/EventsSession"];
 // A trainer's buffer messages are small; this only bounds what a local peer can make us hold.
 const MAX_MESSAGE: usize = 16 << 20;
 // Before `register` the peer is unauthenticated, so it gets a tiny budget: a few streams, a small
@@ -74,29 +71,20 @@ impl Server {
         let listener = StdListener::bind((Ipv4Addr::LOCALHOST, 0))?;
         listener.set_nonblocking(true)?;
         let port = listener.local_addr()?.port();
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
         let handle = runtime.handle().clone();
         let waiters = Waiters::default();
         let (stop, stopped) = oneshot::channel();
         let shared = waiters.clone();
-        thread::Builder::new()
-            .name("tophat-server".into())
-            .spawn(move || {
-                runtime.block_on(async {
-                    match TcpListener::from_std(listener) {
-                        Ok(listener) => accept(listener, shared, stopped).await,
-                        Err(err) => log::error!("tophat server: {err}"),
-                    }
-                });
-            })?;
-        Ok(Self {
-            port,
-            runtime: handle,
-            waiters,
-            _stop: stop,
-        })
+        thread::Builder::new().name("tophat-server".into()).spawn(move || {
+            runtime.block_on(async {
+                match TcpListener::from_std(listener) {
+                    Ok(listener) => accept(listener, shared, stopped).await,
+                    Err(err) => log::error!("tophat server: {err}"),
+                }
+            });
+        })?;
+        Ok(Self { port, runtime: handle, waiters, _stop: stop })
     }
 
     /// Resolves with the stream whose first message registers as `client_id`. The id is
@@ -128,9 +116,7 @@ async fn accept(listener: TcpListener, waiters: Waiters, mut stopped: oneshot::R
 }
 
 async fn connection(socket: TcpStream, waiters: Waiters) {
-    let handshake = server::Builder::new()
-        .max_concurrent_streams(MAX_STREAMS)
-        .handshake(socket);
+    let handshake = server::Builder::new().max_concurrent_streams(MAX_STREAMS).handshake(socket);
     let mut conn = match handshake.await {
         Ok(conn) => conn,
         Err(err) => return log::debug!("tophat handshake: {err}"),
@@ -229,19 +215,12 @@ async fn drain(mut body: RecvStream, mut respond: SendResponse<Bytes>) -> Result
 }
 
 fn grpc_response() -> Result<Response<()>> {
-    Ok(Response::builder()
-        .status(200)
-        .header("content-type", "application/grpc")
-        .body(())?)
+    Ok(Response::builder().status(200).header("content-type", "application/grpc").body(())?)
 }
 
 /// A gRPC "trailers-only" response: the call failed before any message.
 fn reject(mut respond: SendResponse<Bytes>, code: u16) -> Result<()> {
-    let response = Response::builder()
-        .status(200)
-        .header("content-type", "application/grpc")
-        .header("grpc-status", code)
-        .body(())?;
+    let response = Response::builder().status(200).header("content-type", "application/grpc").header("grpc-status", code).body(())?;
     respond.send_response(response, true)?;
     Ok(())
 }
@@ -262,11 +241,7 @@ struct Inbound {
 
 impl Inbound {
     fn new(body: RecvStream, max: usize) -> Self {
-        Self {
-            body,
-            buf: BytesMut::new(),
-            max,
-        }
+        Self { body, buf: BytesMut::new(), max }
     }
 
     /// The next whole message, or `None` once the peer ended the stream between messages.
@@ -332,9 +307,7 @@ mod tests {
     };
 
     async fn soon<T>(work: impl Future<Output = T>) -> T {
-        tokio::time::timeout(Duration::from_secs(5), work)
-            .await
-            .expect("timed out")
+        tokio::time::timeout(Duration::from_secs(5), work).await.expect("timed out")
     }
 
     fn register(source: &str) -> Vec<u8> {
@@ -346,14 +319,10 @@ mod tests {
     }
 
     async fn call(server: &Server, path: &str) -> (SendStream<Bytes>, ResponseFuture) {
-        let socket = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port))
-            .await
-            .unwrap();
+        let socket = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).await.unwrap();
         let (sender, connection) = client::handshake(socket).await.unwrap();
         tokio::spawn(connection);
-        let request = Request::post(format!("http://127.0.0.1{path}"))
-            .body(())
-            .unwrap();
+        let request = Request::post(format!("http://127.0.0.1{path}")).body(()).unwrap();
         let mut sender = sender.ready().await.unwrap();
         let (response, send) = sender.send_request(request, false).unwrap();
         (send, response)
@@ -463,4 +432,3 @@ mod tests {
         assert!(take_message(&mut huge, MAX_MESSAGE).is_err());
     }
 }
-

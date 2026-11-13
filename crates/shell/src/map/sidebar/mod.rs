@@ -6,7 +6,8 @@ mod marks;
 use std::{collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui_kit::{
-    AnyElement, App, Context, Div, ElementId, Entity, Focusable, FontWeight, IntoElement, MouseButton, Render, RenderImage, Stateful, Window,
+    AnyElement, App, Context, Div, ElementId, Entity, Focusable, FontWeight, IntoElement, MouseButton, Render, RenderImage, Stateful,
+    Window,
     component::{
         h_flex,
         input::{InputEvent, InputState},
@@ -71,7 +72,16 @@ impl Sidebar {
             _ => {}
         })
         .detach();
-        Self { board, search, folded: HashSet::new(), regions_open: false, marks_open: true, matches: None, images: Images::default(), stale: Vec::new() }
+        Self {
+            board,
+            search,
+            folded: HashSet::new(),
+            regions_open: false,
+            marks_open: true,
+            matches: None,
+            images: Images::default(),
+            stale: Vec::new(),
+        }
     }
 
     pub fn focus_search(&self, window: &mut Window, cx: &mut App) {
@@ -119,10 +129,12 @@ impl Sidebar {
             return Vec::new();
         }
         let open = self.regions_open;
-        let header = section("map-regions", open, board.accent, "REGIONS", names.len().to_string(), None).on_click(cx.listener(|sidebar, _, _, cx| {
-            sidebar.regions_open ^= true;
-            cx.notify();
-        }));
+        let header = section("map-regions", open, board.accent, "REGIONS", names.len().to_string(), None).on_click(cx.listener(
+            |sidebar, _, _, cx| {
+                sidebar.regions_open ^= true;
+                cx.notify();
+            },
+        ));
         let mut rows = vec![header.into_any_element()];
         if open {
             for (index, (name, color)) in names.into_iter().enumerate() {
@@ -174,18 +186,19 @@ impl Sidebar {
             toggle(event, window, cx);
         });
         let title = category.name.to_uppercase();
-        let header = section(("map-category", index), open, board.accent, &title, tally(found, total), Some(mark.into_any_element())).on_click(
-            cx.listener(move |sidebar, _, _, cx| {
+        let header = section(("map-category", index), open, board.accent, &title, tally(found, total), Some(mark.into_any_element()))
+            .on_click(cx.listener(move |sidebar, _, _, cx| {
                 if !sidebar.folded.remove(&index) {
                     sidebar.folded.insert(index);
                 }
                 cx.notify();
-            }),
-        );
+            }));
         let mut rows = vec![header.into_any_element()];
         if open {
             let cells: Vec<_> = (0..category.groups.len()).map(|group| self.group_cell(map, board, (index, group), window, cx)).collect();
-            rows.push(div().id(("map-groups", index)).grid().grid_cols(2).gap_x(px(4.)).px(px(10.)).pb(px(6.)).children(cells).into_any_element());
+            rows.push(
+                div().id(("map-groups", index)).grid().grid_cols(2).gap_x(px(4.)).px(px(10.)).pb(px(6.)).children(cells).into_any_element(),
+            );
         }
         rows
     }
@@ -240,7 +253,8 @@ impl Sidebar {
         let header = mono(format!("{} PLACES", matching.len()), 10.).text_color(rgb(DIM)).px(px(14.)).pt(px(12.)).pb(px(6.));
         let mut rows = vec![header.into_any_element()];
         if matching.is_empty() {
-            let empty = div().px(px(14.)).text_size(px(12.)).text_color(rgb(FAINT)).child("Nothing matches. Try a group or a shorter word.");
+            let empty =
+                div().px(px(14.)).text_size(px(12.)).text_color(rgb(FAINT)).child("Nothing matches. Try a group or a shorter word.");
             rows.push(empty.into_any_element());
         }
         for &index in matching.iter().take(LISTED) {
@@ -345,7 +359,9 @@ fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoEl
             .when(enabled, |cell| cell.cursor_pointer().hover(|style| style.border_color(line(0.3))))
             .child(mono(label, 10.).font_weight(FontWeight::BOLD).text_color(rgb(color)))
     };
-    let change = |change: fn(&mut super::state::Saved)| cx.listener(move |sidebar: &mut Sidebar, _, _, cx| sidebar.board.update(cx, |board, cx| board.filter(change, cx)));
+    let change = |change: fn(&mut super::state::Saved)| {
+        cx.listener(move |sidebar: &mut Sidebar, _, _, cx| sidebar.board.update(cx, |board, cx| board.filter(change, cx)))
+    };
     let toggle_all = cx.listener(move |sidebar, _, _, cx| {
         sidebar.board.update(cx, |board, cx| {
             let Load::Ready(map) = &board.map else { return };
@@ -386,7 +402,16 @@ fn section(id: impl Into<ElementId>, open: bool, accent: u32, title: &str, note:
         .cursor_pointer()
         .hover(|style| style.bg(rgb(ROW_HOVER)))
         .child(icon(if open { Icon::ChevronDown } else { Icon::ChevronRight }, 11., rgb(if open { accent } else { DIM })))
-        .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::BOLD).text_size(px(12.5)).text_color(rgb(TEXT)).child(title.to_owned()))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .font_weight(FontWeight::BOLD)
+                .text_size(px(12.5))
+                .text_color(rgb(TEXT))
+                .child(title.to_owned()),
+        )
         .child(mono(note, 10.5).text_color(rgb(DIM)))
         .children(control)
 }

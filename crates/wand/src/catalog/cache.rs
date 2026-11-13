@@ -33,9 +33,7 @@ pub fn refresh(data_dir: &Path, have_copy: bool) -> Result<Option<Vec<Game>>> {
     if have_copy && checked.is_ok_and(|at| at.elapsed().is_ok_and(|age| age < MAX_AGE)) {
         return Ok(None);
     }
-    let etag = have_copy
-        .then(|| fs::read_to_string(&tag_file).ok())
-        .flatten();
+    let etag = have_copy.then(|| fs::read_to_string(&tag_file).ok()).flatten();
     let response = fetch::get(URL, etag.as_deref())?;
     match response.status {
         // A 200 that does not parse (captive portal, cut body) is a failure too.

@@ -28,7 +28,10 @@ pub struct Run {
 
 pub enum BoardEvent {
     /// A map went up; `first`: another map than the one shown, not a fresher copy of it; `retiled`: its tiles differ.
-    Installed { first: bool, retiled: bool },
+    Installed {
+        first: bool,
+        retiled: bool,
+    },
     /// The player moved; only the stage draws where. A notify tells whether there is a player at all.
     Moved,
     /// What shows changed: filters, layers, the search, found pins.
@@ -39,7 +42,10 @@ pub enum BoardEvent {
     /// A mark of the user's was added and opened.
     MarkAdded,
     /// The view should show `to`; `close`: near enough to tell pins apart.
-    Bring { to: Point, close: bool },
+    Bring {
+        to: Point,
+        close: bool,
+    },
 }
 
 impl EventEmitter<BoardEvent> for Board {}
@@ -163,7 +169,9 @@ impl Board {
         self.haystacks = map
             .pins
             .iter()
-            .map(|pin| format!("{}\n{}\n{}\n{}", pin.name, group(map, pin).name, map.categories[pin.group.0].name, pin.description).to_lowercase())
+            .map(|pin| {
+                format!("{}\n{}\n{}\n{}", pin.name, group(map, pin).name, map.categories[pin.group.0].name, pin.description).to_lowercase()
+            })
             .collect();
     }
 

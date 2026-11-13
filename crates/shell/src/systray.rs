@@ -21,9 +21,7 @@ impl Page {
         let page = cx.weak_entity();
         window.on_window_should_close(cx, move |_, cx| page.update(cx, |page, cx| page.may_close(hwnd, cx)).unwrap_or(true));
         let (events, mut received) = mpsc::unbounded();
-        let tray = Tray::new("Impulse", move |event| drop(events.unbounded_send(event)))
-            .inspect_err(|e| log::warn!("tray: {e}"))
-            .ok()?;
+        let tray = Tray::new("Impulse", move |event| drop(events.unbounded_send(event))).inspect_err(|e| log::warn!("tray: {e}")).ok()?;
         cx.spawn_in(window, async move |page, cx| {
             while let Some(event) = received.next().await {
                 page.update(cx, |page, cx| page.tray_event(event, hwnd, cx)).ok();

@@ -13,8 +13,8 @@ use blocking::unblock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
-    transport::Transport,
     store::{self, WandToken},
+    transport::Transport,
 };
 
 const CLIENT_ID: &str = "overlay";
@@ -54,11 +54,7 @@ struct Token {
 
 impl From<Token> for Session {
     fn from(t: Token) -> Self {
-        Self {
-            access_token: t.access_token,
-            refresh_token: t.refresh_token,
-            expires_at: now() + t.expires_in,
-        }
+        Self { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: now() + t.expires_in }
     }
 }
 
@@ -97,20 +93,8 @@ async fn from_wand(t: &Transport) -> Result<Session> {
 
 /// Wand's access token only mints the overlay code; the resulting session is Impulse's own.
 async fn sign_in(t: &Transport, wand: WandToken) -> Result<Session> {
-    let Code { code } = api::call(
-        t,
-        "POST",
-        "/v3/auth/overlay_code",
-        Some(wand.expose()),
-        None,
-        201,
-    )
-    .await?;
-    let form = [
-        ("grant_type", "tiny_code"),
-        ("code", code.as_str()),
-        ("client_id", CLIENT_ID),
-    ];
+    let Code { code } = api::call(t, "POST", "/v3/auth/overlay_code", Some(wand.expose()), None, 201).await?;
+    let form = [("grant_type", "tiny_code"), ("code", code.as_str()), ("client_id", CLIENT_ID)];
     let token: Token = api::call(t, "POST", "/auth/token", None, Some(&form), 200).await?;
     Ok(token.into())
 }
@@ -121,11 +105,7 @@ impl Session {
     }
 
     async fn refresh(&self, t: &Transport) -> Result<Self> {
-        let form = [
-            ("grant_type", "refresh_token"),
-            ("refresh_token", self.refresh_token.as_str()),
-            ("client_id", CLIENT_ID),
-        ];
+        let form = [("grant_type", "refresh_token"), ("refresh_token", self.refresh_token.as_str()), ("client_id", CLIENT_ID)];
         let token: Token = api::call(t, "POST", "/auth/token", None, Some(&form), 200).await?;
         Ok(token.into())
     }
@@ -137,9 +117,7 @@ impl Session {
 }
 
 fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
 #[cfg(test)]
@@ -148,11 +126,7 @@ mod tests {
 
     #[test]
     fn debug_is_redacted() {
-        let session = Session {
-            access_token: "secret-access".to_owned(),
-            refresh_token: "secret-refresh".to_owned(),
-            expires_at: 0,
-        };
+        let session = Session { access_token: "secret-access".to_owned(), refresh_token: "secret-refresh".to_owned(), expires_at: 0 };
         assert_eq!(format!("{session:?}"), "Session(<redacted>)");
     }
 }

@@ -49,7 +49,14 @@ pub struct Loaded {
 }
 
 impl Loaded {
-    pub fn new(trainer: Trainer, hotkeys: Vec<Vec<Option<Chord>>>, stamp: Stamp, profile: &Profile, window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(
+        trainer: Trainer,
+        hotkeys: Vec<Vec<Option<Chord>>>,
+        stamp: Stamp,
+        profile: &Profile,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
         let Trainer { cheats, pinned, location, teleport, plan } = trainer;
         let values: Vec<f64> = cheats.iter().map(initial).collect();
         let inputs = cheats
@@ -59,9 +66,7 @@ impl Loaded {
             .map(|(index, cheat)| {
                 let input = cx.new(|cx| {
                     InputState::new(window, cx)
-                        .validate(|text, _| {
-                            text.len() <= INPUT_DIGITS && text.bytes().all(|b| b.is_ascii_digit())
-                        })
+                        .validate(|text, _| text.len() <= INPUT_DIGITS && text.bytes().all(|b| b.is_ascii_digit()))
                         .default_value(number(initial(cheat)))
                 });
                 (index, input)
@@ -110,9 +115,7 @@ impl Loaded {
     }
 
     pub fn active(&self) -> usize {
-        (0..self.cheats.len())
-            .filter(|&index| self.is_live(index))
-            .count()
+        (0..self.cheats.len()).filter(|&index| self.is_live(index)).count()
     }
 
     /// Sets a cheat's value, and its text field's.
@@ -202,28 +205,14 @@ fn row(cheat: &Cheat, slots: &[Option<Chord>]) -> Row {
         search: cheat.name.to_lowercase(),
         category: cheat.category.to_uppercase().into(),
         keys: caps(cheat.kind, slots),
-        tip: cheat
-            .instructions
-            .clone()
-            .or_else(|| cheat.description.clone())
-            .filter(|text| !text.is_empty())
-            .map(SharedString::from),
-        options: cheat
-            .args
-            .options
-            .iter()
-            .map(|option| option.to_uppercase().into())
-            .collect(),
+        tip: cheat.instructions.clone().or_else(|| cheat.description.clone()).filter(|text| !text.is_empty()).map(SharedString::from),
+        options: cheat.args.options.iter().map(|option| option.to_uppercase().into()).collect(),
     }
 }
 
 /// `3`, `0.5`: one decimal only when there is a fraction.
 pub fn number(value: f64) -> String {
-    if value.fract() == 0. {
-        format!("{value:.0}")
-    } else {
-        format!("{value:.1}")
-    }
+    if value.fract() == 0. { format!("{value:.0}") } else { format!("{value:.1}") }
 }
 
 #[cfg(test)]
@@ -235,7 +224,17 @@ mod tests {
 
     #[test]
     fn kept_values_change_only_what_they_can() {
-        let cheat = |id: &str, kind, args| Cheat { id: id.into(), key: None, name: String::new(), category: String::new(), kind, args, hotkeys: Vec::new(), instructions: None, description: None };
+        let cheat = |id: &str, kind, args| Cheat {
+            id: id.into(),
+            key: None,
+            name: String::new(),
+            category: String::new(),
+            kind,
+            args,
+            hotkeys: Vec::new(),
+            instructions: None,
+            description: None,
+        };
         let cheats = [
             cheat("on", Kind::Toggle, Args::default()),
             cheat("same", Kind::Toggle, Args::default()),
@@ -243,7 +242,9 @@ mod tests {
             cheat("pick", Kind::Selection, Args { options: vec!["a".into(), "b".into()], ..Args::default() }),
             cheat("press", Kind::Button, Args::default()),
         ];
-        let wanted: Values = [("on", 1.), ("same", 1.), ("far", 9.), ("pick", 2.), ("press", 1.), ("gone", 1.)].map(|(id, value)| (id.to_owned(), value)).into();
+        let wanted: Values = [("on", 1.), ("same", 1.), ("far", 9.), ("pick", 2.), ("press", 1.), ("gone", 1.)]
+            .map(|(id, value)| (id.to_owned(), value))
+            .into();
         assert_eq!(changes(&cheats, &[0., 1., 1., 0., 0.], &wanted), [(0, 1.), (2, 5.)]);
     }
 

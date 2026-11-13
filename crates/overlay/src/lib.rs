@@ -13,8 +13,8 @@ use std::{
 
 pub use key::Key;
 pub use window::{
-    Monitor, cloak, exclude_from_capture, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place, raise, unminimize,
-    window_of,
+    Monitor, cloak, exclude_from_capture, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place, raise,
+    unminimize, window_of,
 };
 use windows_sys::Win32::{
     Foundation::HWND,
@@ -23,8 +23,8 @@ use windows_sys::Win32::{
         Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent},
         Input::KeyboardAndMouse::{MOD_NOREPEAT, RegisterHotKey, UnregisterHotKey},
         WindowsAndMessaging::{
-            EVENT_SYSTEM_FOREGROUND, GetMessageW, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW, WINEVENT_OUTOFCONTEXT, WM_HOTKEY, WM_QUIT,
-            WM_USER,
+            EVENT_SYSTEM_FOREGROUND, GetMessageW, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW, WINEVENT_OUTOFCONTEXT, WM_HOTKEY,
+            WM_QUIT, WM_USER,
         },
     },
 };
@@ -72,7 +72,15 @@ impl Watch {
                     let _ = ready.send(Err(io::Error::last_os_error()));
                     return;
                 }
-                let hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, ptr::null_mut(), Some(foreground_changed), 0, 0, WINEVENT_OUTOFCONTEXT);
+                let hook = SetWinEventHook(
+                    EVENT_SYSTEM_FOREGROUND,
+                    EVENT_SYSTEM_FOREGROUND,
+                    ptr::null_mut(),
+                    Some(foreground_changed),
+                    0,
+                    0,
+                    WINEVENT_OUTOFCONTEXT,
+                );
                 if hook.is_null() {
                     UnregisterHotKey(ptr::null_mut(), OVERLAY as i32);
                     let _ = ready.send(Err(io::Error::other("cannot watch the foreground window")));
@@ -86,7 +94,9 @@ impl Watch {
                         (SET_MINIMAP, packed) => {
                             UnregisterHotKey(ptr::null_mut(), MINIMAP as i32);
                             let key = Key::unpack(packed);
-                            let taken = key.is_some_and(|key| RegisterHotKey(ptr::null_mut(), MINIMAP as i32, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0);
+                            let taken = key.is_some_and(|key| {
+                                RegisterHotKey(ptr::null_mut(), MINIMAP as i32, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0
+                            });
                             let _ = answer.send(if taken { Err(io::Error::last_os_error()) } else { Ok(()) });
                         }
                         _ => {}

@@ -170,11 +170,9 @@ mod tests {
         .unwrap();
         let [game] = &games[..] else { panic!("one game with a title") };
         assert_eq!((game.name.as_str(), game.exe.as_deref()), ("Game", Some("a.exe")));
-        let maps: Vec<_> = game.maps.iter().map(|m| (m.id.as_str(), m.name.as_str(), m.thumbnail.as_deref(), m.revision.as_deref())).collect();
-        assert_eq!(
-            maps,
-            [("x1", "First", Some("https://api-cdn.wemod.com/m/1.webp"), Some("r1")), ("x2", "Second", None, None)]
-        );
+        let maps: Vec<_> =
+            game.maps.iter().map(|m| (m.id.as_str(), m.name.as_str(), m.thumbnail.as_deref(), m.revision.as_deref())).collect();
+        assert_eq!(maps, [("x1", "First", Some("https://api-cdn.wemod.com/m/1.webp"), Some("r1")), ("x2", "Second", None, None)]);
         assert_eq!(game.cover.as_deref(), Some("https://api-cdn.wemod.com/t/460.jpg"));
         let offer = game.trainer.as_ref().unwrap();
         assert_eq!((offer.cheats, &offer.builds[..], offer.revision.as_deref()), (3, &[7][..], Some("u")));

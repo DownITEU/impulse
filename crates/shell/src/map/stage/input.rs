@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use gpui_kit::{App, Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollEvent, Stateful, Task, Window, prelude::*, px};
+use gpui_kit::{
+    App, Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ScrollEvent, Stateful, Task, Window, prelude::*, px,
+};
 use model::{Map, Point};
 
 use super::{

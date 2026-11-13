@@ -188,28 +188,17 @@ pub fn forget(data_dir: &Path) {
 }
 
 /// Asks the API for the trainer that fits the installed version and stores it.
-pub async fn fetch(
-    session: &Session,
-    t: &Transport,
-    data_dir: &Path,
-    game_id: &str,
-    stamp: Stamp,
-) -> Result<Trainer> {
+pub async fn fetch(session: &Session, t: &Transport, data_dir: &Path, game_id: &str, stamp: Stamp) -> Result<Trainer> {
     #[derive(Deserialize)]
     struct Envelope {
         trainer: Value,
     }
     let versions = stamp.version.map(|v| v.to_string()).unwrap_or_default();
-    let path = format!(
-        "/v3/games/{game_id}/trainer?gameVersions={versions}&locale=en-US&supportedLoaders=artifacts&v=3"
-    );
+    let path = format!("/v3/games/{game_id}/trainer?gameVersions={versions}&locale=en-US&supportedLoaders=artifacts&v=3");
     let Envelope { trainer: raw } = session.get(t, &path).await?;
     let trainer = Trainer::deserialize(&raw).context("unexpected trainer format")?;
     let file = file(data_dir, game_id);
-    let stored = Stored {
-        stamp,
-        trainer: raw,
-    };
+    let stored = Stored { stamp, trainer: raw };
     let saved = unblock(move || disk::replace(&file, &serde_json::to_vec(&stored)?)).await;
     if let Err(e) = saved {
         log::warn!("trainer {game_id} not cached: {e:#}");
@@ -219,10 +208,7 @@ pub async fn fetch(
 
 // Ids come from the catalog, a remote file: nothing but letters and digits reaches the path.
 fn file(data_dir: &Path, game_id: &str) -> PathBuf {
-    let name: String = game_id
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .collect();
+    let name: String = game_id.chars().filter(char::is_ascii_alphanumeric).collect();
     data_dir.join(DIR).join(format!("{name}.json"))
 }
 
@@ -264,14 +250,8 @@ mod tests {
     #[test]
     fn disk_copy_keeps_the_whole_response() {
         let dir = std::env::temp_dir().join(format!("impulse-trainer-{}", std::process::id()));
-        let stamp = Stamp {
-            updated_at: Some("2026-01-01T00:00:00Z".to_owned()),
-            version: Some(7),
-        };
-        let stored = Stored {
-            stamp: stamp.clone(),
-            trainer: serde_json::from_str(JSON).unwrap(),
-        };
+        let stamp = Stamp { updated_at: Some("2026-01-01T00:00:00Z".to_owned()), version: Some(7) };
+        let stored = Stored { stamp: stamp.clone(), trainer: serde_json::from_str(JSON).unwrap() };
         let path = file(&dir, "../82102");
         assert!(path.ends_with("trainers/82102.json"));
         disk::replace(&path, &serde_json::to_vec(&stored).unwrap()).unwrap();

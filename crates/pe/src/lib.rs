@@ -23,8 +23,7 @@ pub fn header(path: &Path) -> Option<Header> {
     if &dos[..2] != b"MZ" {
         return None;
     }
-    file.seek(SeekFrom::Start(u32_at(&dos, 60)?.into()))
-        .ok()?;
+    file.seek(SeekFrom::Start(u32_at(&dos, 60)?.into())).ok()?;
     // Signature (4), Machine (2), NumberOfSections (2), TimeDateStamp (4).
     let mut head = [0u8; 12];
     file.read_exact(&mut head).ok()?;
@@ -50,9 +49,7 @@ pub fn export(path: &Path, name: &str) -> Option<u32> {
             let at = table + 40 * n;
             let (size, va, raw) = (u32_at(&image, at + 8)?, u32_at(&image, at + 12)?, u32_at(&image, at + 20)?);
             let size = size.max(u32_at(&image, at + 16)?);
-            (va..va.checked_add(size)?)
-                .contains(&rva)
-                .then(|| (rva - va + raw) as usize)
+            (va..va.checked_add(size)?).contains(&rva).then(|| (rva - va + raw) as usize)
         })
     };
     let (directory, directory_size) = (u32_at(&image, directories)?, u32_at(&image, directories + 4)?);

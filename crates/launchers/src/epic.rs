@@ -33,53 +33,27 @@ pub fn apps() -> Vec<App> {
     };
     entries
         .flatten()
-        .filter(|e| {
-            e.path()
-                .extension()
-                .is_some_and(|x| x.eq_ignore_ascii_case("item"))
-        })
+        .filter(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("item")))
         .filter_map(|e| serde_json::from_slice::<Item>(&fs::read(e.path()).ok()?).ok())
         .filter(|item| !item.incomplete && item.app_categories.iter().any(|c| c == "games"))
         .flat_map(|item| {
             let location = redirect(&item).unwrap_or_else(|| item.install_location.clone().into());
             // The catalog lists both the full id and the bare app name.
-            [
-                format!(
-                    "epic:{}:{}:{}",
-                    item.catalog_namespace, item.catalog_item_id, item.app_name
-                ),
-                format!("epic:{}", item.app_name),
-            ]
-            .map(|store_id| App {
-                store_id,
-                location: location.clone(),
-            })
+            [format!("epic:{}:{}:{}", item.catalog_namespace, item.catalog_item_id, item.app_name), format!("epic:{}", item.app_name)]
+                .map(|store_id| App { store_id, location: location.clone() })
         })
         .collect()
 }
 
 fn data_dir() -> Option<PathBuf> {
-    let registered = value(
-        LOCAL_MACHINE,
-        r"SOFTWARE\Epic Games\EpicGamesLauncher",
-        "AppDataPath",
-        View::Wow32,
-    )
-    .map(PathBuf::from);
-    let default =
-        env::var_os("ProgramData").map(|p| PathBuf::from(p).join(r"Epic\EpicGamesLauncher\Data"));
-    [registered, default]
-        .into_iter()
-        .flatten()
-        .find(|p| p.is_dir())
+    let registered = value(LOCAL_MACHINE, r"SOFTWARE\Epic Games\EpicGamesLauncher", "AppDataPath", View::Wow32).map(PathBuf::from);
+    let default = env::var_os("ProgramData").map(|p| PathBuf::from(p).join(r"Epic\EpicGamesLauncher\Data"));
+    [registered, default].into_iter().flatten().find(|p| p.is_dir())
 }
 
 // Ubisoft games sold on Epic install through Ubisoft Connect, which owns the real folder.
 fn redirect(item: &Item) -> Option<PathBuf> {
-    if !item
-        .launch_executable
-        .eq_ignore_ascii_case("uplaylaunch.exe")
-    {
+    if !item.launch_executable.eq_ignore_ascii_case("uplaylaunch.exe") {
         return None;
     }
     let command = item.launch_command.to_ascii_lowercase();

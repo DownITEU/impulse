@@ -7,8 +7,8 @@ use std::{
 
 use futures::StreamExt;
 use gpui_kit::{
-    App, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, FontWeight, IntoElement,
-    KeyBinding, Modifiers, Render, Task, UniformListScrollHandle, Window, actions,
+    App, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyBinding, Modifiers, Render, Task,
+    UniformListScrollHandle, Window, actions,
     base::SelectableText,
     component::{
         h_flex,
@@ -71,10 +71,7 @@ pub struct LogView {
 impl EventEmitter<LogEvent> for LogView {}
 
 fn slot(level: Level) -> usize {
-    LEVELS
-        .iter()
-        .position(|l| *l == level)
-        .unwrap_or(LEVELS.len() - 1)
+    LEVELS.iter().position(|l| *l == level).unwrap_or(LEVELS.len() - 1)
 }
 
 fn look(level: Level) -> (&'static str, u32) {
@@ -99,9 +96,7 @@ impl LogView {
         let mut pings = journal::subscribe();
         let pump = cx.spawn(async move |view, cx| {
             loop {
-                if view.update(cx, |view, cx| view.pull(cx)).is_err()
-                    || pings.next().await.is_none()
-                {
+                if view.update(cx, |view, cx| view.pull(cx)).is_err() || pings.next().await.is_none() {
                     break;
                 }
             }
@@ -131,10 +126,7 @@ impl LogView {
 
     /// Buffered errors and warnings, for the status bar.
     pub fn problems(&self) -> (usize, usize) {
-        (
-            self.counts[slot(Level::Error)],
-            self.counts[slot(Level::Warn)],
-        )
+        (self.counts[slot(Level::Error)], self.counts[slot(Level::Warn)])
     }
 
     fn pull(&mut self, cx: &mut Context<Self>) {
@@ -174,12 +166,7 @@ impl LogView {
     }
 
     fn refilter(&mut self, cx: &mut Context<Self>) {
-        self.rows = self
-            .all
-            .iter()
-            .filter(|record| self.passes(record))
-            .cloned()
-            .collect();
+        self.rows = self.all.iter().filter(|record| self.passes(record)).cloned().collect();
         // A hidden row must not stay selected: copy would promise more than it copies.
         let rows = &self.rows;
         let visible = |seq: &u64| rows.binary_search_by_key(seq, |row| row.seq).is_ok();
@@ -188,22 +175,11 @@ impl LogView {
         cx.notify();
     }
 
-    fn click(
-        &mut self,
-        seq: u64,
-        modifiers: Modifiers,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn click(&mut self, seq: u64, modifiers: Modifiers, window: &mut Window, cx: &mut Context<Self>) {
         match self.anchor {
             Some(anchor) if modifiers.shift => {
                 let span = anchor.min(seq)..=anchor.max(seq);
-                self.selected = self
-                    .rows
-                    .iter()
-                    .map(|row| row.seq)
-                    .filter(|seq| span.contains(seq))
-                    .collect();
+                self.selected = self.rows.iter().map(|row| row.seq).filter(|seq| span.contains(seq)).collect();
             }
             _ if modifiers.control => {
                 if !self.selected.remove(&seq) {
@@ -222,12 +198,8 @@ impl LogView {
 
     // The selection, or every visible row when nothing is selected.
     fn copy(&mut self, cx: &mut Context<Self>) {
-        let lines: Vec<String> = self
-            .rows
-            .iter()
-            .filter(|row| self.selected.is_empty() || self.selected.contains(&row.seq))
-            .map(|row| row.line())
-            .collect();
+        let lines: Vec<String> =
+            self.rows.iter().filter(|row| self.selected.is_empty() || self.selected.contains(&row.seq)).map(|row| row.line()).collect();
         // An empty copy would only wipe the clipboard.
         if lines.is_empty() {
             return;
@@ -282,48 +254,28 @@ impl LogView {
             .border_color(line(0.09))
             .child(tracked("LOG", 13., 0.16).font_weight(FontWeight::BOLD))
             .children(chips)
-            .child(
-                filter(&self.filter, self.accent)
-                    .flex_1()
-                    .min_w(px(120.))
-                    .h(px(28.))
-                    .px(px(10.))
-                    .border_1()
-                    .border_color(line(0.1)),
-            )
-            .child(
-                button("FOLLOW")
-                    .id("follow")
-                    .when(self.follow, |button| {
-                        button.child(square(7., rgb(self.accent)))
-                    })
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.follow = !view.follow;
-                        if view.follow {
-                            view.scroll.scroll_to_bottom();
-                        }
-                        cx.notify();
-                    })),
-            )
+            .child(filter(&self.filter, self.accent).flex_1().min_w(px(120.)).h(px(28.)).px(px(10.)).border_1().border_color(line(0.1)))
+            .child(button("FOLLOW").id("follow").when(self.follow, |button| button.child(square(7., rgb(self.accent)))).on_click(
+                cx.listener(|view, _, _, cx| {
+                    view.follow = !view.follow;
+                    if view.follow {
+                        view.scroll.scroll_to_bottom();
+                    }
+                    cx.notify();
+                }),
+            ))
             .child(
                 flash_button(&copy, "COPIED", self.copied.is_some(), self.accent)
                     .id("copy")
                     .on_click(cx.listener(|view, _, _, cx| view.copy(cx))),
             )
-            .child(
-                button("CLEAR")
-                    .id("clear")
-                    .on_click(cx.listener(|view, _, _, cx| view.clear(cx))),
-            )
+            .child(button("CLEAR").id("clear").on_click(cx.listener(|view, _, _, cx| view.clear(cx))))
             .child(button("FOLDER").id("folder").on_click(|_, _, cx| {
                 if let Some(dir) = journal::dir() {
                     cx.open_with_system(dir);
                 }
             }))
-            .child(
-                icon_button("log-close", Icon::Close, 32., 12.)
-                    .on_click(cx.listener(|_, _, _, cx| cx.emit(LogEvent::Close))),
-            )
+            .child(icon_button("log-close", Icon::Close, 32., 12.).on_click(cx.listener(|_, _, _, cx| cx.emit(LogEvent::Close))))
     }
 
     fn row(&self, record: &Record, cx: &mut Context<Self>) -> impl IntoElement {
@@ -347,49 +299,24 @@ impl LogView {
                 (false, Some(tint)) => row.bg(tint),
                 (false, None) => row.hover(|style| style.bg(rgb(ROW_HOVER))),
             })
-            .on_click(
-                cx.listener(move |view, event: &gpui_kit::ClickEvent, window, cx| {
-                    view.click(seq, event.modifiers(), window, cx);
-                }),
-            )
-            .child(
-                mono(record.time.format("%H:%M:%S%.3f").to_string(), 12.)
-                    .w(px(92.))
-                    .flex_none()
-                    .text_color(rgb(FAINT)),
-            )
+            .on_click(cx.listener(move |view, event: &gpui_kit::ClickEvent, window, cx| {
+                view.click(seq, event.modifiers(), window, cx);
+            }))
+            .child(mono(record.time.format("%H:%M:%S%.3f").to_string(), 12.).w(px(92.)).flex_none().text_color(rgb(FAINT)))
             .child(
                 h_flex()
                     .w(px(58.))
                     .flex_none()
                     .gap(px(6.))
                     .child(square(7., rgb(color)))
-                    .child(
-                        mono(label, 10.5)
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(color)),
-                    ),
+                    .child(mono(label, 10.5).font_weight(FontWeight::BOLD).text_color(rgb(color))),
             )
-            .child(
-                mono(record.source.clone(), 12.)
-                    .w(px(150.))
-                    .flex_none()
-                    .truncate()
-                    .text_color(rgb(DIM)),
-            )
-            .child(
-                mono(record.message.clone(), 12.)
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_color(rgb(text)),
-            )
+            .child(mono(record.source.clone(), 12.).w(px(150.)).flex_none().truncate().text_color(rgb(DIM)))
+            .child(mono(record.message.clone(), 12.).flex_1().min_w_0().truncate().text_color(rgb(text)))
     }
 
     fn detail(&self) -> impl IntoElement {
-        let record = self
-            .anchor
-            .and_then(|seq| self.all.iter().find(|record| record.seq == seq));
+        let record = self.anchor.and_then(|seq| self.all.iter().find(|record| record.seq == seq));
         div()
             .id("log-detail")
             .h(px(92.))
@@ -404,13 +331,10 @@ impl LogView {
             .overflow_y_scroll()
             .map(|strip| match record {
                 // Keyed by record, so a selection never carries over to another one.
-                Some(record) => strip.text_color(rgb(TEXT)).child(SelectableText::new(
-                    ("log-detail-text", record.seq as usize),
-                    record.line(),
-                )),
-                None => strip
-                    .text_color(rgb(FAINT))
-                    .child("CLICK A ROW TO READ AND SELECT THE FULL RECORD"),
+                Some(record) => {
+                    strip.text_color(rgb(TEXT)).child(SelectableText::new(("log-detail-text", record.seq as usize), record.line()))
+                }
+                None => strip.text_color(rgb(FAINT)).child("CLICK A ROW TO READ AND SELECT THE FULL RECORD"),
             })
     }
 }
@@ -442,9 +366,7 @@ impl Render for LogView {
                             self.rows.len(),
                             cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
                                 let rows = view.rows[range].to_vec();
-                                rows.iter()
-                                    .map(|record| view.row(record, cx).into_any_element())
-                                    .collect::<Vec<_>>()
+                                rows.iter().map(|record| view.row(record, cx).into_any_element()).collect::<Vec<_>>()
                             }),
                         )
                         .track_scroll(&self.scroll)

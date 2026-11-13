@@ -95,7 +95,11 @@ mod tests {
         assert!(!profiles.of("new").favorite);
         profiles.edit("new", |profile| {
             profile.sessions += 1;
-            profile.collections.push(Collection { name: "Boss".to_owned(), icon: "skull".to_owned(), mods: Values::from([("a".to_owned(), 1.)]) });
+            profile.collections.push(Collection {
+                name: "Boss".to_owned(),
+                icon: "skull".to_owned(),
+                mods: Values::from([("a".to_owned(), 1.)]),
+            });
         });
         let back = Profiles::load(&dir);
         assert!(back.of("old").favorite && back.of("new").sessions == 1);

@@ -58,8 +58,12 @@ impl Stage {
         let (player, shot) = {
             let board = self.board.read(cx);
             let Load::Ready(map) = &board.map else { return };
-            let player = board.player.zip(map.frame.as_ref()).map(|(position, frame)| Walk { at: frame.to_map(position), bearing: board.bearing });
-            (player, Shot { map: map.clone(), saved: board.saved.clone(), selected: board.selected, mark: board.mark, accent: board.accent })
+            let player =
+                board.player.zip(map.frame.as_ref()).map(|(position, frame)| Walk { at: frame.to_map(position), bearing: board.bearing });
+            (
+                player,
+                Shot { map: map.clone(), saved: board.saved.clone(), selected: board.selected, mark: board.mark, accent: board.accent },
+            )
         };
         let (map, saved, selected, accent) = (shot.map.clone(), &shot.saved, shot.selected, shot.accent);
         // The overlays were laid out for the old size: one more frame places them.
@@ -100,7 +104,9 @@ impl Stage {
         }
 
         let place = |(x, y): Pixel| bounds.origin + point(px(x as f32), px(y as f32));
-        let disc = |center: gpui_kit::Point<Pixels>, side: f32| Bounds::new(center - point(px(side / 2.), px(side / 2.)), size(px(side), px(side)));
+        let disc = |center: gpui_kit::Point<Pixels>, side: f32| {
+            Bounds::new(center - point(px(side / 2.), px(side / 2.)), size(px(side), px(side)))
+        };
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             self.paint_tiles(&map, &camera, window, cx);
 
@@ -115,7 +121,8 @@ impl Stage {
             for (index, (region, extent)) in regions {
                 // An outline is tessellated anew each frame: none for a region off the view.
                 let Some((low, high)) = *extent else { continue };
-                let (((left, top), (right, bottom)), pad) = ((camera.to_view(low, area), camera.to_view(high, area)), f64::from(region.thickness));
+                let (((left, top), (right, bottom)), pad) =
+                    ((camera.to_view(low, area), camera.to_view(high, area)), f64::from(region.thickness));
                 if right < -pad || bottom < -pad || left > area.0 + pad || top > area.1 + pad {
                     continue;
                 }
@@ -174,7 +181,10 @@ impl Stage {
                 let (center, scale) = (place(camera.to_view(at, area)), window.scale_factor());
                 if let Some(Bearing { angle, fresh }) = bearing {
                     // About the player, in device pixels; the icon points up.
-                    let turn = TransformationMatrix::unit().translate(center.scale(scale)).rotate(radians(angle as f32)).translate(center.scale(-scale));
+                    let turn = TransformationMatrix::unit()
+                        .translate(center.scale(scale))
+                        .rotate(radians(angle as f32))
+                        .translate(center.scale(-scale));
                     let color = alpha(accent, if fresh { 1. } else { STALE }).into();
                     let _ = window.paint_svg(disc(center, CONE), Icon::Heading.path().into(), None, turn, color, cx);
                 }
@@ -203,7 +213,8 @@ impl Stage {
         let pin = &shot.map.pins[index];
         let category = &shot.map.categories[pin.group.0];
         let look = self.look(index, shot.selected);
-        let marker = Marker { group: Some(pin.group), fill: category.color, look, found: shot.saved.found.contains(&pin.id), level: pin.level };
+        let marker =
+            Marker { group: Some(pin.group), fill: category.color, look, found: shot.saved.found.contains(&pin.id), level: pin.level };
         self.paint_look(marker, category.groups[pin.group.1].icon.as_ref(), scale, tip, shot.accent, window, cx);
     }
 
@@ -357,7 +368,10 @@ mod tests {
     #[test]
     fn a_tile_is_padded_with_its_edges_in_bgra() {
         // Red, then green: without alpha, and with the green half transparent.
-        for (texels, color, alpha) in [(vec![255, 0, 0, 0, 255, 0], ExtendedColorType::Rgb8, 255), (vec![255, 0, 0, 255, 0, 255, 0, 128], ExtendedColorType::Rgba8, 128)] {
+        for (texels, color, alpha) in [
+            (vec![255, 0, 0, 0, 255, 0], ExtendedColorType::Rgb8, 255),
+            (vec![255, 0, 0, 255, 0, 255, 0, 128], ExtendedColorType::Rgba8, 128),
+        ] {
             let mut webp = Vec::new();
             WebPEncoder::new_lossless(&mut webp).encode(&texels, 2, 1, color).unwrap();
             let tile = super::decode(&webp).unwrap();

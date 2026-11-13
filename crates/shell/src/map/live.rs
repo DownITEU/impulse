@@ -56,7 +56,14 @@ pub struct LiveMap {
 }
 
 impl LiveMap {
-    pub(super) fn new(provider: Arc<dyn Provider>, board: Entity<Board>, big: Entity<Board>, tile_dir: PathBuf, data_dir: &Path, cx: &mut Context<Self>) -> Self {
+    pub(super) fn new(
+        provider: Arc<dyn Provider>,
+        board: Entity<Board>,
+        big: Entity<Board>,
+        tile_dir: PathBuf,
+        data_dir: &Path,
+        cx: &mut Context<Self>,
+    ) -> Self {
         // Every change to the big board's state of a map makes a new copy, and comes with a notify.
         cx.observe(&big, |live, _, cx| live.adopt(cx)).detach();
         // A copy either board installs goes to the other when it shows the same map, so both hold one.

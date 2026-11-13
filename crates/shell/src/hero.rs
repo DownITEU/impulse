@@ -1,6 +1,6 @@
 use gpui_kit::{
-    Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex,
-    div, img, linear_color_stop, linear_gradient, prelude::*, px, relative, rgb,
+    Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex, div, img, linear_color_stop,
+    linear_gradient, prelude::*, px, relative, rgb,
 };
 
 use super::{
@@ -16,12 +16,7 @@ impl Page {
     pub(super) fn hero(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let has_trainer = game.support != Support::NoTrainer;
         let cover = || div().absolute().top_0().left_0().size_full();
-        let art = move |url: String| {
-            img(url)
-                .size_full()
-                .object_fit(ObjectFit::Cover)
-                .grayscale(!has_trainer)
-        };
+        let art = move |url: String| img(url).size_full().object_fit(ObjectFit::Cover).grayscale(!has_trainer);
         div()
             .relative()
             .min_h(px(230.))
@@ -39,23 +34,13 @@ impl Page {
             .when_some(game.hero.clone(), |hero, url| {
                 // Not every Steam app has hero art; the title thumbnail always exists.
                 let spare = game.thumbnail.clone();
-                hero.child(
-                    cover().child(art(url).with_fallback(move || match spare.clone() {
-                        Some(url) => art(url).into_any_element(),
-                        None => div().into_any_element(),
-                    })),
-                )
+                hero.child(cover().child(art(url).with_fallback(move || match spare.clone() {
+                    Some(url) => art(url).into_any_element(),
+                    None => div().into_any_element(),
+                })))
             })
-            .child(cover().bg(linear_gradient(
-                90.,
-                linear_color_stop(alpha(BG, 0.94), 0.),
-                linear_color_stop(alpha(BG, 0.15), 0.8),
-            )))
-            .child(cover().bg(linear_gradient(
-                180.,
-                linear_color_stop(alpha(BG, 0.), 0.4),
-                linear_color_stop(rgb(BG), 1.),
-            )))
+            .child(cover().bg(linear_gradient(90., linear_color_stop(alpha(BG, 0.94), 0.), linear_color_stop(alpha(BG, 0.15), 0.8))))
+            .child(cover().bg(linear_gradient(180., linear_color_stop(alpha(BG, 0.), 0.4), linear_color_stop(rgb(BG), 1.))))
             .child(self.actions(game, cx))
             .child(self.title(game, 56.).relative())
     }
@@ -68,10 +53,11 @@ impl Page {
             .flex_col()
             .gap(px(size * 0.18))
             .child(
-                tracked(&game.name, size, 0.04)
-                    .font_weight(FontWeight::BOLD)
-                    .line_height(relative(0.95))
-                    .text_color(rgb(if has_trainer { TEXT_BRIGHT } else { MUTED })),
+                tracked(&game.name, size, 0.04).font_weight(FontWeight::BOLD).line_height(relative(0.95)).text_color(rgb(if has_trainer {
+                    TEXT_BRIGHT
+                } else {
+                    MUTED
+                })),
             )
             .child(self.meta(game))
     }
@@ -116,9 +102,11 @@ impl Page {
             )
             .when_some(launchers::page(&game.install.store_id), |bar, (launcher, uri)| {
                 bar.child(
-                    icon_button("launcher", format!("Open in {launcher}").into())
-                        .on_click(move |_, _, cx| cx.open_url(&uri))
-                        .child(icon(Icon::External, 15., rgb(MUTED))),
+                    icon_button("launcher", format!("Open in {launcher}").into()).on_click(move |_, _, cx| cx.open_url(&uri)).child(icon(
+                        Icon::External,
+                        15.,
+                        rgb(MUTED),
+                    )),
                 )
             })
             // A run holds its install.
@@ -126,9 +114,11 @@ impl Page {
                 let (options, current) = Page::source_options(game);
                 let more = icon_button("source", "Game source".into()).child(icon(Icon::More, 15., rgb(MUTED)));
                 let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
-                bar.child(self.dropdown(more, Menu::Source, options, current, place, cx, |page, at, window, cx| {
-                    page.source_picked(at, window, cx)
-                }))
+                bar.child(
+                    self.dropdown(more, Menu::Source, options, current, place, cx, |page, at, window, cx| {
+                        page.source_picked(at, window, cx)
+                    }),
+                )
             })
     }
 
@@ -145,12 +135,8 @@ impl Page {
         let launchable = !self.play.is_active() && self.trainer(Some(&game.id)).is_some();
         h_flex()
             .gap(px(8.))
-            .when_some(starting, |bar, stage| {
-                bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent))
-            })
-            .when(stopping, |bar| {
-                bar.child(tracked(STOPPING, 12.5, 0.14).text_color(accent))
-            })
+            .when_some(starting, |bar, stage| bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent)))
+            .when(stopping, |bar| bar.child(tracked(STOPPING, 12.5, 0.14).text_color(accent)))
             .when(running || starting.is_some(), |bar| {
                 bar.child(
                     action("stop")
@@ -179,12 +165,7 @@ impl Page {
                         .child(icon(Icon::Play, 13., rgb(BG)))
                         .child(tracked("LAUNCH + ATTACH", 12.5, 0.14))
                         .child(
-                            mono("ENTER", 10.)
-                                .font_weight(FontWeight::BOLD)
-                                .px(px(6.))
-                                .py(px(2.))
-                                .border_1()
-                                .border_color(alpha(BG, 0.45)),
+                            mono("ENTER", 10.).font_weight(FontWeight::BOLD).px(px(6.)).py(px(2.)).border_1().border_color(alpha(BG, 0.45)),
                         ),
                 )
             })
@@ -196,9 +177,7 @@ impl Page {
             Support::NoTrainer => "NO TRAINER".to_owned(),
             // The catalog count, until the trainer itself is there.
             _ => {
-                let count = self
-                    .trainer(Some(&game.id))
-                    .map_or(game.mods as usize, |loaded| loaded.cheats.len());
+                let count = self.trainer(Some(&game.id)).map_or(game.mods as usize, |loaded| loaded.cheats.len());
                 format!("{count} MODS")
             }
         };
@@ -218,9 +197,7 @@ impl Page {
                 h_flex()
                     .gap(px(6.))
                     .child(mono(version, 12.))
-                    .when(game.support == Support::Ready, |version| {
-                        version.child(icon(Icon::Check, 13., rgb(self.accent)))
-                    })
+                    .when(game.support == Support::Ready, |version| version.child(icon(Icon::Check, 13., rgb(self.accent))))
                     .when(game.support == Support::UpdatePending, |version| {
                         version.child(mono("UPDATE PENDING", 12.).text_color(rgb(WARN)))
                     }),

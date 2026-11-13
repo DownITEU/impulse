@@ -92,7 +92,17 @@ impl Layer {
                 let _ = switch(layer, hwnd, asked, cx).await;
             }
         });
-        Self { mode: Mode::Window { armed: None }, playing: Playing::Idle, store, asks, hwnd, watch, minimap: None, live: Box::new(live), _switches: switches }
+        Self {
+            mode: Mode::Window { armed: None },
+            playing: Playing::Idle,
+            store,
+            asks,
+            hwnd,
+            watch,
+            minimap: None,
+            live: Box::new(live),
+            _switches: switches,
+        }
     }
 
     pub fn recheck(&self) {

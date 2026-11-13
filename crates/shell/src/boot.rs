@@ -68,10 +68,7 @@ impl Page {
     }
 
     pub(super) fn set_library(&mut self, library: Library, window: &mut Window, cx: &mut Context<Self>) {
-        let listed = |id: &Option<Arc<str>>| {
-            id.as_ref()
-                .is_some_and(|id| library.games.iter().any(|game| game.id == *id))
-        };
+        let listed = |id: &Option<Arc<str>>| id.as_ref().is_some_and(|id| library.games.iter().any(|game| game.id == *id));
         if !listed(&self.selected) {
             self.selected = library.games.first().map(|game| game.id.clone());
             self.drop_cheat_state();

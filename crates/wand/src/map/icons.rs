@@ -78,11 +78,7 @@ pub fn attach(map: &mut model::Map, names: &[Vec<String>], data_dir: &Path, onli
             let Some(source) = source else { continue };
             group.icon = outlines
                 .entry(&source.file)
-                .or_insert_with(|| {
-                    load(&dir, source)
-                        .inspect_err(|e| log::debug!("icon {} has no outline: {e:#}", source.file))
-                        .ok()
-                })
+                .or_insert_with(|| load(&dir, source).inspect_err(|e| log::debug!("icon {} has no outline: {e:#}", source.file)).ok())
                 .clone();
         }
     }
@@ -188,10 +184,7 @@ mod tests {
     fn names_map_to_one_glyph_fonts() {
         let url = |font: &str, glyph: &str| format!("https://fonts.wemod.com/?font={font}&glyphs={glyph}");
         assert_eq!(parts("gem"), Some((url("uicons-solid-rounded", "fi-sr-gem"), "uicons-solid-rounded-gem.ttf".into())));
-        assert_eq!(
-            parts("roundies:food-cauliflower"),
-            Some((url("roundies", "food-cauliflower"), "roundies-food-cauliflower.ttf".into()))
-        );
+        assert_eq!(parts("roundies:food-cauliflower"), Some((url("roundies", "food-cauliflower"), "roundies-food-cauliflower.ttf".into())));
         assert_eq!(
             parts("material:mark_email_unread"),
             Some((url("material-symbols-rounded", "mark_email_unread"), "material-symbols-rounded-mark_email_unread.ttf".into()))

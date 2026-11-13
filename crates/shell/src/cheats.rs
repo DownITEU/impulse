@@ -45,36 +45,24 @@ impl Page {
             }
         };
         column
-            .when(game.support == Support::UpdatePending, |column| {
-                column.child(update_callout())
-            })
-            .when(!running, |column| {
-                column.child(self.run_note(&game.id))
-            })
+            .when(game.support == Support::UpdatePending, |column| column.child(update_callout()))
+            .when(!running, |column| column.child(self.run_note(&game.id)))
             .child(self.cheat_list(loaded, running, cx))
     }
 
-    fn cheat_list(
-        &self,
-        loaded: &Loaded,
-        running: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn cheat_list(&self, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.mod_filter.read(cx).value().to_lowercase();
         // Pinned first, then categories in the trainer's own order.
         let mut sections: Vec<(SharedString, Vec<usize>)> = vec![(PINNED.into(), Vec::new())];
         for (index, row) in loaded.rows.iter().enumerate() {
             let at = match loaded.pinned.contains(&index) {
                 true => 0,
-                false => sections
-                    .iter()
-                    .skip(1)
-                    .position(|(title, _)| *title == row.category)
-                    .map(|found| found + 1)
-                    .unwrap_or_else(|| {
+                false => {
+                    sections.iter().skip(1).position(|(title, _)| *title == row.category).map(|found| found + 1).unwrap_or_else(|| {
                         sections.push((row.category.clone(), Vec::new()));
                         sections.len() - 1
-                    }),
+                    })
+                }
             };
             sections[at].1.push(index);
         }
@@ -97,15 +85,11 @@ impl Page {
             shown += cheats.len();
             let folded = loaded.folded.contains(&title);
             let divided = !rows.is_empty();
-            rows.push(
-                self.section(at, title, cheats.len(), folded, divided, cx)
-                    .into_any_element(),
-            );
+            rows.push(self.section(at, title, cheats.len(), folded, divided, cx).into_any_element());
             if !folded {
-                rows.extend(cheats.into_iter().map(|(number, index)| {
-                    self.cheat_row(number, index, loaded, running, cx)
-                        .into_any_element()
-                }));
+                rows.extend(
+                    cheats.into_iter().map(|(number, index)| self.cheat_row(number, index, loaded, running, cx).into_any_element()),
+                );
             }
         }
         v_flex()
@@ -159,11 +143,7 @@ impl Page {
         divided: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let chevron = if folded {
-            Icon::ChevronRight
-        } else {
-            Icon::ChevronDown
-        };
+        let chevron = if folded { Icon::ChevronRight } else { Icon::ChevronDown };
         h_flex()
             .h(px(36.))
             .flex_none()
@@ -172,9 +152,7 @@ impl Page {
             .border_b_1()
             .when(divided, |header| header.border_t_1())
             .border_color(line(0.08))
-            .when(at == 0, |header| {
-                header.child(icon(Icon::Pin, 13., rgb(self.accent)))
-            })
+            .when(at == 0, |header| header.child(icon(Icon::Pin, 13., rgb(self.accent))))
             .child(tracked(&title, 13., 0.16).font_weight(FontWeight::BOLD))
             .child(mono(format!("{count:02}"), 11.).text_color(rgb(FAINT)))
             .child(div().flex_1())
@@ -184,14 +162,7 @@ impl Page {
             )
     }
 
-    fn cheat_row(
-        &self,
-        number: usize,
-        index: usize,
-        loaded: &Loaded,
-        running: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn cheat_row(&self, number: usize, index: usize, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(self.accent);
         let row = &loaded.rows[index];
         let live = running && loaded.is_live(index);
@@ -223,11 +194,7 @@ impl Page {
                         true => dot.bg(accent).border_color(accent),
                         false => dot.border_color(line(0.25)),
                     }))
-                    .child(mono(format!("{number:02}"), 11.5).text_color(if live {
-                        accent
-                    } else {
-                        rgb(FAINT)
-                    })),
+                    .child(mono(format!("{number:02}"), 11.5).text_color(if live { accent } else { rgb(FAINT) })),
             )
             .child(
                 // Shrinks with the caps, in proportion to their widths.
@@ -266,9 +233,7 @@ impl Page {
                             .child(
                                 icon(Icon::Pin, 12., if pinned { accent } else { rgb(GHOST) })
                                     .id(("pin-icon", index))
-                                    .when(!pinned, |pin| {
-                                        pin.group_hover("pin", |style| style.text_color(rgb(TEXT)))
-                                    }),
+                                    .when(!pinned, |pin| pin.group_hover("pin", |style| style.text_color(rgb(TEXT)))),
                             ),
                     ),
             )
@@ -295,15 +260,11 @@ fn update_callout() -> impl IntoElement {
         .bg(alpha(WARN, 0.06))
         .child(icon(Icon::Warn, 18., rgb(WARN)))
         .child(
-            v_flex()
-                .gap(px(3.))
-                .child(
-                    tracked("GAME UPDATED", 12.5, 0.14)
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(rgb(WARN)),
-                )
-                .child(div().text_size(px(13.5)).text_color(rgb(TEXT_2)).child(
-                    "This build is newer than the trainer supports. Mods may not work until the trainer is updated.",
-                )),
+            v_flex().gap(px(3.)).child(tracked("GAME UPDATED", 12.5, 0.14).font_weight(FontWeight::BOLD).text_color(rgb(WARN))).child(
+                div()
+                    .text_size(px(13.5))
+                    .text_color(rgb(TEXT_2))
+                    .child("This build is newer than the trainer supports. Mods may not work until the trainer is updated."),
+            ),
         )
 }

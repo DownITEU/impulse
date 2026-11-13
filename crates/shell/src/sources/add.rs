@@ -61,7 +61,12 @@ impl Page {
         .detach();
     }
 
-    fn offer(&mut self, (exe, games, names, owners): (PathBuf, Vec<model::Game>, Vec<String>, Vec<usize>), window: &mut Window, cx: &mut Context<Self>) {
+    fn offer(
+        &mut self,
+        (exe, games, names, owners): (PathBuf, Vec<model::Game>, Vec<String>, Vec<usize>),
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let [at] = owners[..] {
             return self.add(exe, games, at, window, cx);
         }
@@ -143,9 +148,13 @@ impl Page {
             true => "MORE THAN ONE GAME MATCHES: WHICH ONE IS IT?",
             false => "NO CATALOG GAME MATCHES: FIND IT BY NAME",
         };
-        let field = h_flex().h(px(36.)).px(px(10.)).border_1().border_color(line(0.14)).bg(rgb(SUNKEN)).child(
-            Input::new(&picker.filter).appearance(false).px_0().font_family(MONO).text_size(px(12.5)),
-        );
+        let field = h_flex()
+            .h(px(36.))
+            .px(px(10.))
+            .border_1()
+            .border_color(line(0.14))
+            .bg(rgb(SUNKEN))
+            .child(Input::new(&picker.filter).appearance(false).px_0().font_family(MONO).text_size(px(12.5)));
         let body = v_flex()
             .p(px(16.))
             .gap(px(12.))

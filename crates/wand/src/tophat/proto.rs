@@ -19,14 +19,27 @@ pub enum Event {
     Status(String),
     Log(String),
     /// The trainer's current value of a variable.
-    Value { id: u64, name: String, value: f64 },
-    Buffer { kind: String, data: Vec<u8> },
+    Value {
+        id: u64,
+        name: String,
+        value: f64,
+    },
+    Buffer {
+        kind: String,
+        data: Vec<u8>,
+    },
 }
 
 pub enum Incoming<'a> {
-    Reply { seq: u64, payload: &'a [u8] },
+    Reply {
+        seq: u64,
+        payload: &'a [u8],
+    },
     /// The trainer's verdict on a pushed value: 0 set, 1 changed, 2 failed.
-    Applied { id: u64, code: u64 },
+    Applied {
+        id: u64,
+        code: u64,
+    },
     Event(Event),
     Unknown(String),
 }
@@ -38,10 +51,7 @@ pub fn incoming(raw: &[u8]) -> Option<Incoming<'_>> {
     let kind = message.text(0);
     Some(match kind.as_str() {
         "command_response" => Incoming::Reply { seq: message.u64(2), payload },
-        "trainer_value_response" => Incoming::Applied {
-            id: u64_at(payload, 8)?,
-            code: u64_at(payload, 16)?,
-        },
+        "trainer_value_response" => Incoming::Applied { id: u64_at(payload, 8)?, code: u64_at(payload, 16)? },
         "trainer_initializing" => Incoming::Event(Event::Initializing),
         "trainer_ready" => Incoming::Event(Event::Ready),
         "trainer_status" => Incoming::Event(Event::Status(text(payload))),
@@ -78,10 +88,7 @@ fn buffer(payload: &[u8]) -> Option<Event> {
     let kind = rest.get(..kind_len)?;
     let rest = rest.get(kind_len..)?;
     let data_len = u32::from_le_bytes(read(rest, 0)?) as usize;
-    Some(Event::Buffer {
-        kind: String::from_utf8_lossy(kind).into_owned(),
-        data: rest.get(4..)?.get(..data_len)?.to_vec(),
-    })
+    Some(Event::Buffer { kind: String::from_utf8_lossy(kind).into_owned(), data: rest.get(4..)?.get(..data_len)?.to_vec() })
 }
 
 /// A request the service must answer with the same `seq`.
@@ -97,9 +104,7 @@ pub fn request(kind: &str, payload: &[u8], seq: u64) -> Vec<u8> {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_millis() as u64)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis() as u64)
 }
 
 pub fn heartbeat(count: u32) -> Vec<u8> {
@@ -156,12 +161,7 @@ pub fn plugin_handle(payload: &[u8]) -> Result<u64> {
 /// A message as the service sends it, for the tests' fake service.
 #[cfg(test)]
 pub fn from_service(kind: &str, payload: &[u8], seq: u64) -> Vec<u8> {
-    table(&[
-        (0, Field::Str(kind)),
-        (1, Field::Bytes(payload)),
-        (2, Field::U64(seq)),
-        (4, Field::Str("service")),
-    ])
+    table(&[(0, Field::Str(kind)), (1, Field::Bytes(payload)), (2, Field::U64(seq)), (4, Field::Str("service"))])
 }
 
 #[cfg(test)]

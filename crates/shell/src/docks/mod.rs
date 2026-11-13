@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use gpui_kit::{Bounds, Context, MouseButton, MouseMoveEvent, Pixels, Point, Size, point, px, size};
 use serde::{Deserialize, Serialize};
 
-pub(super) use frame::{below_header, frame, input, toolbar};
 use frame::HEADER;
+pub(super) use frame::{below_header, frame, input, toolbar};
 
 use super::{assets::Icon, store};
 
@@ -89,7 +89,8 @@ impl Docks {
     }
 
     pub fn bounds(&self, spec: &Spec, screen: Size<Pixels>) -> Bounds<Pixels> {
-        let kept = self.find(spec.id).and_then(|placed| placed.bounds).map(|[x, y, w, h]| Bounds::new(point(px(x), px(y)), size(px(w), px(h))));
+        let kept =
+            self.find(spec.id).and_then(|placed| placed.bounds).map(|[x, y, w, h]| Bounds::new(point(px(x), px(y)), size(px(w), px(h))));
         let first = (spec.first)(screen);
         let mut bounds = kept.unwrap_or(first);
         if spec.smallest.is_none() {

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    AnyView, App, Bounds, Context, Div, ElementId, Entity, FontWeight, Hsla, InteractiveText, IntoElement, Rgba,
-    SharedString, Stateful, StyledText, Svg, Task, Window, canvas,
+    AnyView, App, Bounds, Context, Div, ElementId, Entity, FontWeight, Hsla, InteractiveText, IntoElement, Rgba, SharedString, Stateful,
+    StyledText, Svg, Task, Window, canvas,
     component::{
         h_flex,
         input::{Input, InputState},
@@ -20,19 +20,11 @@ const FLASH: Duration = Duration::from_millis(900);
 const TIP_WIDTH: f32 = 320.;
 
 pub fn icon(icon: Icon, size: f32, color: impl Into<Hsla>) -> Svg {
-    svg()
-        .path(icon.path())
-        .size(px(size))
-        .flex_none()
-        .text_color(color)
+    svg().path(icon.path()).size(px(size)).flex_none().text_color(color)
 }
 
 pub fn mono(text: impl Into<SharedString>, size: f32) -> Div {
-    div()
-        .font_family(MONO)
-        .font_weight(FontWeight::MEDIUM)
-        .text_size(px(size))
-        .child(text.into())
+    div().font_family(MONO).font_weight(FontWeight::MEDIUM).text_size(px(size)).child(text.into())
 }
 
 /// Letter-spaced label: GPUI has no tracking, so glyphs sit in a flex row with a gap.
@@ -43,12 +35,7 @@ pub fn tracked(text: &str, size: f32, em: f32) -> Div {
         .flex_wrap()
         .gap_x(px(size * 0.28) + gap)
         .text_size(px(size))
-        .children(text.split(' ').map(|word| {
-            div()
-                .flex()
-                .gap(gap)
-                .children(word.chars().map(|c| SharedString::from(c.to_string())))
-        }))
+        .children(text.split(' ').map(|word| div().flex().gap(gap).children(word.chars().map(|c| SharedString::from(c.to_string())))))
 }
 
 pub fn square(side: f32, color: impl Into<Hsla>) -> Div {
@@ -121,23 +108,14 @@ pub fn choice(id: &'static str, label: &'static str, current: bool, accent: u32)
 }
 
 pub fn toggle(on: bool, accent: u32) -> Div {
-    let (off_color, on_color) = if on {
-        (SEGMENT_IDLE, BG)
-    } else {
-        (TEXT, SEGMENT_IDLE)
-    };
+    let (off_color, on_color) = if on { (SEGMENT_IDLE, BG) } else { (TEXT, SEGMENT_IDLE) };
     segmented()
         .h(px(24.))
         .child(segment("OFF", (!on).then_some(SEGMENT_OFF), off_color).w(px(34.)))
         .child(segment("ON", on.then_some(accent), on_color).w(px(34.)))
 }
 
-pub fn icon_button(
-    id: impl Into<ElementId>,
-    glyph: Icon,
-    side: f32,
-    glyph_size: f32,
-) -> Stateful<Div> {
+pub fn icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size: f32) -> Stateful<Div> {
     const GROUP: &str = "icon-button";
     div()
         .id(id)
@@ -149,10 +127,7 @@ pub fn icon_button(
         .justify_center()
         .cursor_pointer()
         .hover(|style| style.bg(line(0.06)))
-        .child(
-            icon(glyph, glyph_size, rgb(DIM))
-                .group_hover(GROUP, |style| style.text_color(rgb(TEXT))),
-        )
+        .child(icon(glyph, glyph_size, rgb(DIM)).group_hover(GROUP, |style| style.text_color(rgb(TEXT))))
 }
 
 /// A dashed card that stands in for content that is not there.
@@ -167,18 +142,8 @@ pub fn notice(tag: &'static str, title: &str, text: &str) -> Div {
         .border_color(line(0.2))
         .bg(alpha(BG, 0.7))
         .child(mono(tag, 11.).text_color(rgb(DIM)))
-        .child(
-            tracked(title, 22., 0.1)
-                .justify_center()
-                .font_weight(FontWeight::BOLD),
-        )
-        .child(
-            div()
-                .max_w(px(420.))
-                .text_center()
-                .text_color(rgb(MUTED))
-                .child(text.to_owned()),
-        )
+        .child(tracked(title, 22., 0.1).justify_center().font_weight(FontWeight::BOLD))
+        .child(div().max_w(px(420.)).text_center().text_color(rgb(MUTED)).child(text.to_owned()))
 }
 
 pub fn button(label: &str) -> Div {
@@ -232,20 +197,8 @@ pub fn filter(state: &Entity<InputState>, accent: u32) -> Div {
     h_flex()
         .gap(px(8.))
         .bg(rgb(SUNKEN))
-        .child(
-            mono("/", 12.)
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(accent)),
-        )
-        .child(
-            div().flex_1().min_w_0().child(
-                Input::new(state)
-                    .appearance(false)
-                    .px_0()
-                    .font_family(MONO)
-                    .text_size(px(12.5)),
-            ),
-        )
+        .child(mono("/", 12.).font_weight(FontWeight::BOLD).text_color(rgb(accent)))
+        .child(div().flex_1().min_w_0().child(Input::new(state).appearance(false).px_0().font_family(MONO).text_size(px(12.5))))
 }
 
 /// 1 px background grid, painted because GPUI has no repeating backgrounds.

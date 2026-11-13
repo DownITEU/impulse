@@ -72,7 +72,8 @@ impl Bindings {
     /// What the slot being bound holds so far.
     fn held(&self, game: &str, cheat: &str, slot: usize) -> Option<Option<Chord>> {
         let capture = self.capture.as_ref()?;
-        let bound = matches!(&capture.target, Target::Slot { game: at, cheat: id, slot: on } if **at == *game && id == cheat && *on == slot);
+        let bound =
+            matches!(&capture.target, Target::Slot { game: at, cheat: id, slot: on } if **at == *game && id == cheat && *on == slot);
         bound.then_some(capture.held)
     }
 
@@ -194,14 +195,12 @@ impl Page {
                     capture.held = held;
                 }
             }
-            Step::Done(outcome) => {
-                match self.bindings.capture.take().map(|capture| capture.target) {
-                    Some(Target::Slot { game, cheat, slot }) => self.rebind(game, &cheat, slot, outcome, window, cx),
-                    Some(Target::Overlay) => self.rebind_overlay(outcome, cx),
-                    Some(Target::Minimap) => self.rebind_minimap(outcome, cx),
-                    None => {}
-                }
-            }
+            Step::Done(outcome) => match self.bindings.capture.take().map(|capture| capture.target) {
+                Some(Target::Slot { game, cheat, slot }) => self.rebind(game, &cheat, slot, outcome, window, cx),
+                Some(Target::Overlay) => self.rebind_overlay(outcome, cx),
+                Some(Target::Minimap) => self.rebind_minimap(outcome, cx),
+                None => {}
+            },
         }
         cx.notify();
     }

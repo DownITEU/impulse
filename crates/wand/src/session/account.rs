@@ -41,10 +41,7 @@ pub fn forget(data_dir: &Path) {
 
 pub async fn fetch(session: &Session, t: &Transport, data_dir: &Path) -> Result<Account> {
     let account: Account = session.get(t, "/v3/account").await?;
-    let stored = Stored {
-        fetched_at: now(),
-        account: account.clone(),
-    };
+    let stored = Stored { fetched_at: now(), account: account.clone() };
     let file = data_dir.join(FILE);
     let saved = unblock(move || disk::replace(&file, &serde_json::to_vec(&stored)?)).await;
     if let Err(e) = saved {

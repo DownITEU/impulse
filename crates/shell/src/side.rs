@@ -41,9 +41,9 @@ impl Page {
     pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
         let open = self.map.read(cx).is_open(cx);
         let run = match &self.play {
-            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected.as_ref() => {
-                self.trainer(Some(game)).map(|loaded| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: loaded.teleport })
-            }
+            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected.as_ref() => self
+                .trainer(Some(game))
+                .map(|loaded| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: loaded.teleport }),
             _ => None,
         };
         let live = match &self.play {
@@ -64,7 +64,10 @@ impl Page {
             Play::Live { game, session, tracker: Some(tracker), .. } if wanted => {
                 let offers = self.games().iter().find(|known| known.id == *game).map(|known| known.source.maps.clone());
                 let teleport = self.trainer(Some(game)).is_some_and(|loaded| loaded.teleport);
-                offers.map(|offers| map::LiveRun { offers, run: map::Run { session: session.clone(), tracker: Some(tracker.clone()), teleport } })
+                offers.map(|offers| map::LiveRun {
+                    offers,
+                    run: map::Run { session: session.clone(), tracker: Some(tracker.clone()), teleport },
+                })
             }
             _ => None,
         };
@@ -147,10 +150,11 @@ impl Page {
             .child(mono(active, 13.).text_color(if running { accent } else { rgb(FAINT) }))
             .child(mono(format!("/ {total}"), 13.).text_color(rgb(FAINT)));
         let clock = |size: f32| {
-            mono(clock(time), size)
-                .font_weight(FontWeight::BOLD)
-                .line_height(relative(1.15))
-                .text_color(rgb(if running { TEXT_BRIGHT } else { FAINT }))
+            mono(clock(time), size).font_weight(FontWeight::BOLD).line_height(relative(1.15)).text_color(rgb(if running {
+                TEXT_BRIGHT
+            } else {
+                FAINT
+            }))
         };
         let panel = div().flex().border_1().border_color(line(0.1)).bg(rgb(PANEL)).px(px(16.));
         if strip {
@@ -188,15 +192,10 @@ impl Page {
             .id("hotkeys-scope")
             .gap(px(8.))
             .when(enabled, |stat| {
-                stat.cursor_pointer()
-                    .on_click(cx.listener(move |page, _, window, cx| page.set_game_only(!game_only, window, cx)))
+                stat.cursor_pointer().on_click(cx.listener(move |page, _, window, cx| page.set_game_only(!game_only, window, cx)))
             })
             .child(square(7., rgb(if enabled { self.accent } else { GHOST })))
-            .child(
-                tracked(scope, 12., 0.12)
-                    .font_weight(FontWeight::BOLD)
-                    .when(!enabled, |text| text.text_color(rgb(GHOST))),
-            )
+            .child(tracked(scope, 12., 0.12).font_weight(FontWeight::BOLD).when(!enabled, |text| text.text_color(rgb(GHOST))))
     }
 }
 
@@ -211,10 +210,5 @@ fn label(text: &'static str) -> Div {
 }
 
 fn stat(name: &'static str) -> Div {
-    h_flex()
-        .h(px(40.))
-        .justify_between()
-        .border_t_1()
-        .border_color(line(0.07))
-        .child(label(name))
+    h_flex().h(px(40.)).justify_between().border_t_1().border_color(line(0.07)).child(label(name))
 }

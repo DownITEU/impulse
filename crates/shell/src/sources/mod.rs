@@ -32,8 +32,10 @@ enum Entry {
 
 /// The menu: the launcher's install first, then the picked executable, then what to do with one.
 fn entries(game: &Game) -> (Vec<(Entry, SharedString)>, usize) {
-    let mut sources: Vec<(bool, &Installation)> =
-        [(false, Some(&game.install)), (true, game.other.as_ref())].into_iter().filter_map(|(other, install)| Some((other, install?))).collect();
+    let mut sources: Vec<(bool, &Installation)> = [(false, Some(&game.install)), (true, game.other.as_ref())]
+        .into_iter()
+        .filter_map(|(other, install)| Some((other, install?)))
+        .collect();
     sources.sort_by_key(|(_, install)| exe(install).is_some());
     let current = sources.iter().position(|(other, _)| !other).unwrap_or_default();
     let picked = sources.iter().any(|(_, install)| exe(install).is_some());
@@ -141,7 +143,12 @@ impl Page {
 }
 
 fn prompt(cx: &mut Context<Page>) -> oneshot::Receiver<Result<Option<Vec<PathBuf>>>> {
-    cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple: false, prompt: Some("Select the game's .exe".into()) })
+    cx.prompt_for_paths(PathPromptOptions {
+        files: true,
+        directories: false,
+        multiple: false,
+        prompt: Some("Select the game's .exe".into()),
+    })
 }
 
 /// The file picked, if it is an executable; a shortcut comes as its target.

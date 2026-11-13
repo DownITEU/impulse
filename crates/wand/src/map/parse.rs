@@ -174,9 +174,10 @@ pub fn map(raw: &str) -> Result<(model::Map, Vec<Vec<String>>)> {
     let mut ordered = metadata.categories;
     // Without an order a category goes last, in the given order.
     ordered.sort_by(|a, b| {
-        a.display_order.is_none().cmp(&b.display_order.is_none()).then_with(|| {
-            a.display_order.unwrap_or_default().total_cmp(&b.display_order.unwrap_or_default())
-        })
+        a.display_order
+            .is_none()
+            .cmp(&b.display_order.is_none())
+            .then_with(|| a.display_order.unwrap_or_default().total_cmp(&b.display_order.unwrap_or_default()))
     });
     let position: HashMap<&str, usize> =
         ordered.iter().enumerate().map(|(index, category)| (category.external_id.as_str(), index)).collect();
@@ -195,9 +196,7 @@ pub fn map(raw: &str) -> Result<(model::Map, Vec<Vec<String>>)> {
         let Some(&category) = position.get(sub.category_external_id.as_str()) else { continue };
         groups.insert(sub.external_id.clone(), (category, categories[category].groups.len()));
         icons[category].push(sub.icon.unwrap_or_default());
-        categories[category]
-            .groups
-            .push(Group { id: sub.external_id, name: sub.title.unwrap_or_default(), icon: None });
+        categories[category].groups.push(Group { id: sub.external_id, name: sub.title.unwrap_or_default(), icon: None });
     }
 
     let pins = features::<PinProperties>(geojson).filter_map(|Feature { geometry, properties: p }| {
@@ -291,21 +290,15 @@ fn tiles(source: Option<TileSource>) -> Result<model::Tiles> {
         other => other,
     };
     match source {
-        Some(TileSource {
-            kind: Some(kind),
-            url_template: Some(template),
-            scheme,
-            tile_size,
-            min_zoom,
-            max_zoom,
-            ..
-        }) if kind == "xyz" => Ok(model::Tiles {
-            template,
-            flipped: scheme.as_deref() == Some("tms"),
-            size: tile_size.unwrap_or(256),
-            min_zoom: min_zoom.unwrap_or_default(),
-            max_zoom: max_zoom.unwrap_or_default(),
-        }),
+        Some(TileSource { kind: Some(kind), url_template: Some(template), scheme, tile_size, min_zoom, max_zoom, .. }) if kind == "xyz" => {
+            Ok(model::Tiles {
+                template,
+                flipped: scheme.as_deref() == Some("tms"),
+                size: tile_size.unwrap_or(256),
+                min_zoom: min_zoom.unwrap_or_default(),
+                max_zoom: max_zoom.unwrap_or_default(),
+            })
+        }
         _ => bail!("unsupported tile source"),
     }
 }
@@ -325,7 +318,8 @@ fn relink(markdown: &str, pins: &HashSet<String>) -> String {
     let (mut out, mut rest) = (String::with_capacity(markdown.len()), markdown);
     while let Some(start) = rest.find("](wemod:") {
         let Some(end) = rest[start..].find(')').map(|end| start + end) else { break };
-        let pin = rest[start + 2..end].split_once("location=").map(|(_, id)| id.split('&').next().unwrap_or(id)).filter(|id| pins.contains(*id));
+        let pin =
+            rest[start + 2..end].split_once("location=").map(|(_, id)| id.split('&').next().unwrap_or(id)).filter(|id| pins.contains(*id));
         match (pin, label_start(&rest[..start])) {
             (Some(id), _) => out.push_str(&format!("{}]({}{id})", &rest[..start], model::PIN_LINK)),
             (None, Some(open)) => out.push_str(&format!("{}{}", &rest[..open], &rest[open + 1..start])),
@@ -369,11 +363,7 @@ fn frame(deltas: Deltas) -> Option<Frame> {
     let (x, y) = (deltas.scale_x? * CIRCUMFERENCE, deltas.scale_y? * CIRCUMFERENCE);
     let scale = (1. / x, -1. / y);
     let origin = Point { x: 0.5 - deltas.offset_x? / x, y: 0.5 + deltas.offset_y? / y };
-    let sound = sorted == [0, 1, 2]
-        && scale.0.is_normal()
-        && scale.1.is_normal()
-        && origin.x.is_finite()
-        && origin.y.is_finite();
+    let sound = sorted == [0, 1, 2] && scale.0.is_normal() && scale.1.is_normal() && origin.x.is_finite() && origin.y.is_finite();
     sound.then_some(Frame { axes, origin, scale })
 }
 
