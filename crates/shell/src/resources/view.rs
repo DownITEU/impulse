@@ -1,7 +1,7 @@
 //! The RESOURCES tab: what takes how much, each cache's CLEAR, the media limit, the user's own data.
 
 use gpui_kit::{
-    Context, FontWeight, IntoElement, Render, Window,
+    Context, Entity, FontWeight, IntoElement, Render, Window,
     component::{h_flex, v_flex},
     div,
     prelude::*,
@@ -26,10 +26,22 @@ const LIMITS: [(&str, &str, Option<u64>); 5] = [
     ("limit-none", "NONE", None),
 ];
 
-impl Render for Resources {
+pub struct ResourcesView {
+    resources: Entity<Resources>,
+}
+
+impl ResourcesView {
+    pub fn new(resources: Entity<Resources>, cx: &mut Context<Self>) -> Self {
+        cx.observe(&resources, |_, _, cx| cx.notify()).detach();
+        Self { resources }
+    }
+}
+
+impl Render for ResourcesView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = v_flex().px(px(18.)).py(px(10.));
-        let Some(usage) = &self.usage else {
+        let resources = self.resources.read(cx);
+        let Some(usage) = &resources.usage else {
             return body.child(mono("READING SIZES...", 11.).text_color(rgb(FAINT))).into_any_element();
         };
         let color = |index: usize| COLORS[index % COLORS.len()];
@@ -78,7 +90,7 @@ impl Render for Resources {
         let clear_all = row("CLEAR ALL CACHES", "your data below stays", 64.)
             .child(button("CLEAR ALL").id("clear-all").on_click(cx.listener(move |view, _, _, cx| view.clear(clearable.clone(), cx))));
         let limits = segmented().w_full().h(px(28.)).children(LIMITS.map(|(id, name, limit)| {
-            choice(id, name, self.kept.limit == limit, cx).flex_1().on_click(cx.listener(move |view, _, _, cx| view.set_limit(limit, cx)))
+            choice(id, name, resources.limit() == limit, cx).flex_1().on_click(cx.listener(move |view, _, _, cx| view.set_limit(limit, cx)))
         }));
         let limit = v_flex()
             .gap(px(10.))
@@ -99,6 +111,16 @@ impl Render for Resources {
             .child(tracked("KEPT", 11., 0.14).pt(px(18.)).pb(px(4.)).text_color(rgb(DIM)))
             .children(kept.map(|(name, hint, bytes)| entry(None, name, hint, bytes)))
             .into_any_element()
+    }
+}
+
+impl ResourcesView {
+    fn clear(&mut self, ids: Vec<&'static str>, cx: &mut Context<Self>) {
+        self.resources.update(cx, |resources, cx| resources.clear(ids, cx));
+    }
+
+    fn set_limit(&mut self, limit: Option<u64>, cx: &mut Context<Self>) {
+        self.resources.update(cx, |resources, cx| resources.set_limit(limit, cx));
     }
 }
 

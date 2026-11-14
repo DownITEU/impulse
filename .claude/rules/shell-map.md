@@ -5,26 +5,29 @@ paths:
 
 # shell map
 
-The map modal, the minimap and their parts: `MapView`, `Board`, `Stage`, `Sidebar`, `Card`, `LiveMap`. The `Tracker` and the `Run` they follow are `run`'s.
+The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Board`, `Stage`, `Sidebar`, `Card`, `LiveMap`. The `Tracker` and the `Run` they follow are `run`'s.
 
 ## Surface
-- `MapView`: the modal (`show`, `hide`, `set_run`, `set_live`, `set_docked`); emits `MapEvent::Close`.
+- `Maps`: the open game's maps, the chosen one, its load and the runs both boards follow; `is_open`, `live_map`, `set_minimap` (the overlay's docking command). `open`, `close`, `choose` are `MapView`'s.
+- `MapView`: the modal's window parts (`show`, `hide`, `set_docked`); emits `MapEvent::Close`.
 - `Minimap`: a mini `Stage` over the live board, one per window; `hide(window)` lets go of its tiles.
-- `LiveMap`, `LiveRun`: the live game's map for the minimap and the run it follows.
+- `LiveMap`: the live game's map for the minimap.
 - `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it.
 - `bind_keys`.
 
 ## Rules
+- `Maps` follows `RunEvent`s itself: the open map gets the run of its game, the minimap the live run while its dock is shown. `map` never names the overlay.
+- The camera is the stage's: `Maps` reads it through `set_camera` and keeps it on the board before the board lets go of the map (`close`, `choose`).
 - Each part is its own entity drawn with `cached`, observing the shared `Board`. The board notifies on what a person does, never per frame; the player's moves are `BoardEvent::Moved`, which only the stage hears.
 - `Board::live` (the minimap's) never writes the user's state: `saves` is off and it adopts the big board's `Rc<Saved>`. Only the big board writes.
 - Map state is written blocking, on each change, in order. A board saves before it swaps or closes a map (`pending`, `hide`); `forget` does not save. The state and heading are `client::map`.
 - `Tracker` asks the position only while a `Lease` is held, one question at a time. The board holds its lease (`_fixes`) only while open with a tracker and a map that has a `Frame`; dropping it stops the asking.
-- A `Cached` snapshot is skipped when the board already holds a shared copy (`MapView::choose`, `live::load`).
+- A `Cached` snapshot is skipped when the board already holds a shared copy (`Maps::choose`, `live::load`).
 - `Tiles` drops the least recently drawn, never what the last frame drew or a load just brought. Whatever leaves `Tiles` or `Images` goes to `window.drop_image` (`stale`), in the window it was drawn in: `hide(window)` when a window stops showing a part.
 - `Stage::mini` only draws: no input, hover, chip or menu; its tile cache is small.
 - Clips: `ClipView` downloads through `art::path`, decodes with `video` on the window's D3D11 device, paints with `paint_surface` (never the atlas), and starts again when the device changed. A clip no frame asked for stops.
 - Pin links: `PIN_LINK` selects a pin; only `http://` and `https://` open in the browser; any other link, `wemod:` included, does nothing.
-- A closed map forgets its pins after 3 minutes (`forget_later`), unless a trainer is live in its game; `show` cancels that, and `forget_later` drops a load on its way before forgetting.
+- A closed map forgets its pins after 3 minutes (`forget_later`), unless a trainer is live in its game; `open` cancels that, and `forget_later` drops a load on its way before forgetting.
 - Paint allocates nothing per pin or label: per-map data is made once (`Shown::of`, `Images`), markers regroup per half zoom step, regions and labels off the view are skipped.
 - Ask for frames only while something moves (`animate`); a size change asks for one more.
 - Anything laid over the stage calls `occlude()`: pins hover only while the stage's own hitbox is hovered.

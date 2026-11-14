@@ -21,7 +21,7 @@ The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD vie
 - The overlay's and the minimap's keys are bound by asking `Hotkeys` for a capture (`Target::Key`) and applying its outcome here: refused when the other key or a cheat's chord holds it. `Layer::takes` keeps trainer chords off them.
 - `Glance` is a `PopUp` that never takes input: `focus: false`, `show: false`, `pass_through` before the first show. It is placed over the MINIMAP dock's minimap on the game's monitor, hidden (tiles dropped) when the live map is not placed, closed on `Playing::Idle` and on release. It honours `hide_from_capture`.
 - Entering the overlay closes what belongs to the window (menu, editor, settings, log, capture) and selects the live game. Escape closes the editor, then the menu, then leaves.
-- The map in the MAP dock is the page's `MapView`: `sync_map_dock` opens and hides it, and the focus must not stay in a gone map.
+- The map in the MAP dock is the page's `MapView`: `sync_map_dock` opens and hides it, and the focus must not stay in a gone map. The overlay tells `Maps` whether the MINIMAP dock is shown (`set_minimap`), at start and on each `Docks` change.
 - Dock layout is one for all games, in `docks.json`, saved blocking on toggle, raise and release; a drag's bounds stay in its `Grab` until the release. A missing or damaged file means each `Spec`'s first bounds. `fit` keeps a dock on screen.
 
 ## Traps

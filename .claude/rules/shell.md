@@ -15,6 +15,9 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`). `Printed` is the cheat list's projection of the open game's sheet.
 - `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`).
 - `Hotkeys` (`bindings/`: a `hotkeys` module would shadow the crate): `hotkeys.json`, the live run's hook, the capture; `capture`, `cancel`, `rebind`, `set_enabled`, `set_game_only`.
+- `Account` (`account.rs`): the provider's session, read by the header; `reload` asks again.
+- `Folders` (`settings/`): the provider's folders and the user's edits checked through it (`scan`, `set`); emits `Shown(at)` when a row's field must show the provider's path. The page holds the fields.
+- `Resources` (`resources/`): sizes, clear, the media limit; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.
 
 ## Rules
 - Colors and fonts come only from `theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
@@ -23,10 +26,10 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Settings` (`settings/`) owns the prefs: read them with `settings.read(cx).prefs()`, change them with `Settings::edit`. It sets `Look` and GPUI's reduce motion; whoever reacts to a pref observes it.
 - `Library` owns the open game: open one with `Library::open`, react to `LibraryEvent`. A view holds the open game as an `Arc<Game>` while it draws.
 - `Trainers` owns the sheets and the profiles: read them through it, change them with its commands. It never knows the run: a run holds its game's copy with `hold`.
-- Provider streams: the catalog in `Library`, trainers in `Trainers`, sign-in in `boot.rs`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
+- Provider streams: the catalog in `Library`, trainers in `Trainers`, sign-in in `Account`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
 - `Trainers` loads the open game's trainer only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
 - A starting or live run carries its game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
-- `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, the page's `run_changed`). It stops a run whose game left the list.
+- `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, the page's `run_changed`). It stops a run whose game left the list.
 - `Printed` is made on `Opened` and `Installed` of the open game, re-capped on `Rebound`; a number field follows `Set`. The cheat-list helpers take `&Context<Page>`, so they read the sheet in place.
 - One run at a time: `Runs::start` refuses while `is_active`. `Stopping` lasts until `Session::stop` returns.
 - A cheat value goes one way: `Runs::set`, `step` or `apply` change the live sheet through `Trainers` and send it; they do nothing without a live run. A run's time and mods are kept once (`closed` flag), on end, STOP, quit and release.
@@ -36,7 +39,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - A capture's outcome goes to its asker (`capture` returns a receiver), who applies it: the cheat list with `Hotkeys::rebind`, the overlay tab with the layer's setters. A capture hides keys from every app; it ends on its outcome, a click outside the cap, the window going inactive, another game opening, a copy of its game's trainer showing, the overlay opening or the run's hook arming.
 - A hook handler only forwards to a channel; no GPUI call, no lock.
 - Every header control calls `occlude()`: GPUI picks the window control area by the first hitbox under the cursor.
-- What repaints often is its own entity (`LogView`, `Resources`, the map parts); never `cx.notify()` the page from a per-frame or per-record path.
+- What repaints often is its own entity (`LogView`, `ResourcesView`, the map parts); never `cx.notify()` the page from a per-frame or per-record path.
 
 ## Traps
 - `Page` is drawn cached: it re-renders only when it notifies, so an entity it reads must be observed. The session clock notifies it once a second while a run is live. A changed global reaches cached views only through `cx.refresh_windows()`.

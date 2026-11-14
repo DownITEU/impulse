@@ -40,7 +40,7 @@ impl Page {
                 Tab::Overlay => self.overlay_settings(cx).into_any_element(),
                 Tab::Hotkeys => self.hotkey_settings(cx).into_any_element(),
                 Tab::App => self.app(cx).into_any_element(),
-                Tab::Resources => self.resources.clone().into_any_element(),
+                Tab::Resources => self.resources_view.clone().into_any_element(),
             }),
         );
         self.dialog("settings", "SETTINGS", 640., Self::close_settings, body, cx)

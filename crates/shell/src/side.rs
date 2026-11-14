@@ -12,8 +12,6 @@ use gpui_kit::{
 use super::{
     Page,
     assets::Icon,
-    hud::MINIMAP_DOCK,
-    map,
     theme::*,
     widgets::{brackets, grid, icon_button, mono, square, tracked},
 };
@@ -25,7 +23,6 @@ impl Page {
         let Some(game) = self.game(cx) else { return };
         let (id, offers) = (game.id.clone(), game.source.maps.clone());
         self.map.update(cx, |map, cx| map.show(&id, &offers, window, cx));
-        self.sync_map(cx);
     }
 
     pub(super) fn close_map(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -34,30 +31,6 @@ impl Page {
             return self.layer.read(cx).leave();
         }
         self.map.update(cx, |map, cx| map.hide(window, cx));
-    }
-
-    /// Gives the open map the live run of its game, or takes it away; and the minimap its run.
-    pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
-        let (open, selected) = (self.map.read(cx).is_open(cx), self.selected(cx));
-        let runs = self.runs.read(cx);
-        let run = runs.live_run().filter(|(game, _)| open && selected.as_ref() == Some(*game)).map(|(_, run)| run.clone());
-        let live = runs.live().cloned();
-        self.map.update(cx, |map, cx| {
-            map.set_run(run, cx);
-            map.set_live(live, cx);
-        });
-        self.sync_minimap(cx);
-    }
-
-    /// The minimap follows a live run whose trainer can place the player, while its dock is shown.
-    pub(super) fn sync_minimap(&mut self, cx: &mut Context<Self>) {
-        let wanted = self.docks.read(cx).is_shown(MINIMAP_DOCK);
-        let live = self.runs.read(cx).live_run().filter(|(_, run)| wanted && run.tracker.is_some());
-        let minimap = live.and_then(|(game, run)| {
-            let offers = self.library.read(cx).game(game)?.source.maps.clone();
-            Some(map::LiveRun { offers, run: run.clone() })
-        });
-        self.map.update(cx, |map, cx| map.set_minimap(minimap, cx));
     }
 
     /// The caller gives it a width.

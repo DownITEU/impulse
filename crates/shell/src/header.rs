@@ -19,8 +19,9 @@ impl Page {
             }
             _ => "search trainers".to_owned(),
         };
-        let name = match (&self.account, self.signed_out) {
-            (Some(account), _) => account.name.clone(),
+        let account = self.account.read(cx);
+        let name = match (account.user(), account.signed_out()) {
+            (Some(user), _) => user.name.clone(),
             (None, true) => "NOT SIGNED IN".to_owned(),
             (None, false) => String::new(),
         };
@@ -98,7 +99,7 @@ impl Page {
         self.dialog_focus.focus(window, cx);
         self.settings_open = true;
         // An update may have installed a newer version since the last look.
-        self.scan_folders(window, cx);
+        self.folders.update(cx, |folders, cx| folders.scan(cx));
         self.resources.update(cx, |resources, cx| resources.measure(cx));
         cx.notify();
     }

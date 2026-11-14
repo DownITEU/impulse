@@ -104,7 +104,7 @@ impl Page {
                     }
                     (MODS, None) => div().p(px(16.)).child(self.vacant(cx)).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
-                    (MINIMAP, Some(_)) if mapped && self.map.read(cx).live_map().read(cx).ready(cx) => {
+                    (MINIMAP, Some(_)) if mapped && self.maps.read(cx).live_map().read(cx).ready(cx) => {
                         self.minimap.clone().into_any_element()
                     }
                     (MINIMAP, Some(_)) if mapped => div()
@@ -194,9 +194,15 @@ impl Page {
             None => self.sync_map_dock(window, cx),
         }
         // An open map keeps the focus: its Escape closes its own things first, then leaves.
-        if over && !self.map.read(cx).is_open(cx) {
+        if over && !self.maps.read(cx).is_open(cx) {
             self.hud_focus.focus(window, cx);
         }
+    }
+
+    /// The minimap follows the live run while its dock is shown.
+    pub(super) fn dock_minimap(&self, cx: &mut Context<Self>) {
+        let wanted = self.docks.read(cx).is_shown(MINIMAP_DOCK);
+        self.maps.update(cx, |maps, cx| maps.set_minimap(wanted, cx));
     }
 
     /// Only a live game with a map has a minimap to toggle.
@@ -210,7 +216,7 @@ impl Page {
     /// The dock's minimap lets go of its tiles once it is not drawn: out of the overlay (the HUD's own draws),
     /// its dock closed, or no live map.
     pub(super) fn sync_minimap_dock(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let drawn = self.over && self.docks.read(cx).is_shown(MINIMAP_DOCK) && self.map.read(cx).live_map().read(cx).ready(cx);
+        let drawn = self.over && self.docks.read(cx).is_shown(MINIMAP_DOCK) && self.maps.read(cx).live_map().read(cx).ready(cx);
         if !drawn {
             self.minimap.update(cx, |minimap, cx| minimap.hide(window, cx));
         }
@@ -220,7 +226,7 @@ impl Page {
     pub(super) fn sync_map_dock(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let shown = DOCKS.iter().find(|spec| spec.id == MAP).is_some_and(|spec| self.docks.read(cx).is_shown(spec));
         let docked = self.over && shown && self.game(cx).is_some_and(|game| !game.source.maps.is_empty());
-        if docked != self.map.read(cx).is_open(cx) {
+        if docked != self.maps.read(cx).is_open(cx) {
             match docked {
                 true => self.open_map(window, cx),
                 false => {

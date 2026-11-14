@@ -1,12 +1,14 @@
 //! The user's preferences in `settings.json`, kept here alone, and the SETTINGS dialog. The accent and
 //! reduce motion apply to every window.
 
+mod folders;
 mod view;
 
 use gpui_kit::{App, Context};
 use serde::{Deserialize, Serialize};
 
 use client::storage::{Paths, Stored};
+pub(super) use folders::{Folders, Shown};
 pub(super) use view::{Tab, label, row};
 
 use super::theme::{ACCENTS, Look};

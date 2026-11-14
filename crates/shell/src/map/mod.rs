@@ -5,28 +5,26 @@ mod board;
 mod card;
 mod keys;
 mod live;
+mod maps;
 mod markers;
 mod picture;
 mod sidebar;
 mod stage;
 
-use std::{rc::Rc, sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use client::{media::Media, storage::Paths};
-use futures::StreamExt;
 use gpui_kit::{
-    App, Context, Entity, EventEmitter, FocusHandle, IntoElement, Render, StyleRefinement, Task, Window,
+    App, Context, Entity, EventEmitter, FocusHandle, IntoElement, Render, StyleRefinement, Window,
     component::{h_flex, v_flex},
     div,
     prelude::*,
     px, rgb,
 };
-use model::{Group, Map, MapOffer, Pin, Provider, Snapshot};
+use model::{Group, Map, MapOffer, Pin};
 
 use crate::{
-    Load,
     assets::Icon,
-    run::Run,
     theme::*,
     widgets::{icon_button, mono},
 };
@@ -34,7 +32,8 @@ use board::Board;
 use card::Card;
 pub use keys::bind_keys;
 use keys::{CONTEXT, CloseMap, FindPlace};
-pub use live::{LiveMap, LiveRun};
+pub use live::LiveMap;
+pub use maps::Maps;
 use sidebar::Sidebar;
 use stage::Stage;
 
@@ -44,9 +43,6 @@ const MARGIN: f32 = 12.;
 // The stage's buttons at the bottom right. The card ends above their tallest stack: follow, the zoom pair, layers.
 const BUTTON: f32 = 34.;
 const CONTROLS: f32 = BUTTON * 4. + 16.;
-// A closed map keeps its pins this long, so opening it again soon is instant; later they are read from disk again.
-// While a trainer is live in its game, it keeps them until the run ends.
-const KEPT_CLOSED: Duration = Duration::from_secs(3 * 60);
 
 pub enum MapEvent {
     Close,
@@ -54,66 +50,31 @@ pub enum MapEvent {
 
 impl EventEmitter<MapEvent> for MapView {}
 
+/// The window's parts of `Maps`.
 pub struct MapView {
-    provider: Arc<dyn Provider>,
+    maps: Entity<Maps>,
     board: Entity<Board>,
     stage: Entity<Stage>,
     sidebar: Entity<Sidebar>,
     card: Entity<Card>,
-    // The game whose maps are listed, and the one a trainer is live in.
-    game: Option<Arc<str>>,
-    live: Option<Arc<str>>,
-    offers: Vec<MapOffer>,
-    chosen: usize,
     sidebar_open: bool,
     // In a dock, whose frame closes it.
     docked: bool,
-    live_map: Entity<LiveMap>,
     focus: FocusHandle,
-    _load: Task<()>,
-    _forget: Task<()>,
 }
 
 impl MapView {
-    pub fn new(provider: Arc<dyn Provider>, paths: &Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let board = cx.new(|_| Board::new(paths.map_state()));
+    pub fn new(maps: Entity<Maps>, paths: &Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let board = maps.read(cx).board().clone();
+        cx.observe(&maps, |_, _, cx| cx.notify()).detach();
         cx.observe(&board, |_, _, cx| cx.notify()).detach();
-        let live_board = cx.new(|_| Board::live(paths.map_state()));
-        let tile_dir = Media::Tiles.dir(paths);
-        let live_map = cx.new(|cx| LiveMap::new(provider.clone(), live_board, board.clone(), tile_dir.clone(), paths, cx));
-        let stage = cx.new(|cx| Stage::new(board.clone(), tile_dir, cx));
+        let stage = cx.new(|cx| Stage::new(board.clone(), Media::Tiles.dir(paths), cx));
         let sidebar = cx.new(|cx| Sidebar::new(board.clone(), window, cx));
         let card = cx.new(|cx| Card::new(board.clone(), Media::Videos.dir(paths), window, cx));
-        Self {
-            provider,
-            board,
-            stage,
-            sidebar,
-            card,
-            game: None,
-            live: None,
-            offers: Vec::new(),
-            chosen: 0,
-            sidebar_open: true,
-            docked: false,
-            live_map,
-            focus: cx.focus_handle(),
-            _load: Task::ready(()),
-            _forget: Task::ready(()),
-        }
-    }
-
-    pub fn is_open(&self, cx: &App) -> bool {
-        self.board.read(cx).is_open()
-    }
-
-    pub fn live_map(&self) -> &Entity<LiveMap> {
-        &self.live_map
-    }
-
-    /// The live run the minimap follows, while it is wanted.
-    pub fn set_minimap(&mut self, run: Option<LiveRun>, cx: &mut Context<Self>) {
-        self.live_map.update(cx, |live, cx| live.set_run(run, cx));
+        // The camera lives with the stage.
+        let camera = stage.downgrade();
+        maps.update(cx, |maps, _| maps.set_camera(move |cx| camera.upgrade().and_then(|stage| stage.read(cx).view())));
+        Self { maps, board, stage, sidebar, card, sidebar_open: true, docked: false, focus: cx.focus_handle() }
     }
 
     pub fn set_docked(&mut self, docked: bool, cx: &mut Context<Self>) {
@@ -121,109 +82,29 @@ impl MapView {
         cx.notify();
     }
 
-    pub fn set_run(&mut self, run: Option<Run>, cx: &mut Context<Self>) {
-        self.board.update(cx, |board, cx| board.set_run(run, cx));
-    }
-
-    /// The game a trainer is live in, open map or not.
-    pub fn set_live(&mut self, game: Option<Arc<str>>, cx: &mut Context<Self>) {
-        if self.live != game {
-            self.live = game;
-            self.forget_later(cx);
-        }
-    }
-
-    /// Opens on `offers`, the maps of `game`. The same game keeps its map and the view of it.
+    /// Opens on `offers`, the maps of `game`.
     pub fn show(&mut self, game: &Arc<str>, offers: &[MapOffer], window: &mut Window, cx: &mut Context<Self>) {
-        self._forget = Task::ready(());
         self.stage.update(cx, |stage, cx| stage.take_focus(window, cx));
-        let listed = self.game.as_ref() == Some(game) && self.offers == offers;
-        if !listed {
-            (self.game, self.offers) = (Some(game.clone()), offers.to_vec());
-        }
-        if !listed || self.board.read(cx).unloaded() {
-            self.choose(if listed { self.chosen } else { 0 }, cx);
-        }
-        self.board.update(cx, |board, cx| board.set_open(true, cx));
-        cx.notify();
+        self.maps.update(cx, |maps, cx| maps.open(game, offers, cx));
     }
 
     /// Lets go of what only an open map needs.
     pub fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.is_open(cx) {
+        if !self.maps.read(cx).is_open(cx) {
             return;
         }
-        self.keep_view(cx);
-        self.board.update(cx, |board, cx| {
-            board.save();
-            board.set_open(false, cx);
-        });
+        self.maps.update(cx, |maps, cx| maps.close(cx));
         self.stage.update(cx, |stage, _| stage.hide(window));
         self.card.update(cx, |card, _| card.hide(window));
         self.sidebar.update(cx, |sidebar, _| sidebar.hide(window));
-        self.forget_later(cx);
-        cx.notify();
-    }
-
-    /// A closed map whose game has no live trainer lets go of its pins after a while.
-    fn forget_later(&mut self, cx: &mut Context<Self>) {
-        let kept = self.is_open(cx) || self.live.is_some() && self.live == self.game;
-        if kept || self.board.read(cx).unloaded() {
-            self._forget = Task::ready(());
-            return;
-        }
-        self._forget = cx.spawn(async move |view, cx| {
-            cx.background_executor().timer(KEPT_CLOSED).await;
-            view.update(cx, |view, cx| {
-                // A load on its way would install into the map let go of.
-                view._load = Task::ready(());
-                view.board.update(cx, |board, _| board.forget());
-            })
-            .ok();
-        });
-    }
-
-    // The camera lives with the stage; the board keeps it with the rest of the map's state.
-    fn keep_view(&mut self, cx: &mut Context<Self>) {
-        let view = self.stage.read(cx).view();
-        self.board.update(cx, |board, _| board.saved_mut().view = view);
-    }
-
-    fn choose(&mut self, index: usize, cx: &mut Context<Self>) {
-        // The board saves the map it lets go of.
-        self.keep_view(cx);
-        self.chosen = index;
-        let Some(offer) = self.offers.get(index) else { return };
-        let shared = self.live_map.read(cx).board.read(cx).loaded(&offer.id);
-        self.board.update(cx, |board, cx| board.pending(offer.id.clone(), cx));
-        // The minimap's copy, when it shows this map.
-        if let Some(map) = shared {
-            self._load = Task::ready(());
-            return self.board.update(cx, |board, cx| board.install(map, cx));
-        }
-        let mut snapshots = self.provider.map(offer);
-        let board = self.board.downgrade();
-        self._load = cx.spawn(async move |_, cx| {
-            while let Some(snapshot) = snapshots.next().await {
-                let shown = board.update(cx, |board, cx| match snapshot {
-                    // The minimap shared its copy meanwhile.
-                    Snapshot::Cached(Some(_)) if matches!(board.map, Load::Ready(_)) => {}
-                    Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
-                    // The network is next.
-                    Snapshot::Cached(None) => {}
-                    Snapshot::Fresh(Err(e)) => board.fail(format!("{e:#}"), cx),
-                });
-                if shown.is_err() {
-                    break;
-                }
-            }
-        });
     }
 
     fn toolbar(&self, cx: &Context<Self>) -> impl IntoElement {
         let accent = accent(cx);
+        let maps = self.maps.read(cx);
+        let chosen = maps.chosen();
         let tab = |(index, offer): (usize, &MapOffer)| {
-            let chosen = index == self.chosen;
+            let chosen = index == chosen;
             div()
                 .id(("map-tab", index))
                 .h(px(26.))
@@ -237,8 +118,8 @@ impl MapView {
                 .text_color(rgb(if chosen { TEXT_BRIGHT } else { DIM }))
                 .child(mono(offer.name.to_uppercase(), 11.))
                 .on_click(cx.listener(move |view, _, _, cx| {
-                    if view.chosen != index {
-                        view.choose(index, cx);
+                    if view.maps.read(cx).chosen() != index {
+                        view.maps.update(cx, |maps, cx| maps.choose(index, cx));
                     }
                 }))
         };
@@ -266,7 +147,7 @@ impl MapView {
                     .min_w_0()
                     .gap(px(6.))
                     .overflow_x_scroll()
-                    .children(self.offers.iter().enumerate().map(tab)),
+                    .children(maps.offers().iter().enumerate().map(tab)),
             )
             .when(!self.docked, |bar| {
                 bar.child(icon_button("map-close", Icon::Close, 32., 12.).on_click(cx.listener(|_, _, _, cx| cx.emit(MapEvent::Close))))

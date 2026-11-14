@@ -1,5 +1,5 @@
 //! What Impulse keeps on disk, by kind: sizes, clearing, and the limit on media.
-//! An entity of its own; the Settings RESOURCES tab shows it.
+//! The Settings RESOURCES tab shows it (`ResourcesView`).
 
 mod view;
 
@@ -13,6 +13,8 @@ use client::{
     media::{Media, limit},
     storage::{Paths, Stored},
 };
+
+pub use view::ResourcesView;
 
 const SWEEP_EVERY: Duration = Duration::from_secs(600);
 
@@ -70,8 +72,12 @@ impl Resources {
         });
     }
 
+    pub fn limit(&self) -> Option<u64> {
+        self.kept.limit
+    }
+
     /// Empties the stores `ids` name, then reads the sizes again.
-    fn clear(&mut self, ids: Vec<&'static str>, cx: &mut Context<Self>) {
+    pub fn clear(&mut self, ids: Vec<&'static str>, cx: &mut Context<Self>) {
         let (provider, paths) = (self.provider.clone(), self.paths.clone());
         cx.spawn(async move |view, cx| {
             let mut provided = false;
@@ -98,7 +104,7 @@ impl Resources {
         .detach();
     }
 
-    fn set_limit(&mut self, limit: Option<u64>, cx: &mut Context<Self>) {
+    pub fn set_limit(&mut self, limit: Option<u64>, cx: &mut Context<Self>) {
         self.kept.edit(|kept| kept.limit = limit);
         self.keep_limit(cx);
         cx.notify();

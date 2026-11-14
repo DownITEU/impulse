@@ -1,6 +1,7 @@
 //! The combined page (`docs/design.md`): the installed games, the open game's trainer and its controls.
 //! LAUNCH + ATTACH runs the open game's trainer (`run.rs`); its cheat controls drive the live session.
 
+mod account;
 mod art;
 mod assets;
 mod bindings;
@@ -49,27 +50,27 @@ use gpui_kit::{
     rgb,
 };
 
+use account::Account;
 pub use assets::Assets;
 use bindings::Hotkeys;
 use collections::Editor;
 use docks::Docks;
-use folders::FolderRow;
 use glance::Glance;
 use layer::{Layer, MinimapKey};
 use library::{Library, LibraryEvent};
 use log_view::{LogEvent, LogView};
-use map::{MapEvent, MapView, Minimap};
-use resources::{Resources, ResourcesEvent};
+use map::{MapEvent, MapView, Maps, Minimap};
+use resources::{Resources, ResourcesEvent, ResourcesView};
 pub use root::Root;
 use run::{RunEvent, Runs};
-use settings::{Settings, Tab};
+use settings::{Folders, Settings, Tab};
 use sources::Picker;
 use theme::*;
 use trainer::{Printed, Trainers};
 use widgets::grid;
 
 use client::{Load, library::Game, media::Media, storage::Paths, trainer::Sheet};
-use model::{Account, Provider};
+use model::Provider;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 const SIDEBAR_WIDTH: f32 = 248.;
@@ -110,10 +111,7 @@ enum Flash {
 }
 
 pub struct Page {
-    provider: Arc<dyn Provider>,
-    account: Option<Account>,
-    // No session: the header says so when no account is known.
-    signed_out: bool,
+    account: Entity<Account>,
     library: Entity<Library>,
     trainers: Entity<Trainers>,
     // The open game's cheat list as printed; the cheat list's own until it is a view.
@@ -127,7 +125,9 @@ pub struct Page {
     editor: Option<Editor>,
     settings_open: bool,
     settings_tab: Tab,
-    folders: Vec<FolderRow>,
+    folders: Entity<Folders>,
+    // The folder rows' path fields, one per row of `folders`.
+    folder_fields: Vec<Entity<InputState>>,
     // The window is the overlay over a game: the HUD replaces the page.
     over: bool,
     tray: Option<tray::Tray>,
@@ -146,8 +146,10 @@ pub struct Page {
     flashed: Option<(Flash, Task<()>)>,
     log: Entity<LogView>,
     log_open: bool,
+    maps: Entity<Maps>,
     map: Entity<MapView>,
     resources: Entity<Resources>,
+    resources_view: Entity<ResourcesView>,
     game_filter: Entity<InputState>,
     mod_filter: Entity<InputState>,
 }
@@ -168,6 +170,11 @@ impl Page {
             cx.notify();
         })
         .detach();
+        let folders = cx.new(|cx| Folders::new(provider.clone(), cx));
+        cx.observe(&folders, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&folders, window, Self::folder_shown).detach();
+        let account = cx.new(|cx| Account::new(provider.clone(), cx));
+        cx.observe(&account, |_, _, cx| cx.notify()).detach();
         let library = cx.new(|cx| Library::new(provider.clone(), &paths, settings.clone(), cx));
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
         cx.subscribe_in(&library, window, Self::library_changed).detach();
@@ -186,11 +193,13 @@ impl Page {
             cx.notify();
         })
         .detach();
-        let map = cx.new(|cx| MapView::new(provider.clone(), &paths, window, cx));
+        let maps = cx.new(|cx| Maps::new(provider.clone(), &paths, library.clone(), runs.clone(), cx));
+        let map = cx.new(|cx| MapView::new(maps.clone(), &paths, window, cx));
         cx.subscribe_in(&map, window, |page, _, _: &MapEvent, window, cx| page.close_map(window, cx)).detach();
-        let resources = cx.new(|cx| Resources::new(provider.clone(), &paths, cx));
-        cx.subscribe_in(&resources, window, |page, _, event: &ResourcesEvent, window, cx| match event {
-            ResourcesEvent::Cleared => page.reload(window, cx),
+        let resources = cx.new(|cx| Resources::new(provider, &paths, cx));
+        let resources_view = cx.new(|cx| ResourcesView::new(resources.clone(), cx));
+        cx.subscribe(&resources, |page, _, event: &ResourcesEvent, cx| match event {
+            ResourcesEvent::Cleared => page.reload(cx),
         })
         .detach();
         let mut filter = |placeholder: &'static str| {
@@ -213,7 +222,7 @@ impl Page {
         cx.observe_in(&layer, window, Self::overlay_changed).detach();
         cx.subscribe(&layer, |page, _, _: &MinimapKey, cx| page.minimap_key(cx)).detach();
         let docks = cx.new(|_| Docks::load(&paths, &hud::DOCKS));
-        let live_map = map.read(cx).live_map().clone();
+        let live_map = maps.read(cx).live_map().clone();
         let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), live_map.clone(), &settings, cx));
         if hidden && let Some(hwnd) = hwnd(window) {
             overlay::exclude_from_capture(hwnd, true);
@@ -221,7 +230,7 @@ impl Page {
         let minimap = cx.new(|cx| Minimap::new(live_map.clone(), cx));
         cx.observe_in(&docks, window, |page, _, window, cx| {
             page.sync_map_dock(window, cx);
-            page.sync_minimap(cx);
+            page.dock_minimap(cx);
             page.sync_minimap_dock(window, cx);
             cx.notify();
         })
@@ -236,10 +245,9 @@ impl Page {
         let page = Self {
             hotkeys,
             picker: None,
-            provider,
-            account: None,
-            signed_out: false,
-            folders: Vec::new(),
+            account,
+            folders,
+            folder_fields: Vec::new(),
             library,
             trainers,
             printed: None,
@@ -261,13 +269,14 @@ impl Page {
             flashed: None,
             log,
             log_open: false,
+            maps,
             map,
             resources,
+            resources_view,
             game_filter,
             mod_filter,
         };
-        page.sign_in(window, cx);
-        page.scan_folders(window, cx);
+        page.dock_minimap(cx);
         page
     }
 
@@ -317,7 +326,7 @@ impl Page {
             }
             // The tray's quit waited for the trainer to stop.
             RunEvent::Ended if self.quitting => cx.quit(),
-            RunEvent::Live | RunEvent::Stopping | RunEvent::Ended => self.sync_map(cx),
+            RunEvent::Live | RunEvent::Stopping | RunEvent::Ended => {}
         }
         cx.notify();
     }

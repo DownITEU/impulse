@@ -1,10 +1,10 @@
-//! A Settings row per provider folder: a path field, the provider's ready picks and a folder picker.
+//! A Settings row per provider folder (`Folders`): a path field, the provider's ready picks and a folder picker.
 //! The provider checks and saves every edit; the row shows what it answers.
 
 use std::path::PathBuf;
 
 use gpui_kit::{
-    Context, Div, Entity, PathPromptOptions, SharedString, Stateful, Task, Window,
+    Context, Div, Entity, PathPromptOptions, SharedString, Stateful, Window,
     component::{
         h_flex,
         input::{Input, InputEvent, InputState},
@@ -14,93 +14,38 @@ use gpui_kit::{
     prelude::*,
     px, rgb,
 };
-use model::Folder;
 
 use super::{
     Menu, Page,
     assets::Icon,
     controls::span,
-    settings::label,
+    settings::{Folders, Shown, label},
     theme::*,
     widgets::{icon_button, mono},
 };
 
-pub(super) struct FolderRow {
-    // The provider's last answer; its path is not the field's text once the user edits.
-    folder: Folder,
-    input: Entity<InputState>,
-    // Starting a check drops the previous one, so the newest text wins.
-    check: Task<()>,
-    // A check is out: the provider may still apply it, so a listing must not show another path.
-    checking: bool,
-    // Counts the user's edits: a listing that started before one, or during a check, must not overwrite it.
-    edits: u32,
-}
-
 impl Page {
-    /// Lists the folders: their picks always, their path and status unless the user edited since.
-    pub(super) fn scan_folders(&self, window: &Window, cx: &mut Context<Self>) {
-        let edits: Vec<Option<u32>> = self.folders.iter().map(|row| (!row.checking).then_some(row.edits)).collect();
-        let listing = self.provider.folders();
-        cx.spawn_in(window, async move |page, cx| {
-            let folders = listing.await;
-            page.update_in(cx, |page, window, cx| {
-                for folder in folders {
-                    page.list_folder(folder, &edits, window, cx);
-                }
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    fn list_folder(&mut self, folder: Folder, edits: &[Option<u32>], window: &mut Window, cx: &mut Context<Self>) {
-        let Some(at) = self.folders.iter().position(|row| row.folder.id == folder.id) else {
-            let at = self.folders.len();
+    /// A row's field shows the provider's path; a new row gets its field.
+    pub(super) fn folder_shown(&mut self, folders: &Entity<Folders>, &Shown(at): &Shown, window: &mut Window, cx: &mut Context<Self>) {
+        if at == self.folder_fields.len() {
             let input = cx.new(|cx| InputState::new(window, cx).placeholder("path to the folder"));
             // Only typing emits `Change`; `set_value` does not.
-            cx.subscribe(&input, move |page, _, event: &InputEvent, cx| {
+            cx.subscribe(&input, move |page, input, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
-                    page.check_folder(at, cx);
+                    let text = input.read(cx).value().to_string();
+                    page.folders.update(cx, |folders, cx| folders.set(at, &text, cx));
                 }
             })
             .detach();
-            set_text(&input, folder.path.clone(), window, cx);
-            self.folders.push(FolderRow { folder, input, check: Task::ready(()), checking: false, edits: 0 });
-            return;
-        };
-        let row = &mut self.folders[at];
-        if edits.get(at) == Some(&Some(row.edits)) {
-            set_text(&row.input, folder.path.clone(), window, cx);
-            row.folder = folder;
-        } else {
-            row.folder.choices = folder.choices;
+            self.folder_fields.push(input);
         }
-    }
-
-    /// Resolved off the UI thread: the path may be a slow network share.
-    fn check_folder(&mut self, at: usize, cx: &mut Context<Self>) {
-        let row = &mut self.folders[at];
-        row.edits = row.edits.wrapping_add(1);
-        // "Copy as path" in Explorer wraps the path in quotes.
-        let path = PathBuf::from(row.input.read(cx).value().trim().trim_matches('"'));
-        let checked = self.provider.set_folder(row.folder.id, path);
-        row.checking = true;
-        row.check = cx.spawn(async move |page, cx| {
-            let folder = checked.await;
-            page.update(cx, |page, cx| {
-                let row = &mut page.folders[at];
-                (row.folder, row.checking) = (folder, false);
-                cx.notify();
-            })
-            .ok();
-        });
+        set_text(&self.folder_fields[at], folders.read(cx).get(at).path.clone(), window, cx);
     }
 
     fn pick_folder(&mut self, at: usize, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
-        set_text(&self.folders[at].input, Some(path), window, cx);
-        self.check_folder(at, cx);
+        let text = path.to_string_lossy().into_owned();
+        self.folder_fields[at].update(cx, |input, cx| input.set_value(text.clone(), window, cx));
+        self.folders.update(cx, |folders, cx| folders.set(at, &text, cx));
     }
 
     fn browse_folder(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -123,11 +68,11 @@ impl Page {
     }
 
     pub(super) fn folder_rows(&self, cx: &mut Context<Self>) -> Vec<Div> {
-        (0..self.folders.len()).map(|at| self.folder_row(at, cx)).collect()
+        (0..self.folder_fields.len()).map(|at| self.folder_row(at, cx)).collect()
     }
 
     fn folder_row(&self, at: usize, cx: &mut Context<Self>) -> Div {
-        let FolderRow { folder, input, .. } = &self.folders[at];
+        let (folder, input) = (self.folders.read(cx).get(at), &self.folder_fields[at]);
         let choices: Vec<SharedString> = folder.choices.iter().map(|(label, _)| label.clone().into()).collect();
         let current = folder.choices.iter().position(|(_, path)| Some(path) == folder.selected.as_ref()).unwrap_or(usize::MAX);
         let edge = |button: Stateful<Div>| button.border_l_1().border_color(line(0.14));
@@ -153,8 +98,9 @@ impl Page {
                 page.browse_folder(at, window, cx);
             })));
         let field = self.dropdown(field, Menu::Choices(at), choices, current, span, cx, move |page, pick, window, cx| {
-            if let Some((_, path)) = page.folders[at].folder.choices.get(pick) {
-                page.pick_folder(at, path.clone(), window, cx);
+            let path = page.folders.read(cx).get(at).choices.get(pick).map(|(_, path)| path.clone());
+            if let Some(path) = path {
+                page.pick_folder(at, path, window, cx);
             }
         });
         let status = match &folder.status {
