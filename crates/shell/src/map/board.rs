@@ -1,32 +1,24 @@
 //! The shown map and what the user did with it, shared by the stage, the sidebar and the card.
 //! They observe it; it notifies on what a person does (clicks, typing, the player's position), never per frame.
 
-use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
+use std::{path::PathBuf, rc::Rc, time::Duration};
 
 use client::map::{
     heading::Bearing,
     state::{self, Mark, PALETTE, Saved},
 };
-use gpui_kit::{Context, Entity, EventEmitter, Subscription};
-use model::{Map, Point, Session};
+use gpui_kit::{Context, EventEmitter, Subscription};
+use model::{Map, Point};
 
-use super::{
-    group,
-    tracker::{Fix, Lease, Tracked, Tracker},
+use super::group;
+use crate::{
+    Load,
+    run::{Fix, Lease, Run, Tracked},
 };
-use crate::Load;
 
 // How often the open map wants the player's position, and the minimap, which follows the player.
 const EVERY: Duration = Duration::from_secs(1);
 const LIVE_EVERY: Duration = Duration::from_millis(250);
-
-/// A live run of the shown game, as far as the map uses it.
-pub struct Run {
-    pub session: Arc<dyn Session>,
-    /// When the trainer can tell where the player is.
-    pub tracker: Option<Entity<Tracker>>,
-    pub teleport: bool,
-}
 
 pub enum BoardEvent {
     /// A map went up; `first`: another map than the one shown, not a fresher copy of it; `retiled`: its tiles differ.

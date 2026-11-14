@@ -1,49 +1,15 @@
-//! A run's bookkeeping: its count and time, the mods it leaves on, kept for the next run when the game
-//! says so, and their reset.
+//! The saved bar: whether the mods a run leaves on come back at the next one, and their reset.
 
-use std::mem;
-
-use client::{profile::Values, trainer::Sheet};
-use gpui_kit::{App, Context, IntoElement, component::h_flex, div, prelude::*, px, rgb};
+use client::trainer::Sheet;
+use gpui_kit::{Context, IntoElement, component::h_flex, div, prelude::*, px, rgb};
 
 use super::{
     Page,
-    run::Play,
     theme::*,
     widgets::{button, mono, tip, toggle},
 };
 
 impl Page {
-    /// Sets the live trainer's cheats to `values`, as moving each control would.
-    pub(super) fn apply(&mut self, values: &Values, cx: &mut Context<Self>) {
-        let Some(game) = self.play.live().cloned() else { return };
-        let Some(changes) = self.sheet(&game, cx).map(|sheet| sheet.changes(values)) else { return };
-        for (index, value) in changes {
-            self.trainers.update(cx, |trainers, cx| trainers.set(&game, index, value, cx));
-            self.push_value(index, value, cx);
-        }
-    }
-
-    /// Counts the run that went live and sets the mods kept for it.
-    pub(super) fn open_session(&mut self, cx: &mut Context<Self>) {
-        let Some(game) = self.play.live().cloned() else { return };
-        let kept = self.trainers.update(cx, |trainers, cx| trainers.run_opened(&game, cx));
-        if let Some(values) = kept {
-            self.apply(&values, cx);
-        }
-    }
-
-    /// Keeps the live run's time and what it leaves on, once: a run ends in several ways, and the
-    /// window closing or the app quitting may come after any of them.
-    pub(super) fn close_session(&mut self, cx: &mut App) {
-        let Play::Live { game, since, closed, .. } = &mut self.play else { return };
-        if mem::replace(closed, true) {
-            return;
-        }
-        let (game, secs) = (game.clone(), since.elapsed().as_secs());
-        self.trainers.update(cx, |trainers, cx| trainers.run_closed(&game, secs, cx));
-    }
-
     /// Turns every live mod off; with no run, forgets the kept ones.
     fn reset_mods(&mut self, cx: &mut Context<Self>) {
         let Some(game) = self.selected(cx) else { return };
@@ -51,7 +17,7 @@ impl Page {
             return self.trainers.update(cx, |trainers, cx| trainers.forget_kept(&game, cx));
         }
         if let Some(rest) = self.sheet(&game, cx).map(|sheet| sheet.rest(&sheet.live_values())) {
-            self.apply(&rest, cx);
+            self.runs.update(cx, |runs, cx| runs.apply(&rest, cx));
         }
     }
 

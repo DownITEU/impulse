@@ -178,7 +178,8 @@ impl Page {
         self.over = over;
         self.map.update(cx, |map, cx| map.set_docked(over, cx));
         self.sync_minimap_dock(window, cx);
-        let live = self.play.live().filter(|&live| over && self.selected(cx).as_ref() != Some(live)).cloned();
+        let selected = self.selected(cx);
+        let live = self.runs.read(cx).live().filter(|&live| over && selected.as_ref() != Some(live)).cloned();
         if over {
             // What belongs to the window closes, and the docks show the running game.
             self.menu = None;
@@ -200,7 +201,7 @@ impl Page {
 
     /// Only a live game with a map has a minimap to toggle.
     pub(super) fn minimap_key(&mut self, cx: &mut Context<Self>) {
-        let live = self.play.live().and_then(|live| self.library.read(cx).games().iter().find(|game| game.id == *live));
+        let live = self.runs.read(cx).live().and_then(|live| self.library.read(cx).game(live));
         if live.is_some_and(|game| !game.source.maps.is_empty()) {
             self.docks.update(cx, |docks, cx| docks.toggle(MINIMAP_DOCK, cx));
         }

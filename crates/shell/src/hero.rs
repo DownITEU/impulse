@@ -7,7 +7,7 @@ use gpui_kit::{
 use super::{
     Menu, Page,
     assets::Icon,
-    run::{Play, STOPPING, label},
+    run::{STOPPING, State, label},
     theme::*,
     widgets::{icon, mono, square, tip, tracked},
 };
@@ -109,7 +109,7 @@ impl Page {
                 )
             })
             // A run holds its install.
-            .when(self.play.game() != Some(&game.id) || !self.play.is_active(), |bar| {
+            .when(!self.runs.read(cx).holds(&game.id), |bar| {
                 let (options, current) = Page::source_options(game);
                 let more = icon_button("source", "Game source".into()).child(icon(Icon::More, 15., rgb(MUTED)));
                 let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
@@ -125,13 +125,13 @@ impl Page {
     pub(super) fn run_button(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
         let running = self.is_running(cx);
-        let starting = match &self.play {
-            Play::Busy { game: busy, stage, .. } if *busy == game.id => Some(*stage),
-            _ => None,
+        let runs = self.runs.read(cx);
+        let (starting, stopping) = match runs.state(&game.id) {
+            State::Starting(stage) => (Some(stage), false),
+            state => (None, matches!(state, State::Stopping)),
         };
-        let stopping = matches!(&self.play, Play::Stopping { game: ending, .. } if *ending == game.id);
         // Nothing to run before the cheat list is there, and one run at a time.
-        let launchable = !self.play.is_active() && self.sheet(&game.id, cx).is_some();
+        let launchable = !runs.is_active() && self.sheet(&game.id, cx).is_some();
         h_flex()
             .gap(px(8.))
             .when_some(starting, |bar, stage| bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent)))
@@ -142,7 +142,7 @@ impl Page {
                         .px(px(16.))
                         .border_color(accent)
                         .text_color(accent)
-                        .on_click(cx.listener(|page, _, _, cx| page.stop_run(cx)))
+                        .on_click(cx.listener(|page, _, _, cx| page.runs.update(cx, |runs, cx| runs.stop(cx))))
                         .child(square(9., accent))
                         .child(tracked("STOP", 12.5, 0.14)),
                 )
@@ -160,7 +160,11 @@ impl Page {
                         .text_color(rgb(BG))
                         .font_weight(FontWeight::BOLD)
                         .cursor_pointer()
-                        .on_click(cx.listener(|page, _, window, cx| page.start_run(window, cx)))
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            if let Some(game) = page.selected(cx) {
+                                page.runs.update(cx, |runs, cx| runs.start(game, cx));
+                            }
+                        }))
                         .child(icon(Icon::Play, 13., rgb(BG)))
                         .child(tracked("LAUNCH + ATTACH", 12.5, 0.14))
                         .child(

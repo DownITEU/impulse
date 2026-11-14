@@ -1,6 +1,6 @@
 //! The control at the right of a cheat row, one per cheat kind.
 
-use client::trainer::{Sheet, Span, Step, TOP_TICK};
+use client::trainer::{Sheet, Span, TOP_TICK};
 use gpui_kit::{
     AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful, Window,
     component::{h_flex, input::Input, v_flex},
@@ -19,29 +19,8 @@ use super::{
 };
 
 impl Page {
-    /// A hotkey slot of the live trainer's cheat; a numeric field takes the new value too.
-    pub(super) fn hotkey(&mut self, index: usize, slot: usize, cx: &mut Context<Self>) {
-        let Some(game) = self.play.live().cloned() else { return };
-        match self.sheet(&game, cx).and_then(|sheet| sheet.step(index, slot)) {
-            Some(Step::Press(pressed)) => {
-                self.push_value(index, pressed, cx);
-                if self.selected(cx).as_ref() == Some(&game) {
-                    self.flash(Flash::Cheat(index), cx);
-                }
-            }
-            Some(Step::Set(next)) => {
-                self.trainers.update(cx, |trainers, cx| trainers.set(&game, index, next, cx));
-                self.push_value(index, next, cx);
-            }
-            None => {}
-        }
-    }
-
     fn set_value(&mut self, index: usize, value: f64, cx: &mut Context<Self>) {
-        if let Some(game) = self.selected(cx) {
-            self.trainers.update(cx, |trainers, cx| trainers.set(&game, index, value, cx));
-        }
-        self.push_value(index, value, cx);
+        self.runs.update(cx, |runs, cx| runs.set(index, value, cx));
     }
 
     pub(super) fn control(
@@ -147,17 +126,17 @@ impl Page {
                 // A cheat with a text field takes its value from it; a button cheat sends its own and
                 // keeps no state.
                 let Some(game) = page.selected(cx) else { return };
-                let (typed, fired) = page.sheet(&game, cx).map_or((None, None), |sheet| {
+                let (typed, button) = page.sheet(&game, cx).map_or((None, false), |sheet| {
                     let cheat = &sheet.cheats[index];
                     let input = page.printed.as_ref().and_then(|printed| printed.inputs.get(&index));
                     let typed = input.and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
-                    (typed, (cheat.kind == Kind::Button).then_some(cheat.args.pressed))
+                    (typed, cheat.kind == Kind::Button)
                 });
                 if let Some(value) = typed {
                     page.set_value(index, value, cx);
                 }
-                if let Some(value) = fired {
-                    page.push_value(index, value, cx);
+                if button {
+                    page.runs.update(cx, |runs, cx| runs.press(index, cx));
                 }
                 page.flash(Flash::Cheat(index), cx);
             },

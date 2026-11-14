@@ -15,13 +15,15 @@ use futures::{
     future,
 };
 use gpui_kit::{
-    App, AsyncWindowContext, Context, EventEmitter, Styled, Task, WeakEntity, Window, WindowBackgroundAppearance, base::Root as Surface,
-    transparent_black,
+    App, AsyncWindowContext, Context, Entity, EventEmitter, Styled, Task, WeakEntity, Window, WindowBackgroundAppearance,
+    base::Root as Surface, transparent_black,
 };
 use overlay::{Event, Key, Watch};
 use store::Store;
 
 use client::storage::Paths;
+
+use crate::run::{RunEvent, Runs};
 
 // GPUI switches fullscreen in a task of its own: how often and how long to look for it.
 const TICK: Duration = Duration::from_millis(8);
@@ -36,9 +38,6 @@ enum Mode {
     /// Over `game`, with the input.
     Over { game: isize },
 }
-
-/// The process of the game a trainer runs in.
-type Live = Box<dyn Fn(&App) -> Option<u32>>;
 
 /// What the window is asked to do; one switch runs at a time, in order.
 enum Ask {
@@ -72,12 +71,12 @@ pub(super) struct Layer {
     watch: Option<Watch>,
     // The minimap's hotkey as registered now.
     minimap: Option<Key>,
-    live: Live,
+    runs: WeakEntity<Runs>,
     _switches: Task<()>,
 }
 
 impl Layer {
-    pub fn new(paths: &Paths, live: impl Fn(&App) -> Option<u32> + 'static, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(paths: &Paths, runs: &Entity<Runs>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (asks, asked) = mpsc::unbounded();
         let hwnd = super::hwnd(window);
         let store = Store::load(paths);
@@ -86,6 +85,12 @@ impl Layer {
         cx.observe_window_activation(window, |layer, window, _| {
             if layer.is_over() && !window.is_window_active() {
                 let _ = layer.asks.unbounded_send(Ask::Foreground);
+            }
+        })
+        .detach();
+        cx.subscribe(runs, |layer, _, event: &RunEvent, _| {
+            if !matches!(event, RunEvent::Pressed(_)) {
+                let _ = layer.asks.unbounded_send(Ask::Recheck);
             }
         })
         .detach();
@@ -102,13 +107,14 @@ impl Layer {
             hwnd,
             watch,
             minimap: None,
-            live: Box::new(live),
+            runs: runs.downgrade(),
             _switches: switches,
         }
     }
 
-    pub fn recheck(&self) {
-        let _ = self.asks.unbounded_send(Ask::Recheck);
+    /// The process of the game a trainer is live in.
+    fn live(&self, cx: &App) -> Option<u32> {
+        self.runs.upgrade()?.read(cx).pid()
     }
 
     pub fn is_over(&self) -> bool {
@@ -156,7 +162,7 @@ impl Layer {
     /// Taken from every app, so only while there is a minimap to toggle: the live game in front or under the overlay.
     fn hold_minimap_key(&mut self, cx: &App) {
         let under = match self.mode {
-            Mode::Over { game } => (self.live)(cx).is_some_and(|pid| overlay::owner(game) == pid),
+            Mode::Over { game } => self.live(cx).is_some_and(|pid| overlay::owner(game) == pid),
             Mode::Window { .. } => false,
         };
         let wanted = (matches!(self.playing, Playing::Front(_)) || under).then(|| self.store.minimap()).flatten();
@@ -175,7 +181,7 @@ impl Layer {
     }
 
     fn seen(&mut self, front: Option<isize>, cx: &mut Context<Self>) {
-        let playing = match (self.live)(cx) {
+        let playing = match self.live(cx) {
             None => Playing::Idle,
             // Without the foreground hook the HUD would stay over whatever comes in front next.
             Some(pid) => match front {
@@ -209,7 +215,7 @@ fn watch(key: Key, asks: &mpsc::UnboundedSender<Ask>) -> io::Result<Watch> {
 // The window in front is read here too: a foreground event may be late.
 async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::UnboundedReceiver<Ask>, cx: &mut AsyncWindowContext) -> Result<()> {
     while let Some(ask) = asked.next().await {
-        let (mode, live) = layer.read_with(cx, |layer, cx| (layer.mode, (layer.live)(cx)))?;
+        let (mode, live) = layer.read_with(cx, |layer, cx| (layer.mode, layer.live(cx)))?;
         let front = overlay::foreground();
         match (mode, ask) {
             (_, Ask::Minimap) => layer.update(cx, |_, cx| cx.emit(MinimapKey))?,

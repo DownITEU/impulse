@@ -9,7 +9,6 @@ mod markers;
 mod picture;
 mod sidebar;
 mod stage;
-mod tracker;
 
 use std::{rc::Rc, sync::Arc, time::Duration};
 
@@ -27,19 +26,17 @@ use model::{Group, Map, MapOffer, Pin, Provider, Snapshot};
 use crate::{
     Load,
     assets::Icon,
+    run::Run,
     theme::*,
     widgets::{icon_button, mono},
 };
 use board::Board;
-pub use board::Run;
 use card::Card;
 pub use keys::bind_keys;
 use keys::{CONTEXT, CloseMap, FindPlace};
 pub use live::{LiveMap, LiveRun};
 use sidebar::Sidebar;
 use stage::Stage;
-/// The user's progress on each map.
-pub use tracker::Tracker;
 
 const CARD_WIDTH: f32 = 340.;
 // Between the map's edges and what floats over it.

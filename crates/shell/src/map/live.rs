@@ -10,11 +10,11 @@ use gpui_kit::{App, AsyncApp, Context, Entity, EntityId, Subscription, Task, Wea
 use model::{Map, MapOffer, Provider, Snapshot};
 use serde::{Deserialize, Serialize};
 
-use super::{
-    board::{Board, BoardEvent, Run},
-    tracker::{Tracked, Tracker},
+use super::board::{Board, BoardEvent};
+use crate::{
+    Load,
+    run::{Run, Tracked, Tracker},
 };
-use crate::Load;
 
 // Tile levels above the map's deepest: where the minimap starts and how far the wheel takes it.
 const ZOOM: f64 = 1.;

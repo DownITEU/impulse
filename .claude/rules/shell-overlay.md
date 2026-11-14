@@ -8,7 +8,7 @@ paths:
 The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD view (`hud.rs`).
 
 ## Surface
-- `Layer`: `toggle`, `leave`, `recheck`, `is_over`, `hotkey`, `minimap_hotkey`, setters. Emits `Playing` and `MinimapKey`.
+- `Layer`: `toggle`, `leave`, `is_over`, `hotkey`, `minimap_hotkey`, setters. Emits `Playing` and `MinimapKey`.
 - `Glance`: the HUD minimap window; it observes `Settings` for capture exclusion.
 - `Docks`, `Spec`: floating panels; `DOCKS` and `MINIMAP_DOCK` live in `hud.rs`.
 - `Page::hud`: draws the overlay in place of the page while `over`.
@@ -16,7 +16,7 @@ The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD vie
 ## Rules
 - Hotkey, foreground events, activation loss and UI asks are `Ask`s, run one at a time by the one `switch` task. Win32 calls that move, show, raise, lower or cloak Impulse's own window run there (or in `Glance`'s call task), never inside a GPUI update: they run GPUI's callbacks at once.
 - The window stays cloaked until a frame of the new layout shows (`reveal`: two next-frame callbacks, 500 ms at most).
-- `Playing` is emitted on change only. `Front` needs the foreground hook and is never set while over. Call `recheck` when a run starts or ends.
+- `Playing` is emitted on change only. `Front` needs the foreground hook and is never set while over. It reads the live pid from `Runs` and rechecks on `Live`, `Stopping` and `Ended`.
 - The minimap hotkey is registered only while the live game is in front or under the overlay (`hold_minimap_key`). `set_hotkey` registers the new key before the old watch drops, so a refused key keeps the old one; the old watch takes the minimap key with it, so hold it again.
 - Overlay and minimap keys are rebound through the capture in `bindings` (`Target::Overlay`, `Target::Minimap`), which keeps them apart from trainer chords.
 - `Glance` is a `PopUp` that never takes input: `focus: false`, `show: false`, `pass_through` before the first show. It is placed over the MINIMAP dock's minimap on the game's monitor, hidden (tiles dropped) when the live map is not placed, closed on `Playing::Idle` and on release. It honours `hide_from_capture`.

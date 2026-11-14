@@ -8,7 +8,7 @@ use futures::{StreamExt, channel::mpsc};
 use gpui_kit::{Context, Window};
 use tray::{Event, Menu, Tray};
 
-use super::{Page, hwnd, run::Play};
+use super::{Page, hwnd};
 
 // Quitting waits this long at most for a live trainer to stop.
 const STOP_WAIT: Duration = Duration::from_secs(5);
@@ -36,7 +36,7 @@ impl Page {
     fn tray_event(&mut self, event: Event, hwnd: isize, cx: &mut Context<Self>) {
         match event {
             Event::Open => tray::show(hwnd),
-            Event::Stop => self.stop_run(cx),
+            Event::Stop => self.runs.update(cx, |runs, cx| runs.stop(cx)),
             Event::Overlay => self.layer.read(cx).toggle(),
             Event::Quit => self.quit(hwnd, cx),
         }
@@ -47,13 +47,11 @@ impl Page {
     fn quit(&mut self, hwnd: isize, cx: &mut Context<Self>) {
         // Quitting skips drops: the icon would stay until a hover.
         self.tray = None;
-        if self.play.is_active() {
-            self.stop_run(cx);
-        }
-        if !matches!(self.play, Play::Stopping { .. }) {
+        self.runs.update(cx, |runs, cx| runs.stop(cx));
+        if !self.runs.read(cx).is_stopping() {
             return cx.quit();
         }
-        // `run_stopped` quits.
+        // `run_changed` quits on `Ended`.
         self.quitting = true;
         tray::hide(hwnd);
         cx.spawn(async move |_, cx| {
@@ -66,7 +64,7 @@ impl Page {
     /// `false` keeps the window: hidden in the tray, or back from over a game, where the overlay has the input.
     fn may_close(&mut self, hwnd: isize, cx: &mut Context<Self>) -> bool {
         if self.settings.read(cx).prefs().quit_on_close || self.tray.is_none() {
-            if !self.play.is_active() {
+            if !self.runs.read(cx).is_active() {
                 return true;
             }
             self.quit(hwnd, cx);
@@ -81,11 +79,7 @@ impl Page {
 
     fn sync_tray(&mut self, cx: &mut Context<Self>) {
         let Some(tray) = &self.tray else { return };
-        let playing = self
-            .play
-            .live()
-            .and_then(|id| self.library.read(cx).games().iter().find(|game| game.id == *id))
-            .map(|game| game.name.to_string());
+        let playing = self.runs.read(cx).live().and_then(|id| self.library.read(cx).game(id)).map(|game| game.name.to_string());
         tray.set_menu(Menu { playing, over: self.over });
     }
 }

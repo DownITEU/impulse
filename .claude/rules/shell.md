@@ -13,6 +13,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Page`: the combined page, one `impl Page` block per region file (`header`, `sidebar`, `hero`, `pane`, `cheats`, `controls`, `run`, `boot`, ...).
 - `Library` (`library/`): the game list, the picked executables and the open game; emits `LibraryEvent` (`Listed`, `Opened`, `Switched`).
 - `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`). `Printed` is the cheat list's projection of the open game's sheet.
+- `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`).
 
 ## Rules
 - Colors and fonts come only from `theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
@@ -23,12 +24,13 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Trainers` owns the sheets and the profiles: read them through it, change them with its commands. It never knows the run: a run holds its game's copy with `hold`.
 - Provider streams: the catalog in `Library`, trainers in `Trainers`, sign-in in `boot.rs`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
 - `Trainers` loads the open game's trainer only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
-- `Play::Busy` and `Live` carry the game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
+- A starting or live run carries its game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
+- `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, the page's `run_changed`). It stops a run whose game left the list.
 - `Printed` is made on `Opened` and `Installed` of the open game, re-capped on `Rebound`; a number field follows `Set`. The cheat-list helpers take `&Context<Page>`, so they read the sheet in place.
-- One run at a time: `start_run` refuses while `Play::is_active`. `Stopping` lasts until `Session::stop` returns.
-- A cheat value reaches the trainer only through `push_value`. `close_session` keeps time and mods once per run (`closed` flag), on end, STOP, quit and page release.
-- Every live session goes to `crash::follow`: a UI-thread panic stops it before the process ends.
-- Quit: `quit` drops the tray icon first (quitting skips drops), stops a live trainer, then quits in `run_stopped` or after 5 s. Closing the window follows `quit_on_close`: quit, else hide in the tray.
+- One run at a time: `Runs::start` refuses while `is_active`. `Stopping` lasts until `Session::stop` returns.
+- A cheat value goes one way: `Runs::set`, `step` or `apply` change the live sheet through `Trainers` and send it; they do nothing without a live run. A run's time and mods are kept once (`closed` flag), on end, STOP, quit and release.
+- Every live session is followed by `crash::watch`: a UI-thread panic stops it before the process ends.
+- Quit: `quit` drops the tray icon first (quitting skips drops), stops a live trainer, then quits on `RunEvent::Ended` or after 5 s. Closing the window follows `quit_on_close`: quit, else hide in the tray.
 - A hotkey capture hides keys from every app. It ends on its outcome, a click outside the cap, the window going inactive, another game opening or a run hook arming. `start_capture` calls `cancel_capture` first.
 - A hook handler only forwards to a channel; no GPUI call, no lock.
 - Every header control calls `occlude()`: GPUI picks the window control area by the first hitbox under the cursor.

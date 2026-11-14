@@ -31,7 +31,7 @@ impl Page {
         // The session is asked for again.
         self.signed_out = false;
         // The run keeps what it leaves on first, from the trainers about to go.
-        self.stop_run(cx);
+        self.runs.update(cx, |runs, cx| runs.stop(cx));
         self.trainers.update(cx, |trainers, cx| trainers.clear(cx));
         self.sign_in(window, cx);
         cx.notify();

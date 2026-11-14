@@ -16,7 +16,7 @@ use gpui_kit::{App, Context, Div, Task, Window, prelude::*, rgb};
 use hotkeys::{Binding, Capture, Chord, Fired, Hook, Matcher, Outcome, Step};
 use model::Cheat;
 
-use super::{Page, run::Play, theme::*, widgets::mono};
+use super::{Page, theme::*, widgets::mono};
 
 pub(super) const PRESS_KEYS: &str = "PRESS KEYS";
 
@@ -61,10 +61,6 @@ impl Bindings {
         self.store.game_only()
     }
 
-    pub fn disarm(&mut self) {
-        self.armed = None;
-    }
-
     /// The caller repaints.
     pub fn cancel(&mut self) {
         self.capture = None;
@@ -88,11 +84,10 @@ impl Page {
     /// Hooks the live run's hotkeys, or stops them when no run is live or they are off.
     pub(super) fn arm_hotkeys(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.bindings.armed = None;
-        let Play::Live { game, pid, .. } = &self.play else { return };
+        let (Some(game), Some(pid)) = (self.runs.read(cx).live().cloned(), self.runs.read(cx).pid()) else { return };
         if !self.bindings.enabled() {
             return cx.notify();
         }
-        let (game, pid) = (game.clone(), *pid);
         // A newer hook sees keys first, so it must not get ahead of a capture.
         self.cancel_capture(cx);
         let Some(sheet) = self.sheet(&game, cx) else { return };
@@ -120,9 +115,10 @@ impl Page {
             Ok(hook) => hook,
             Err(e) => return log::warn!("hotkeys are off: {e}"),
         };
-        let task = cx.spawn_in(window, async move |page, cx| {
+        let runs = self.runs.downgrade();
+        let task = cx.spawn_in(window, async move |_, cx| {
             while let Some((index, slot)) = presses.next().await {
-                if page.update(cx, |page, cx| page.hotkey(index, slot, cx)).is_err() {
+                if runs.update(cx, |runs, cx| runs.step(index, slot, cx)).is_err() {
                     break;
                 }
             }
@@ -222,7 +218,7 @@ impl Page {
         }
         let slots = self.bindings.slots(&game, &sheet.cheats);
         self.trainers.update(cx, |trainers, cx| trainers.bind(&game, slots, cx));
-        if self.play.live() == Some(&game) {
+        if self.runs.read(cx).live() == Some(&game) {
             self.arm_hotkeys(window, cx);
         }
     }

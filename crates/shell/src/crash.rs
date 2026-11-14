@@ -8,7 +8,10 @@ use std::{
     time::Duration,
 };
 
+use gpui_kit::{App, Entity};
 use model::Session;
+
+use crate::run::{RunEvent, Runs};
 
 // The process ends after this at most.
 const WAIT: Duration = Duration::from_secs(2);
@@ -31,8 +34,18 @@ pub fn install() {
     }));
 }
 
+/// Follows the runs that go live.
+pub fn watch(runs: &Entity<Runs>, cx: &mut App) {
+    cx.subscribe(runs, |runs, event: &RunEvent, cx| {
+        if let (RunEvent::Live, Some((_, run))) = (event, runs.read(cx).live_run()) {
+            follow(&run.session);
+        }
+    })
+    .detach();
+}
+
 /// The run that went live; an ended one's session has nothing left to stop.
-pub fn follow(session: &Arc<dyn Session>) {
+fn follow(session: &Arc<dyn Session>) {
     if let Ok(mut live) = LIVE.lock() {
         *live = Some(Arc::downgrade(session));
     }

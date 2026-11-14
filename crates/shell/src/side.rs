@@ -14,7 +14,6 @@ use super::{
     assets::Icon,
     hud::MINIMAP_DOCK,
     map,
-    run::Play,
     theme::*,
     widgets::{brackets, grid, icon_button, mono, square, tracked},
 };
@@ -39,17 +38,10 @@ impl Page {
 
     /// Gives the open map the live run of its game, or takes it away; and the minimap its run.
     pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
-        let open = self.map.read(cx).is_open(cx);
-        let run = match &self.play {
-            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected(cx).as_ref() => {
-                self.sheet(game, cx).map(|sheet| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: sheet.teleport })
-            }
-            _ => None,
-        };
-        let live = match &self.play {
-            Play::Live { game, .. } => Some(game.clone()),
-            _ => None,
-        };
+        let (open, selected) = (self.map.read(cx).is_open(cx), self.selected(cx));
+        let runs = self.runs.read(cx);
+        let run = runs.live_run().filter(|(game, _)| open && selected.as_ref() == Some(*game)).map(|(_, run)| run.clone());
+        let live = runs.live().cloned();
         self.map.update(cx, |map, cx| {
             map.set_run(run, cx);
             map.set_live(live, cx);
@@ -60,17 +52,11 @@ impl Page {
     /// The minimap follows a live run whose trainer can place the player, while its dock is shown.
     pub(super) fn sync_minimap(&mut self, cx: &mut Context<Self>) {
         let wanted = self.docks.read(cx).is_shown(MINIMAP_DOCK);
-        let minimap = match &self.play {
-            Play::Live { game, session, tracker: Some(tracker), .. } if wanted => {
-                let offers = self.library.read(cx).games().iter().find(|known| known.id == *game).map(|known| known.source.maps.clone());
-                let teleport = self.sheet(game, cx).is_some_and(|sheet| sheet.teleport);
-                offers.map(|offers| map::LiveRun {
-                    offers,
-                    run: map::Run { session: session.clone(), tracker: Some(tracker.clone()), teleport },
-                })
-            }
-            _ => None,
-        };
+        let live = self.runs.read(cx).live_run().filter(|(_, run)| wanted && run.tracker.is_some());
+        let minimap = live.and_then(|(game, run)| {
+            let offers = self.library.read(cx).game(game)?.source.maps.clone();
+            Some(map::LiveRun { offers, run: run.clone() })
+        });
         self.map.update(cx, |map, cx| map.set_minimap(minimap, cx));
     }
 
@@ -134,7 +120,7 @@ impl Page {
     pub(super) fn session_panel(&self, game: &Game, running: bool, strip: bool, cx: &mut Context<Self>) -> Div {
         let accent = rgb(accent(cx));
         let last = self.trainers.read(cx).profile(&game.id).last;
-        let (title, time) = match self.play.since().filter(|_| running) {
+        let (title, time) = match self.runs.read(cx).since().filter(|_| running) {
             Some(since) => ("SESSION", since.elapsed()),
             None if last > 0 => ("LAST SESSION", Duration::from_secs(last)),
             None => ("SESSION", Duration::ZERO),

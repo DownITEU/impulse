@@ -61,7 +61,7 @@ use log_view::{LogEvent, LogView};
 use map::{MapEvent, MapView, Minimap};
 use resources::{Resources, ResourcesEvent};
 pub use root::Root;
-use run::Play;
+use run::{RunEvent, Runs};
 use settings::{Settings, Tab};
 use sources::Picker;
 use theme::*;
@@ -118,7 +118,7 @@ pub struct Page {
     trainers: Entity<Trainers>,
     // The open game's cheat list as printed; the cheat list's own until it is a view.
     printed: Option<Printed>,
-    play: Play,
+    runs: Entity<Runs>,
     bindings: Bindings,
     // `+ ADD`'s choice of game.
     picker: Option<Picker>,
@@ -174,6 +174,10 @@ impl Page {
         let trainers = cx.new(|cx| Trainers::new(provider.clone(), &paths, library.clone(), cx));
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         cx.subscribe_in(&trainers, window, Self::trainer_changed).detach();
+        let runs = cx.new(|cx| Runs::new(library.clone(), trainers.clone(), cx));
+        cx.observe(&runs, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&runs, window, Self::run_changed).detach();
+        crash::watch(&runs, cx);
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
             if matches!(event, LogEvent::Close) {
@@ -207,8 +211,7 @@ impl Page {
             }
         })
         .detach();
-        let page = cx.weak_entity();
-        let layer = cx.new(|cx| Layer::new(&paths, move |cx| page.upgrade().and_then(|page| page.read(cx).play.pid()), window, cx));
+        let layer = cx.new(|cx| Layer::new(&paths, &runs, window, cx));
         cx.observe_in(&layer, window, Self::overlay_changed).detach();
         cx.subscribe(&layer, |page, _, _: &MinimapKey, cx| page.minimap_key(cx)).detach();
         let docks = cx.new(|_| Docks::load(&paths, &hud::DOCKS));
@@ -226,14 +229,12 @@ impl Page {
         })
         .detach();
         cx.observe_in(&live_map, window, |page, _, window, cx| page.sync_minimap_dock(window, cx)).detach();
-        // A run's time and mods are kept when it ends, and so does closing the window or quitting.
-        cx.on_app_quit(|page, cx| {
-            page.close_session(cx);
+        // Quitting skips drops: the icon would stay until a hover.
+        cx.on_app_quit(|page, _| {
             page.tray = None;
             async {}
         })
         .detach();
-        cx.on_release(|page, cx| page.close_session(cx)).detach();
         let page = Self {
             bindings: Bindings::load(&paths),
             picker: None,
@@ -244,7 +245,7 @@ impl Page {
             library,
             trainers,
             printed: None,
-            play: Play::Idle,
+            runs,
             settings,
             editor: None,
             settings_open: false,
@@ -286,7 +287,7 @@ impl Page {
     }
 
     fn is_running(&self, cx: &App) -> bool {
-        self.play.live().is_some_and(|game| self.library.read(cx).open_id() == Some(game))
+        self.runs.read(cx).live().is_some_and(|game| self.library.read(cx).open_id() == Some(game))
     }
 
     fn select(&self, id: Arc<str>, cx: &mut App) {
@@ -305,13 +306,24 @@ impl Page {
                 // Over a game, its dock opens the new game's map.
                 self.sync_map_dock(window, cx);
             }
-            LibraryEvent::Listed => {
-                let library = self.library.read(cx);
-                if !self.play.game().is_some_and(|game| library.game(game).is_some()) {
-                    self.stop_run(cx);
+            LibraryEvent::Listed | LibraryEvent::Switched => {}
+        }
+        cx.notify();
+    }
+
+    fn run_changed(&mut self, _: &Entity<Runs>, event: &RunEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match event {
+            RunEvent::Pressed(index) => {
+                if self.is_running(cx) {
+                    self.flash(Flash::Cheat(*index), cx);
                 }
             }
-            LibraryEvent::Switched => {}
+            // The tray's quit waited for the trainer to stop.
+            RunEvent::Ended if self.quitting => cx.quit(),
+            RunEvent::Live | RunEvent::Stopping | RunEvent::Ended => {
+                self.sync_map(cx);
+                self.arm_hotkeys(window, cx);
+            }
         }
         cx.notify();
     }

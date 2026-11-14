@@ -151,7 +151,7 @@ impl Page {
         let Some(mods) = trainers.profile(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
         let Some(sheet) = trainers.sheet(&game) else { return };
         let values = if sheet.holds(&mods) { sheet.rest(&mods) } else { mods };
-        self.apply(&values, cx);
+        self.runs.update(cx, |runs, cx| runs.apply(&values, cx));
     }
 
     fn delete_collection(&mut self, at: usize, cx: &mut Context<Self>) {

@@ -5,13 +5,13 @@ paths:
 
 # shell map
 
-The map modal, the minimap and their parts: `MapView`, `Board`, `Stage`, `Sidebar`, `Card`, `LiveMap`, `Tracker`.
+The map modal, the minimap and their parts: `MapView`, `Board`, `Stage`, `Sidebar`, `Card`, `LiveMap`. The `Tracker` and the `Run` they follow are `run`'s.
 
 ## Surface
 - `MapView`: the modal (`show`, `hide`, `set_run`, `set_live`, `set_docked`); emits `MapEvent::Close`.
 - `Minimap`: a mini `Stage` over the live board, one per window; `hide(window)` lets go of its tiles.
-- `LiveMap`, `LiveRun`, `Run`: the live game's map for the minimap and the run it follows.
-- `Tracker`: one per live run whose trainer can place the player; `Page` makes it.
+- `LiveMap`, `LiveRun`: the live game's map for the minimap and the run it follows.
+- `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it.
 - `bind_keys`.
 
 ## Rules

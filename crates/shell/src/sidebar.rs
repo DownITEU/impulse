@@ -149,7 +149,7 @@ impl Page {
                     .text_color(name_color)
                     .child(SharedString::from(&game.name)),
             )
-            .when(Some(&game.id) == self.play.live(), |row| row.child(self.live(cx)))
+            .when(Some(&game.id) == self.runs.read(cx).live(), |row| row.child(self.live(cx)))
             .when(game.support == Support::UpdatePending, |row| row.child(icon(Icon::Warn, 14., rgb(WARN))))
     }
 
