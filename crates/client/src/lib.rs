@@ -9,3 +9,10 @@ pub mod profile;
 pub mod run;
 pub mod storage;
 pub mod trainer;
+
+/// Something that arrives after the window opens.
+pub enum Load<T> {
+    Pending,
+    Ready(T),
+    Failed(String),
+}

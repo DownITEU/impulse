@@ -1,6 +1,6 @@
 //! The control at the right of a cheat row, one per cheat kind.
 
-use client::trainer::{Span, Step, TOP_TICK};
+use client::trainer::{Sheet, Span, Step, TOP_TICK};
 use gpui_kit::{
     AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful, Window,
     component::{h_flex, input::Input, v_flex},
@@ -11,19 +11,18 @@ use gpui_kit::{
 use model::Kind;
 
 use super::{
-    Flash, Load, Menu, Page,
+    Flash, Menu, Page,
     assets::Icon,
-    loaded::{Loaded, number},
     theme::*,
+    trainer::{Printed, number},
     widgets::{button, flash_button, icon, mono, toggle},
 };
 
 impl Page {
     /// A hotkey slot of the live trainer's cheat; a numeric field takes the new value too.
-    pub(super) fn hotkey(&mut self, index: usize, slot: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn hotkey(&mut self, index: usize, slot: usize, cx: &mut Context<Self>) {
         let Some(game) = self.play.live().cloned() else { return };
-        let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
-        match loaded.sheet.step(index, slot) {
+        match self.sheet(&game, cx).and_then(|sheet| sheet.step(index, slot)) {
             Some(Step::Press(pressed)) => {
                 self.push_value(index, pressed, cx);
                 if self.selected(cx).as_ref() == Some(&game) {
@@ -31,25 +30,31 @@ impl Page {
                 }
             }
             Some(Step::Set(next)) => {
-                loaded.put(index, next, window, cx);
+                self.trainers.update(cx, |trainers, cx| trainers.set(&game, index, next, cx));
                 self.push_value(index, next, cx);
-                cx.notify();
             }
             None => {}
         }
     }
 
     fn set_value(&mut self, index: usize, value: f64, cx: &mut Context<Self>) {
-        if let Some(loaded) = self.loaded_mut(cx) {
-            loaded.sheet.values[index] = value;
+        if let Some(game) = self.selected(cx) {
+            self.trainers.update(cx, |trainers, cx| trainers.set(&game, index, value, cx));
         }
         self.push_value(index, value, cx);
-        cx.notify();
     }
 
-    pub(super) fn control(&self, index: usize, loaded: &Loaded, running: bool, live: bool, cx: &mut Context<Self>) -> AnyElement {
-        let cheat = &loaded.sheet.cheats[index];
-        let value = loaded.sheet.values[index];
+    pub(super) fn control(
+        &self,
+        index: usize,
+        sheet: &Sheet,
+        printed: &Printed,
+        running: bool,
+        live: bool,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let cheat = &sheet.cheats[index];
+        let value = sheet.values[index];
         let value_color = if live { rgb(accent(cx)) } else { rgb(DIM) };
         match cheat.kind {
             Kind::Toggle => div()
@@ -72,7 +77,7 @@ impl Page {
             }
             Kind::Number if cheat.args.button => h_flex()
                 .gap(px(8.))
-                .when_some(loaded.inputs.get(&index), |control, input| {
+                .when_some(printed.inputs.get(&index), |control, input| {
                     control.child(
                         value_box("").w(px(72.)).child(
                             Input::new(input)
@@ -92,8 +97,8 @@ impl Page {
                 let nudge = |id: &'static str, label: &'static str, by: f64| {
                     button(label).id((id, index)).w(px(26.)).px_0().font_family(MONO).text_size(px(14.)).on_click(cx.listener(
                         move |page, _, _, cx| {
-                            if running && let Some(loaded) = page.loaded_mut(cx) {
-                                let next = loaded.sheet.cheats[index].args.clamp(value + by);
+                            let game = page.selected(cx).filter(|_| running);
+                            if let Some(next) = game.and_then(|game| Some(page.sheet(&game, cx)?.cheats[index].args.clamp(value + by))) {
                                 page.set_value(index, next, cx);
                             }
                         },
@@ -108,7 +113,7 @@ impl Page {
             }
             Kind::Button => self.press(index, "EXECUTE", "APPLIED", running, cx).px(px(14.)).into_any_element(),
             Kind::Selection => {
-                let options = loaded.rows[index].options.clone();
+                let options = printed.rows[index].options.clone();
                 let current = value as usize;
                 let trigger = value_box(options.get(current).cloned().unwrap_or_default())
                     .id(("select", index))
@@ -133,7 +138,7 @@ impl Page {
     }
 
     /// A button with no state of its own: it confirms the press for a moment.
-    fn press(&self, index: usize, label: &str, done: &str, running: bool, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn press(&self, index: usize, label: &str, done: &str, running: bool, cx: &Context<Self>) -> Stateful<Div> {
         flash_button(label, done, self.is_flashed(Flash::Cheat(index)), cx).id(("press", index)).on_click(cx.listener(
             move |page, _, _, cx| {
                 if !running {
@@ -141,9 +146,11 @@ impl Page {
                 }
                 // A cheat with a text field takes its value from it; a button cheat sends its own and
                 // keeps no state.
-                let (typed, fired) = page.trainer(page.selected(cx).as_ref()).map_or((None, None), |loaded| {
-                    let cheat = &loaded.sheet.cheats[index];
-                    let typed = loaded.inputs.get(&index).and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
+                let Some(game) = page.selected(cx) else { return };
+                let (typed, fired) = page.sheet(&game, cx).map_or((None, None), |sheet| {
+                    let cheat = &sheet.cheats[index];
+                    let input = page.printed.as_ref().and_then(|printed| printed.inputs.get(&index));
+                    let typed = input.and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
                     (typed, (cheat.kind == Kind::Button).then_some(cheat.args.pressed))
                 });
                 if let Some(value) = typed {
@@ -158,7 +165,7 @@ impl Page {
     }
 
     /// Ten ticks: click or drag across them, or use the wheel.
-    fn ticks(&self, index: usize, span: Span, value: f64, running: bool, live: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    fn ticks(&self, index: usize, span: Span, value: f64, running: bool, live: bool, cx: &Context<Self>) -> impl IntoElement {
         let lit = if live { accent(cx) } else { TICK_IDLE };
         let level = span.tick(value);
         h_flex()
@@ -200,7 +207,7 @@ impl Page {
         options: Vec<SharedString>,
         current: usize,
         place: fn(Div) -> Div,
-        cx: &mut Context<Self>,
+        cx: &Context<Self>,
         pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
     ) -> Stateful<Div> {
         trigger
@@ -225,7 +232,7 @@ impl Page {
         &self,
         options: Vec<SharedString>,
         current: usize,
-        cx: &mut Context<Self>,
+        cx: &Context<Self>,
         pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
     ) -> Div {
         let accent = rgb(accent(cx));

@@ -1,6 +1,10 @@
-use client::library::{Game, Support};
+use client::{
+    Load,
+    library::{Game, Support},
+    trainer::Sheet,
+};
 use gpui_kit::{
-    AnyElement, Context, FontWeight, IntoElement, SharedString,
+    AnyElement, Context, Entity, FontWeight, IntoElement, SharedString, Window,
     component::{h_flex, v_flex},
     div,
     prelude::*,
@@ -8,10 +12,10 @@ use gpui_kit::{
 };
 
 use super::{
-    Load, Page,
+    Page,
     assets::Icon,
-    loaded::Loaded,
     theme::*,
+    trainer::{Printed, TrainerEvent, Trainers},
     widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
 };
 
@@ -19,7 +23,7 @@ const PINNED: &str = "PINNED";
 const KEPT: &str = "It is kept on disk after the first download.";
 
 impl Page {
-    pub(super) fn cheats(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn cheats(&self, game: &Game, cx: &Context<Self>) -> impl IntoElement {
         let running = self.is_running(cx);
         let column = v_flex().flex_1().min_w_0().gap(px(12.));
         if game.support == Support::NoTrainer {
@@ -29,8 +33,9 @@ impl Page {
                 "There is no trainer for this game yet. Impulse will flag it in your library as soon as one ships.",
             ));
         }
-        let loaded = match self.trainers.get(&game.id) {
-            Some(Load::Ready(loaded)) => loaded,
+        let trainers = self.trainers.read(cx);
+        let sheet = match trainers.get(&game.id) {
+            Some(Load::Ready(sheet)) => sheet,
             Some(Load::Failed(why)) => {
                 return column.child(notice(
                     "[ NO DATA ]",
@@ -39,23 +44,70 @@ impl Page {
                 ));
             }
             // The disk answers within a frame or two: a card would only flash.
-            None if self.loading.contains(&game.id) => return column,
+            None if trainers.is_loading(&game.id) => return column,
             _ => {
                 return column.child(notice("[ LOADING ]", "LOADING THE CHEAT LIST", KEPT));
             }
         };
+        // Printed as the sheet shows, before a frame draws.
+        let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == game.id) else { return column };
         column
             .when(game.support == Support::UpdatePending, |column| column.child(update_callout()))
             .when(!running, |column| column.child(self.run_note(&game.id, cx)))
-            .child(self.cheat_list(loaded, running, cx))
+            .child(self.cheat_list(sheet, printed, running, cx))
     }
 
-    fn cheat_list(&self, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The open game's cheat list as printed, made anew when another game opens or another copy shows.
+    pub(super) fn print(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let game = self.selected(cx);
+        self.printed = self.trainers.update(cx, |trainers, cx| {
+            let game = game?;
+            Some(Printed::new(game.clone(), trainers.sheet(&game)?, window, cx))
+        });
+    }
+
+    pub(super) fn trainer_changed(
+        &mut self,
+        trainers: &Entity<Trainers>,
+        event: &TrainerEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            TrainerEvent::Installed(game) => {
+                // The user's hotkey choices over the provider's.
+                let slots = trainers.read(cx).sheet(game).map(|sheet| self.bindings.slots(game, &sheet.cheats));
+                if let Some(slots) = slots {
+                    trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
+                }
+                if self.selected(cx).as_ref() == Some(game) {
+                    self.drop_cheat_state();
+                    // Its cap may be gone, and with it the click that ends the capture.
+                    self.bindings.cancel();
+                    self.print(window, cx);
+                }
+            }
+            TrainerEvent::Rebound(game) => {
+                if let Some(printed) = self.printed.as_mut().filter(|printed| printed.game == *game)
+                    && let Some(sheet) = trainers.read(cx).sheet(game)
+                {
+                    printed.recap(sheet);
+                }
+            }
+            TrainerEvent::Set { game, index, value } => {
+                if let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == *game) {
+                    printed.put(*index, *value, window, cx);
+                }
+            }
+        }
+    }
+
+    fn cheat_list(&self, sheet: &Sheet, printed: &Printed, running: bool, cx: &Context<Self>) -> impl IntoElement {
         let query = self.mod_filter.read(cx).value().to_lowercase();
         // Pinned first, then categories in the trainer's own order.
         let mut sections: Vec<(SharedString, Vec<usize>)> = vec![(PINNED.into(), Vec::new())];
-        for (index, row) in loaded.rows.iter().enumerate() {
-            let at = match loaded.sheet.pinned.contains(&index) {
+        for (index, row) in printed.rows.iter().enumerate() {
+            let at = match sheet.pinned.contains(&index) {
                 true => 0,
                 false => {
                     sections.iter().skip(1).position(|(title, _)| *title == row.category).map(|found| found + 1).unwrap_or_else(|| {
@@ -77,18 +129,18 @@ impl Page {
                     number += 1;
                     (number, index)
                 })
-                .filter(|(_, index)| loaded.rows[*index].search.contains(&query))
+                .filter(|(_, index)| printed.rows[*index].search.contains(&query))
                 .collect();
             if cheats.is_empty() {
                 continue;
             }
             shown += cheats.len();
-            let folded = loaded.sheet.folded.contains(&*title);
+            let folded = sheet.folded.contains(&*title);
             let divided = !rows.is_empty();
             rows.push(self.section(at, title, cheats.len(), folded, divided, cx).into_any_element());
             if !folded {
                 rows.extend(
-                    cheats.into_iter().map(|(number, index)| self.cheat_row(number, index, loaded, running, cx).into_any_element()),
+                    cheats.into_iter().map(|(number, index)| self.cheat_row(number, index, sheet, printed, running, cx).into_any_element()),
                 );
             }
         }
@@ -96,7 +148,7 @@ impl Page {
             .border_1()
             .border_color(line(0.09))
             .bg(alpha(BG, 0.78))
-            .child(self.collections_bar(loaded, running, cx))
+            .child(self.collections_bar(sheet, running, cx))
             .child(
                 filter(&self.mod_filter, cx)
                     .h(px(38.))
@@ -106,35 +158,23 @@ impl Page {
                     .border_b_1()
                     .border_color(line(0.09))
                     .child(mono(format!("{shown:02} MODS"), 10.5).flex_none().text_color(rgb(GHOST)))
-                    .child(self.saved_bar(loaded, running, cx)),
+                    .child(self.saved_bar(sheet, running, cx)),
             )
             .children(rows)
             .when(shown == 0, |list| list.child(mono("NO MODS MATCH THE FILTER", 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
     }
 
     fn toggle_fold(&mut self, title: SharedString, cx: &mut Context<Self>) {
-        let Some(game) = self.selected(cx).clone() else { return };
-        let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
-        self.profiles.edit(&game, |profile| loaded.sheet.toggle_fold(&title, profile));
-        cx.notify();
+        let Some(game) = self.selected(cx) else { return };
+        self.trainers.update(cx, |trainers, cx| trainers.toggle_fold(&game, &title, cx));
     }
 
     fn toggle_pin(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(game) = self.selected(cx).clone() else { return };
-        let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
-        self.profiles.edit(&game, |profile| loaded.sheet.toggle_pin(index, profile));
-        cx.notify();
+        let Some(game) = self.selected(cx) else { return };
+        self.trainers.update(cx, |trainers, cx| trainers.toggle_pin(&game, index, cx));
     }
 
-    fn section(
-        &self,
-        at: usize,
-        title: SharedString,
-        count: usize,
-        folded: bool,
-        divided: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn section(&self, at: usize, title: SharedString, count: usize, folded: bool, divided: bool, cx: &Context<Self>) -> impl IntoElement {
         let chevron = if folded { Icon::ChevronRight } else { Icon::ChevronDown };
         h_flex()
             .h(px(36.))
@@ -154,12 +194,20 @@ impl Page {
             )
     }
 
-    fn cheat_row(&self, number: usize, index: usize, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    fn cheat_row(
+        &self,
+        number: usize,
+        index: usize,
+        sheet: &Sheet,
+        printed: &Printed,
+        running: bool,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let lit = accent(cx);
         let accent = rgb(lit);
-        let row = &loaded.rows[index];
-        let live = running && loaded.sheet.is_live(index);
-        let pinned = loaded.sheet.pinned.contains(&index);
+        let row = &printed.rows[index];
+        let live = running && sheet.is_live(index);
+        let pinned = sheet.pinned.contains(&index);
         let name_color = match (live, running) {
             (true, _) => TEXT_BRIGHT,
             (false, true) => TEXT_2,
@@ -230,14 +278,14 @@ impl Page {
                             ),
                     ),
             )
-            .child(self.caps(index, loaded, cx))
+            .child(self.caps(index, sheet, printed, cx))
             .child(
                 h_flex()
-                    .w(px(loaded.control_width))
+                    .w(px(printed.control_width))
                     .flex_none()
                     .gap(px(8.))
                     .opacity(if running { 1. } else { 0.4 })
-                    .child(self.control(index, loaded, running, live, cx)),
+                    .child(self.control(index, sheet, printed, running, live, cx)),
             )
     }
 }

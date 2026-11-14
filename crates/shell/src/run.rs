@@ -12,7 +12,7 @@ use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, Context, Div, Entity, Task, Window, prelude::*, rgb};
 use model::{Event, Live, Process, Session};
 
-use super::{Page, map::Tracker, theme::*, widgets::mono};
+use super::{Page, map::Tracker, theme::*, trainer::Hold, widgets::mono};
 
 pub(super) enum Play {
     Idle,
@@ -20,6 +20,8 @@ pub(super) enum Play {
     Busy {
         game: Arc<str>,
         stage: Stage,
+        // The run's variables come from the shown cheat list.
+        hold: Hold,
         _run: Task<()>,
     },
     Live {
@@ -32,6 +34,7 @@ pub(super) enum Play {
         session: Arc<dyn Session>,
         /// When the trainer can tell where the player is.
         tracker: Option<Entity<Tracker>>,
+        _hold: Hold,
         _events: Task<()>,
         /// Repaints the session clock.
         _clock: Task<()>,
@@ -79,11 +82,6 @@ impl Play {
         }
     }
 
-    /// The run's variables came from its cheat list, so that list must stay as it is.
-    pub fn holds(&self, id: &Arc<str>) -> bool {
-        matches!(self, Self::Busy { game, .. } | Self::Live { game, .. } if game == id)
-    }
-
     /// A run is under way, in place or ending: another cannot start.
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Busy { .. } | Self::Live { .. } | Self::Stopping { .. })
@@ -112,6 +110,7 @@ impl Page {
             Err(e) => return self.fail_run(id, e, cx),
         };
         let game = id.clone();
+        let hold = self.trainers.update(cx, |trainers, cx| trainers.hold(id.clone(), cx));
         let task = cx.spawn_in(window, async move |page, cx| {
             let outcome = {
                 let (progress, mut progress_cx) = (page.clone(), cx.clone());
@@ -122,14 +121,14 @@ impl Page {
             };
             page.update_in(cx, |page, window, cx| page.run_finished(game, outcome, window, cx)).ok();
         });
-        self.play = Play::Busy { game: id, stage: Stage::Preparing, _run: task };
+        self.play = Play::Busy { game: id, stage: Stage::Preparing, hold, _run: task };
         cx.notify();
     }
 
     fn run_request(&self, id: &Arc<str>, cx: &App) -> Result<Request> {
         let game = self.library.read(cx).games().iter().find(|game| game.id == *id).context("the game is not in the library")?;
-        let loaded = self.trainer(Some(id)).context("the cheat list is not loaded")?;
-        Ok(run::request(&game.install, &loaded.sheet.plan))
+        let sheet = self.sheet(id, cx).context("the cheat list is not loaded")?;
+        Ok(run::request(&game.install, &sheet.plan))
     }
 
     fn run_stage(&mut self, stage: Stage, cx: &mut Context<Self>) {
@@ -140,11 +139,12 @@ impl Page {
     }
 
     fn run_finished(&mut self, id: Arc<str>, outcome: Result<(Process, Live)>, window: &mut Window, cx: &mut Context<Self>) {
+        let Play::Busy { hold, .. } = mem::replace(&mut self.play, Play::Idle) else { return };
         let (process, Live { session, events }) = match outcome {
             Ok(attached) => attached,
             Err(e) => return self.fail_run(id, e, cx),
         };
-        self.reset_values(&id);
+        self.reset_values(&id, cx);
         let watcher = cx.spawn(async move |page, cx| {
             watch(events).await;
             page.update(cx, |page, cx| page.run_ended(cx)).ok();
@@ -160,7 +160,7 @@ impl Page {
         log::info!("trainer is live in {id}");
         let session: Arc<dyn Session> = Arc::from(session);
         super::crash::follow(&session);
-        let located = self.trainer(Some(&id)).is_some_and(|loaded| loaded.sheet.location);
+        let located = self.sheet(&id, cx).is_some_and(|sheet| sheet.location);
         let tracker = located.then(|| cx.new(|_| Tracker::new(session.clone())));
         self.play = Play::Live {
             game: id,
@@ -169,10 +169,11 @@ impl Page {
             closed: false,
             session,
             tracker,
+            _hold: hold,
             _events: watcher,
             _clock: clock,
         };
-        self.open_session(window, cx);
+        self.open_session(cx);
         self.sync_map(cx);
         self.layer.read(cx).recheck();
         self.arm_hotkeys(window, cx);
@@ -184,13 +185,12 @@ impl Page {
         if let Play::Live { game, .. } = &self.play {
             log::info!("trainer session ended");
             let game = game.clone();
-            self.close_session();
+            self.close_session(cx);
             self.play = Play::Idle;
             self.sync_map(cx);
             self.layer.read(cx).recheck();
             self.bindings.disarm();
-            self.reset_values(&game);
-            self.install_deferred(cx);
+            self.reset_values(&game, cx);
             cx.notify();
         }
     }
@@ -198,7 +198,6 @@ impl Page {
     fn fail_run(&mut self, id: Arc<str>, error: anyhow::Error, cx: &mut Context<Self>) {
         log::warn!("run failed: {error:#}");
         self.play = Play::Failed { game: id, error: format!("{error:#}") };
-        self.install_deferred(cx);
         cx.notify();
     }
 
@@ -206,10 +205,10 @@ impl Page {
     /// that is done; a starting one is abandoned, which closes its session as it is dropped.
     pub(super) fn stop_run(&mut self, cx: &mut Context<Self>) {
         self.bindings.disarm();
-        self.close_session();
+        self.close_session(cx);
         match mem::replace(&mut self.play, Play::Idle) {
             Play::Live { game, session, .. } => {
-                self.reset_values(&game);
+                self.reset_values(&game, cx);
                 let id = game.clone();
                 let stop = cx.spawn(async move |page, cx| {
                     if let Err(e) = session.stop().await {
@@ -223,13 +222,12 @@ impl Page {
             stopping @ Play::Stopping { .. } => self.play = stopping,
             other => {
                 if let Some(game) = other.game() {
-                    self.reset_values(&game.clone());
+                    self.reset_values(&game.clone(), cx);
                 }
             }
         }
         self.sync_map(cx);
         self.layer.read(cx).recheck();
-        self.install_deferred(cx);
         cx.notify();
     }
 
@@ -243,16 +241,14 @@ impl Page {
         }
     }
 
-    fn reset_values(&mut self, id: &Arc<str>) {
-        if let Some(super::Load::Ready(loaded)) = self.trainers.get_mut(id) {
-            loaded.sheet.reset();
-        }
+    fn reset_values(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.trainers.update(cx, |trainers, cx| trainers.reset(id, cx));
     }
 
     /// Sends a cheat's value to the running trainer.
     pub(super) fn push_value(&self, index: usize, value: f64, cx: &mut Context<Self>) {
         let Play::Live { game, session, .. } = &self.play else { return };
-        let Some(key) = self.trainer(Some(game)).and_then(|loaded| loaded.sheet.cheats[index].key.clone()) else {
+        let Some(key) = self.sheet(game, cx).and_then(|sheet| sheet.cheats[index].key.clone()) else {
             return;
         };
         let session = session.clone();

@@ -18,7 +18,6 @@ mod hero;
 mod hud;
 mod layer;
 mod library;
-mod loaded;
 mod log_view;
 mod map;
 mod pane;
@@ -33,13 +32,10 @@ mod sources;
 mod status;
 mod systray;
 mod theme;
+mod trainer;
 mod widgets;
 
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 use gpui_kit::{
     App, Context, Entity, FocusHandle, IntoElement, Render, Task, Window,
@@ -61,7 +57,6 @@ use folders::FolderRow;
 use glance::Glance;
 use layer::{Layer, MinimapKey};
 use library::{Library, LibraryEvent};
-use loaded::Loaded;
 use log_view::{LogEvent, LogView};
 use map::{MapEvent, MapView, Minimap};
 use resources::{Resources, ResourcesEvent};
@@ -70,9 +65,10 @@ use run::Play;
 use settings::{Settings, Tab};
 use sources::Picker;
 use theme::*;
+use trainer::{Printed, Trainers};
 use widgets::grid;
 
-use client::{library::Game, media::Media, profile::Profiles, storage::Paths};
+use client::{Load, library::Game, media::Media, storage::Paths, trainer::Sheet};
 use model::{Account, Provider};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -94,13 +90,6 @@ fn hwnd(window: &Window) -> Option<isize> {
         Ok(RawWindowHandle::Win32(handle)) => Some(handle.hwnd.get()),
         _ => None,
     }
-}
-
-/// Something that arrives after the window opens.
-enum Load<T> {
-    Pending,
-    Ready(T),
-    Failed(String),
 }
 
 /// The open dropdown.
@@ -126,16 +115,11 @@ pub struct Page {
     // No session: the header says so when no account is known.
     signed_out: bool,
     library: Entity<Library>,
-    // By game id, for the games opened in this run.
-    // `Pending` while a first download runs.
-    trainers: HashMap<Arc<str>, Load<Loaded>>,
-    // Games whose trainer is being read or downloaded right now.
-    loading: HashSet<Arc<str>>,
-    // A newer copy of the running game's trainer: installed when the run ends.
-    deferred: Option<(Arc<str>, Loaded)>,
+    trainers: Entity<Trainers>,
+    // The open game's cheat list as printed; the cheat list's own until it is a view.
+    printed: Option<Printed>,
     play: Play,
     bindings: Bindings,
-    profiles: Profiles,
     // `+ ADD`'s choice of game.
     picker: Option<Picker>,
     settings: Entity<Settings>,
@@ -187,6 +171,9 @@ impl Page {
         let library = cx.new(|cx| Library::new(provider.clone(), &paths, settings.clone(), cx));
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
         cx.subscribe_in(&library, window, Self::library_changed).detach();
+        let trainers = cx.new(|cx| Trainers::new(provider.clone(), &paths, library.clone(), cx));
+        cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&trainers, window, Self::trainer_changed).detach();
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
             if matches!(event, LogEvent::Close) {
@@ -240,25 +227,23 @@ impl Page {
         .detach();
         cx.observe_in(&live_map, window, |page, _, window, cx| page.sync_minimap_dock(window, cx)).detach();
         // A run's time and mods are kept when it ends, and so does closing the window or quitting.
-        cx.on_app_quit(|page, _| {
-            page.close_session();
+        cx.on_app_quit(|page, cx| {
+            page.close_session(cx);
             page.tray = None;
             async {}
         })
         .detach();
-        cx.on_release(|page, _| page.close_session()).detach();
+        cx.on_release(|page, cx| page.close_session(cx)).detach();
         let page = Self {
             bindings: Bindings::load(&paths),
-            profiles: Profiles::load(&paths),
             picker: None,
             provider,
             account: None,
             signed_out: false,
             folders: Vec::new(),
             library,
-            trainers: HashMap::new(),
-            loading: HashSet::new(),
-            deferred: None,
+            trainers,
+            printed: None,
             play: Play::Idle,
             settings,
             editor: None,
@@ -296,19 +281,8 @@ impl Page {
         self.library.read(cx).open_id().cloned()
     }
 
-    fn trainer(&self, id: Option<&Arc<str>>) -> Option<&Loaded> {
-        match self.trainers.get(id?)? {
-            Load::Ready(loaded) => Some(loaded),
-            _ => None,
-        }
-    }
-
-    /// The open game's trainer.
-    fn loaded_mut(&mut self, cx: &App) -> Option<&mut Loaded> {
-        match self.trainers.get_mut(&self.selected(cx)?)? {
-            Load::Ready(loaded) => Some(loaded),
-            _ => None,
-        }
+    fn sheet<'a>(&self, game: &str, cx: &'a App) -> Option<&'a Sheet> {
+        self.trainers.read(cx).sheet(game)
     }
 
     fn is_running(&self, cx: &App) -> bool {
@@ -327,7 +301,7 @@ impl Page {
                 // Another trainer's names: the old filter would hide them.
                 self.mod_filter.update(cx, |filter, cx| filter.set_value("", window, cx));
                 self.drop_cheat_state();
-                self.open_trainer(window, cx);
+                self.print(window, cx);
                 // Over a game, its dock opens the new game's map.
                 self.sync_map_dock(window, cx);
             }
@@ -336,9 +310,8 @@ impl Page {
                 if !self.play.game().is_some_and(|game| library.game(game).is_some()) {
                     self.stop_run(cx);
                 }
-                self.open_trainer(window, cx);
             }
-            LibraryEvent::Switched => self.open_trainer(window, cx),
+            LibraryEvent::Switched => {}
         }
         cx.notify();
     }

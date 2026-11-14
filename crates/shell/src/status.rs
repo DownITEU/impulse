@@ -27,8 +27,7 @@ impl Page {
             .text_color(rgb(DIM))
             .map(|bar| match running {
                 Some(game) => {
-                    let (active, total) =
-                        self.trainer(Some(&game.id)).map_or((0, 0), |loaded| (loaded.sheet.active(), loaded.sheet.cheats.len()));
+                    let (active, total) = self.sheet(&game.id, cx).map_or((0, 0), |sheet| (sheet.active(), sheet.cheats.len()));
                     bar.child(h_flex().gap(px(8.)).child(square(7., accent)).child(mono("LIVE", 11.).text_color(accent)))
                         .child(mono(game.name.clone(), 11.))
                         .child(mono(format!("{active}/{total} ACTIVE"), 11.))

@@ -16,7 +16,7 @@ use gpui_kit::{App, Context, Div, Task, Window, prelude::*, rgb};
 use hotkeys::{Binding, Capture, Chord, Fired, Hook, Matcher, Outcome, Step};
 use model::Cheat;
 
-use super::{Load, Page, run::Play, theme::*, widgets::mono};
+use super::{Page, run::Play, theme::*, widgets::mono};
 
 pub(super) const PRESS_KEYS: &str = "PRESS KEYS";
 
@@ -95,16 +95,16 @@ impl Page {
         let (game, pid) = (game.clone(), *pid);
         // A newer hook sees keys first, so it must not get ahead of a capture.
         self.cancel_capture(cx);
-        let Some(loaded) = self.trainer(Some(&game)) else { return };
+        let Some(sheet) = self.sheet(&game, cx) else { return };
         let mut matcher = Matcher::default();
-        for (index, slots) in loaded.sheet.hotkeys.iter().enumerate() {
+        for (index, slots) in sheet.hotkeys.iter().enumerate() {
             for (slot, chord) in slots.iter().enumerate() {
                 if let Some(chord) = chord {
                     matcher.bind(*chord, Binding { action: (index, slot), block: false });
                 }
             }
         }
-        let mouse = loaded.sheet.hotkeys.iter().flatten().flatten().any(|chord| chord.uses_mouse());
+        let mouse = sheet.hotkeys.iter().flatten().flatten().any(|chord| chord.uses_mouse());
         let (tx, mut presses) = mpsc::unbounded();
         let game_only = self.bindings.game_only();
         let hook = Hook::start(mouse, move |vk, down| {
@@ -122,7 +122,7 @@ impl Page {
         };
         let task = cx.spawn_in(window, async move |page, cx| {
             while let Some((index, slot)) = presses.next().await {
-                if page.update_in(cx, |page, window, cx| page.hotkey(index, slot, window, cx)).is_err() {
+                if page.update(cx, |page, cx| page.hotkey(index, slot, cx)).is_err() {
                     break;
                 }
             }
@@ -145,8 +145,8 @@ impl Page {
 
     /// Starts binding the open trainer's slot.
     fn capture(&mut self, index: usize, slot: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.selected(cx).clone() else { return };
-        let Some(cheat) = self.trainer(Some(&game)).map(|loaded| loaded.sheet.cheats[index].id.clone()) else { return };
+        let Some(game) = self.selected(cx) else { return };
+        let Some(cheat) = self.sheet(&game, cx).map(|sheet| sheet.cheats[index].id.clone()) else { return };
         self.start_capture(Target::Slot { game, cheat, slot }, window, cx);
     }
 
@@ -214,11 +214,14 @@ impl Page {
             Outcome::Bound(chord) => Choice::Bound(chord),
         };
         let (overlay, minimap) = (self.layer.read(cx).hotkey(), self.layer.read(cx).minimap_hotkey());
-        let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
-        let Some(index) = loaded.sheet.cheats.iter().position(|found| found.id == cheat) else { return };
+        let Some(sheet) = self.sheet(&game, cx) else { return };
+        let Some(cheat) = sheet.cheats.iter().find(|found| found.id == cheat) else { return };
         let layer = |chord: Chord| overlay.fired_by(chord.vks()) || minimap.is_some_and(|key| key.fired_by(chord.vks()));
-        let Some(slots) = self.bindings.store.rebind(&game, &loaded.sheet.cheats[index], slot, choice, layer) else { return };
-        loaded.rebind(index, slots);
+        if self.bindings.store.rebind(&game, cheat, slot, choice, layer).is_none() {
+            return;
+        }
+        let slots = self.bindings.slots(&game, &sheet.cheats);
+        self.trainers.update(cx, |trainers, cx| trainers.bind(&game, slots, cx));
         if self.play.live() == Some(&game) {
             self.arm_hotkeys(window, cx);
         }

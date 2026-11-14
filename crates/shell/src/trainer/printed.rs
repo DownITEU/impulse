@@ -1,8 +1,8 @@
-//! A trainer as the page shows it: its sheet, the printed form of its cheats and their text fields.
+//! The open game's trainer as the cheat list prints it: its rows, its number fields and the control column's width.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-use client::trainer::{Sheet, initial};
+use client::trainer::Sheet;
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use model::{Cheat, Chord, Kind};
 
@@ -19,8 +19,9 @@ pub struct Row {
     pub options: Vec<SharedString>,
 }
 
-pub struct Loaded {
-    pub sheet: Sheet,
+pub struct Printed {
+    /// Whose sheet it prints.
+    pub game: Arc<str>,
     pub rows: Vec<Row>,
     /// Text fields of the cheats applied with a button, by cheat index.
     pub inputs: HashMap<usize, Entity<InputState>>,
@@ -28,38 +29,39 @@ pub struct Loaded {
     pub control_width: f32,
 }
 
-impl Loaded {
-    pub fn new(sheet: Sheet, window: &mut Window, cx: &mut App) -> Self {
+impl Printed {
+    pub fn new(game: Arc<str>, sheet: &Sheet, window: &mut Window, cx: &mut App) -> Self {
         let inputs = sheet
             .cheats
             .iter()
             .enumerate()
             .filter(|(_, cheat)| cheat.kind == Kind::Number && cheat.args.button)
-            .map(|(index, cheat)| {
+            .map(|(index, _)| {
                 let input = cx.new(|cx| {
                     InputState::new(window, cx)
                         .validate(|text, _| text.len() <= INPUT_DIGITS && text.bytes().all(|b| b.is_ascii_digit()))
-                        .default_value(number(initial(cheat)))
+                        .default_value(number(sheet.values[index]))
                 });
                 (index, input)
             })
             .collect();
         Self {
+            game,
             rows: sheet.cheats.iter().zip(&sheet.hotkeys).map(|(cheat, slots)| row(cheat, slots)).collect(),
             control_width: sheet.cheats.iter().map(control_width).fold(0., f32::max),
             inputs,
-            sheet,
         }
     }
 
-    pub fn rebind(&mut self, index: usize, slots: Vec<Option<Chord>>) {
-        self.rows[index].keys = caps(self.sheet.cheats[index].kind, &slots);
-        self.sheet.rebind(index, slots);
+    /// The caps after the hotkeys changed.
+    pub fn recap(&mut self, sheet: &Sheet) {
+        for ((row, cheat), slots) in self.rows.iter_mut().zip(&sheet.cheats).zip(&sheet.hotkeys) {
+            row.keys = caps(cheat.kind, slots);
+        }
     }
 
-    /// Sets a cheat's value, and its text field's.
-    pub fn put(&mut self, index: usize, value: f64, window: &mut Window, cx: &mut App) {
-        self.sheet.values[index] = value;
+    /// A cheat's text field follows its value.
+    pub fn put(&self, index: usize, value: f64, window: &mut Window, cx: &mut App) {
         if let Some(input) = self.inputs.get(&index) {
             input.update(cx, |input, cx| input.set_value(number(value), window, cx));
         }

@@ -12,7 +12,8 @@ The app's logic without GPUI: what `shell`'s entities hold and decide, and the f
 - `media`: `Media` (a cache folder per kind), the file per URL, `known_missing`, `steam_hero`; `limit` (`Kept`, `sweep`).
 - `profile`: `Profiles` (`games.json`), `Profile`, `Collection`, `Values`.
 - `bindings`: `Store` (`hotkeys.json`), `Choice`, `rebind` with the "no chord twice" rule.
-- `trainer`: `Sheet`, a trainer as the app holds it, `step` (a hotkey's `Step`), `Span` (a slider), `initial`.
+- `Load`: something that arrives after the window opens.
+- `trainer`: `Sheet`, a trainer as the app holds it, `step` (a hotkey's `Step`), `Span` (a slider), `initial`; `Shelf`, the sheets by game and the holds (a held game's newer copy waits).
 - `library`: `Game`, `Library`, `Support`, `Stamp`, `scan` (launchers joined with the catalog), `Picked` (`picked.json`), `sources` (the source menu).
 - `run`: `request` (a `play::Request` from an install and a plan), `start`, `Stage`, and the bookkeeping `opened`, `closed`.
 - `map`: `state` (the user's state of a map, a file per map) and `heading`.

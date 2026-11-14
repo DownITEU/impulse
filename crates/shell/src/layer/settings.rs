@@ -5,7 +5,7 @@ use hotkeys::{Chord, Outcome};
 use overlay::Key;
 
 use super::super::{
-    Load, Page,
+    Page,
     bindings::{PRESS_KEYS, Target},
     settings::row,
     theme::*,
@@ -74,7 +74,7 @@ impl Page {
             _ => None,
         };
         let minimap = self.layer.read(cx).minimap_hotkey();
-        if let Some(key) = key.filter(|&key| Some(key) != minimap && !self.cheats_hold(key))
+        if let Some(key) = key.filter(|&key| Some(key) != minimap && !self.cheats_hold(key, cx))
             && let Err(e) = self.layer.update(cx, |layer, cx| layer.set_hotkey(key, cx))
         {
             log::warn!("overlay hotkey not changed: {e}");
@@ -91,16 +91,13 @@ impl Page {
             Outcome::Unbound => None,
             Outcome::Cancelled => return,
         };
-        if !key.is_some_and(|key| key == self.layer.read(cx).hotkey() || self.cheats_hold(key)) {
+        if !key.is_some_and(|key| key == self.layer.read(cx).hotkey() || self.cheats_hold(key, cx)) {
             self.layer.update(cx, |layer, cx| layer.set_minimap_hotkey(key, cx));
         }
     }
 
-    fn cheats_hold(&self, key: Key) -> bool {
-        self.trainers.values().any(|load| match load {
-            Load::Ready(loaded) => loaded.sheet.hotkeys.iter().flatten().flatten().any(|bound| key.fired_by(bound.vks())),
-            _ => false,
-        })
+    fn cheats_hold(&self, key: Key, cx: &App) -> bool {
+        self.trainers.read(cx).sheets().any(|sheet| sheet.hotkeys.iter().flatten().flatten().any(|bound| key.fired_by(bound.vks())))
     }
 }
 

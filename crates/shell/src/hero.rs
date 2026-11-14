@@ -65,7 +65,7 @@ impl Page {
     fn actions(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
         let running = self.is_running(cx);
-        let favorite = self.profiles.of(&game.id).favorite;
+        let favorite = self.trainers.read(cx).profile(&game.id).favorite;
         let (id, location) = (game.id.clone(), game.install.location.clone());
         let layer = self.layer.clone();
         h_flex()
@@ -87,8 +87,7 @@ impl Page {
             .child(
                 icon_button("favorite", "Star".into())
                     .on_click(cx.listener(move |page, _, _, cx| {
-                        page.profiles.edit(&id, |profile| profile.favorite = !profile.favorite);
-                        cx.notify();
+                        page.trainers.update(cx, |trainers, cx| trainers.toggle_favorite(&id, cx));
                     }))
                     .child(match favorite {
                         true => icon(Icon::StarFill, 16., accent),
@@ -132,7 +131,7 @@ impl Page {
         };
         let stopping = matches!(&self.play, Play::Stopping { game: ending, .. } if *ending == game.id);
         // Nothing to run before the cheat list is there, and one run at a time.
-        let launchable = !self.play.is_active() && self.trainer(Some(&game.id)).is_some();
+        let launchable = !self.play.is_active() && self.sheet(&game.id, cx).is_some();
         h_flex()
             .gap(px(8.))
             .when_some(starting, |bar, stage| bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent)))
@@ -177,7 +176,7 @@ impl Page {
             Support::NoTrainer => "NO TRAINER".to_owned(),
             // The catalog count, until the trainer itself is there.
             _ => {
-                let count = self.trainer(Some(&game.id)).map_or(game.mods as usize, |loaded| loaded.sheet.cheats.len());
+                let count = self.sheet(&game.id, cx).map_or(game.mods as usize, |sheet| sheet.cheats.len());
                 format!("{count} MODS")
             }
         };
@@ -185,7 +184,7 @@ impl Page {
             Some(version) => format!("V{version}"),
             None => "VERSION UNKNOWN".to_owned(),
         };
-        let profile = self.profiles.of(&game.id);
+        let profile = self.trainers.read(cx).profile(&game.id);
         h_flex()
             .flex_wrap()
             .gap_x(px(10.))

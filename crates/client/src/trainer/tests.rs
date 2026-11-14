@@ -1,6 +1,10 @@
-use model::{Args, Cheat, Kind};
+use std::{sync::Arc, time::Duration};
 
-use super::{Span, Step, TOP_TICK, Values, changes, round_to, step};
+use futures::future::BoxFuture;
+use model::{Args, Attach, Cheat, Kind, Plan, Runner, Trainer};
+
+use super::{Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, step};
+use crate::{Load, profile::Profile};
 
 fn cheat(id: &str, kind: Kind, args: Args) -> Cheat {
     Cheat {
@@ -79,4 +83,57 @@ fn wheel_moves_a_coarse_step() {
     assert_eq!(span.nudge(5., true), 10.);
     assert_eq!(span.nudge(10., true), 10.);
     assert_eq!(span.nudge(5., false), 0.);
+}
+
+struct Idle;
+
+impl Runner for Idle {
+    fn prepare(&self) -> BoxFuture<'_, anyhow::Result<Box<dyn Attach>>> {
+        Box::pin(async { anyhow::bail!("idle") })
+    }
+}
+
+fn sheet(build: u32) -> Sheet {
+    let plan = Plan { image: None, minimum_age: Duration::ZERO, launch: false, runner: Arc::new(Idle) };
+    let cheats = vec![cheat("god", Kind::Toggle, Args::default())];
+    let trainer = Trainer { cheats, pinned: Vec::new(), location: false, teleport: false, plan };
+    Sheet::new(trainer, (None, Some(build)), &Profile::default())
+}
+
+#[test]
+fn a_held_game_shows_its_newer_copy_once_every_hold_is_released() {
+    let mut shelf = Shelf::default();
+    let game: Arc<str> = "g".into();
+    assert!(shelf.put(game.clone(), sheet(1)));
+    shelf.hold(game.clone());
+    shelf.hold(game.clone());
+    assert!(!shelf.put(game.clone(), sheet(2)));
+    assert_eq!(shelf.sheet("g").unwrap().stamp, (None, Some(1)));
+    let pinned = Profile { pinned: Some(["god".to_owned()].into()), ..Profile::default() };
+    let other: Arc<str> = "h".into();
+    shelf.hold(other.clone());
+    assert!(!shelf.put(other.clone(), sheet(3)));
+    assert!(!shelf.release("g", &pinned));
+    assert!(shelf.release("h", &pinned));
+    assert_eq!(shelf.sheet("g").unwrap().stamp, (None, Some(1)));
+    assert!(shelf.release("g", &pinned));
+    let shown = shelf.sheet("g").unwrap();
+    assert!(shown.stamp == (None, Some(2)) && shown.pinned.contains(&0));
+    assert!(!shelf.release("g", &pinned));
+}
+
+#[test]
+fn a_failed_refresh_keeps_a_copy_stale_and_fails_without_one() {
+    let mut shelf = Shelf::default();
+    let game: Arc<str> = "g".into();
+    shelf.put(game.clone(), sheet(1));
+    shelf.hold(game.clone());
+    shelf.put(game.clone(), sheet(2));
+    shelf.failed(game.clone(), "offline".into());
+    assert!(!shelf.is_current("g", &(None, Some(1))));
+    shelf.release("g", &Profile::default());
+    assert!(shelf.sheet("g").is_some_and(|sheet| sheet.stale));
+    shelf.pending("h".into());
+    shelf.failed("h".into(), "offline".into());
+    assert!(matches!(shelf.get("h"), Some(Load::Failed(_))));
 }

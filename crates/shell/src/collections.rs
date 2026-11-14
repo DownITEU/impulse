@@ -3,7 +3,10 @@
 
 use std::sync::Arc;
 
-use client::profile::{Collection, Values};
+use client::{
+    profile::{Collection, Values},
+    trainer::Sheet,
+};
 use gpui_kit::{
     Context, Div, Entity, IntoElement, MouseButton, Stateful, Subscription, Window,
     component::{
@@ -20,7 +23,6 @@ use gpui_kit::{
 use super::{
     Menu, Page,
     assets::Icon,
-    loaded::Loaded,
     theme::*,
     widgets::{button, icon, icon_button, mono, tip},
 };
@@ -60,14 +62,14 @@ pub(super) struct Editor {
 }
 
 impl Page {
-    pub(super) fn collections_bar(&self, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let collections = &self.profiles.of(self.selected(cx).as_deref().unwrap_or_default()).collections;
+    pub(super) fn collections_bar(&self, sheet: &Sheet, running: bool, cx: &Context<Self>) -> impl IntoElement {
+        let collections = &self.trainers.read(cx).profile(self.selected(cx).as_deref().unwrap_or_default()).collections;
         // A new one is made of the mods that are on.
-        let addable = running && loaded.sheet.active() > 0;
+        let addable = running && sheet.active() > 0;
         let chips = collections
             .iter()
             .enumerate()
-            .map(|(at, collection)| self.chip(at, collection, running, running && loaded.sheet.holds(&collection.mods), cx));
+            .map(|(at, collection)| self.chip(at, collection, running, running && sheet.holds(&collection.mods), cx));
         h_flex()
             .h(px(40.))
             .flex_none()
@@ -96,7 +98,7 @@ impl Page {
             )
     }
 
-    fn chip(&self, at: usize, collection: &Collection, running: bool, on: bool, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn chip(&self, at: usize, collection: &Collection, running: bool, on: bool, cx: &Context<Self>) -> Stateful<Div> {
         let color = rgb(match (on, running) {
             (true, _) => accent(cx),
             (false, true) => MUTED,
@@ -119,7 +121,7 @@ impl Page {
             .when(running, |chip| {
                 chip.cursor_pointer()
                     .hover(|style| style.bg(rgb(RAISED_HOVER)))
-                    .on_click(cx.listener(move |page, _, window, cx| page.toggle_collection(at, window, cx)))
+                    .on_click(cx.listener(move |page, _, _, cx| page.toggle_collection(at, cx)))
             })
             .on_mouse_down(
                 MouseButton::Right,
@@ -143,33 +145,28 @@ impl Page {
             })
     }
 
-    fn toggle_collection(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.selected(cx).clone() else { return };
-        let Some(mods) = self.profiles.of(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
-        let Some(loaded) = self.trainer(Some(&game)) else { return };
-        let values = if loaded.sheet.holds(&mods) { loaded.sheet.rest(&mods) } else { mods };
-        self.apply(&values, window, cx);
+    fn toggle_collection(&mut self, at: usize, cx: &mut Context<Self>) {
+        let Some(game) = self.selected(cx) else { return };
+        let trainers = self.trainers.read(cx);
+        let Some(mods) = trainers.profile(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
+        let Some(sheet) = trainers.sheet(&game) else { return };
+        let values = if sheet.holds(&mods) { sheet.rest(&mods) } else { mods };
+        self.apply(&values, cx);
     }
 
     fn delete_collection(&mut self, at: usize, cx: &mut Context<Self>) {
-        let Some(game) = self.selected(cx).clone() else { return };
-        self.profiles.edit(&game, |profile| {
-            if at < profile.collections.len() {
-                profile.collections.remove(at);
-            }
-        });
-        cx.notify();
+        let Some(game) = self.selected(cx) else { return };
+        self.trainers.update(cx, |trainers, cx| trainers.delete_collection(&game, at, cx));
     }
 
     /// Opens the editor on the collection at `at`, or on a new one of the mods that are on.
     fn edit_collection(&mut self, at: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.selected(cx).clone() else { return };
-        let changed = at.and_then(|at| self.profiles.of(&game).collections.get(at));
+        let Some(game) = self.selected(cx) else { return };
+        let trainers = self.trainers.read(cx);
+        let changed = at.and_then(|at| trainers.profile(&game).collections.get(at));
         let (title, key, mods) = match (changed, at) {
             (Some(collection), _) => (collection.name.clone(), listed(&collection.icon).0, collection.mods.clone()),
-            (None, None) => {
-                (String::new(), ICONS[0].0, self.trainer(Some(&game)).map(|loaded| loaded.sheet.live_values()).unwrap_or_default())
-            }
+            (None, None) => (String::new(), ICONS[0].0, trainers.sheet(&game).map(Sheet::live_values).unwrap_or_default()),
             (None, Some(_)) => return,
         };
         if mods.is_empty() {
@@ -197,11 +194,9 @@ impl Page {
         if name.is_empty() {
             return;
         }
-        let (game, at, icon, mods) = (editor.game.clone(), editor.at, editor.icon.to_owned(), editor.mods.clone());
-        self.profiles.edit(&game, |profile| match at.and_then(|at| profile.collections.get_mut(at)) {
-            Some(collection) => (collection.name, collection.icon) = (name, icon),
-            None => profile.collections.push(Collection { name, icon, mods }),
-        });
+        let (game, at) = (editor.game.clone(), editor.at);
+        let collection = Collection { name, icon: editor.icon.to_owned(), mods: editor.mods.clone() };
+        self.trainers.update(cx, |trainers, cx| trainers.keep_collection(&game, at, collection, cx));
         self.close_editor(window, cx);
     }
 

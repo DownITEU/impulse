@@ -41,9 +41,9 @@ impl Page {
     pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
         let open = self.map.read(cx).is_open(cx);
         let run = match &self.play {
-            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected(cx).as_ref() => self
-                .trainer(Some(game))
-                .map(|loaded| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: loaded.sheet.teleport }),
+            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected(cx).as_ref() => {
+                self.sheet(game, cx).map(|sheet| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: sheet.teleport })
+            }
             _ => None,
         };
         let live = match &self.play {
@@ -63,7 +63,7 @@ impl Page {
         let minimap = match &self.play {
             Play::Live { game, session, tracker: Some(tracker), .. } if wanted => {
                 let offers = self.library.read(cx).games().iter().find(|known| known.id == *game).map(|known| known.source.maps.clone());
-                let teleport = self.trainer(Some(game)).is_some_and(|loaded| loaded.sheet.teleport);
+                let teleport = self.sheet(game, cx).is_some_and(|sheet| sheet.teleport);
                 offers.map(|offers| map::LiveRun {
                     offers,
                     run: map::Run { session: session.clone(), tracker: Some(tracker.clone()), teleport },
@@ -133,16 +133,16 @@ impl Page {
     /// `strip`: all of it in one line that wraps.
     pub(super) fn session_panel(&self, game: &Game, running: bool, strip: bool, cx: &mut Context<Self>) -> Div {
         let accent = rgb(accent(cx));
-        let last = self.profiles.of(&game.id).last;
+        let last = self.trainers.read(cx).profile(&game.id).last;
         let (title, time) = match self.play.since().filter(|_| running) {
             Some(since) => ("SESSION", since.elapsed()),
             None if last > 0 => ("LAST SESSION", Duration::from_secs(last)),
             None => ("SESSION", Duration::ZERO),
         };
-        let loaded = self.trainer(Some(&game.id));
-        let total = loaded.map_or(game.mods as usize, |loaded| loaded.sheet.cheats.len());
-        let active = match (running, loaded) {
-            (true, Some(loaded)) => format!("{:02}", loaded.sheet.active()),
+        let sheet = self.sheet(&game.id, cx);
+        let total = sheet.map_or(game.mods as usize, |sheet| sheet.cheats.len());
+        let active = match (running, sheet) {
+            (true, Some(sheet)) => format!("{:02}", sheet.active()),
             _ => "-".to_owned(),
         };
         let active = h_flex()

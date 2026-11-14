@@ -1,9 +1,12 @@
 //! A trainer as the app holds it: the cheats, their values, the pins, the folded sections and the hotkeys in
 //! effect, and how a hotkey steps a value.
 
+mod shelf;
+
 use std::collections::HashSet;
 
 use model::{Args, Cheat, Chord, Kind, Plan, Trainer};
+pub use shelf::Shelf;
 
 use crate::{
     library::Stamp,
@@ -12,7 +15,7 @@ use crate::{
 
 pub struct Sheet {
     pub cheats: Vec<Cheat>,
-    /// By cheat, then slot: the provider's bindings with the user's choices laid over them.
+    /// By cheat, then slot: the provider's bindings, with the user's choices once their owner lays them over.
     pub hotkeys: Vec<Vec<Option<Chord>>>,
     /// What it was asked for; another stamp on the game means it is stale.
     pub stamp: Stamp,
@@ -40,12 +43,13 @@ pub enum Step {
 }
 
 impl Sheet {
-    pub fn new(trainer: Trainer, hotkeys: Vec<Vec<Option<Chord>>>, stamp: Stamp, profile: &Profile) -> Self {
+    pub fn new(trainer: Trainer, stamp: Stamp, profile: &Profile) -> Self {
         let Trainer { cheats, pinned, location, teleport, plan } = trainer;
+        let slots = |cheat: &Cheat| (0..cheat.kind.slots()).map(|slot| cheat.hotkeys.get(slot).copied().flatten()).collect();
         let mut sheet = Self {
             values: cheats.iter().map(initial).collect(),
             pinned: (0..cheats.len()).filter(|&index| pinned.contains(&cheats[index].id)).collect(),
-            hotkeys,
+            hotkeys: cheats.iter().map(slots).collect(),
             cheats,
             stamp,
             stale: false,
@@ -80,10 +84,6 @@ impl Sheet {
             self.folded.insert(title.to_owned());
         }
         profile.folded = self.folded.iter().cloned().collect();
-    }
-
-    pub fn rebind(&mut self, index: usize, slots: Vec<Option<Chord>>) {
-        self.hotkeys[index] = slots;
     }
 
     /// A trainer starts with every cheat at rest.

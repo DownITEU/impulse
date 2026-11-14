@@ -22,7 +22,8 @@ impl Page {
         let query = self.game_filter.read(cx).value().to_lowercase();
         let games = self.library.read(cx).games().to_vec();
         // Favorites first; the numbers follow that order and stay through the filter.
-        let (starred, rest): (Vec<_>, Vec<_>) = games.iter().enumerate().partition(|(_, game)| self.profiles.of(&game.id).favorite);
+        let trainers = self.trainers.read(cx);
+        let (starred, rest): (Vec<_>, Vec<_>) = games.iter().enumerate().partition(|(_, game)| trainers.profile(&game.id).favorite);
         let sectioned = !starred.is_empty();
         let mut number = 0;
         let mut rows = Vec::new();
