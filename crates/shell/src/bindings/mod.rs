@@ -5,11 +5,11 @@ mod caps;
 mod scope;
 mod settings;
 
-use std::sync::Arc;
-
 use client::{
     bindings::{Choice, Store},
+    library::GameId,
     storage::Paths,
+    trainer::Sheet,
 };
 use futures::{
     StreamExt,
@@ -17,7 +17,7 @@ use futures::{
 };
 use gpui_kit::{App, Context, Entity, Task, Window};
 use hotkeys::{Binding, Capture, Fired, Hook, Matcher, Outcome, Step};
-use model::{Cheat, Chord};
+use model::Chord;
 
 use crate::{
     library::{Library, LibraryEvent},
@@ -36,7 +36,7 @@ pub const PRESS_KEYS: &str = "PRESS KEYS";
 pub enum Target {
     // An id, not an index: a newer cheat list may arrive meanwhile.
     Slot {
-        game: Arc<str>,
+        game: GameId,
         cheat: String,
         slot: usize,
     },
@@ -88,7 +88,7 @@ impl Hotkeys {
         cx.subscribe(&trainers, |hotkeys, trainers, event: &TrainerEvent, cx| {
             let TrainerEvent::Installed(game) = event else { return };
             // The user's choices over the provider's.
-            let slots = trainers.read(cx).sheet(game).map(|sheet| hotkeys.slots(game, &sheet.cheats));
+            let slots = trainers.read(cx).sheet(game).map(|sheet| hotkeys.slots(sheet));
             if let Some(slots) = slots {
                 trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
             }
@@ -115,8 +115,8 @@ impl Hotkeys {
     }
 
     /// Each cheat's slots, with the user's choices laid over the provider's.
-    pub fn slots(&self, game: &str, cheats: &[Cheat]) -> Vec<Vec<Option<Chord>>> {
-        cheats.iter().map(|cheat| self.store.slots(game, cheat)).collect()
+    pub fn slots(&self, sheet: &Sheet) -> Vec<Vec<Option<Chord>>> {
+        sheet.cheats.iter().map(|cheat| self.store.slots(&sheet.trainer, cheat)).collect()
     }
 
     pub fn enabled(&self) -> bool {
@@ -136,10 +136,9 @@ impl Hotkeys {
     }
 
     /// What the slot being bound holds so far.
-    pub fn held_slot(&self, game: &str, cheat: &str, slot: usize) -> Option<Option<Chord>> {
+    pub fn held_slot(&self, game: &GameId, cheat: &str, slot: usize) -> Option<Option<Chord>> {
         let capture = self.capture.as_ref()?;
-        let bound =
-            matches!(&capture.target, Target::Slot { game: at, cheat: id, slot: on } if **at == *game && id == cheat && *on == slot);
+        let bound = matches!(&capture.target, Target::Slot { game: at, cheat: id, slot: on } if at == game && id == cheat && *on == slot);
         bound.then_some(capture.held)
     }
 
@@ -204,7 +203,7 @@ impl Hotkeys {
     }
 
     /// Binds a cheat's slot as a capture ended; refused when another slot of it or someone else's hotkey holds the chord.
-    pub fn rebind(&mut self, game: &Arc<str>, cheat: &str, slot: usize, outcome: Outcome, cx: &mut Context<Self>) {
+    pub fn rebind(&mut self, game: &GameId, cheat: &str, slot: usize, outcome: Outcome, cx: &mut Context<Self>) {
         let choice = match outcome {
             Outcome::Cancelled => return,
             Outcome::Reset => Choice::Default,
@@ -214,10 +213,10 @@ impl Hotkeys {
         let app: &App = cx;
         let Some(sheet) = self.trainers.read(app).sheet(game) else { return };
         let Some(cheat) = sheet.cheats.iter().find(|found| found.id == cheat) else { return };
-        if self.store.rebind(game, cheat, slot, choice, |chord| (self.reserved)(chord, app)).is_none() {
+        if self.store.rebind(&sheet.trainer, cheat, slot, choice, |chord| (self.reserved)(chord, app)).is_none() {
             return;
         }
-        let slots = self.slots(game, &sheet.cheats);
+        let slots = self.slots(sheet);
         self.trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
         if self.runs.read(cx).is_live(game) {
             self.arm(cx);

@@ -3,7 +3,7 @@
 
 use std::{rc::Rc, sync::Arc, time::Duration};
 
-use client::{media::Media, storage::Paths};
+use client::{library::GameId, media::Media, storage::Paths};
 use futures::StreamExt;
 use gpui_kit::{App, AppContext, Context, Entity, Task};
 use model::{MapOffer, Provider, Snapshot};
@@ -32,8 +32,8 @@ pub struct Maps {
     board: Entity<Board>,
     live_map: Entity<LiveMap>,
     // The game whose maps are listed, and the one a trainer is live in.
-    game: Option<Arc<str>>,
-    live: Option<Arc<str>>,
+    game: Option<GameId>,
+    live: Option<GameId>,
     offers: Vec<MapOffer>,
     chosen: usize,
     // The minimap's dock is shown.
@@ -97,7 +97,7 @@ impl Maps {
     }
 
     /// Opens on `offers`, the maps of `game`. The same game keeps its map and the view of it.
-    pub(super) fn open(&mut self, game: &Arc<str>, offers: &[MapOffer], cx: &mut Context<Self>) {
+    pub(super) fn open(&mut self, game: &GameId, offers: &[MapOffer], cx: &mut Context<Self>) {
         self._forget = Task::ready(());
         let listed = self.game.as_ref() == Some(game) && self.offers == offers;
         if !listed {
@@ -127,7 +127,7 @@ impl Maps {
         self.chosen = index;
         cx.notify();
         let Some(offer) = self.offers.get(index) else { return };
-        let shared = self.live_map.read(cx).board.read(cx).loaded(&offer.id);
+        let shared = self.live_map.read(cx).board.read(cx).loaded(Some(&offer.id));
         self.board.update(cx, |board, cx| board.pending(offer.id.clone(), cx));
         // The minimap's copy, when it shows this map.
         if let Some(map) = shared {

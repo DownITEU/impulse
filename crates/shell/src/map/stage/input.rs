@@ -128,7 +128,7 @@ impl Stage {
         let saved = self.board.read(cx).saved.clone();
         let region = if over && hit.is_none() && mark.is_none() && saved.regions {
             let at = camera.to_plane(pixel, self.size());
-            map.regions.iter().position(|region| !saved.hidden_regions.contains(&region.name) && inside(at, &region.outline))
+            map.regions.iter().position(|region| !saved.hidden_regions.contains(&region.id) && inside(at, &region.outline))
         } else {
             None
         };

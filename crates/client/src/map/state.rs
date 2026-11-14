@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use model::Map;
+use model::{Map, Ref};
 // Looked up per drawn pin each frame.
 use rustc_hash::FxHashSet as HashSet;
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ pub struct Saved {
     pub found: HashSet<String>,
     /// Group ids.
     pub hidden: HashSet<String>,
-    /// Region names.
+    /// Region ids.
     pub hidden_regions: HashSet<String>,
     pub unfound_only: bool,
     pub teleport_only: bool,
@@ -69,19 +69,24 @@ impl Saved {
     }
 }
 
-/// The copy on disk (blocking).
-pub fn load(dir: &Path, id: &str) -> Option<Saved> {
-    storage::read(&file(dir, id))
+/// The copy on disk, else the v1 one, which `storage::migrate` put under the source that wrote it (blocking).
+pub fn load(dir: &Path, map: &Ref) -> Option<Saved> {
+    storage::read(&file(dir, map)).or_else(|| storage::read(&v1(dir, map)?))
 }
 
 /// Blocking.
-pub fn store(dir: &Path, id: &str, saved: &Saved) {
-    storage::write(&file(dir, id), saved);
+pub fn store(dir: &Path, map: &Ref, saved: &Saved) {
+    storage::write(&file(dir, map), saved);
 }
 
-// Ids come from the provider: only letters and digits reach a file name.
-fn file(dir: &Path, id: &str) -> PathBuf {
-    dir.join(format!("{}.json", id.chars().filter(char::is_ascii_alphanumeric).collect::<String>()))
+fn file(dir: &Path, map: &Ref) -> PathBuf {
+    storage::maps_of(dir, map.source(), false).join(format!("{}.json", storage::name(map.id())))
+}
+
+// v1 named a file by the id's letters and digits only: another id's file could have the same name.
+fn v1(dir: &Path, map: &Ref) -> Option<PathBuf> {
+    let id = map.id();
+    id.bytes().all(|byte| byte.is_ascii_alphanumeric()).then(|| storage::maps_of(dir, map.source(), true).join(format!("{id}.json")))
 }
 
 #[cfg(test)]
@@ -101,13 +106,20 @@ mod tests {
             marks: vec![mark],
             ..Saved::default()
         };
-        store(&dir, "../ab", &saved);
-        let back = load(&dir, "ab").unwrap();
+        let map = |id: &str| Ref::parse(&format!("s:{id}")).unwrap();
+        store(&dir, &map("../aB"), &saved);
+        assert!(load(&dir, &map("../ab")).is_none());
+        let back = load(&dir, &map("../aB")).unwrap();
         assert_eq!((back.found, back.clusters, back.view, back.labels), (saved.found, false, saved.view, true));
         assert_eq!((back.marks[0].name.as_str(), back.marks[0].color), ("Camp", 0xFF0000));
-        fs::write(file(&dir, "old"), br#"{"found":["x"]}"#).unwrap();
-        let old = load(&dir, "old").unwrap();
+        fs::create_dir_all(dir.join("s").join("v1")).unwrap();
+        fs::write(dir.join("s").join("v1").join("OldMap.json"), br#"{"found":["x"]}"#).unwrap();
+        let old = load(&dir, &map("OldMap")).unwrap();
         assert!(old.found.contains("x") && old.clusters && old.regions && old.marks_shown);
+        // v1 kept letters and digits only: the file may be another map's.
+        assert!(load(&dir, &map("Old-Map")).is_none());
+        store(&dir, &map("OldMap"), &Saved::default());
+        assert!(load(&dir, &map("OldMap")).unwrap().found.is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 }

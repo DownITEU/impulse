@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use model::{Game, Installation, Origin, StoreId};
+use model::{Game, Installation, Origin, Ref, StoreId};
 
 pub use custom::{Custom, install, owners};
 pub use start::start;
@@ -54,20 +54,20 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
     for app in apps.into_iter().flatten() {
         let Some(id) = StoreId::parse(&app.store_id) else { continue };
         for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
-            if seen.insert(game.id.as_str()) {
+            if seen.insert(&game.id) {
                 out.push(installation(game, Origin::Launcher(id.clone()), app.location.clone()));
             }
         }
     }
-    let by_id: HashMap<&str, &Game> = games.iter().map(|game| (game.id.as_str(), game)).collect();
-    out.extend(custom.iter().filter_map(|picked| custom::install(by_id.get(picked.game_id.as_str())?, &picked.exe)));
+    let by_id: HashMap<&Ref, &Game> = games.iter().map(|game| (&game.id, game)).collect();
+    out.extend(custom.iter().filter_map(|picked| custom::install(by_id.get(&picked.game)?, &picked.exe)));
     out
 }
 
 /// The build is the PE TimeDateStamp of the game's `exe` in the install.
 fn installation(game: &Game, origin: Origin, location: PathBuf) -> Installation {
     let build = game.exe.as_deref().and_then(|exe| pe::header(&location.join(exe))).map(|header| header.timestamp);
-    Installation { game_id: game.id.clone(), origin, location, build }
+    Installation { game: game.id.clone(), origin, location, build }
 }
 
 /// The launcher's name and the URI of the game's page in it, for the stores that have one.
@@ -92,8 +92,26 @@ fn same_path(a: &Path, b: &Path) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+    use model::SourceId;
+
     use super::*;
+
+    /// A catalog game of source `t`.
+    pub(crate) fn game(id: &str, exe: Option<&str>, store_ids: &[&str]) -> Game {
+        Game {
+            id: Ref::new(&SourceId::new("t").unwrap(), id),
+            title_id: String::new(),
+            name: String::new(),
+            store_ids: store_ids.iter().filter_map(|id| StoreId::parse(id)).collect(),
+            exe: exe.map(str::to_owned),
+            standalone: Vec::new(),
+            cover: None,
+            thumbnail: None,
+            maps: Vec::new(),
+            trainer: None,
+        }
+    }
 
     #[test]
     fn pages_only_for_plain_ids_of_known_launchers() {

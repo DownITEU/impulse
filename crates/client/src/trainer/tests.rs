@@ -1,10 +1,15 @@
-use std::{sync::Arc, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 
 use futures::future::BoxFuture;
-use model::{Args, Attach, Cheat, Kind, Plan, Runner, Trainer};
+use model::{Args, Attach, Cheat, Kind, Plan, Ref, Runner, Trainer};
 
-use super::{Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, step};
-use crate::{Load, profile::Profile};
+use super::{PINNED, Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, step};
+use crate::{
+    Load,
+    library::GameId,
+    profile::{Profiles, TrainerProfile},
+    storage::Paths,
+};
 
 fn cheat(id: &str, kind: Kind, args: Args) -> Cheat {
     Cheat {
@@ -93,47 +98,79 @@ impl Runner for Idle {
     }
 }
 
-fn sheet(build: u32) -> Sheet {
+fn trainer() -> Ref {
+    Ref::parse("s:t").unwrap()
+}
+
+fn game(id: &str) -> GameId {
+    GameId::of(&Ref::parse(&format!("s:{id}")).unwrap())
+}
+
+fn sheet_of(build: u32, profile: &TrainerProfile) -> Sheet {
     let plan = Plan { image: None, minimum_age: Duration::ZERO, launch: false, runner: Arc::new(Idle) };
-    let cheats = vec![cheat("god", Kind::Toggle, Args::default())];
+    let cheats = vec![Cheat { category: "player".into(), ..cheat("god", Kind::Toggle, Args::default()) }];
     let trainer = Trainer { cheats, pinned: Vec::new(), location: false, teleport: false, plan };
-    Sheet::new(trainer, (None, Some(build)), &Profile::default())
+    Sheet::new(trainer, self::trainer(), (None, Some(build)), profile)
+}
+
+fn sheet(build: u32) -> Sheet {
+    sheet_of(build, &TrainerProfile::default())
+}
+
+/// Profiles in a fresh folder, the trainer's pins set when `pinned`.
+fn profiles(name: &str, pinned: bool) -> Profiles {
+    let dir = std::env::temp_dir().join(format!("impulse-shelf-{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let mut profiles = Profiles::load(&Paths::new(dir));
+    if pinned {
+        profiles.edit_trainer(&trainer(), |profile| profile.pinned = Some(["god".to_owned()].into()));
+    }
+    profiles
 }
 
 #[test]
 fn a_held_game_shows_its_newer_copy_once_every_hold_is_released() {
     let mut shelf = Shelf::default();
-    let game: Arc<str> = "g".into();
-    assert!(shelf.put(game.clone(), sheet(1)));
-    shelf.hold(game.clone());
-    shelf.hold(game.clone());
-    assert!(!shelf.put(game.clone(), sheet(2)));
-    assert_eq!(shelf.sheet("g").unwrap().stamp, (None, Some(1)));
-    let pinned = Profile { pinned: Some(["god".to_owned()].into()), ..Profile::default() };
-    let other: Arc<str> = "h".into();
-    shelf.hold(other.clone());
-    assert!(!shelf.put(other.clone(), sheet(3)));
-    assert!(!shelf.release("g", &pinned));
-    assert!(shelf.release("h", &pinned));
-    assert_eq!(shelf.sheet("g").unwrap().stamp, (None, Some(1)));
-    assert!(shelf.release("g", &pinned));
-    let shown = shelf.sheet("g").unwrap();
+    let (g, h) = (game("g"), game("h"));
+    assert!(shelf.put(g.clone(), sheet(1)));
+    shelf.hold(g.clone());
+    shelf.hold(g.clone());
+    assert!(!shelf.put(g.clone(), sheet(2)));
+    assert_eq!(shelf.sheet(&g).unwrap().stamp, (None, Some(1)));
+    let pinned = profiles("held", true);
+    shelf.hold(h.clone());
+    assert!(!shelf.put(h.clone(), sheet(3)));
+    assert!(!shelf.release(&g, &pinned));
+    assert!(shelf.release(&h, &pinned));
+    assert_eq!(shelf.sheet(&g).unwrap().stamp, (None, Some(1)));
+    assert!(shelf.release(&g, &pinned));
+    let shown = shelf.sheet(&g).unwrap();
     assert!(shown.stamp == (None, Some(2)) && shown.pinned.contains(&0));
-    assert!(!shelf.release("g", &pinned));
+    assert!(!shelf.release(&g, &pinned));
 }
 
 #[test]
 fn a_failed_refresh_keeps_a_copy_stale_and_fails_without_one() {
     let mut shelf = Shelf::default();
-    let game: Arc<str> = "g".into();
-    shelf.put(game.clone(), sheet(1));
-    shelf.hold(game.clone());
-    shelf.put(game.clone(), sheet(2));
-    shelf.failed(game.clone(), "offline".into());
-    assert!(!shelf.is_current("g", &(None, Some(1))));
-    shelf.release("g", &Profile::default());
-    assert!(shelf.sheet("g").is_some_and(|sheet| sheet.stale));
-    shelf.pending("h".into());
-    shelf.failed("h".into(), "offline".into());
-    assert!(matches!(shelf.get("h"), Some(Load::Failed(_))));
+    let (g, h) = (game("g"), game("h"));
+    shelf.put(g.clone(), sheet(1));
+    shelf.hold(g.clone());
+    shelf.put(g.clone(), sheet(2));
+    shelf.failed(g.clone(), "offline".into());
+    assert!(!shelf.is_current(&g, &(None, Some(1))));
+    shelf.release(&g, &profiles("stale", false));
+    assert!(shelf.sheet(&g).is_some_and(|sheet| sheet.stale));
+    shelf.pending(h.clone());
+    shelf.failed(h.clone(), "offline".into());
+    assert!(matches!(shelf.get(&h), Some(Load::Failed(_))));
+}
+
+#[test]
+fn a_v1_fold_label_becomes_an_id_and_an_unknown_one_stays() {
+    let mut profile = TrainerProfile { folded_labels: ["PLAYER", "PINNED", "GONE"].map(str::to_owned).into(), ..TrainerProfile::default() };
+    let mut sheet = sheet_of(1, &profile);
+    assert_eq!(sheet.folded, ["player", PINNED].map(str::to_owned).into());
+    sheet.toggle_fold("player", &mut profile);
+    assert_eq!(profile.folded, [PINNED.to_owned()].into());
+    assert_eq!(profile.folded_labels, ["GONE".to_owned()].into());
 }

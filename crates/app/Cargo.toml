@@ -12,6 +12,7 @@ name = "Impulse"
 path = "src/main.rs"
 
 [dependencies]
+client.workspace = true
 journal.workspace = true
 model.workspace = true
 shell.workspace = true

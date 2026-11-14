@@ -3,7 +3,7 @@
 use client::{
     Load,
     library::{Game, Support},
-    trainer::Sheet,
+    trainer::{PINNED as PINNED_ID, Sheet},
 };
 use gpui_kit::{
     AnyElement, Context, Div, FontWeight, IntoElement, SharedString,
@@ -66,23 +66,21 @@ impl CheatList {
     fn cheat_list(&self, game: &Game, sheet: &Sheet, printed: &Printed, running: bool, cx: &Context<Self>) -> impl IntoElement {
         let query = self.filter.read(cx).value().to_lowercase();
         // Pinned first, then categories in the trainer's own order.
-        let mut sections: Vec<(SharedString, Vec<usize>)> = vec![(PINNED.into(), Vec::new())];
+        let mut sections: Vec<(SharedString, SharedString, Vec<usize>)> = vec![(PINNED_ID.into(), PINNED.into(), Vec::new())];
         for (index, row) in printed.rows.iter().enumerate() {
             let at = match sheet.pinned.contains(&index) {
                 true => 0,
-                false => {
-                    sections.iter().skip(1).position(|(title, _)| *title == row.category).map(|found| found + 1).unwrap_or_else(|| {
-                        sections.push((row.category.clone(), Vec::new()));
-                        sections.len() - 1
-                    })
-                }
+                false => sections.iter().skip(1).position(|(id, ..)| *id == row.section).map(|found| found + 1).unwrap_or_else(|| {
+                    sections.push((row.section.clone(), row.category.clone(), Vec::new()));
+                    sections.len() - 1
+                }),
             };
-            sections[at].1.push(index);
+            sections[at].2.push(index);
         }
         let mut number = 0;
         let mut shown = 0;
         let mut rows: Vec<AnyElement> = Vec::new();
-        for (at, (title, cheats)) in sections.into_iter().enumerate() {
+        for (at, (id, title, cheats)) in sections.into_iter().enumerate() {
             // Numbers are assigned before filtering and folding, so they stay stable.
             let cheats: Vec<_> = cheats
                 .into_iter()
@@ -96,9 +94,9 @@ impl CheatList {
                 continue;
             }
             shown += cheats.len();
-            let folded = sheet.folded.contains(&*title);
+            let folded = sheet.folded.contains(id.as_ref());
             let divided = !rows.is_empty();
-            rows.push(self.section(at, title, cheats.len(), folded, divided, cx).into_any_element());
+            rows.push(self.section(at, (id, title), cheats.len(), folded, divided, cx).into_any_element());
             if !folded {
                 rows.extend(
                     cheats.into_iter().map(|(number, index)| self.cheat_row(number, index, sheet, printed, running, cx).into_any_element()),
@@ -125,9 +123,9 @@ impl CheatList {
             .when(shown == 0, |list| list.child(mono("NO MODS MATCH THE FILTER", 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
     }
 
-    fn toggle_fold(&mut self, title: SharedString, cx: &mut Context<Self>) {
+    fn toggle_fold(&mut self, section: &str, cx: &mut Context<Self>) {
         let Some(game) = self.selected(cx) else { return };
-        self.trainers.update(cx, |trainers, cx| trainers.toggle_fold(&game, &title, cx));
+        self.trainers.update(cx, |trainers, cx| trainers.toggle_fold(&game, section, cx));
     }
 
     fn toggle_pin(&mut self, index: usize, cx: &mut Context<Self>) {
@@ -135,7 +133,16 @@ impl CheatList {
         self.trainers.update(cx, |trainers, cx| trainers.toggle_pin(&game, index, cx));
     }
 
-    fn section(&self, at: usize, title: SharedString, count: usize, folded: bool, divided: bool, cx: &Context<Self>) -> impl IntoElement {
+    /// `section`: its id and title.
+    fn section(
+        &self,
+        at: usize,
+        (id, title): (SharedString, SharedString),
+        count: usize,
+        folded: bool,
+        divided: bool,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let chevron = if folded { Icon::ChevronRight } else { Icon::ChevronDown };
         h_flex()
             .h(px(36.))
@@ -149,10 +156,7 @@ impl CheatList {
             .child(tracked(&title, 13., 0.16).font_weight(FontWeight::BOLD))
             .child(mono(format!("{count:02}"), 11.).text_color(rgb(FAINT)))
             .child(div().flex_1())
-            .child(
-                icon_button(("fold", at), chevron, 26., 13.)
-                    .on_click(cx.listener(move |list, _, _, cx| list.toggle_fold(title.clone(), cx))),
-            )
+            .child(icon_button(("fold", at), chevron, 26., 13.).on_click(cx.listener(move |list, _, _, cx| list.toggle_fold(&id, cx))))
     }
 
     fn cheat_row(

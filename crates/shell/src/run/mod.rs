@@ -11,6 +11,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use client::{
+    library::GameId,
     profile::Values,
     run::{self, Request, Stage},
     trainer::Step,
@@ -59,14 +60,14 @@ enum Play {
     Idle,
     /// Dropping the task abandons the run.
     Busy {
-        game: Arc<str>,
+        game: GameId,
         stage: Stage,
         // The run's variables come from the shown cheat list.
         hold: Hold,
         _run: Task<()>,
     },
     Live {
-        game: Arc<str>,
+        game: GameId,
         /// The game's process, for hotkeys that fire only while it is in front.
         pid: u32,
         since: Instant,
@@ -80,12 +81,12 @@ enum Play {
     },
     /// The trainer is being taken down: a new run waits until it is gone.
     Stopping {
-        game: Arc<str>,
+        game: GameId,
         _stop: Task<()>,
     },
     /// Stays until the next run, so the reason is still there when the user looks.
     Failed {
-        game: Arc<str>,
+        game: GameId,
         error: String,
     },
 }
@@ -116,15 +117,15 @@ impl Runs {
         Self { library, trainers, play: Play::Idle }
     }
 
-    pub fn live(&self) -> Option<&Arc<str>> {
+    pub fn live(&self) -> Option<&GameId> {
         self.live_run().map(|(game, _)| game)
     }
 
-    pub fn is_live(&self, game: &str) -> bool {
-        self.live().is_some_and(|live| **live == *game)
+    pub fn is_live(&self, game: &GameId) -> bool {
+        self.live() == Some(game)
     }
 
-    pub fn live_run(&self) -> Option<(&Arc<str>, &Run)> {
+    pub fn live_run(&self) -> Option<(&GameId, &Run)> {
         match &self.play {
             Play::Live { game, run, .. } => Some((game, run)),
             _ => None,
@@ -157,17 +158,17 @@ impl Runs {
     }
 
     /// An active run of `game`: it keeps its install.
-    pub fn holds(&self, game: &str) -> bool {
-        self.is_active() && self.game().is_some_and(|at| **at == *game)
+    pub fn holds(&self, game: &GameId) -> bool {
+        self.is_active() && self.game() == Some(game)
     }
 
     /// Nothing runs before the cheat list is there, and one run at a time.
-    pub fn can_start(&self, game: &str, cx: &App) -> bool {
+    pub fn can_start(&self, game: &GameId, cx: &App) -> bool {
         !self.is_active() && self.trainers.read(cx).sheet(game).is_some()
     }
 
-    pub fn state(&self, game: &str) -> State<'_> {
-        if self.game().is_none_or(|at| **at != *game) {
+    pub fn state(&self, game: &GameId) -> State<'_> {
+        if self.game() != Some(game) {
             return State::Idle;
         }
         match &self.play {
@@ -179,7 +180,7 @@ impl Runs {
         }
     }
 
-    pub fn start(&mut self, game: Arc<str>, cx: &mut Context<Self>) {
+    pub fn start(&mut self, game: GameId, cx: &mut Context<Self>) {
         if self.is_active() {
             return;
         }
@@ -268,14 +269,14 @@ impl Runs {
     }
 
     /// The run's game, whatever its state.
-    fn game(&self) -> Option<&Arc<str>> {
+    fn game(&self) -> Option<&GameId> {
         match &self.play {
             Play::Idle => None,
             Play::Busy { game, .. } | Play::Live { game, .. } | Play::Stopping { game, .. } | Play::Failed { game, .. } => Some(game),
         }
     }
 
-    fn request(&self, game: &str, cx: &App) -> Result<Request> {
+    fn request(&self, game: &GameId, cx: &App) -> Result<Request> {
         let listed = self.library.read(cx).game(game).context("the game is not in the library")?;
         let sheet = self.trainers.read(cx).sheet(game).context("the cheat list is not loaded")?;
         Ok(run::request(&listed.install, &sheet.plan))
@@ -288,7 +289,7 @@ impl Runs {
         }
     }
 
-    fn attached(&mut self, game: Arc<str>, outcome: Result<(Process, Live)>, cx: &mut Context<Self>) {
+    fn attached(&mut self, game: GameId, outcome: Result<(Process, Live)>, cx: &mut Context<Self>) {
         let Play::Busy { hold, .. } = mem::replace(&mut self.play, Play::Idle) else { return };
         let (process, Live { session, events }) = match outcome {
             Ok(attached) => attached,
@@ -340,7 +341,7 @@ impl Runs {
         cx.notify();
     }
 
-    fn fail(&mut self, game: Arc<str>, error: anyhow::Error, cx: &mut Context<Self>) {
+    fn fail(&mut self, game: GameId, error: anyhow::Error, cx: &mut Context<Self>) {
         log::warn!("run failed: {error:#}");
         self.play = Play::Failed { game, error: format!("{error:#}") };
         cx.notify();

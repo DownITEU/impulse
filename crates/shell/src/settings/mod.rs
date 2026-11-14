@@ -8,7 +8,10 @@ mod view;
 use gpui_kit::{App, Context};
 use serde::{Deserialize, Serialize};
 
-use client::storage::{Paths, Stored};
+use client::{
+    library::GameId,
+    storage::{Paths, Stored},
+};
 pub(super) use folders::Folders;
 use folders::Shown;
 pub(super) use view::{Looked, SettingsView, Tabs, label, row};
@@ -44,7 +47,7 @@ pub struct Prefs {
     pub panels: Panels,
     pub reduce_motion: bool,
     /// The game the user opened last.
-    pub game: Option<String>,
+    pub game: Option<GameId>,
     /// Off, the default: the close button hides Impulse in the tray.
     pub quit_on_close: bool,
     /// Screenshots, recordings and streams show no Impulse window.

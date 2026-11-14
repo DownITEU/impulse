@@ -5,15 +5,20 @@ mod shelf;
 
 use std::collections::HashSet;
 
-use model::{Args, Cheat, Chord, Kind, Plan, Trainer};
+use model::{Args, Cheat, Chord, Kind, Plan, Ref, Trainer};
 pub use shelf::Shelf;
 
 use crate::{
     library::Stamp,
-    profile::{Profile, Values},
+    profile::{TrainerProfile, Values},
 };
 
+/// The pinned section's id; the others are their category.
+pub const PINNED: &str = "app:pinned";
+
 pub struct Sheet {
+    /// Its profile's key.
+    pub trainer: Ref,
     pub cheats: Vec<Cheat>,
     /// By cheat, then slot: the provider's bindings, with the user's choices once their owner lays them over.
     pub hotkeys: Vec<Vec<Option<Chord>>>,
@@ -24,7 +29,7 @@ pub struct Sheet {
     /// One per cheat: 0 or 1 for a toggle, the option index for a selection, else the number.
     pub values: Vec<f64>,
     pub pinned: HashSet<usize>,
-    /// Section titles as printed.
+    /// Section ids.
     pub folded: HashSet<String>,
     /// Whether a run tells where the player is, and can move them.
     pub location: bool,
@@ -43,10 +48,11 @@ pub enum Step {
 }
 
 impl Sheet {
-    pub fn new(trainer: Trainer, stamp: Stamp, profile: &Profile) -> Self {
+    pub fn new(trainer: Trainer, id: Ref, stamp: Stamp, profile: &TrainerProfile) -> Self {
         let Trainer { cheats, pinned, location, teleport, plan } = trainer;
         let slots = |cheat: &Cheat| (0..cheat.kind.slots()).map(|slot| cheat.hotkeys.get(slot).copied().flatten()).collect();
         let mut sheet = Self {
+            trainer: id,
             values: cheats.iter().map(initial).collect(),
             pinned: (0..cheats.len()).filter(|&index| pinned.contains(&cheats[index].id)).collect(),
             hotkeys: cheats.iter().map(slots).collect(),
@@ -63,27 +69,38 @@ impl Sheet {
     }
 
     /// The user's pins, once there are any, replace the provider's; the folds are theirs.
-    pub fn restore(&mut self, profile: &Profile) {
+    pub fn restore(&mut self, profile: &TrainerProfile) {
         if let Some(own) = &profile.pinned {
             self.pinned = (0..self.cheats.len()).filter(|&index| own.contains(&self.cheats[index].id)).collect();
         }
-        self.folded = profile.folded.iter().cloned().collect();
+        let labels = profile.folded_labels.iter().filter_map(|label| self.section(label));
+        let folded = profile.folded.iter().cloned().chain(labels).collect();
+        self.folded = folded;
+    }
+
+    /// The section v1 printed as `label`.
+    fn section(&self, label: &str) -> Option<String> {
+        if label == "PINNED" {
+            return Some(PINNED.to_owned());
+        }
+        self.cheats.iter().find(|cheat| cheat.category.to_uppercase() == label).map(|cheat| cheat.category.clone())
     }
 
     /// Pins or unpins a cheat, and keeps the pins in `profile`.
-    pub fn toggle_pin(&mut self, index: usize, profile: &mut Profile) {
+    pub fn toggle_pin(&mut self, index: usize, profile: &mut TrainerProfile) {
         if !self.pinned.remove(&index) {
             self.pinned.insert(index);
         }
         profile.pinned = Some(self.pinned.iter().map(|&index| self.cheats[index].id.clone()).collect());
     }
 
-    /// Folds or unfolds a section, and keeps the folds in `profile`.
-    pub fn toggle_fold(&mut self, title: &str, profile: &mut Profile) {
-        if !self.folded.remove(title) {
-            self.folded.insert(title.to_owned());
+    /// Folds or unfolds a section, and keeps the folds in `profile`; the labels it has are ids now.
+    pub fn toggle_fold(&mut self, section: &str, profile: &mut TrainerProfile) {
+        if !self.folded.remove(section) {
+            self.folded.insert(section.to_owned());
         }
         profile.folded = self.folded.iter().cloned().collect();
+        profile.folded_labels.retain(|label| self.section(label).is_none());
     }
 
     /// A trainer starts with every cheat at rest.

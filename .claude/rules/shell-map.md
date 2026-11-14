@@ -36,4 +36,4 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 - The tracker keeps the heading for the whole run on the leaseholder's `Frame`; a lease with another frame starts it over.
 - Tiles are decoded with a 1 px border: the atlas filters across an image's edge and shows seams otherwise.
 - Closed, a board shows the tracker's last fix, not a live one; its bearing goes stale.
-- Hidden regions are saved by name, hidden groups by id.
+- Hidden regions are saved by `Region::id`, hidden groups by id.

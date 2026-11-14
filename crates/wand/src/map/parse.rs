@@ -249,6 +249,8 @@ pub fn map(raw: &str) -> Result<(model::Map, Vec<Vec<String>>)> {
                 color: color(style.color.as_deref(), GRAY),
                 thickness: style.line_thickness.unwrap_or(1.),
                 zoom: style.zoom(),
+                // Hidden regions are kept by title.
+                id: style.title.clone().unwrap_or_default(),
                 name: style.title.unwrap_or_default(),
             })
         })

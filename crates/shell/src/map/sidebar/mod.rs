@@ -119,13 +119,13 @@ impl Sidebar {
     }
 
     fn regions(&self, map: &Map, board: &Board, cx: &Context<Self>) -> Vec<AnyElement> {
-        // Several outlines can share a name: a region in parts.
+        // Several outlines can share an id: a region in parts.
         let mut seen = HashSet::new();
-        let names: Vec<(&str, u32)> = map
+        let names: Vec<(&str, &str, u32)> = map
             .regions
             .iter()
-            .filter(|region| !region.name.is_empty() && seen.insert(region.name.as_str()))
-            .map(|region| (region.name.as_str(), region.color))
+            .filter(|region| !region.name.is_empty() && seen.insert(region.id.as_str()))
+            .map(|region| (region.id.as_str(), region.name.as_str(), region.color))
             .collect();
         if names.is_empty() {
             return Vec::new();
@@ -138,16 +138,16 @@ impl Sidebar {
             }));
         let mut rows = vec![header.into_any_element()];
         if open {
-            for (index, (name, color)) in names.into_iter().enumerate() {
-                let shown = !board.saved.hidden_regions.contains(name);
+            for (index, (id, name, color)) in names.into_iter().enumerate() {
+                let shown = !board.saved.hidden_regions.contains(id);
                 let row = item(("map-region", index), check(color, shown), name, shown).pl(px(32.));
-                let name = name.to_owned();
+                let id = id.to_owned();
                 let toggle = cx.listener(move |sidebar, _, _, cx| {
                     sidebar.board.update(cx, |board, cx| {
                         board.filter(
                             |saved| {
-                                if !saved.hidden_regions.remove(&name) {
-                                    saved.hidden_regions.insert(name.clone());
+                                if !saved.hidden_regions.remove(&id) {
+                                    saved.hidden_regions.insert(id.clone());
                                 }
                             },
                             cx,

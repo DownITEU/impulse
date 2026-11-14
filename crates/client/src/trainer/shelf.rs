@@ -1,28 +1,32 @@
 //! The sheets by game: which copy shows, and the newer one that waits while a run holds its game.
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use super::Sheet;
-use crate::{Load, library::Stamp, profile::Profile};
+use crate::{
+    Load,
+    library::{GameId, Stamp},
+    profile::Profiles,
+};
 
 #[derive(Default)]
 pub struct Shelf {
-    shown: HashMap<Arc<str>, Load<Sheet>>,
+    shown: HashMap<GameId, Load<Sheet>>,
     /// A run's variables come from the shown list, so it stays while held. A list: a late release never frees a newer hold.
-    held: Vec<Arc<str>>,
-    waiting: HashMap<Arc<str>, Sheet>,
+    held: Vec<GameId>,
+    waiting: HashMap<GameId, Sheet>,
 }
 
 impl Shelf {
-    pub fn get(&self, game: &str) -> Option<&Load<Sheet>> {
+    pub fn get(&self, game: &GameId) -> Option<&Load<Sheet>> {
         self.shown.get(game)
     }
 
-    pub fn sheet(&self, game: &str) -> Option<&Sheet> {
+    pub fn sheet(&self, game: &GameId) -> Option<&Sheet> {
         ready(self.shown.get(game)?)
     }
 
-    pub fn sheet_mut(&mut self, game: &str) -> Option<&mut Sheet> {
+    pub fn sheet_mut(&mut self, game: &GameId) -> Option<&mut Sheet> {
         match self.shown.get_mut(game)? {
             Load::Ready(sheet) => Some(sheet),
             _ => None,
@@ -34,12 +38,12 @@ impl Shelf {
     }
 
     /// A shown copy of `stamp` that needs no refresh.
-    pub fn is_current(&self, game: &str, stamp: &Stamp) -> bool {
+    pub fn is_current(&self, game: &GameId, stamp: &Stamp) -> bool {
         self.sheet(game).is_some_and(|sheet| !sheet.stale && sheet.stamp == *stamp)
     }
 
     /// Shows `sheet` unless a run holds the game: it then waits. `true` when shown.
-    pub fn put(&mut self, game: Arc<str>, sheet: Sheet) -> bool {
+    pub fn put(&mut self, game: GameId, sheet: Sheet) -> bool {
         if self.held.contains(&game) {
             self.waiting.insert(game, sheet);
             return false;
@@ -49,12 +53,12 @@ impl Shelf {
     }
 
     /// No copy on disk: the first download runs.
-    pub fn pending(&mut self, game: Arc<str>) {
+    pub fn pending(&mut self, game: GameId) {
         self.shown.entry(game).or_insert(Load::Pending);
     }
 
     /// A stale copy still beats an error, and the next open asks again.
-    pub fn failed(&mut self, game: Arc<str>, error: String) {
+    pub fn failed(&mut self, game: GameId, error: String) {
         if let Some(sheet) = self.waiting.get_mut(&game) {
             sheet.stale = true;
         }
@@ -66,20 +70,20 @@ impl Shelf {
         }
     }
 
-    pub fn hold(&mut self, game: Arc<str>) {
+    pub fn hold(&mut self, game: GameId) {
         self.held.push(game);
     }
 
     /// One hold less. With none left the waiting copy shows, with the pins and folds set while it waited: `true`.
-    pub fn release(&mut self, game: &str, profile: &Profile) -> bool {
-        if let Some(at) = self.held.iter().position(|held| &**held == game) {
+    pub fn release(&mut self, game: &GameId, profiles: &Profiles) -> bool {
+        if let Some(at) = self.held.iter().position(|held| held == game) {
             self.held.swap_remove(at);
         }
-        if self.held.iter().any(|held| &**held == game) {
+        if self.held.contains(game) {
             return false;
         }
         let Some((game, mut sheet)) = self.waiting.remove_entry(game) else { return false };
-        sheet.restore(profile);
+        sheet.restore(profiles.trainer(&sheet.trainer));
         self.put(game, sheet)
     }
 

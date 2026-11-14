@@ -5,7 +5,7 @@ mod cache;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use model::{Game, Locator, MapOffer, Offer, Standalone, StoreId};
+use model::{Game, Locator, MapOffer, Offer, Ref, SourceId, Standalone, StoreId};
 use serde::Deserialize;
 
 pub use cache::{cached, forget, refresh, size};
@@ -94,13 +94,17 @@ enum LocatorKind {
     Unknown,
 }
 
+/// The source id of every `Ref` Wand mints.
+pub(crate) const SOURCE: &str = "wand";
+
 /// A game whose title is missing is left out.
 fn parse(json: &[u8]) -> Result<Vec<Game>> {
     let Catalog { games, titles, platforms, maps } = serde_json::from_slice(json).context("parse catalog")?;
+    let wand = SourceId::new(SOURCE).context("source id")?;
     let mut maps_of: HashMap<String, Vec<MapOffer>> = HashMap::new();
     for map in maps {
         maps_of.entry(map.title_id).or_default().push(MapOffer {
-            id: map.external_id,
+            id: Ref::new(&wand, &map.external_id),
             name: map.name,
             thumbnail: map.thumbnail.map(|path| format!("{ART_CDN}{path}")),
             revision: map.updated_at,
@@ -124,12 +128,14 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
             cover: art(460),
             thumbnail: art(100),
             maps: maps_of.get(&entry.title_id).cloned().unwrap_or_default(),
+            // Wand keeps one trainer per game, under the game's id.
             trainer: entry.trainer.map(|trainer| Offer {
+                id: Ref::new(&wand, &entry.id),
                 cheats: trainer.cheat_count,
                 builds: trainer.supported_versions,
                 revision: trainer.updated_at,
             }),
-            id: entry.id,
+            id: Ref::new(&wand, &entry.id),
             title_id: entry.title_id,
             store_ids: entry.correlation_ids.iter().filter_map(|id| StoreId::parse(id)).collect(),
             exe: entry.version_path,
@@ -171,11 +177,18 @@ mod tests {
         let [game] = &games[..] else { panic!("one game with a title") };
         assert_eq!((game.name.as_str(), game.exe.as_deref()), ("Game", Some("a.exe")));
         let maps: Vec<_> =
-            game.maps.iter().map(|m| (m.id.as_str(), m.name.as_str(), m.thumbnail.as_deref(), m.revision.as_deref())).collect();
-        assert_eq!(maps, [("x1", "First", Some("https://api-cdn.wemod.com/m/1.webp"), Some("r1")), ("x2", "Second", None, None)]);
+            game.maps.iter().map(|m| (m.id.to_string(), m.name.as_str(), m.thumbnail.as_deref(), m.revision.as_deref())).collect();
+        assert_eq!(game.id.to_string(), "wand:1");
+        assert_eq!(
+            maps,
+            [("wand:x1".into(), "First", Some("https://api-cdn.wemod.com/m/1.webp"), Some("r1")), ("wand:x2".into(), "Second", None, None)]
+        );
         assert_eq!(game.cover.as_deref(), Some("https://api-cdn.wemod.com/t/460.jpg"));
         let offer = game.trainer.as_ref().unwrap();
-        assert_eq!((offer.cheats, &offer.builds[..], offer.revision.as_deref()), (3, &[7][..], Some("u")));
+        assert_eq!(
+            (offer.id.to_string(), offer.cheats, &offer.builds[..], offer.revision.as_deref()),
+            ("wand:1".into(), 3, &[7][..], Some("u"))
+        );
         let standalone: Vec<_> = game.standalone.iter().map(|app| (app.store_id.as_str(), app.locators.len())).collect();
         assert_eq!(standalone, [("standalone:app", 1), ("standalone:other", 0)]);
     }

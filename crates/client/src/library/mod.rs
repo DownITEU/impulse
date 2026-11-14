@@ -1,5 +1,6 @@
 //! The game list: every installed game with what the app shows about it.
 
+mod id;
 mod picked;
 pub mod sources;
 
@@ -10,8 +11,9 @@ use std::{
     sync::Arc,
 };
 
-use model::{Installation, Origin, StoreId};
+use model::{Installation, Origin, Ref, StoreId};
 
+pub use id::GameId;
 pub use picked::Picked;
 
 use crate::media;
@@ -31,7 +33,7 @@ pub type Stamp = (Option<String>, Option<u32>);
 
 #[derive(Clone)]
 pub struct Game {
-    pub id: Arc<str>,
+    pub id: GameId,
     /// Upper case, as the app prints it.
     pub name: Arc<str>,
     /// Lower case, for the filter.
@@ -116,28 +118,28 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
         }
     }
     let trainers = with_trainer.len();
-    let mut by_id: HashMap<String, model::Game> = all.into_iter().map(|game| (game.id.clone(), game)).collect();
+    let mut by_id: HashMap<Ref, model::Game> = all.into_iter().map(|game| (game.id.clone(), game)).collect();
     let mut per_store = BTreeMap::<String, usize>::new();
     let mut games = Vec::<Game>::new();
-    let mut at = HashMap::<String, usize>::new();
+    let mut at = HashMap::<Ref, usize>::new();
     for found in installed {
         *per_store.entry(store(&found.origin)).or_default() += 1;
         log::debug!(
             "{} [{:?}] v{} @ {}",
-            found.game_id,
+            found.game,
             found.origin,
             found.build.map_or("?".to_owned(), |v| v.to_string()),
             found.location.display()
         );
         // A launcher's install comes first, a picked executable after it.
-        if let Some(&index) = at.get(&found.game_id) {
+        if let Some(&index) = at.get(&found.game) {
             let game = &mut games[index];
             game.other = Some(found);
             if picked.used(&game.id) {
                 game.switch();
             }
-        } else if let Some(entry) = by_id.remove(&found.game_id) {
-            at.insert(found.game_id.clone(), games.len());
+        } else if let Some(entry) = by_id.remove(&found.game) {
+            at.insert(found.game.clone(), games.len());
             games.push(game(entry, found, &steam_apps, art_cache));
         }
     }
@@ -150,7 +152,7 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
 fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u32>, art_cache: &Path) -> Game {
     let app = found.origin.store_id().and_then(StoreId::steam_app).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
     let mut game = Game {
-        id: found.game_id.as_str().into(),
+        id: GameId::of(&found.game),
         name: entry.name.to_uppercase().into(),
         search: entry.name.to_lowercase(),
         store: String::new(),

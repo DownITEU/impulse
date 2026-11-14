@@ -7,7 +7,7 @@ use std::{
     slice,
 };
 
-use model::{Game, Installation, Origin};
+use model::{Game, Installation, Origin, Ref};
 
 use super::installation;
 
@@ -16,7 +16,7 @@ const DEPTH: usize = 5;
 
 /// An executable the user picked for a game.
 pub struct Custom {
-    pub game_id: String,
+    pub game: Ref,
     pub exe: PathBuf,
 }
 
@@ -35,7 +35,7 @@ pub fn owners<'a>(games: &'a [Game], exe: &Path) -> Vec<(&'a Game, PathBuf)> {
             let head = entry.file_name().to_string_lossy().to_lowercase();
             for game in by_head.get(&head).into_iter().flatten() {
                 let path = game.exe.as_deref().unwrap_or_default();
-                if dir.join(path).is_file() && seen.insert(game.id.as_str()) {
+                if dir.join(path).is_file() && seen.insert(&game.id) {
                     found.push((*game, dir.to_owned()));
                 }
             }
@@ -61,7 +61,7 @@ mod tests {
     use super::*;
 
     fn game(id: &str, exe: &str) -> Game {
-        Game { id: id.into(), exe: Some(exe.into()), ..Default::default() }
+        crate::tests::game(id, Some(exe), &[])
     }
 
     #[test]
@@ -75,9 +75,9 @@ mod tests {
             game("deep", r"Binaries\Win64\game.exe"),
             game("unity", "GameAssembly.dll"),
             game("other", r"Binaries\Win64\Other.exe"),
-            Game { id: "none".into(), ..Default::default() },
+            crate::tests::game("none", None, &[]),
         ];
-        let found: Vec<_> = owners(&games, &bin.join("Game.exe")).into_iter().map(|(game, dir)| (game.id.as_str(), dir)).collect();
+        let found: Vec<_> = owners(&games, &bin.join("Game.exe")).into_iter().map(|(game, dir)| (game.id.id(), dir)).collect();
         assert_eq!(found, [("deep", root.clone()), ("unity", root.clone())]);
 
         let installed = install(&games[0], &bin.join("Game.exe")).unwrap();

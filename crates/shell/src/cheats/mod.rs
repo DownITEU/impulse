@@ -8,7 +8,7 @@ mod printed;
 
 use std::sync::Arc;
 
-use client::library::Game;
+use client::library::{Game, GameId};
 use gpui_kit::{App, Context, Entity, EventEmitter, IntoElement, Render, Task, Window, component::input::InputState};
 
 use crate::{
@@ -111,7 +111,7 @@ impl CheatList {
         self.library.read(cx).opened().cloned()
     }
 
-    fn selected(&self, cx: &App) -> Option<Arc<str>> {
+    fn selected(&self, cx: &App) -> Option<GameId> {
         self.library.read(cx).open_id().cloned()
     }
 

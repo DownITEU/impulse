@@ -2,8 +2,9 @@
 
 use std::{env, path::PathBuf, sync::Arc};
 
+use client::storage::{self, Paths};
 use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
-use model::Provider;
+use model::{Provider, SourceId};
 use shell::Root;
 use wand::Wand;
 
@@ -14,6 +15,9 @@ fn main() {
     }
     let data_dir = PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("Impulse");
     journal::init(&data_dir);
+    // Wand wrote every file before ids named their source.
+    let wand = SourceId::new(Wand::SOURCE).expect("a valid source id");
+    storage::migrate(&Paths::new(data_dir.clone()), &wand);
     // Built before the window: its browser bridge takes a moment to come up.
     let provider: Arc<dyn Provider> = Arc::new(Wand::new(data_dir.clone()));
     gpui_kit::application().with_assets(shell::Assets).run(move |cx| {

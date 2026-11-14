@@ -19,7 +19,7 @@ const GRAPH: &[(&str, &[&str])] = &[
     ("disk", &[]),
     ("fetch", &[]),
     ("hotkeys", &["model"]),
-    ("impulse", &["journal", "model", "shell", "tray", "wand"]),
+    ("impulse", &["client", "journal", "model", "shell", "tray", "wand"]),
     ("journal", &[]),
     ("launchers", &["model", "pe"]),
     ("model", &[]),

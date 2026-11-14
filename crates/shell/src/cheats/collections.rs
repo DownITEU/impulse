@@ -1,9 +1,8 @@
 //! Collections: named sets of mods with their values, a chip each over the cheat list. A click sets the
 //! running trainer to one, or turns its mods off when all are on; a right click edits or deletes it.
 
-use std::sync::Arc;
-
 use client::{
+    library::GameId,
     profile::{Collection, Values},
     trainer::Sheet,
 };
@@ -56,8 +55,8 @@ fn listed(key: &str) -> (&'static str, Icon) {
 }
 
 impl CheatList {
-    pub(super) fn collections_bar(&self, game: &str, sheet: &Sheet, running: bool, cx: &Context<Self>) -> impl IntoElement {
-        let collections = &self.trainers.read(cx).profile(game).collections;
+    pub(super) fn collections_bar(&self, game: &GameId, sheet: &Sheet, running: bool, cx: &Context<Self>) -> impl IntoElement {
+        let collections = &self.trainers.read(cx).trainer_profile(game).collections;
         // A new one is made of the mods that are on.
         let addable = running && sheet.active() > 0;
         let chips = collections
@@ -138,7 +137,7 @@ impl CheatList {
     fn toggle_collection(&mut self, at: usize, cx: &mut Context<Self>) {
         let Some(game) = self.selected(cx) else { return };
         let trainers = self.trainers.read(cx);
-        let Some(mods) = trainers.profile(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
+        let Some(mods) = trainers.trainer_profile(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
         let Some(sheet) = trainers.sheet(&game) else { return };
         let values = if sheet.holds(&mods) { sheet.rest(&mods) } else { mods };
         self.runs.update(cx, |runs, cx| runs.apply(&values, cx));
@@ -153,7 +152,7 @@ impl CheatList {
     fn edit_collection(&mut self, at: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(game) = self.selected(cx) else { return };
         let trainers = self.trainers.read(cx);
-        let changed = at.and_then(|at| trainers.profile(&game).collections.get(at));
+        let changed = at.and_then(|at| trainers.trainer_profile(&game).collections.get(at));
         let (title, key, mods) = match (changed, at) {
             (Some(collection), _) => (collection.name.clone(), listed(&collection.icon).0, collection.mods.clone()),
             (None, None) => (String::new(), ICONS[0].0, trainers.sheet(&game).map(Sheet::live_values).unwrap_or_default()),
@@ -178,7 +177,7 @@ impl CheatList {
 /// The dialog that names a collection and picks its icon.
 pub struct CollectionEditor {
     trainers: Entity<Trainers>,
-    game: Arc<str>,
+    game: GameId,
     /// The collection being changed; `None` makes one of `mods`.
     at: Option<usize>,
     mods: Values,
@@ -194,7 +193,7 @@ impl CollectionEditor {
     #[expect(clippy::too_many_arguments, reason = "the collection's game, place, mods, icon and name")]
     fn new(
         trainers: Entity<Trainers>,
-        game: Arc<str>,
+        game: GameId,
         at: Option<usize>,
         mods: Values,
         icon: &'static str,

@@ -1,8 +1,8 @@
 //! The open game's trainer as the cheat list prints it: its rows, its number fields and the control column's width.
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
-use client::trainer::Sheet;
+use client::{library::GameId, trainer::Sheet};
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use model::{Cheat, Chord, Kind};
 
@@ -14,6 +14,8 @@ const INPUT_DIGITS: usize = 6;
 pub struct Row {
     pub name: SharedString,
     pub search: String,
+    /// Its section's id: the category.
+    pub section: SharedString,
     pub category: SharedString,
     /// One cap per hotkey slot.
     pub keys: Vec<SharedString>,
@@ -23,7 +25,7 @@ pub struct Row {
 
 pub struct Printed {
     /// Whose sheet it prints.
-    pub game: Arc<str>,
+    pub game: GameId,
     pub rows: Vec<Row>,
     /// Text fields of the cheats applied with a button, by cheat index.
     pub inputs: HashMap<usize, Entity<InputState>>,
@@ -32,7 +34,7 @@ pub struct Printed {
 }
 
 impl Printed {
-    pub fn new(game: Arc<str>, sheet: &Sheet, window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(game: GameId, sheet: &Sheet, window: &mut Window, cx: &mut App) -> Self {
         let inputs = sheet
             .cheats
             .iter()
@@ -94,6 +96,7 @@ fn row(cheat: &Cheat, slots: &[Option<Chord>]) -> Row {
     Row {
         name: cheat.name.to_uppercase().into(),
         search: cheat.name.to_lowercase(),
+        section: cheat.category.clone().into(),
         category: cheat.category.to_uppercase().into(),
         keys: caps(cheat.kind, slots),
         tip: cheat.instructions.clone().or_else(|| cheat.description.clone()).filter(|text| !text.is_empty()).map(SharedString::from),

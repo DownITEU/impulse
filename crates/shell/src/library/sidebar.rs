@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use client::{
     Load,
-    library::{Game, Support},
+    library::{Game, GameId, Support},
 };
 use gpui_kit::{
     Animation, AnimationExt, App, Context, Entity, FontWeight, IntoElement, ObjectFit, Render, SharedString, Window,
@@ -33,7 +33,7 @@ pub struct Marks {
 }
 
 /// Reads a game's marks.
-type MarksOf = Box<dyn Fn(&str, &App) -> Marks>;
+type MarksOf = Box<dyn Fn(&GameId, &App) -> Marks>;
 
 pub struct Sidebar {
     library: Entity<Library>,
@@ -48,7 +48,7 @@ impl Sidebar {
         library: Entity<Library>,
         settings: Entity<Settings>,
         picker: Entity<GamePicker>,
-        marks: impl Fn(&str, &App) -> Marks + 'static,
+        marks: impl Fn(&GameId, &App) -> Marks + 'static,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {

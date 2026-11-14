@@ -3693,6 +3693,7 @@ checksum = "6e44b0a4eaa4c82f441d50a963f2d5f05a787240aeee097597033e72accfd22f"
 name = "impulse"
 version = "0.1.0"
 dependencies = [
+ "client",
  "embed-resource",
  "gpui-kit",
  "journal",

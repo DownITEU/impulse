@@ -8,7 +8,7 @@ use client::map::{
     state::{self, Mark, PALETTE, Saved},
 };
 use gpui_kit::{Context, EventEmitter, Subscription};
-use model::{Map, Point};
+use model::{Map, Point, Ref};
 
 use super::group;
 use crate::{
@@ -39,8 +39,8 @@ impl EventEmitter<BoardEvent> for Board {}
 
 pub struct Board {
     state_dir: PathBuf,
-    // The shown map's id, which its saved state is kept under.
-    id: String,
+    // The shown map's, which its saved state is kept under.
+    id: Option<Ref>,
     pub map: Load<Rc<Map>>,
     // Shared so a frame can hold it while it paints.
     pub saved: Rc<Saved>,
@@ -79,7 +79,7 @@ impl Board {
     fn with(state_dir: PathBuf, every: Duration, saves: bool) -> Self {
         Self {
             state_dir,
-            id: String::new(),
+            id: None,
             map: Load::Pending,
             saved: Rc::default(),
             counts: Vec::new(),
@@ -99,22 +99,22 @@ impl Board {
         }
     }
 
-    pub fn id(&self) -> &str {
-        &self.id
+    pub fn id(&self) -> Option<&Ref> {
+        self.id.as_ref()
     }
 
     /// The map `id`, when this board holds it.
-    pub fn loaded(&self, id: &str) -> Option<Rc<Map>> {
+    pub fn loaded(&self, id: Option<&Ref>) -> Option<Rc<Map>> {
         match &self.map {
-            Load::Ready(map) if self.id == id => Some(map.clone()),
+            Load::Ready(map) if id.is_some() && self.id.as_ref() == id => Some(map.clone()),
             _ => None,
         }
     }
 
     /// Waits for the map `id`; the one shown keeps its state on disk first.
-    pub fn pending(&mut self, id: String, cx: &mut Context<Self>) {
+    pub fn pending(&mut self, id: Ref, cx: &mut Context<Self>) {
         self.save();
-        (self.id, self.map, self.selected, self.mark) = (id, Load::Pending, None, None);
+        (self.id, self.map, self.selected, self.mark) = (Some(id), Load::Pending, None, None);
         self.watch(cx);
         cx.notify();
     }
@@ -125,7 +125,8 @@ impl Board {
         let first = !matches!(self.map, Load::Ready(_));
         let retiled = !matches!(&self.map, Load::Ready(shown) if shown.tiles == map.tiles);
         if first {
-            self.saved = Rc::new(state::load(&self.state_dir, &self.id).unwrap_or_else(|| Saved::first(&map)));
+            let saved = self.id.as_ref().and_then(|id| state::load(&self.state_dir, id));
+            self.saved = Rc::new(saved.unwrap_or_else(|| Saved::first(&map)));
         }
         self.counts = map.categories.iter().map(|category| vec![0; category.groups.len()]).collect();
         for pin in &map.pins {
@@ -164,8 +165,8 @@ impl Board {
 
     /// Keeps the user's state of the map on screen; blocking, so saves land in order (small, on a click).
     pub fn save(&self) {
-        if self.saves && matches!(self.map, Load::Ready(_)) {
-            state::store(&self.state_dir, &self.id, &self.saved);
+        if let Some(id) = self.id.as_ref().filter(|_| self.saves && matches!(self.map, Load::Ready(_))) {
+            state::store(&self.state_dir, id, &self.saved);
         }
     }
 
@@ -321,12 +322,12 @@ impl Board {
 
     /// Whether showing the map has to load it: it failed, or it was let go of.
     pub fn unloaded(&self) -> bool {
-        matches!(self.map, Load::Failed(_)) || self.id.is_empty()
+        matches!(self.map, Load::Failed(_)) || self.id.is_none()
     }
 
     /// Lets go of the map, closed for a while; the user's state of it was saved when it closed.
     pub fn forget(&mut self) {
-        (self.id, self.map, self.selected, self.mark) = (String::new(), Load::Pending, None, None);
+        (self.id, self.map, self.selected, self.mark) = (None, Load::Pending, None, None);
         (self.saved, self.counts, self.found_counts, self.haystacks) = (Rc::default(), Vec::new(), Vec::new(), Vec::new());
     }
 

@@ -38,7 +38,7 @@ fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
         Some(version) => format!("V{version}"),
         None => "VERSION UNKNOWN".to_owned(),
     };
-    let profile = trainers.profile(&game.id);
+    let profile = trainers.game_profile(&game.id);
     h_flex()
         .flex_wrap()
         .gap_x(px(10.))

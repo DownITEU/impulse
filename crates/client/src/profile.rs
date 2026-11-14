@@ -1,11 +1,15 @@
-//! `games.json`: what the user keeps about a game: the star, the play time, the mods a run starts with,
-//! their collections, the pins and the folded sections.
+//! `games.json`: what the user keeps about a game, the star and the play time, and about its trainer, the mods a
+//! run starts with, their collections, the pins and the folded sections.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use model::Ref;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{Paths, Stored};
+use crate::{
+    library::GameId,
+    storage::{Paths, Stored},
+};
 
 /// Cheat values by cheat id.
 pub type Values = BTreeMap<String, f64>;
@@ -20,13 +24,18 @@ pub struct Collection {
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Profile {
+pub struct GameProfile {
     pub favorite: bool,
     /// Runs that went live.
     pub sessions: u32,
     /// Seconds live: in all runs, and in the last one.
     pub played: u64,
     pub last: u64,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TrainerProfile {
     /// A run starts with `values` set.
     pub save_mods: bool,
     /// What the last run left on.
@@ -34,39 +43,68 @@ pub struct Profile {
     pub collections: Vec<Collection>,
     /// Cheat ids; `None` until the user pins or unpins: the provider's pins.
     pub pinned: Option<BTreeSet<String>>,
-    /// Titles of the folded sections.
+    /// Section ids.
     pub folded: BTreeSet<String>,
+    /// v1's folded sections, by printed title: a sheet turns the ones it has into ids.
+    pub folded_labels: BTreeSet<String>,
 }
 
-static BLANK: Profile = Profile {
-    favorite: false,
-    sessions: 0,
-    played: 0,
-    last: 0,
+impl TrainerProfile {
+    /// A trainer's before the user keeps anything.
+    pub fn blank() -> &'static Self {
+        &BLANK_TRAINER
+    }
+}
+
+static BLANK_GAME: GameProfile = GameProfile { favorite: false, sessions: 0, played: 0, last: 0 };
+
+static BLANK_TRAINER: TrainerProfile = TrainerProfile {
     save_mods: false,
     values: Values::new(),
     collections: Vec::new(),
     pinned: None,
     folded: BTreeSet::new(),
+    folded_labels: BTreeSet::new(),
 };
 
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Kept {
+    games: HashMap<GameId, GameProfile>,
+    #[serde(with = "crate::storage::by_ref")]
+    trainers: HashMap<Ref, TrainerProfile>,
+}
+
 pub struct Profiles {
-    /// By game id.
-    games: Stored<HashMap<String, Profile>>,
+    kept: Stored<Kept>,
 }
 
 impl Profiles {
     pub fn load(paths: &Paths) -> Self {
-        Self { games: Stored::load(paths.games()) }
+        Self { kept: Stored::load(paths.games()) }
     }
 
-    pub fn of(&self, game: &str) -> &Profile {
-        self.games.get(game).unwrap_or(&BLANK)
+    pub fn game(&self, game: &GameId) -> &GameProfile {
+        self.kept.games.get(game).unwrap_or(&BLANK_GAME)
+    }
+
+    pub fn trainer(&self, trainer: &Ref) -> &TrainerProfile {
+        self.kept.trainers.get(trainer).unwrap_or(&BLANK_TRAINER)
     }
 
     /// Changes a game's profile and saves.
-    pub fn edit<R>(&mut self, game: &str, change: impl FnOnce(&mut Profile) -> R) -> R {
-        self.games.edit(|games| change(games.entry(game.to_owned()).or_default()))
+    pub fn edit_game<R>(&mut self, game: &GameId, change: impl FnOnce(&mut GameProfile) -> R) -> R {
+        self.kept.edit(|kept| change(kept.games.entry(game.clone()).or_default()))
+    }
+
+    /// Changes a trainer's profile and saves.
+    pub fn edit_trainer<R>(&mut self, trainer: &Ref, change: impl FnOnce(&mut TrainerProfile) -> R) -> R {
+        self.kept.edit(|kept| change(kept.trainers.entry(trainer.clone()).or_default()))
+    }
+
+    /// Changes both, as a run does, and saves once.
+    pub fn edit_run<R>(&mut self, game: &GameId, trainer: &Ref, change: impl FnOnce(&mut GameProfile, &mut TrainerProfile) -> R) -> R {
+        self.kept.edit(|kept| change(kept.games.entry(game.clone()).or_default(), kept.trainers.entry(trainer.clone()).or_default()))
     }
 }
 
@@ -74,28 +112,35 @@ impl Profiles {
 mod tests {
     use std::fs;
 
+    use model::SourceId;
+
     use super::*;
+    use crate::storage::migrate;
 
     #[test]
-    fn profiles_survive_a_reload_and_older_files() {
+    fn a_v1_profile_splits_into_its_game_and_trainer_and_survives_a_reload() {
         let dir = std::env::temp_dir().join(format!("impulse-profiles-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let paths = Paths::new(dir.clone());
-        fs::write(paths.games(), br#"{"old":{"favorite":true}}"#).unwrap();
+        fs::write(paths.games(), br#"{"old":{"favorite":true,"save_mods":true,"folded":["PLAYER"]}}"#).unwrap();
+        migrate(&paths, &SourceId::new("s").unwrap());
+        let (old, trainer) = (GameId::of(&Ref::parse("s:old").unwrap()), Ref::parse("s:old").unwrap());
         let mut profiles = Profiles::load(&paths);
-        assert!(profiles.of("old").favorite && profiles.of("old").pinned.is_none());
-        assert!(!profiles.of("new").favorite);
-        profiles.edit("new", |profile| {
-            profile.sessions += 1;
-            profile.collections.push(Collection {
+        assert!(profiles.game(&old).favorite && profiles.trainer(&trainer).save_mods);
+        assert!(profiles.trainer(&trainer).folded_labels.contains("PLAYER") && profiles.trainer(&trainer).pinned.is_none());
+        let new = GameId::of(&Ref::parse("s:new").unwrap());
+        assert!(!profiles.game(&new).favorite);
+        profiles.edit_run(&new, &trainer, |game, trainer| {
+            game.sessions += 1;
+            trainer.collections.push(Collection {
                 name: "Boss".to_owned(),
                 icon: "skull".to_owned(),
                 mods: Values::from([("a".to_owned(), 1.)]),
             });
         });
         let back = Profiles::load(&paths);
-        assert!(back.of("old").favorite && back.of("new").sessions == 1);
-        assert_eq!(back.of("new").collections[0].mods["a"], 1.);
+        assert!(back.game(&old).favorite && back.game(&new).sessions == 1);
+        assert_eq!(back.trainer(&trainer).collections[0].mods["a"], 1.);
         fs::remove_dir_all(&dir).unwrap();
     }
 }

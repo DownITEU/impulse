@@ -160,7 +160,7 @@ impl LiveMap {
     /// place the player.
     fn load(&mut self, cx: &mut Context<Self>) {
         let mut offers = self.offers.clone();
-        if let Some(at) = offers.iter().position(|offer| offer.id == self.big.read(cx).id()) {
+        if let Some(at) = offers.iter().position(|offer| Some(&offer.id) == self.big.read(cx).id()) {
             offers[..=at].rotate_right(1);
         }
         let (provider, board, big) = (self.provider.clone(), self.board.downgrade(), self.big.downgrade());
@@ -220,7 +220,7 @@ async fn load(
     cx: &mut AsyncApp,
 ) -> Result<()> {
     for offer in offers {
-        let shared = big.read_with(cx, |big, _| big.loaded(&offer.id))?;
+        let shared = big.read_with(cx, |big, _| big.loaded(Some(&offer.id)))?;
         board.update(cx, |board, cx| board.pending(offer.id.clone(), cx))?;
         if let Some(map) = shared {
             board.update(cx, |board, cx| board.install(map, cx))?;

@@ -7,7 +7,10 @@ mod status;
 
 use std::sync::Arc;
 
-use client::{library::Game, storage::Paths};
+use client::{
+    library::{Game, GameId},
+    storage::Paths,
+};
 use gpui_kit::{
     AnyElement, App, Context, Div, Entity, IntoElement, Render, Window,
     component::{h_flex, scroll::ScrollableElement, v_flex},
@@ -99,7 +102,10 @@ impl Page {
         cx.observe(&picker, |_, _, cx| cx.notify()).detach();
         let marks = {
             let (trainers, runs) = (trainers.clone(), runs.clone());
-            move |game: &str, cx: &App| Marks { favorite: trainers.read(cx).profile(game).favorite, live: runs.read(cx).is_live(game) }
+            move |game: &GameId, cx: &App| Marks {
+                favorite: trainers.read(cx).game_profile(game).favorite,
+                live: runs.read(cx).is_live(game),
+            }
         };
         let sidebar = cx.new(|cx| {
             // What `marks` reads.

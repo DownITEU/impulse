@@ -16,7 +16,7 @@ play.workspace = true
 anyhow.workspace = true
 log.workspace = true
 rustc-hash.workspace = true
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive", "rc"] }
 serde_json.workspace = true
 
 [dev-dependencies]

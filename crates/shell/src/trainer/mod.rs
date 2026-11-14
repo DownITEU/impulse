@@ -7,8 +7,8 @@ use std::{collections::HashSet, sync::Arc};
 
 use client::{
     Load,
-    library::Support,
-    profile::{Collection, Profile, Profiles, Values},
+    library::{GameId, Support},
+    profile::{Collection, GameProfile, Profiles, TrainerProfile, Values},
     run,
     storage::Paths,
     trainer::{Sheet, Shelf},
@@ -22,11 +22,11 @@ pub use title::title;
 
 pub enum TrainerEvent {
     /// A copy of the game's trainer shows: the first, a newer one, or the one that waited.
-    Installed(Arc<str>),
+    Installed(GameId),
     /// The game's hotkeys changed.
-    Rebound(Arc<str>),
+    Rebound(GameId),
     /// A cheat's value changed.
-    Set { game: Arc<str>, index: usize, value: f64 },
+    Set { game: GameId, index: usize, value: f64 },
 }
 
 /// While it lives the game's shown copy stays; dropping it shows the newer one that waited.
@@ -40,7 +40,7 @@ pub struct Trainers {
     profiles: Profiles,
     shelf: Shelf,
     // Games whose trainer is being read or downloaded right now.
-    loading: HashSet<Arc<str>>,
+    loading: HashSet<GameId>,
 }
 
 impl EventEmitter<TrainerEvent> for Trainers {}
@@ -51,11 +51,11 @@ impl Trainers {
         Self { provider, library, profiles: Profiles::load(paths), shelf: Shelf::default(), loading: HashSet::new() }
     }
 
-    pub fn get(&self, game: &str) -> Option<&Load<Sheet>> {
+    pub fn get(&self, game: &GameId) -> Option<&Load<Sheet>> {
         self.shelf.get(game)
     }
 
-    pub fn sheet(&self, game: &str) -> Option<&Sheet> {
+    pub fn sheet(&self, game: &GameId) -> Option<&Sheet> {
         self.shelf.sheet(game)
     }
 
@@ -63,16 +63,28 @@ impl Trainers {
         self.shelf.sheets()
     }
 
-    pub fn is_loading(&self, game: &str) -> bool {
+    pub fn is_loading(&self, game: &GameId) -> bool {
         self.loading.contains(game)
     }
 
-    pub fn profile(&self, game: &str) -> &Profile {
-        self.profiles.of(game)
+    pub fn game_profile(&self, game: &GameId) -> &GameProfile {
+        self.profiles.game(game)
+    }
+
+    /// The shown copy's trainer profile; a blank one without a copy.
+    pub fn trainer_profile(&self, game: &GameId) -> &TrainerProfile {
+        self.shelf.sheet(game).map_or(TrainerProfile::blank(), |sheet| self.profiles.trainer(&sheet.trainer))
+    }
+
+    /// Changes the shown copy's trainer profile; nothing without a copy.
+    fn edit_trainer(&mut self, game: &GameId, change: impl FnOnce(&mut TrainerProfile), cx: &mut Context<Self>) {
+        let Some(trainer) = self.shelf.sheet(game).map(|sheet| sheet.trainer.clone()) else { return };
+        self.profiles.edit_trainer(&trainer, change);
+        cx.notify();
     }
 
     /// Keeps the game's shown copy until the `Hold` drops.
-    pub fn hold(&mut self, game: Arc<str>, cx: &mut Context<Self>) -> Hold {
+    pub fn hold(&mut self, game: GameId, cx: &mut Context<Self>) -> Hold {
         let (release, released) = oneshot::channel::<()>();
         self.shelf.hold(game.clone());
         cx.spawn(async move |trainers, cx| {
@@ -80,7 +92,7 @@ impl Trainers {
             let _ = released.await;
             trainers
                 .update(cx, |trainers, cx| {
-                    if trainers.shelf.release(&game, trainers.profiles.of(&game)) {
+                    if trainers.shelf.release(&game, &trainers.profiles) {
                         trainers.installed(game, cx);
                     }
                 })
@@ -97,14 +109,14 @@ impl Trainers {
     }
 
     /// The hotkeys in effect, by cheat: the user's choices over the provider's.
-    pub fn bind(&mut self, game: &Arc<str>, hotkeys: Vec<Vec<Option<Chord>>>, cx: &mut Context<Self>) {
+    pub fn bind(&mut self, game: &GameId, hotkeys: Vec<Vec<Option<Chord>>>, cx: &mut Context<Self>) {
         let Some(sheet) = self.shelf.sheet_mut(game) else { return };
         sheet.hotkeys = hotkeys;
         cx.emit(TrainerEvent::Rebound(game.clone()));
         cx.notify();
     }
 
-    pub fn set(&mut self, game: &Arc<str>, index: usize, value: f64, cx: &mut Context<Self>) {
+    pub fn set(&mut self, game: &GameId, index: usize, value: f64, cx: &mut Context<Self>) {
         let Some(sheet) = self.shelf.sheet_mut(game) else { return };
         sheet.values[index] = value;
         cx.emit(TrainerEvent::Set { game: game.clone(), index, value });
@@ -112,78 +124,87 @@ impl Trainers {
     }
 
     /// Every cheat at rest, as a trainer starts.
-    pub fn reset(&mut self, game: &str, cx: &mut Context<Self>) {
+    pub fn reset(&mut self, game: &GameId, cx: &mut Context<Self>) {
         if let Some(sheet) = self.shelf.sheet_mut(game) {
             sheet.reset();
             cx.notify();
         }
     }
 
-    pub fn toggle_pin(&mut self, game: &str, index: usize, cx: &mut Context<Self>) {
+    pub fn toggle_pin(&mut self, game: &GameId, index: usize, cx: &mut Context<Self>) {
         let Some(sheet) = self.shelf.sheet_mut(game) else { return };
-        self.profiles.edit(game, |profile| sheet.toggle_pin(index, profile));
+        let trainer = sheet.trainer.clone();
+        self.profiles.edit_trainer(&trainer, |profile| sheet.toggle_pin(index, profile));
         cx.notify();
     }
 
-    pub fn toggle_fold(&mut self, game: &str, title: &str, cx: &mut Context<Self>) {
+    pub fn toggle_fold(&mut self, game: &GameId, section: &str, cx: &mut Context<Self>) {
         let Some(sheet) = self.shelf.sheet_mut(game) else { return };
-        self.profiles.edit(game, |profile| sheet.toggle_fold(title, profile));
+        let trainer = sheet.trainer.clone();
+        self.profiles.edit_trainer(&trainer, |profile| sheet.toggle_fold(section, profile));
         cx.notify();
     }
 
-    pub fn toggle_favorite(&mut self, game: &str, cx: &mut Context<Self>) {
-        self.profiles.edit(game, |profile| profile.favorite = !profile.favorite);
+    pub fn toggle_favorite(&mut self, game: &GameId, cx: &mut Context<Self>) {
+        self.profiles.edit_game(game, |profile| profile.favorite = !profile.favorite);
         cx.notify();
     }
 
     /// Whether a run's mods come back at the next one; what was kept goes either way.
-    pub fn set_save_mods(&mut self, game: &str, on: bool, cx: &mut Context<Self>) {
-        self.profiles.edit(game, |profile| {
-            profile.save_mods = on;
-            profile.values.clear();
-        });
-        cx.notify();
+    pub fn set_save_mods(&mut self, game: &GameId, on: bool, cx: &mut Context<Self>) {
+        self.edit_trainer(
+            game,
+            |profile| {
+                profile.save_mods = on;
+                profile.values.clear();
+            },
+            cx,
+        );
     }
 
-    pub fn forget_kept(&mut self, game: &str, cx: &mut Context<Self>) {
-        self.profiles.edit(game, |profile| profile.values.clear());
-        cx.notify();
+    pub fn forget_kept(&mut self, game: &GameId, cx: &mut Context<Self>) {
+        self.edit_trainer(game, |profile| profile.values.clear(), cx);
     }
 
     /// Renames the collection at `at` and changes its icon, or adds `collection`.
-    pub fn keep_collection(&mut self, game: &str, at: Option<usize>, collection: Collection, cx: &mut Context<Self>) {
-        self.profiles.edit(game, |profile| match at.and_then(|at| profile.collections.get_mut(at)) {
+    pub fn keep_collection(&mut self, game: &GameId, at: Option<usize>, collection: Collection, cx: &mut Context<Self>) {
+        let change = |profile: &mut TrainerProfile| match at.and_then(|at| profile.collections.get_mut(at)) {
             Some(kept) => (kept.name, kept.icon) = (collection.name, collection.icon),
             None => profile.collections.push(collection),
-        });
-        cx.notify();
+        };
+        self.edit_trainer(game, change, cx);
     }
 
-    pub fn delete_collection(&mut self, game: &str, at: usize, cx: &mut Context<Self>) {
-        self.profiles.edit(game, |profile| {
+    pub fn delete_collection(&mut self, game: &GameId, at: usize, cx: &mut Context<Self>) {
+        let change = |profile: &mut TrainerProfile| {
             if at < profile.collections.len() {
                 profile.collections.remove(at);
             }
-        });
-        cx.notify();
+        };
+        self.edit_trainer(game, change, cx);
     }
 
     /// Counts a run that went live; the values it starts with.
-    pub fn run_opened(&mut self, game: &str, cx: &mut Context<Self>) -> Option<Values> {
+    pub fn run_opened(&mut self, game: &GameId, cx: &mut Context<Self>) -> Option<Values> {
         cx.notify();
-        self.profiles.edit(game, run::opened)
+        let trainer = self.shelf.sheet(game)?.trainer.clone();
+        self.profiles.edit_run(game, &trainer, run::opened)
     }
 
     /// Keeps a run's time and what it leaves on.
-    pub fn run_closed(&mut self, game: &str, secs: u64, cx: &mut Context<Self>) {
-        let left = self.shelf.sheet(game).map(Sheet::live_values);
-        self.profiles.edit(game, |profile| run::closed(profile, secs, left));
+    pub fn run_closed(&mut self, game: &GameId, secs: u64, cx: &mut Context<Self>) {
+        match self.shelf.sheet(game).map(|sheet| (sheet.trainer.clone(), sheet.live_values())) {
+            Some((trainer, left)) => self.profiles.edit_run(game, &trainer, |game, trainer| run::closed(game, trainer, secs, Some(left))),
+            // The caches were cleared: only the time is kept.
+            None => self.profiles.edit_game(game, |game| run::closed(game, &mut TrainerProfile::default(), secs, None)),
+        }
         cx.notify();
     }
 
     /// The open game's trainer. Nothing is downloaded for a game the user did not open.
     fn open(&mut self, cx: &mut Context<Self>) {
         let Some(game) = self.library.read(cx).opened().cloned() else { return };
+        let Some(offer) = game.source.trainer.as_ref().map(|offer| offer.id.clone()) else { return };
         if game.support == Support::NoTrainer || self.shelf.is_current(&game.id, &game.stamp) {
             return;
         }
@@ -199,7 +220,7 @@ impl Trainers {
                     .update(cx, |trainers, cx| {
                         match snapshot {
                             Snapshot::Cached(Some(trainer)) | Snapshot::Fresh(Ok(trainer)) => {
-                                let sheet = Sheet::new(trainer, stamp.clone(), trainers.profiles.of(&id));
+                                let sheet = Sheet::new(trainer, offer.clone(), stamp.clone(), trainers.profiles.trainer(&offer));
                                 if trainers.shelf.put(id.clone(), sheet) {
                                     trainers.installed(id.clone(), cx);
                                 }
@@ -226,7 +247,7 @@ impl Trainers {
         .detach();
     }
 
-    fn installed(&mut self, game: Arc<str>, cx: &mut Context<Self>) {
+    fn installed(&mut self, game: GameId, cx: &mut Context<Self>) {
         cx.emit(TrainerEvent::Installed(game));
         cx.notify();
     }

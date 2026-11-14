@@ -112,7 +112,7 @@ impl Stage {
                 .iter()
                 .zip(&self.shown.regions)
                 .enumerate()
-                .filter(|(_, (region, _))| saved.regions && shows(region.zoom) && !saved.hidden_regions.contains(&region.name));
+                .filter(|(_, (region, _))| saved.regions && shows(region.zoom) && !saved.hidden_regions.contains(&region.id));
             for (index, (region, extent)) in regions {
                 // An outline is tessellated anew each frame: none for a region off the view.
                 let Some((low, high)) = *extent else { continue };

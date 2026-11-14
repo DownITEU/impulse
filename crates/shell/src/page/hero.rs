@@ -51,7 +51,7 @@ impl Hero {
     fn actions(&self, game: &Game, cx: &Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
         let running = self.runs.read(cx).is_live(&game.id);
-        let favorite = self.trainers.read(cx).profile(&game.id).favorite;
+        let favorite = self.trainers.read(cx).game_profile(&game.id).favorite;
         let (id, location) = (game.id.clone(), game.install.location.clone());
         let layer = self.layer.clone();
         h_flex()

@@ -48,6 +48,9 @@ pub struct Wand {
 }
 
 impl Wand {
+    /// The source id of everything it mints.
+    pub const SOURCE: &str = catalog::SOURCE;
+
     /// Starts the browser bridge at once: it takes a moment to come up.
     pub fn new(data_dir: PathBuf) -> Self {
         let transport = Transport::spawn(data_dir.clone()).map_err(|e| {
@@ -136,7 +139,7 @@ impl model::Provider for Wand {
     /// The API is asked only when the disk copy is missing or was fetched for another trainer or build.
     fn trainer(&self, game: &Game, install: &Installation) -> BoxStream<'static, Snapshot<model::Trainer>> {
         let stamp = Stamp { updated_at: game.trainer.as_ref().and_then(|offer| offer.revision.clone()), version: install.build };
-        let (dir, id, session, host) = (self.data_dir.clone(), game.id.clone(), self.session(), self.host.clone());
+        let (dir, id, session, host) = (self.data_dir.clone(), game.id.id().to_owned(), self.session(), self.host.clone());
         let hotkeys = self.hotkeys.clone();
         channel(|tx| async move {
             let copy = {
@@ -168,7 +171,7 @@ impl model::Provider for Wand {
         let (dir, offer, session) = (self.data_dir.clone(), offer.clone(), self.session());
         channel(|tx| async move {
             let mut copy = {
-                let (dir, id) = (dir.clone(), offer.id.clone());
+                let (dir, id) = (dir.clone(), offer.id.id().to_owned());
                 unblock(move || map::cached(&dir, &id)).await
             };
             let fresh = copy.as_ref().is_some_and(|copy| copy.stamp == offer.revision);
@@ -177,7 +180,7 @@ impl model::Provider for Wand {
             if !fresh {
                 let mut fetched = async {
                     let (session, transport) = session.await.map_err(|e| anyhow!(e))?;
-                    map::fetch(&session, &transport, &dir, &offer.id, offer.revision.clone()).await
+                    map::fetch(&session, &transport, &dir, offer.id.id(), offer.revision.clone()).await
                 }
                 .await;
                 if let Err(e) = &fetched {

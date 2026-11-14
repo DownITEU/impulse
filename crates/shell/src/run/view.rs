@@ -2,7 +2,10 @@
 
 use std::time::Duration;
 
-use client::{library::Game, run::Stage};
+use client::{
+    library::{Game, GameId},
+    run::Stage,
+};
 use gpui_kit::{
     AnyElement, App, Div, Entity, FontWeight, IntoElement,
     component::{h_flex, v_flex},
@@ -86,7 +89,7 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
 pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool, scope: AnyElement, cx: &App) -> Div {
     let accent = rgb(accent(cx));
     let running = matches!(runs.state(&game.id), State::Live);
-    let last = trainers.profile(&game.id).last;
+    let last = trainers.game_profile(&game.id).last;
     let (title, time) = match runs.since().filter(|_| running) {
         Some(since) => ("SESSION", since.elapsed()),
         None if last > 0 => ("LAST SESSION", Duration::from_secs(last)),
@@ -134,7 +137,7 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
 }
 
 /// The line above the cheat list while the trainer is not live.
-pub fn run_note(runs: &Runs, game: &str, cx: &App) -> Div {
+pub fn run_note(runs: &Runs, game: &GameId, cx: &App) -> Div {
     match runs.state(game) {
         State::Failed(error) => mono(error.to_owned(), 11.).text_color(rgb(WARN)),
         State::Starting(stage) => mono(label(stage), 11.).text_color(rgb(accent(cx))),

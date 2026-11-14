@@ -23,6 +23,7 @@ use crate::ui::{
     theme::*,
     widgets::{filter_input, mono},
 };
+use client::library::GameId;
 
 /// Rows shown at once: the filter narrows the rest.
 const SHOWN: usize = 50;
@@ -108,7 +109,7 @@ impl Render for GamePicker {
             let game = &found.games[at];
             let mut store = game.store_ids.first().map_or(String::new(), |id| id.store().to_uppercase());
             // Picking it adds a source to the listed game.
-            if library.game(&game.id).is_some() {
+            if library.game(&GameId::of(&game.id)).is_some() {
                 store.push_str("  IN LIBRARY");
             }
             h_flex()

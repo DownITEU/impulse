@@ -1,9 +1,11 @@
 //! A game's interactive map: tiles, pins and how the game's coordinates lie on it.
 
+use crate::Ref;
+
 /// A map a provider has for a game, before it is opened.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MapOffer {
-    pub id: String,
+    pub id: Ref,
     pub name: String,
     pub thumbnail: Option<String>,
     /// Changes whenever the map does.
@@ -107,6 +109,8 @@ pub struct Pin {
 }
 
 pub struct Region {
+    /// Stable across revisions: the user's state refers to it.
+    pub id: String,
     pub name: String,
     pub color: u32,
     pub thickness: f32,

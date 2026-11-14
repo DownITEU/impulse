@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, path::Path};
 
-use model::{Installation, Origin};
+use model::{Installation, Origin, Ref};
 
 use super::Game;
 
@@ -52,8 +52,8 @@ pub fn exe(install: &Installation) -> Option<&Path> {
 
 /// The catalog games that keep their executable where `exe` is, by index (blocking).
 pub fn owners(games: &[model::Game], exe: &Path) -> Vec<usize> {
-    let owners: HashSet<&str> = launchers::owners(games, exe).into_iter().map(|(game, _)| game.id.as_str()).collect();
-    (0..games.len()).filter(|&at| owners.contains(games[at].id.as_str())).collect()
+    let owners: HashSet<&Ref> = launchers::owners(games, exe).into_iter().map(|(game, _)| &game.id).collect();
+    (0..games.len()).filter(|&at| owners.contains(&games[at].id)).collect()
 }
 
 /// `exe` as an install of `game` (blocking); `None` when it is not a file.
@@ -63,19 +63,36 @@ pub fn install(game: &model::Game, exe: &Path) -> Option<Installation> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
 
-    use model::{Installation, Origin, StoreId};
+    use model::{Installation, Origin, Ref, StoreId};
 
     use super::{super::Game, Entry, entries};
-    use crate::library::Support;
+    use crate::library::{GameId, Support};
+
+    fn id() -> Ref {
+        Ref::parse("s:g").unwrap()
+    }
 
     fn install(origin: Origin) -> Installation {
-        Installation { game_id: "g".into(), origin, location: Default::default(), build: None }
+        Installation { game: id(), origin, location: Default::default(), build: None }
     }
 
     fn game(install: Installation, other: Option<Installation>) -> Game {
+        let source = model::Game {
+            id: id(),
+            title_id: String::new(),
+            name: "G".into(),
+            store_ids: Vec::new(),
+            exe: None,
+            standalone: Vec::new(),
+            cover: None,
+            thumbnail: None,
+            maps: Vec::new(),
+            trainer: None,
+        };
         Game {
-            id: "g".into(),
+            id: GameId::of(&id()),
             name: "G".into(),
             search: "g".into(),
             store: String::new(),
@@ -84,7 +101,7 @@ mod tests {
             stamp: (None, None),
             hero: None,
             thumbnail: None,
-            source: Default::default(),
+            source: Arc::new(source),
             install,
             other,
             page: None,

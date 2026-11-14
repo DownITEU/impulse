@@ -1,8 +1,6 @@
 //! The hotkey caps of a cheat row: one per slot; a click binds it.
 
-use std::sync::Arc;
-
-use client::trainer::Sheet;
+use client::{library::GameId, trainer::Sheet};
 use gpui_kit::{App, Entity, IntoElement, SharedString, Window, component::h_flex, prelude::*, px, rgb};
 use model::Kind;
 
@@ -22,7 +20,7 @@ pub fn cap(kind: Kind, slot: usize, body: &str) -> SharedString {
 }
 
 /// `keys`: the slots' labels as printed.
-pub fn caps(hotkeys: &Entity<Hotkeys>, game: &Arc<str>, sheet: &Sheet, index: usize, keys: &[SharedString], cx: &App) -> impl IntoElement {
+pub fn caps(hotkeys: &Entity<Hotkeys>, game: &GameId, sheet: &Sheet, index: usize, keys: &[SharedString], cx: &App) -> impl IntoElement {
     let cheat = &sheet.cheats[index];
     let bound = hotkeys.read(cx);
     let accent = rgb(accent(cx));
@@ -49,7 +47,7 @@ pub fn caps(hotkeys: &Entity<Hotkeys>, game: &Arc<str>, sheet: &Sheet, index: us
 }
 
 /// Binds a cheat's slot by what the user presses.
-fn bind_slot(hotkeys: &Entity<Hotkeys>, game: Arc<str>, cheat: String, slot: usize, window: &mut Window, cx: &mut App) {
+fn bind_slot(hotkeys: &Entity<Hotkeys>, game: GameId, cheat: String, slot: usize, window: &mut Window, cx: &mut App) {
     let target = Target::Slot { game: game.clone(), cheat: cheat.clone(), slot };
     let Some(outcome) = hotkeys.update(cx, |hotkeys, cx| hotkeys.capture(target, window, cx)) else { return };
     let hotkeys = hotkeys.downgrade();

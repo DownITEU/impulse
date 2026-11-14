@@ -1,6 +1,9 @@
 //! The control at the right of a cheat row, one per cheat kind, and the saved bar over the rows.
 
-use client::trainer::{Sheet, Span, TOP_TICK};
+use client::{
+    library::GameId,
+    trainer::{Sheet, Span, TOP_TICK},
+};
 use gpui_kit::{
     AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful,
     component::{h_flex, input::Input},
@@ -190,8 +193,8 @@ impl CheatList {
     }
 
     /// The right of the filter row: the game's save switch and the reset.
-    pub(super) fn saved_bar(&self, game: &str, sheet: &Sheet, running: bool, cx: &Context<Self>) -> impl IntoElement {
-        let profile = self.trainers.read(cx).profile(game);
+    pub(super) fn saved_bar(&self, game: &GameId, sheet: &Sheet, running: bool, cx: &Context<Self>) -> impl IntoElement {
+        let profile = self.trainers.read(cx).trainer_profile(game);
         let (save, kept) = (profile.save_mods, profile.values.len());
         let resettable = if running { sheet.active() > 0 } else { kept > 0 };
         let label = match kept {

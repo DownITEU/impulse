@@ -9,7 +9,7 @@ use std::{mem, path::PathBuf, sync::Arc};
 
 use blocking::unblock;
 use client::{
-    library::{self as listing, Game, Picked, sources},
+    library::{self as listing, Game, GameId, Picked, sources},
     media::Media,
     storage::Paths,
 };
@@ -48,7 +48,7 @@ pub struct Library {
     art: PathBuf,
     picked: Picked,
     list: Load<listing::Library>,
-    open: Option<Arc<str>>,
+    open: Option<GameId>,
     // Dropped by a reload.
     _listing: Task<()>,
 }
@@ -58,7 +58,7 @@ impl EventEmitter<LibraryEvent> for Library {}
 impl Library {
     pub fn new(provider: Arc<dyn Provider>, paths: &Paths, settings: Entity<Settings>, cx: &mut Context<Self>) -> Self {
         // Opens once the list holds it.
-        let open = settings.read(cx).prefs().game.as_deref().map(Arc::from);
+        let open = settings.read(cx).prefs().game.clone();
         Self {
             _listing: listen(&provider, cx),
             provider,
@@ -88,29 +88,29 @@ impl Library {
         }
     }
 
-    pub fn game(&self, id: &str) -> Option<&Arc<Game>> {
-        self.games().iter().find(|game| &*game.id == id)
+    pub fn game(&self, id: &GameId) -> Option<&Arc<Game>> {
+        self.games().iter().find(|game| game.id == *id)
     }
 
     /// The open game's id; before the list comes, the one open at the last start.
-    pub fn open_id(&self) -> Option<&Arc<str>> {
+    pub fn open_id(&self) -> Option<&GameId> {
         self.open.as_ref()
     }
 
     pub fn opened(&self) -> Option<&Arc<Game>> {
-        self.game(self.open.as_deref()?)
+        self.game(self.open.as_ref()?)
     }
 
     /// The user opens a game: it is open at the next start too.
-    pub fn open(&mut self, id: Arc<str>, cx: &mut Context<Self>) {
-        self.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.game = Some(id.to_string()), cx));
+    pub fn open(&mut self, id: GameId, cx: &mut Context<Self>) {
+        self.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.game = Some(id.clone()), cx));
         self.open = Some(id);
         cx.emit(LibraryEvent::Opened);
         cx.notify();
     }
 
     /// Uses the game's other install.
-    pub fn switch(&mut self, id: &str, cx: &mut Context<Self>) {
+    pub fn switch(&mut self, id: &GameId, cx: &mut Context<Self>) {
         let Some(game) = self.game_mut(id) else { return };
         game.switch();
         let used = sources::exe(&game.install).is_some();
@@ -119,7 +119,7 @@ impl Library {
     }
 
     /// Makes `exe` the source of a listed game.
-    pub fn pick(&mut self, id: Arc<str>, exe: PathBuf, cx: &mut Context<Self>) {
+    pub fn pick(&mut self, id: GameId, exe: PathBuf, cx: &mut Context<Self>) {
         let Some(game) = self.game(&id) else { return };
         let source = game.source.clone();
         cx.spawn(async move |library, cx| {
@@ -138,14 +138,14 @@ impl Library {
     }
 
     /// Forgets the game's picked executable; a game the user added leaves the list with it.
-    pub fn forget(&mut self, id: &str, cx: &mut Context<Self>) {
+    pub fn forget(&mut self, id: &GameId, cx: &mut Context<Self>) {
         self.picked.set(id, None);
         let Some(game) = self.game_mut(id) else { return };
         if game.unpick() {
             return switched(cx);
         }
         if let Load::Ready(mut list) = mem::replace(&mut self.list, Load::Pending) {
-            list.games.retain(|game| &*game.id != id);
+            list.games.retain(|game| game.id != *id);
             self.set(list, cx);
         }
     }
@@ -169,7 +169,7 @@ impl Library {
 
     /// Adds `games[at]` with its executable and opens it; a listed game takes it as its source.
     pub fn add(&mut self, exe: PathBuf, games: Vec<model::Game>, at: usize, cx: &mut Context<Self>) {
-        let id: Arc<str> = games[at].id.as_str().into();
+        let id = GameId::of(&games[at].id);
         if self.game(&id).is_some() {
             self.pick(id.clone(), exe, cx);
             return self.open(id, cx);
@@ -189,9 +189,9 @@ impl Library {
         .detach();
     }
 
-    fn game_mut(&mut self, id: &str) -> Option<&mut Game> {
+    fn game_mut(&mut self, id: &GameId) -> Option<&mut Game> {
         let Load::Ready(list) = &mut self.list else { return None };
-        list.games.iter_mut().find(|game| &*game.id == id).map(Arc::make_mut)
+        list.games.iter_mut().find(|game| game.id == *id).map(Arc::make_mut)
     }
 
     fn set(&mut self, list: listing::Library, cx: &mut Context<Self>) {

@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use model::{Cheat, Chord};
+use model::{Cheat, Chord, Ref};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{Paths, Stored};
@@ -25,13 +25,14 @@ struct Saved {
     enabled: bool,
     /// Hotkeys fire only while the game owns the foreground window.
     game_only: bool,
-    /// By game id, then cheat id.
-    games: HashMap<String, HashMap<String, Slots>>,
+    /// By trainer, then cheat id.
+    #[serde(with = "crate::storage::by_ref")]
+    trainers: HashMap<Ref, HashMap<String, Slots>>,
 }
 
 impl Default for Saved {
     fn default() -> Self {
-        Self { enabled: true, game_only: false, games: HashMap::new() }
+        Self { enabled: true, game_only: false, trainers: HashMap::new() }
     }
 }
 
@@ -63,8 +64,8 @@ impl Store {
 
     /// The cheat's slots: the provider's bindings with the user's choices laid over them. A default
     /// holding the keys of a choice is dropped: a newer cheat list may bring it after the choice.
-    pub fn slots(&self, game: &str, cheat: &Cheat) -> Vec<Option<Chord>> {
-        let chosen = self.saved.games.get(game).and_then(|cheats| cheats.get(&cheat.id));
+    pub fn slots(&self, trainer: &Ref, cheat: &Cheat) -> Vec<Option<Chord>> {
+        let chosen = self.saved.trainers.get(trainer).and_then(|cheats| cheats.get(&cheat.id));
         let choice = |slot: usize| chosen.and_then(|slots| slots.get(&slot)).map(|vks| vks.as_deref().and_then(Chord::from_vks));
         let choices: Vec<_> = (0..cheat.kind.slots()).map(choice).collect();
         let chosen_keys = |chord: Chord| choices.iter().flatten().flatten().any(|other| other.same_keys(chord));
@@ -78,9 +79,9 @@ impl Store {
             .collect()
     }
 
-    pub fn choose(&mut self, game: &str, cheat: &str, slot: usize, choice: Choice) {
+    pub fn choose(&mut self, trainer: &Ref, cheat: &str, slot: usize, choice: Choice) {
         self.saved.edit(|saved| {
-            let cheats = saved.games.entry(game.to_owned()).or_default();
+            let cheats = saved.trainers.entry(trainer.clone()).or_default();
             let slots = cheats.entry(cheat.to_owned()).or_default();
             match choice {
                 Choice::Bound(chord) => slots.insert(slot, Some(chord.vks().map(u16::from).collect())),
@@ -91,7 +92,7 @@ impl Store {
                 cheats.remove(cheat);
             }
             if cheats.is_empty() {
-                saved.games.remove(game);
+                saved.trainers.remove(trainer);
             }
         });
     }
@@ -100,7 +101,7 @@ impl Store {
     /// holds one chord twice, nor one `reserved` elsewhere.
     pub fn rebind(
         &mut self,
-        game: &str,
+        trainer: &Ref,
         cheat: &Cheat,
         slot: usize,
         choice: Choice,
@@ -111,14 +112,14 @@ impl Store {
             Choice::Unbound => None,
             Choice::Default => cheat.hotkeys.get(slot).copied().flatten(),
         };
-        let slots = self.slots(game, cheat);
+        let slots = self.slots(trainer, cheat);
         let other =
             |chord: Chord| slots.iter().enumerate().any(|(at, bound)| at != slot && bound.is_some_and(|bound| bound.same_keys(chord)));
         if wanted.is_some_and(|chord| reserved(chord) || other(chord)) {
             return None;
         }
-        self.choose(game, &cheat.id, slot, choice);
-        Some(self.slots(game, cheat))
+        self.choose(trainer, &cheat.id, slot, choice);
+        Some(self.slots(trainer, cheat))
     }
 }
 
@@ -150,20 +151,21 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let paths = Paths::new(dir.clone());
         let mut store = Store::load(&paths);
+        let g = Ref::parse("s:g").unwrap();
         assert!(store.enabled());
-        assert_eq!(store.slots("g", &cheat()), [Chord::from_vks(&[112]), None]);
-        store.choose("g", "a", 0, Choice::Unbound);
-        store.choose("g", "a", 1, Choice::Bound(Chord::from_vks(&[17, 113]).unwrap()));
+        assert_eq!(store.slots(&g, &cheat()), [Chord::from_vks(&[112]), None]);
+        store.choose(&g, "a", 0, Choice::Unbound);
+        store.choose(&g, "a", 1, Choice::Bound(Chord::from_vks(&[17, 113]).unwrap()));
         store.set_game_only(true);
         store.set_enabled(false);
         let reloaded = Store::load(&paths);
-        assert_eq!(reloaded.slots("g", &cheat()), [None, Chord::from_vks(&[17, 113])]);
+        assert_eq!(reloaded.slots(&g, &cheat()), [None, Chord::from_vks(&[17, 113])]);
         assert!(reloaded.game_only() && !reloaded.enabled());
-        store.choose("g", "a", 0, Choice::Default);
-        store.choose("g", "a", 1, Choice::Default);
-        assert!(Store::load(&paths).saved.games.is_empty());
-        store.choose("g", "a", 1, Choice::Bound(Chord::from_vks(&[112]).unwrap()));
-        assert_eq!(store.slots("g", &cheat()), [None, Chord::from_vks(&[112])]);
+        store.choose(&g, "a", 0, Choice::Default);
+        store.choose(&g, "a", 1, Choice::Default);
+        assert!(Store::load(&paths).saved.trainers.is_empty());
+        store.choose(&g, "a", 1, Choice::Bound(Chord::from_vks(&[112]).unwrap()));
+        assert_eq!(store.slots(&g, &cheat()), [None, Chord::from_vks(&[112])]);
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -172,13 +174,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("impulse-rebind-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let mut store = Store::load(&Paths::new(dir.clone()));
+        let g = Ref::parse("s:g").unwrap();
         let (f1, f2) = (Chord::from_vks(&[112]).unwrap(), Chord::from_vks(&[113]).unwrap());
-        assert_eq!(store.rebind("g", &cheat(), 1, Choice::Bound(f1), |_| false), None);
-        assert_eq!(store.rebind("g", &cheat(), 1, Choice::Bound(f2), |chord| chord == f2), None);
-        assert_eq!(store.rebind("g", &cheat(), 0, Choice::Bound(f1), |_| false), Some(vec![Some(f1), None]));
-        assert_eq!(store.rebind("g", &cheat(), 1, Choice::Bound(f2), |_| false), Some(vec![Some(f1), Some(f2)]));
-        assert_eq!(store.rebind("g", &cheat(), 0, Choice::Bound(f2), |_| false), None);
-        assert_eq!(store.rebind("g", &cheat(), 0, Choice::Unbound, |_| true), Some(vec![None, Some(f2)]));
+        assert_eq!(store.rebind(&g, &cheat(), 1, Choice::Bound(f1), |_| false), None);
+        assert_eq!(store.rebind(&g, &cheat(), 1, Choice::Bound(f2), |chord| chord == f2), None);
+        assert_eq!(store.rebind(&g, &cheat(), 0, Choice::Bound(f1), |_| false), Some(vec![Some(f1), None]));
+        assert_eq!(store.rebind(&g, &cheat(), 1, Choice::Bound(f2), |_| false), Some(vec![Some(f1), Some(f2)]));
+        assert_eq!(store.rebind(&g, &cheat(), 0, Choice::Bound(f2), |_| false), None);
+        assert_eq!(store.rebind(&g, &cheat(), 0, Choice::Unbound, |_| true), Some(vec![None, Some(f2)]));
         fs::remove_dir_all(&dir).unwrap();
     }
 }
