@@ -6,13 +6,11 @@ mod frame;
 use gpui_kit::{Bounds, Context, MouseButton, MouseMoveEvent, Pixels, Point, Size, point, px, size};
 use serde::{Deserialize, Serialize};
 
+use client::storage::{Paths, Stored};
 use frame::HEADER;
 pub(super) use frame::{below_header, frame, input, toolbar};
 
-use super::{
-    assets::Icon,
-    storage::{Paths, Stored},
-};
+use super::assets::Icon;
 
 pub(super) struct Spec {
     pub id: &'static str,

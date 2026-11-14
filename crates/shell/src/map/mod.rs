@@ -3,18 +3,17 @@
 
 mod board;
 mod card;
-mod heading;
 mod keys;
 mod live;
 mod markers;
 mod picture;
 mod sidebar;
 mod stage;
-mod state;
 mod tracker;
 
 use std::{rc::Rc, sync::Arc, time::Duration};
 
+use client::{media::Media, storage::Paths};
 use futures::StreamExt;
 use gpui_kit::{
     App, Context, Entity, EventEmitter, FocusHandle, IntoElement, Render, StyleRefinement, Task, Window,
@@ -26,9 +25,8 @@ use gpui_kit::{
 use model::{Group, Map, MapOffer, Pin, Provider, Snapshot};
 
 use crate::{
-    Load, art,
+    Load,
     assets::Icon,
-    storage::Paths,
     theme::*,
     widgets::{icon_button, mono},
 };
@@ -84,11 +82,11 @@ impl MapView {
         let board = cx.new(|_| Board::new(paths.map_state()));
         cx.observe(&board, |_, _, cx| cx.notify()).detach();
         let live_board = cx.new(|_| Board::live(paths.map_state()));
-        let tile_dir = art::Media::Tiles.dir(paths);
+        let tile_dir = Media::Tiles.dir(paths);
         let live_map = cx.new(|cx| LiveMap::new(provider.clone(), live_board, board.clone(), tile_dir.clone(), paths, cx));
         let stage = cx.new(|cx| Stage::new(board.clone(), tile_dir, cx));
         let sidebar = cx.new(|cx| Sidebar::new(board.clone(), window, cx));
-        let card = cx.new(|cx| Card::new(board.clone(), art::Media::Videos.dir(paths), window, cx));
+        let card = cx.new(|cx| Card::new(board.clone(), Media::Videos.dir(paths), window, cx));
         Self {
             provider,
             board,

@@ -1,70 +1,27 @@
-//! A game's sources, as Wand calls them: its launcher's install and an executable the user picked.
-//! The hero's `⋯` switches between them; `+ ADD` adds a game the launchers did not find.
+//! The hero's `⋯` switches a game's sources; `+ ADD` adds a game the launchers did not find.
 
 mod add;
-mod picked;
 
-use std::{
-    mem,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{mem, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use blocking::unblock;
+use client::library::{
+    Game,
+    sources::{Entry, entries, exe},
+};
 use futures::channel::oneshot;
 use gpui_kit::{Context, PathPromptOptions, SharedString, Window};
-use model::Installation;
 
 pub(super) use add::Picker;
-pub(super) use picked::Picked;
 
-use super::{Load, Page, library::Game};
-
-/// What an entry of the `⋯` menu does.
-#[derive(Clone, Copy)]
-enum Entry {
-    /// `true`: the install not in use.
-    Use(bool),
-    Pick,
-    Forget,
-}
-
-/// The menu: the launcher's install first, then the picked executable, then what to do with one.
-fn entries(game: &Game) -> (Vec<(Entry, SharedString)>, usize) {
-    let mut sources: Vec<(bool, &Installation)> = [(false, Some(&game.install)), (true, game.other.as_ref())]
-        .into_iter()
-        .filter_map(|(other, install)| Some((other, install?)))
-        .collect();
-    sources.sort_by_key(|(_, install)| exe(install).is_some());
-    let current = sources.iter().position(|(other, _)| !other).unwrap_or_default();
-    let picked = sources.iter().any(|(_, install)| exe(install).is_some());
-    let mut entries: Vec<(Entry, SharedString)> = sources
-        .into_iter()
-        .map(|(other, install)| {
-            let label = match exe(install) {
-                Some(exe) => format!("EXE  {}", exe.file_name().unwrap_or_default().to_string_lossy()),
-                None => install.store_id.split(':').next().unwrap_or_default().to_uppercase(),
-            };
-            (Entry::Use(other), label.into())
-        })
-        .collect();
-    entries.push((Entry::Pick, if picked { "CHANGE .EXE" } else { "+ ADD .EXE" }.into()));
-    if picked {
-        entries.push((Entry::Forget, "REMOVE .EXE".into()));
-    }
-    (entries, current)
-}
-
-fn exe(install: &Installation) -> Option<&Path> {
-    model::custom_exe(&install.store_id)
-}
+use super::{Load, Page};
 
 impl Page {
     /// The `⋯` menu's options and the one in use.
     pub(super) fn source_options(game: &Game) -> (Vec<SharedString>, usize) {
         let (entries, current) = entries(game);
-        (entries.into_iter().map(|(_, label)| label).collect(), current)
+        (entries.into_iter().map(|(_, label)| label.into()).collect(), current)
     }
 
     /// A pick in the open game's `⋯` menu.

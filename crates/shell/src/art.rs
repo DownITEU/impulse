@@ -10,7 +10,7 @@ use anyhow::{Result, bail};
 use futures::future::BoxFuture;
 use gpui_kit::http_client::{AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
 
-use crate::storage::Paths;
+use client::media::file;
 
 /// Lets `img(url)` load public art through the disk cache and the native CDN client.
 pub struct CdnClient {
@@ -34,31 +34,6 @@ impl HttpClient for CdnClient {
             Ok(Response::new(AsyncBody::from_bytes(bytes.into())))
         })
     }
-}
-
-/// A kind of cached file, in a folder of its own: sized, cleared and limited apart.
-#[derive(Clone, Copy, PartialEq)]
-pub enum Media {
-    Pictures,
-    Tiles,
-    Videos,
-}
-
-impl Media {
-    pub const ALL: [Self; 3] = [Self::Pictures, Self::Tiles, Self::Videos];
-
-    pub fn dir(self, paths: &Paths) -> PathBuf {
-        match self {
-            Self::Pictures => paths.pictures(),
-            Self::Tiles => paths.tiles(),
-            Self::Videos => paths.videos(),
-        }
-    }
-}
-
-/// Whether the CDN already answered 404 for `url` (blocking), so nothing asks for it again.
-pub fn known_missing(cache: &Path, url: &str) -> bool {
-    fs::metadata(file(cache, url)).is_ok_and(|meta| meta.len() == 0)
 }
 
 // Disk first and never revalidated: files under one URL do not change.
@@ -109,14 +84,4 @@ fn download(file: &Path, url: &str) -> Result<Vec<u8>> {
         bail!("{url} does not exist");
     }
     Ok(response.body)
-}
-
-fn file(cache: &Path, url: &str) -> PathBuf {
-    let keep = |c: char| c.is_ascii_alphanumeric() || c == '.';
-    let name: String = url.trim_start_matches("https://").chars().map(|c| if keep(c) { c } else { '_' }).collect();
-    cache.join(name)
-}
-
-pub fn steam_hero(app: u32) -> String {
-    format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero.jpg")
 }

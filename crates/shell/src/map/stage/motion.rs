@@ -2,6 +2,7 @@
 
 use std::time::Instant;
 
+use client::map::heading::{Bearing, JUMP, arc};
 use gpui_kit::{Context, Window};
 use model::{Map, Point};
 
@@ -9,10 +10,7 @@ use super::{
     Stage,
     camera::{Glide, Pixel},
 };
-use crate::map::{
-    heading::{Bearing, JUMP, arc},
-    markers::Look,
-};
+use crate::map::markers::Look;
 
 // Seconds a marker takes to cover about two thirds of its change in size.
 const GROW: f64 = 0.05;

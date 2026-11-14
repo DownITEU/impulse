@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 
-use super::storage::{Paths, Stored};
+use crate::storage::{Paths, Stored};
 
 /// Cheat values by cheat id.
 pub type Values = BTreeMap<String, f64>;

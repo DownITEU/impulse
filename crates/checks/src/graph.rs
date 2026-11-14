@@ -15,6 +15,7 @@ use crate::{root, verdict};
 const GRAPH: &[(&str, &[&str])] = &[
     ("agent", &["model", "pe"]),
     ("checks", &[]),
+    ("client", &["disk", "launchers", "model", "play"]),
     ("disk", &[]),
     ("fetch", &[]),
     ("hotkeys", &[]),
@@ -25,7 +26,7 @@ const GRAPH: &[(&str, &[&str])] = &[
     ("overlay", &[]),
     ("pe", &[]),
     ("play", &["agent", "model"]),
-    ("shell", &["disk", "fetch", "hotkeys", "journal", "launchers", "model", "overlay", "play", "tray", "video"]),
+    ("shell", &["client", "disk", "fetch", "hotkeys", "journal", "launchers", "model", "overlay", "tray", "video"]),
     ("tray", &[]),
     ("video", &[]),
     ("wand", &["agent", "disk", "fetch", "hotkeys", "model", "pe"]),

@@ -4,17 +4,19 @@
 
 mod caps;
 mod settings;
-mod store;
 
 use std::sync::Arc;
 
+use client::{
+    bindings::{Choice, Store},
+    storage::Paths,
+};
 use futures::{StreamExt, channel::mpsc};
 use gpui_kit::{App, Context, Div, Task, Window, prelude::*, rgb};
 use hotkeys::{Binding, Capture, Chord, Fired, Hook, Matcher, Outcome, Step};
 use model::Cheat;
 
-use super::{Load, Page, run::Play, storage::Paths, theme::*, widgets::mono};
-use store::{Choice, Store};
+use super::{Load, Page, run::Play, theme::*, widgets::mono};
 
 pub(super) const PRESS_KEYS: &str = "PRESS KEYS";
 
@@ -95,14 +97,14 @@ impl Page {
         self.cancel_capture(cx);
         let Some(loaded) = self.trainer(Some(&game)) else { return };
         let mut matcher = Matcher::default();
-        for (index, slots) in loaded.hotkeys.iter().enumerate() {
+        for (index, slots) in loaded.sheet.hotkeys.iter().enumerate() {
             for (slot, chord) in slots.iter().enumerate() {
                 if let Some(chord) = chord {
                     matcher.bind(*chord, Binding { action: (index, slot), block: false });
                 }
             }
         }
-        let mouse = loaded.hotkeys.iter().flatten().flatten().any(|chord| chord.uses_mouse());
+        let mouse = loaded.sheet.hotkeys.iter().flatten().flatten().any(|chord| chord.uses_mouse());
         let (tx, mut presses) = mpsc::unbounded();
         let game_only = self.bindings.game_only();
         let hook = Hook::start(mouse, move |vk, down| {
@@ -144,7 +146,7 @@ impl Page {
     /// Starts binding the open trainer's slot.
     fn capture(&mut self, index: usize, slot: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(game) = self.selected.clone() else { return };
-        let Some(cheat) = self.trainer(Some(&game)).map(|loaded| loaded.cheats[index].id.clone()) else { return };
+        let Some(cheat) = self.trainer(Some(&game)).map(|loaded| loaded.sheet.cheats[index].id.clone()) else { return };
         self.start_capture(Target::Slot { game, cheat, slot }, window, cx);
     }
 
@@ -213,23 +215,9 @@ impl Page {
         };
         let (overlay, minimap) = (self.layer.read(cx).hotkey(), self.layer.read(cx).minimap_hotkey());
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
-        let Some(index) = loaded.cheats.iter().position(|found| found.id == cheat) else { return };
-        let wanted = match choice {
-            Choice::Bound(chord) => Some(chord),
-            Choice::Unbound => None,
-            Choice::Default => loaded.cheats[index].hotkeys.get(slot).copied().flatten(),
-        };
-        // As in Wand, a cheat never holds one chord twice, nor the overlay's or the minimap's.
-        let taken = |chord: Chord| {
-            let other = |(at, bound): (usize, &Option<Chord>)| at != slot && bound.is_some_and(|bound| bound.same_keys(chord));
-            let layer = overlay.fired_by(chord.vks()) || minimap.is_some_and(|key| key.fired_by(chord.vks()));
-            layer || loaded.hotkeys[index].iter().enumerate().any(other)
-        };
-        if wanted.is_some_and(taken) {
-            return;
-        }
-        self.bindings.store.choose(&game, cheat, slot, choice);
-        let slots = self.bindings.store.slots(&game, &loaded.cheats[index]);
+        let Some(index) = loaded.sheet.cheats.iter().position(|found| found.id == cheat) else { return };
+        let layer = |chord: Chord| overlay.fired_by(chord.vks()) || minimap.is_some_and(|key| key.fired_by(chord.vks()));
+        let Some(slots) = self.bindings.store.rebind(&game, &loaded.sheet.cheats[index], slot, choice, layer) else { return };
         loaded.rebind(index, slots);
         if self.play.live() == Some(&game) {
             self.arm_hotkeys(window, cx);

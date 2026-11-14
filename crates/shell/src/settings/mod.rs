@@ -6,12 +6,10 @@ mod view;
 use gpui_kit::{App, Context};
 use serde::{Deserialize, Serialize};
 
+use client::storage::{Paths, Stored};
 pub(super) use view::{Tab, label, row};
 
-use super::{
-    storage::{Paths, Stored},
-    theme::{ACCENTS, Look},
-};
+use super::theme::{ACCENTS, Look};
 
 /// The leading item of a sidebar row.
 #[derive(Clone, Copy, Default, PartialEq, Serialize, Deserialize)]

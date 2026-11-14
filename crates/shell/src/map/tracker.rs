@@ -11,7 +11,7 @@ use anyhow::Result;
 use gpui_kit::{Context, EventEmitter, Task};
 use model::{Frame, Session};
 
-use super::heading::{Bearing, Heading};
+use client::map::heading::{Bearing, Heading};
 
 // Failed answers in a row before the player counts as lost (a menu, a loading screen); asking goes on,
 // slower each time, but soon enough for the minimap to come back with the player.

@@ -3,12 +3,12 @@
 
 use std::mem;
 
+use client::{profile::Values, run};
 use gpui_kit::{Context, IntoElement, Window, component::h_flex, div, prelude::*, px, rgb};
 
 use super::{
     Load, Page,
     loaded::Loaded,
-    profile::Values,
     run::Play,
     theme::*,
     widgets::{button, mono, tip, toggle},
@@ -19,7 +19,7 @@ impl Page {
     pub(super) fn apply(&mut self, values: &Values, window: &mut Window, cx: &mut Context<Self>) {
         let Some(game) = self.play.live().cloned() else { return };
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
-        let changes = loaded.changes(values);
+        let changes = loaded.sheet.changes(values);
         for &(index, value) in &changes {
             loaded.put(index, value, window, cx);
         }
@@ -32,10 +32,7 @@ impl Page {
     /// Counts the run that went live and sets the mods kept for it.
     pub(super) fn open_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(game) = self.play.live().cloned() else { return };
-        let kept = self.profiles.edit(&game, |profile| {
-            profile.sessions += 1;
-            profile.save_mods.then(|| profile.values.clone())
-        });
+        let kept = self.profiles.edit(&game, run::opened);
         if let Some(values) = kept {
             self.apply(&values, window, cx);
         }
@@ -49,14 +46,8 @@ impl Page {
             return;
         }
         let (game, secs) = (game.clone(), since.elapsed().as_secs());
-        let left = self.trainer(Some(&game)).map(Loaded::live_values);
-        self.profiles.edit(&game, |profile| {
-            profile.played += secs;
-            profile.last = secs;
-            if let Some(left) = left.filter(|_| profile.save_mods) {
-                profile.values = left;
-            }
-        });
+        let left = self.trainer(Some(&game)).map(|loaded| loaded.sheet.live_values());
+        self.profiles.edit(&game, |profile| run::closed(profile, secs, left));
     }
 
     /// Turns every live mod off; with no run, forgets the kept ones.
@@ -66,7 +57,7 @@ impl Page {
             self.profiles.edit(&game, |profile| profile.values.clear());
             return cx.notify();
         }
-        if let Some(rest) = self.trainer(Some(&game)).map(|loaded| loaded.rest(&loaded.live_values())) {
+        if let Some(rest) = self.trainer(Some(&game)).map(|loaded| loaded.sheet.rest(&loaded.sheet.live_values())) {
             self.apply(&rest, window, cx);
         }
     }
@@ -75,7 +66,7 @@ impl Page {
     pub(super) fn saved_bar(&self, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let profile = self.profiles.of(self.selected.as_deref().unwrap_or_default());
         let (save, kept) = (profile.save_mods, profile.values.len());
-        let resettable = if running { loaded.active() > 0 } else { kept > 0 };
+        let resettable = if running { loaded.sheet.active() > 0 } else { kept > 0 };
         let label = match kept {
             0 => "SAVE".to_owned(),
             _ if running => "SAVE".to_owned(),

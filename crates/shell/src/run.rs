@@ -7,12 +7,12 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
+use client::run::{self, Request, Stage};
 use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, Context, Div, Entity, Task, Window, prelude::*, rgb};
-use model::{Event, Live, Process, Rule, Session};
+use model::{Event, Live, Process, Session};
 
 use super::{Page, map::Tracker, theme::*, widgets::mono};
-use play::{Request, Stage, run};
 
 pub(super) enum Play {
     Idle,
@@ -115,7 +115,7 @@ impl Page {
         let task = cx.spawn_in(window, async move |page, cx| {
             let outcome = {
                 let (progress, mut progress_cx) = (page.clone(), cx.clone());
-                run(request, move |stage| {
+                run::start(request, move |stage| {
                     progress.update(&mut progress_cx, |page, cx| page.run_stage(stage, cx)).ok();
                 })
                 .await
@@ -128,14 +128,8 @@ impl Page {
 
     fn run_request(&self, id: &Arc<str>) -> Result<Request> {
         let game = self.games().iter().find(|game| game.id == *id).context("the game is not in the library")?;
-        let plan = &self.trainer(Some(id)).context("the cheat list is not loaded")?.plan;
-        let install = &game.install;
-        Ok(Request {
-            runner: plan.runner.clone(),
-            store_id: install.store_id.clone(),
-            rule: Rule { image: plan.image.clone(), location: install.location.clone(), minimum_age: plan.minimum_age },
-            launch: plan.launch,
-        })
+        let loaded = self.trainer(Some(id)).context("the cheat list is not loaded")?;
+        Ok(run::request(&game.install, &loaded.sheet.plan))
     }
 
     fn run_stage(&mut self, stage: Stage, cx: &mut Context<Self>) {
@@ -166,7 +160,7 @@ impl Page {
         log::info!("trainer is live in {id}");
         let session: Arc<dyn Session> = Arc::from(session);
         super::crash::follow(&session);
-        let located = self.trainer(Some(&id)).is_some_and(|loaded| loaded.location);
+        let located = self.trainer(Some(&id)).is_some_and(|loaded| loaded.sheet.location);
         let tracker = located.then(|| cx.new(|_| Tracker::new(session.clone())));
         self.play = Play::Live {
             game: id,
@@ -251,14 +245,14 @@ impl Page {
 
     fn reset_values(&mut self, id: &Arc<str>) {
         if let Some(super::Load::Ready(loaded)) = self.trainers.get_mut(id) {
-            loaded.reset();
+            loaded.sheet.reset();
         }
     }
 
     /// Sends a cheat's value to the running trainer.
     pub(super) fn push_value(&self, index: usize, value: f64, cx: &mut Context<Self>) {
         let Play::Live { game, session, .. } = &self.play else { return };
-        let Some(key) = self.trainer(Some(game)).and_then(|loaded| loaded.cheats[index].key.clone()) else {
+        let Some(key) = self.trainer(Some(game)).and_then(|loaded| loaded.sheet.cheats[index].key.clone()) else {
             return;
         };
         let session = session.clone();

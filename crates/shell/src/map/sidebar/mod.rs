@@ -359,7 +359,7 @@ fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoEl
             .when(enabled, |cell| cell.cursor_pointer().hover(|style| style.border_color(line(0.3))))
             .child(mono(label, 10.).font_weight(FontWeight::BOLD).text_color(rgb(color)))
     };
-    let change = |change: fn(&mut super::state::Saved)| {
+    let change = |change: fn(&mut client::map::state::Saved)| {
         cx.listener(move |sidebar: &mut Sidebar, _, _, cx| sidebar.board.update(cx, |board, cx| board.filter(change, cx)))
     };
     let toggle_all = cx.listener(move |sidebar, _, _, cx| {

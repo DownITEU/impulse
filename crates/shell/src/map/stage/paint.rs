@@ -4,6 +4,7 @@ use std::{ops::RangeInclusive, rc::Rc, sync::Arc};
 
 use anyhow::Context as _;
 use blocking::unblock;
+use client::map::{heading::Bearing, state::Saved};
 use gpui_kit::{
     App, BorderStyle, Bounds, ContentMask, Context, Corners, DispatchPhase, Font, FontWeight, Hitbox, MouseMoveEvent, MouseUpEvent,
     PathBuilder, Pixels, RenderImage, Rgba, SharedString, TextAlign, TextRun, TransformationMatrix, Window, font, point, px, quad, radians,
@@ -23,9 +24,7 @@ use crate::{
     assets::Icon,
     map::{
         board::plane,
-        heading::Bearing,
         markers::{Look, Marker, SIZE, TIP, ink},
-        state::Saved,
     },
     theme::*,
 };

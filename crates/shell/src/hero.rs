@@ -1,3 +1,4 @@
+use client::library::{Game, Support};
 use gpui_kit::{
     App, Context, Div, FontWeight, IntoElement, ObjectFit, SharedString, Stateful, component::h_flex, div, img, linear_color_stop,
     linear_gradient, prelude::*, px, relative, rgb,
@@ -6,7 +7,6 @@ use gpui_kit::{
 use super::{
     Menu, Page,
     assets::Icon,
-    library::{Game, Support},
     run::{Play, STOPPING, label},
     theme::*,
     widgets::{icon, mono, square, tip, tracked},
@@ -177,7 +177,7 @@ impl Page {
             Support::NoTrainer => "NO TRAINER".to_owned(),
             // The catalog count, until the trainer itself is there.
             _ => {
-                let count = self.trainer(Some(&game.id)).map_or(game.mods as usize, |loaded| loaded.cheats.len());
+                let count = self.trainer(Some(&game.id)).map_or(game.mods as usize, |loaded| loaded.sheet.cheats.len());
                 format!("{count} MODS")
             }
         };

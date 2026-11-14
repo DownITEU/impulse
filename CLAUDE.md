@@ -20,6 +20,7 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 
 - `app` - the composition root: one instance, the journal, the provider, the window.
 - `shell` - the GPUI UI.
+- `client` - the app's logic without GPUI: library, trainer sheet, runs, hotkey choices, map state and the files that keep them.
 - `wand` - everything WeMod/Wand; its one public item is the `Wand` provider.
 - `model` - the contract the UI, a run and the providers share.
 - `play` - one run: prepare, find or start the game, attach.

@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use client::profile::{Collection, Values};
 use gpui_kit::{
     Context, Div, Entity, IntoElement, MouseButton, Stateful, Subscription, Window,
     component::{
@@ -20,7 +21,6 @@ use super::{
     Menu, Page,
     assets::Icon,
     loaded::Loaded,
-    profile::{Collection, Values},
     theme::*,
     widgets::{button, icon, icon_button, mono, tip},
 };
@@ -63,11 +63,11 @@ impl Page {
     pub(super) fn collections_bar(&self, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let collections = &self.profiles.of(self.selected.as_deref().unwrap_or_default()).collections;
         // A new one is made of the mods that are on.
-        let addable = running && loaded.active() > 0;
+        let addable = running && loaded.sheet.active() > 0;
         let chips = collections
             .iter()
             .enumerate()
-            .map(|(at, collection)| self.chip(at, collection, running, running && loaded.holds(&collection.mods), cx));
+            .map(|(at, collection)| self.chip(at, collection, running, running && loaded.sheet.holds(&collection.mods), cx));
         h_flex()
             .h(px(40.))
             .flex_none()
@@ -147,7 +147,7 @@ impl Page {
         let Some(game) = self.selected.clone() else { return };
         let Some(mods) = self.profiles.of(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
         let Some(loaded) = self.trainer(Some(&game)) else { return };
-        let values = if loaded.holds(&mods) { loaded.rest(&mods) } else { mods };
+        let values = if loaded.sheet.holds(&mods) { loaded.sheet.rest(&mods) } else { mods };
         self.apply(&values, window, cx);
     }
 
@@ -167,7 +167,9 @@ impl Page {
         let changed = at.and_then(|at| self.profiles.of(&game).collections.get(at));
         let (title, key, mods) = match (changed, at) {
             (Some(collection), _) => (collection.name.clone(), listed(&collection.icon).0, collection.mods.clone()),
-            (None, None) => (String::new(), ICONS[0].0, self.trainer(Some(&game)).map(Loaded::live_values).unwrap_or_default()),
+            (None, None) => {
+                (String::new(), ICONS[0].0, self.trainer(Some(&game)).map(|loaded| loaded.sheet.live_values()).unwrap_or_default())
+            }
             (None, Some(_)) => return,
         };
         if mods.is_empty() {

@@ -1,5 +1,6 @@
 //! The control at the right of a cheat row, one per cheat kind.
 
+use client::trainer::{Span, Step, TOP_TICK};
 use gpui_kit::{
     AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful, Window,
     component::{h_flex, input::Input, v_flex},
@@ -7,7 +8,7 @@ use gpui_kit::{
     prelude::*,
     px, relative, rgb,
 };
-use model::{Args, Kind};
+use model::Kind;
 
 use super::{
     Flash, Load, Menu, Page,
@@ -17,102 +18,38 @@ use super::{
     widgets::{button, flash_button, icon, mono, toggle},
 };
 
-const TOP_TICK: u8 = 9;
-
-/// A slider's bounds; trainers may leave any of them out.
-#[derive(Clone, Copy)]
-struct Span {
-    min: f64,
-    max: f64,
-    step: f64,
-}
-
-impl Span {
-    fn of(args: &Args) -> Self {
-        let min = args.min.unwrap_or(0.);
-        Self { min, max: args.max.filter(|max| *max > min).unwrap_or(min + 100.), step: args.step.filter(|step| *step > 0.).unwrap_or(1.) }
-    }
-
-    fn tick(self, value: f64) -> u8 {
-        let share = (value - self.min) / (self.max - self.min);
-        (share * f64::from(TOP_TICK)).round() as u8
-    }
-
-    fn value(self, tick: u8) -> f64 {
-        self.snap(self.min + (self.max - self.min) * f64::from(tick) / f64::from(TOP_TICK))
-    }
-
-    /// A wheel notch: at least one step, so a coarse step never rounds back to where it was.
-    fn nudge(self, value: f64, up: bool) -> f64 {
-        let by = self.step.max((self.max - self.min) / f64::from(TOP_TICK));
-        self.snap(if up { value + by } else { value - by })
-    }
-
-    /// Steps count from `min`, not from zero.
-    fn snap(self, value: f64) -> f64 {
-        (self.min + ((value - self.min) / self.step).round() * self.step).clamp(self.min, self.max)
-    }
-}
-
-/// Rounds to the decimals of the step and of `min`, so repeated steps do not drift (Wand rounds
-/// to the step's alone, which turns 0.5 + 1 into 2).
-fn round_to(value: f64, args: &Args, step: f64) -> f64 {
-    let decimals = |x: f64| x.to_string().split_once('.').map_or(0, |(_, fraction)| fraction.len());
-    let scale = 10_f64.powi(decimals(step).max(args.min.map_or(0, decimals)) as i32);
-    let rounded = (value * scale).round() / scale;
-    // Far past f64's range the scale overflows: the step is then too coarse to drift.
-    if rounded.is_finite() { rounded } else { value }
-}
-
 impl Page {
-    /// A hotkey slot of the live trainer's cheat, stepped as Wand steps it: a pair moves by the step
-    /// and stops at the ends, a selection wraps, a numeric field takes the new value too.
+    /// A hotkey slot of the live trainer's cheat; a numeric field takes the new value too.
     pub(super) fn hotkey(&mut self, index: usize, slot: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(game) = self.play.live().cloned() else { return };
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
-        let (cheat, value, up) = (&loaded.cheats[index], loaded.values[index], slot == 1);
-        let next = match cheat.kind {
-            Kind::Toggle => 1. - value.min(1.),
-            Kind::Button => {
-                let pressed = cheat.args.pressed;
+        match loaded.sheet.step(index, slot) {
+            Some(Step::Press(pressed)) => {
                 self.push_value(index, pressed, cx);
                 if self.selected.as_ref() == Some(&game) {
                     self.flash(Flash::Cheat(index), cx);
                 }
-                return;
             }
-            Kind::Number | Kind::Slider => {
-                let step = cheat.args.step.filter(|step| *step > 0.).unwrap_or(1.);
-                cheat.args.clamp(round_to(if up { value + step } else { value - step }, &cheat.args, step))
+            Some(Step::Set(next)) => {
+                loaded.put(index, next, window, cx);
+                self.push_value(index, next, cx);
+                cx.notify();
             }
-            Kind::Selection => {
-                let count = loaded.rows[index].options.len() as f64;
-                if count == 0. {
-                    return;
-                }
-                (value + if up { 1. } else { -1. }).rem_euclid(count)
-            }
-            Kind::Unknown => return,
-        };
-        if next == value {
-            return;
+            None => {}
         }
-        loaded.put(index, next, window, cx);
-        self.push_value(index, next, cx);
-        cx.notify();
     }
 
     fn set_value(&mut self, index: usize, value: f64, cx: &mut Context<Self>) {
         if let Some(loaded) = self.loaded_mut() {
-            loaded.values[index] = value;
+            loaded.sheet.values[index] = value;
         }
         self.push_value(index, value, cx);
         cx.notify();
     }
 
     pub(super) fn control(&self, index: usize, loaded: &Loaded, running: bool, live: bool, cx: &mut Context<Self>) -> AnyElement {
-        let cheat = &loaded.cheats[index];
-        let value = loaded.values[index];
+        let cheat = &loaded.sheet.cheats[index];
+        let value = loaded.sheet.values[index];
         let value_color = if live { rgb(accent(cx)) } else { rgb(DIM) };
         match cheat.kind {
             Kind::Toggle => div()
@@ -156,7 +93,7 @@ impl Page {
                     button(label).id((id, index)).w(px(26.)).px_0().font_family(MONO).text_size(px(14.)).on_click(cx.listener(
                         move |page, _, _, cx| {
                             if running && let Some(loaded) = page.loaded_mut() {
-                                let next = loaded.cheats[index].args.clamp(value + by);
+                                let next = loaded.sheet.cheats[index].args.clamp(value + by);
                                 page.set_value(index, next, cx);
                             }
                         },
@@ -205,7 +142,7 @@ impl Page {
                 // A cheat with a text field takes its value from it; a button cheat sends its own and
                 // keeps no state.
                 let (typed, fired) = page.trainer(page.selected.as_ref()).map_or((None, None), |loaded| {
-                    let cheat = &loaded.cheats[index];
+                    let cheat = &loaded.sheet.cheats[index];
                     let typed = loaded.inputs.get(&index).and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
                     (typed, (cheat.kind == Kind::Button).then_some(cheat.args.pressed))
                 });
@@ -323,35 +260,4 @@ pub(super) fn span(list: Div) -> Div {
 
 fn value_box(value: impl Into<SharedString>) -> Div {
     mono(value, 12.5).h(px(26.)).flex().items_center().border_1().border_color(line(0.14)).bg(rgb(SUNKEN))
-}
-
-#[cfg(test)]
-mod tests {
-    use model::Args;
-
-    use super::{Span, round_to};
-
-    #[test]
-    fn hotkey_steps_keep_the_origin_and_do_not_drift() {
-        let half = Args { min: Some(0.5), ..Args::default() };
-        assert_eq!(round_to(0.5 + 1., &half, 1.), 1.5);
-        assert_eq!(round_to(0.2 + 0.1, &Args::default(), 0.1), 0.3);
-    }
-
-    #[test]
-    fn steps_count_from_min() {
-        let span = Span { min: 3., max: 21., step: 2. };
-        assert_eq!(span.value(0), 3.);
-        assert_eq!(span.value(super::TOP_TICK), 21.);
-        assert!((0..=super::TOP_TICK).all(|tick| (span.value(tick) - 3.) % 2. == 0.));
-    }
-
-    #[test]
-    fn wheel_moves_a_coarse_step() {
-        let span = Span { min: 0., max: 10., step: 5. };
-        assert_eq!(span.nudge(0., true), 5.);
-        assert_eq!(span.nudge(5., true), 10.);
-        assert_eq!(span.nudge(10., true), 10.);
-        assert_eq!(span.nudge(5., false), 0.);
-    }
 }

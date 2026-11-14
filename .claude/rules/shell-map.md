@@ -17,7 +17,7 @@ The map modal, the minimap and their parts: `MapView`, `Board`, `Stage`, `Sideba
 ## Rules
 - Each part is its own entity drawn with `cached`, observing the shared `Board`. The board notifies on what a person does, never per frame; the player's moves are `BoardEvent::Moved`, which only the stage hears.
 - `Board::live` (the minimap's) never writes the user's state: `saves` is off and it adopts the big board's `Rc<Saved>`. Only the big board writes.
-- Map state is written blocking, on each change, in order. A board saves before it swaps or closes a map (`pending`, `hide`); `forget` does not save. Map ids reach a file name only through `state::file`; a new `Saved` field is `#[serde(default)]`.
+- Map state is written blocking, on each change, in order. A board saves before it swaps or closes a map (`pending`, `hide`); `forget` does not save. The state and heading are `client::map`.
 - `Tracker` asks the position only while a `Lease` is held, one question at a time. The board holds its lease (`_fixes`) only while open with a tracker and a map that has a `Frame`; dropping it stops the asking.
 - A `Cached` snapshot is skipped when the board already holds a shared copy (`MapView::choose`, `live::load`).
 - `Tiles` drops the least recently drawn, never what the last frame drew or a load just brought. Whatever leaves `Tiles` or `Images` goes to `window.drop_image` (`stale`), in the window it was drawn in: `hide(window)` when a window stops showing a part.

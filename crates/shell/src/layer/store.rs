@@ -3,7 +3,7 @@
 use overlay::Key;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{Paths, Stored};
+use client::storage::{Paths, Stored};
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]

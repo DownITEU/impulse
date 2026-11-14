@@ -21,7 +21,7 @@ use gpui_kit::{
 use overlay::{Event, Key, Watch};
 use store::Store;
 
-use crate::storage::Paths;
+use client::storage::Paths;
 
 // GPUI switches fullscreen in a task of its own: how often and how long to look for it.
 const TICK: Duration = Duration::from_millis(8);

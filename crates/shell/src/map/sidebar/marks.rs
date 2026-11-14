@@ -1,15 +1,10 @@
 //! The sidebar's list of the user's own pins, with a switch for all of them.
 
+use client::map::state::{Mark, PALETTE};
 use gpui_kit::{AnyElement, Context, IntoElement, component::h_flex, div, prelude::*, px, rgb};
 
 use super::{Sidebar, check, section};
-use crate::{
-    map::{
-        board::Board,
-        state::{Mark, PALETTE},
-    },
-    theme::*,
-};
+use crate::{map::board::Board, theme::*};
 
 impl Sidebar {
     pub(super) fn marks_section(&self, board: &Board, cx: &Context<Self>) -> Vec<AnyElement> {

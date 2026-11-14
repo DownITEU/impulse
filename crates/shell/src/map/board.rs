@@ -3,13 +3,15 @@
 
 use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
+use client::map::{
+    heading::Bearing,
+    state::{self, Mark, PALETTE, Saved},
+};
 use gpui_kit::{Context, Entity, EventEmitter, Subscription};
 use model::{Map, Point, Session};
 
 use super::{
     group,
-    heading::Bearing,
-    state::{self, Mark, PALETTE, Saved},
     tracker::{Fix, Lease, Tracked, Tracker},
 };
 use crate::Load;

@@ -3,15 +3,16 @@
 use std::sync::Arc;
 
 use blocking::unblock;
+use client::{
+    library::{self, Library, Support},
+    media::Media,
+    trainer::Sheet,
+};
 use futures::StreamExt;
 use gpui_kit::{AsyncWindowContext, Context, WeakEntity, Window};
 use model::{Provider, SignIn, Snapshot};
 
-use super::{
-    Load, Page, art,
-    library::{self, Library, Support},
-    loaded::Loaded,
-};
+use super::{Load, Page, loaded::Loaded};
 
 impl Page {
     pub(super) fn boot(&self, window: &Window, cx: &mut Context<Self>) {
@@ -86,7 +87,8 @@ impl Page {
         let Some(game) = self.game() else {
             return;
         };
-        let current = matches!(self.trainers.get(&game.id), Some(Load::Ready(loaded)) if !loaded.stale && loaded.stamp == game.stamp);
+        let current =
+            matches!(self.trainers.get(&game.id), Some(Load::Ready(loaded)) if !loaded.sheet.stale && loaded.sheet.stamp == game.stamp);
         if game.support == Support::NoTrainer || current {
             return;
         }
@@ -102,7 +104,8 @@ impl Page {
                     match snapshot {
                         Snapshot::Cached(Some(trainer)) | Snapshot::Fresh(Ok(trainer)) => {
                             let hotkeys = page.bindings.slots(&id, &trainer.cheats);
-                            let loaded = Loaded::new(trainer, hotkeys, stamp.clone(), page.profiles.of(&id), window, cx);
+                            let sheet = Sheet::new(trainer, hotkeys, stamp.clone(), page.profiles.of(&id));
+                            let loaded = Loaded::new(sheet, window, cx);
                             page.install(id.clone(), loaded);
                         }
                         // The network is next.
@@ -131,10 +134,10 @@ impl Page {
     /// A stale copy still beats an error, and the next open asks again.
     fn refresh_failed(&mut self, id: &Arc<str>, error: String) {
         if let Some((_, loaded)) = self.deferred.as_mut().filter(|(held, _)| held == id) {
-            loaded.stale = true;
+            loaded.sheet.stale = true;
         }
         match self.trainers.get_mut(id) {
-            Some(Load::Ready(loaded)) => loaded.stale = true,
+            Some(Load::Ready(loaded)) => loaded.sheet.stale = true,
             _ => {
                 self.trainers.insert(id.clone(), Load::Failed(error));
             }
@@ -160,10 +163,10 @@ impl Page {
     pub(super) fn install_deferred(&mut self) {
         if let Some((id, mut loaded)) = self.deferred.take() {
             // The user may have rebound a slot, pinned a mod or folded a section while it waited.
-            for (index, slots) in self.bindings.slots(&id, &loaded.cheats).into_iter().enumerate() {
+            for (index, slots) in self.bindings.slots(&id, &loaded.sheet.cheats).into_iter().enumerate() {
                 loaded.rebind(index, slots);
             }
-            loaded.restore(self.profiles.of(&id));
+            loaded.sheet.restore(self.profiles.of(&id));
             self.install(id, loaded);
         }
     }
@@ -173,7 +176,7 @@ impl Page {
 pub(super) async fn rescan(page: &WeakEntity<Page>, mut games: Vec<model::Game>, cx: &mut AsyncWindowContext) {
     loop {
         let Ok((art, picked, provider)) =
-            page.read_with(cx, |page, _| (art::Media::Pictures.dir(&page.paths), page.picked.clone(), page.provider.clone()))
+            page.read_with(cx, |page, _| (Media::Pictures.dir(&page.paths), page.picked.clone(), page.provider.clone()))
         else {
             return;
         };

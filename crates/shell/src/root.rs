@@ -3,13 +3,13 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use client::storage::Paths;
 use gpui_kit::{Context, Entity, IntoElement, Render, StyleRefinement, Window, div, prelude::*, px, rgb};
 use model::Provider;
 
 use super::{
     Page,
     map::{MapEvent, MapView},
-    storage::Paths,
     theme::*,
 };
 

@@ -1,5 +1,6 @@
 //! The card of a pin of the user's own: named, noted, colored, kept with the map's state.
 
+use client::map::state::{Mark, PALETTE};
 use gpui_kit::{
     AnyElement, Context, Entity, EventEmitter, FontWeight, Window,
     component::{
@@ -15,10 +16,7 @@ use model::Map;
 use super::Card;
 use crate::{
     assets::Icon,
-    map::{
-        board::{Board, plane},
-        state::{Mark, PALETTE},
-    },
+    map::board::{Board, plane},
     theme::*,
     widgets::{button, icon_button, mono},
 };

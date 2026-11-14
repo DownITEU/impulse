@@ -1,7 +1,6 @@
 //! What Impulse keeps on disk, by kind: sizes, clearing, and the limit on media.
 //! An entity of its own; the Settings RESOURCES tab shows it.
 
-mod limit;
 mod view;
 
 use std::{sync::Arc, time::Duration};
@@ -10,8 +9,8 @@ use blocking::unblock;
 use gpui_kit::{Context, EventEmitter, Task};
 use model::{Clear, Provider, Store};
 
-use crate::{
-    art::Media,
+use client::{
+    media::{Media, limit},
     storage::{Paths, Stored},
 };
 

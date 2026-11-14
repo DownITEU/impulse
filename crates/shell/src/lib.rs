@@ -17,12 +17,10 @@ mod header;
 mod hero;
 mod hud;
 mod layer;
-mod library;
 mod loaded;
 mod log_view;
 mod map;
 mod pane;
-mod profile;
 mod resources;
 mod root;
 mod run;
@@ -32,7 +30,6 @@ mod side;
 mod sidebar;
 mod sources;
 mod status;
-mod storage;
 mod systray;
 mod theme;
 mod widgets;
@@ -62,20 +59,23 @@ use docks::Docks;
 use folders::FolderRow;
 use glance::Glance;
 use layer::{Layer, MinimapKey};
-use library::{Game, Library};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
 use map::{MapEvent, MapView, Minimap};
-use profile::Profiles;
 use resources::{Resources, ResourcesEvent};
 pub use root::Root;
 use run::Play;
 use settings::{Settings, Tab};
-use sources::{Picked, Picker};
-use storage::Paths;
+use sources::Picker;
 use theme::*;
 use widgets::grid;
 
+use client::{
+    library::{Game, Library, Picked},
+    media::Media,
+    profile::Profiles,
+    storage::Paths,
+};
 use model::{Account, Provider};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -84,7 +84,7 @@ const SIDEBAR_WIDTH: f32 = 248.;
 pub fn init(data_dir: &Path, cx: &mut App) {
     crash::install();
     theme::init(cx);
-    cx.set_http_client(Arc::new(art::CdnClient { cache: art::Media::Pictures.dir(&Paths::new(data_dir.to_owned())) }));
+    cx.set_http_client(Arc::new(art::CdnClient { cache: Media::Pictures.dir(&Paths::new(data_dir.to_owned())) }));
     log_view::bind_keys(cx);
     map::bind_keys(cx);
     hud::bind_keys(cx);

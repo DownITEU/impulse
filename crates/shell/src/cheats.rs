@@ -1,3 +1,4 @@
+use client::library::{Game, Support};
 use gpui_kit::{
     AnyElement, Context, FontWeight, IntoElement, SharedString,
     component::{h_flex, v_flex},
@@ -9,7 +10,6 @@ use gpui_kit::{
 use super::{
     Load, Page,
     assets::Icon,
-    library::{Game, Support},
     loaded::Loaded,
     theme::*,
     widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
@@ -55,7 +55,7 @@ impl Page {
         // Pinned first, then categories in the trainer's own order.
         let mut sections: Vec<(SharedString, Vec<usize>)> = vec![(PINNED.into(), Vec::new())];
         for (index, row) in loaded.rows.iter().enumerate() {
-            let at = match loaded.pinned.contains(&index) {
+            let at = match loaded.sheet.pinned.contains(&index) {
                 true => 0,
                 false => {
                     sections.iter().skip(1).position(|(title, _)| *title == row.category).map(|found| found + 1).unwrap_or_else(|| {
@@ -83,7 +83,7 @@ impl Page {
                 continue;
             }
             shown += cheats.len();
-            let folded = loaded.folded.contains(&title);
+            let folded = loaded.sheet.folded.contains(&*title);
             let divided = !rows.is_empty();
             rows.push(self.section(at, title, cheats.len(), folded, divided, cx).into_any_element());
             if !folded {
@@ -114,23 +114,15 @@ impl Page {
 
     fn toggle_fold(&mut self, title: SharedString, cx: &mut Context<Self>) {
         let Some(game) = self.selected.clone() else { return };
-        let Some(loaded) = self.loaded_mut() else { return };
-        if !loaded.folded.remove(&title) {
-            loaded.folded.insert(title);
-        }
-        let folded = loaded.folded.iter().map(SharedString::to_string).collect();
-        self.profiles.edit(&game, |profile| profile.folded = folded);
+        let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
+        self.profiles.edit(&game, |profile| loaded.sheet.toggle_fold(&title, profile));
         cx.notify();
     }
 
     fn toggle_pin(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(game) = self.selected.clone() else { return };
-        let Some(loaded) = self.loaded_mut() else { return };
-        if !loaded.pinned.remove(&index) {
-            loaded.pinned.insert(index);
-        }
-        let pinned = loaded.pinned.iter().map(|&index| loaded.cheats[index].id.clone()).collect();
-        self.profiles.edit(&game, |profile| profile.pinned = Some(pinned));
+        let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
+        self.profiles.edit(&game, |profile| loaded.sheet.toggle_pin(index, profile));
         cx.notify();
     }
 
@@ -166,8 +158,8 @@ impl Page {
         let lit = accent(cx);
         let accent = rgb(lit);
         let row = &loaded.rows[index];
-        let live = running && loaded.is_live(index);
-        let pinned = loaded.pinned.contains(&index);
+        let live = running && loaded.sheet.is_live(index);
+        let pinned = loaded.sheet.pinned.contains(&index);
         let name_color = match (live, running) {
             (true, _) => TEXT_BRIGHT,
             (false, true) => TEXT_2,

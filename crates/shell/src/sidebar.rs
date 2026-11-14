@@ -1,7 +1,8 @@
 use std::time::Duration;
 
+use client::library::{Game, Support};
 use gpui_kit::{
-    Animation, AnimationExt, App, Context, FontWeight, IntoElement, ObjectFit,
+    Animation, AnimationExt, App, Context, FontWeight, IntoElement, ObjectFit, SharedString,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div, img,
     prelude::*,
@@ -11,7 +12,6 @@ use gpui_kit::{
 use super::{
     Page, SIDEBAR_WIDTH,
     assets::Icon,
-    library::{Game, Support},
     settings::Lead,
     theme::*,
     widgets::{filter, icon, icon_button, mono, square},
@@ -146,7 +146,7 @@ impl Page {
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_size(px(13.))
                     .text_color(name_color)
-                    .child(game.name.clone()),
+                    .child(SharedString::from(&game.name)),
             )
             .when(Some(&game.id) == self.play.live(), |row| row.child(self.live(cx)))
             .when(game.support == Support::UpdatePending, |row| row.child(icon(Icon::Warn, 14., rgb(WARN))))

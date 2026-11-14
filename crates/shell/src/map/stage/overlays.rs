@@ -1,6 +1,7 @@
 //! What floats over the map and moves with it: the hovered pin's chip, the right click menu,
 //! the buttons and layers, the player's readout.
 
+use client::map::state::Saved;
 use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, IntoElement, Stateful,
     component::{h_flex, v_flex},
@@ -19,7 +20,6 @@ use crate::{
         kind,
         markers::HEAD_ABOVE,
         picture::{fill, picture},
-        state::Saved,
     },
     theme::*,
     widgets::{button, icon, mono, square},

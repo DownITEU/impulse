@@ -4,6 +4,7 @@
 use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
 use anyhow::Result;
+use client::storage::{Paths, Stored};
 use futures::StreamExt;
 use gpui_kit::{App, AsyncApp, Context, Entity, EntityId, Subscription, Task, WeakEntity};
 use model::{Map, MapOffer, Provider, Snapshot};
@@ -13,10 +14,7 @@ use super::{
     board::{Board, BoardEvent, Run},
     tracker::{Tracked, Tracker},
 };
-use crate::{
-    Load,
-    storage::{Paths, Stored},
-};
+use crate::Load;
 
 // Tile levels above the map's deepest: where the minimap starts and how far the wheel takes it.
 const ZOOM: f64 = 1.;

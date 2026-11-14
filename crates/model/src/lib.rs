@@ -13,3 +13,6 @@ pub use process::{Process, Rule};
 pub use provider::{Account, Clear, Folder, Provider, SignIn, Snapshot, Store};
 pub use run::{Attach, Event, Live, Runner, Session};
 pub use trainer::{Args, Cheat, Kind, Plan, Trainer};
+
+// `hotkeys`' type until phase 3 moves it here.
+pub use hotkeys::Chord;

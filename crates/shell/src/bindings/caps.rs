@@ -14,7 +14,7 @@ use super::{
 
 impl Page {
     pub(in super::super) fn caps(&self, index: usize, loaded: &Loaded, cx: &mut Context<Self>) -> impl IntoElement {
-        let cheat = &loaded.cheats[index];
+        let cheat = &loaded.sheet.cheats[index];
         let game = self.selected.as_deref().unwrap_or_default();
         let accent = rgb(accent(cx));
         h_flex().flex_initial().min_w_0().justify_end().gap(px(4.)).children(loaded.rows[index].keys.iter().enumerate().map(
@@ -24,7 +24,7 @@ impl Page {
                     Some(held) => cap(cheat.kind, slot, &held.map_or_else(|| PRESS_KEYS.to_owned(), |chord| chord.to_string())),
                     None => label.clone(),
                 };
-                let unbound = held.is_none() && loaded.hotkeys[index][slot].is_none();
+                let unbound = held.is_none() && loaded.sheet.hotkeys[index][slot].is_none();
                 keycap(("cap", index * 2 + slot), text)
                     .cursor_pointer()
                     .hover(|style| style.border_color(line(0.3)))

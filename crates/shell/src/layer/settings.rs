@@ -98,7 +98,7 @@ impl Page {
 
     fn cheats_hold(&self, key: Key) -> bool {
         self.trainers.values().any(|load| match load {
-            Load::Ready(loaded) => loaded.hotkeys.iter().flatten().flatten().any(|bound| key.fired_by(bound.vks())),
+            Load::Ready(loaded) => loaded.sheet.hotkeys.iter().flatten().flatten().any(|bound| key.fired_by(bound.vks())),
             _ => false,
         })
     }

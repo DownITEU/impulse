@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use client::library::Game;
 use gpui_kit::{
     Context, Div, FontWeight, IntoElement, ObjectFit, Window,
     component::{h_flex, v_flex},
@@ -12,7 +13,6 @@ use super::{
     Page,
     assets::Icon,
     hud::MINIMAP_DOCK,
-    library::Game,
     map,
     run::Play,
     theme::*,
@@ -43,7 +43,7 @@ impl Page {
         let run = match &self.play {
             Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected.as_ref() => self
                 .trainer(Some(game))
-                .map(|loaded| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: loaded.teleport }),
+                .map(|loaded| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: loaded.sheet.teleport }),
             _ => None,
         };
         let live = match &self.play {
@@ -63,7 +63,7 @@ impl Page {
         let minimap = match &self.play {
             Play::Live { game, session, tracker: Some(tracker), .. } if wanted => {
                 let offers = self.games().iter().find(|known| known.id == *game).map(|known| known.source.maps.clone());
-                let teleport = self.trainer(Some(game)).is_some_and(|loaded| loaded.teleport);
+                let teleport = self.trainer(Some(game)).is_some_and(|loaded| loaded.sheet.teleport);
                 offers.map(|offers| map::LiveRun {
                     offers,
                     run: map::Run { session: session.clone(), tracker: Some(tracker.clone()), teleport },
@@ -140,9 +140,9 @@ impl Page {
             None => ("SESSION", Duration::ZERO),
         };
         let loaded = self.trainer(Some(&game.id));
-        let total = loaded.map_or(game.mods as usize, |loaded| loaded.cheats.len());
+        let total = loaded.map_or(game.mods as usize, |loaded| loaded.sheet.cheats.len());
         let active = match (running, loaded) {
-            (true, Some(loaded)) => format!("{:02}", loaded.active()),
+            (true, Some(loaded)) => format!("{:02}", loaded.sheet.active()),
             _ => "-".to_owned(),
         };
         let active = h_flex()

@@ -2,8 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use hotkeys::Chord;
-use model::Cheat;
+use model::{Cheat, Chord};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{Paths, Stored};
@@ -96,6 +95,31 @@ impl Store {
             }
         });
     }
+
+    /// Sets a slot of the cheat unless its chord is taken; the cheat's new slots. As in Wand, a cheat never
+    /// holds one chord twice, nor one `reserved` elsewhere.
+    pub fn rebind(
+        &mut self,
+        game: &str,
+        cheat: &Cheat,
+        slot: usize,
+        choice: Choice,
+        reserved: impl Fn(Chord) -> bool,
+    ) -> Option<Vec<Option<Chord>>> {
+        let wanted = match choice {
+            Choice::Bound(chord) => Some(chord),
+            Choice::Unbound => None,
+            Choice::Default => cheat.hotkeys.get(slot).copied().flatten(),
+        };
+        let slots = self.slots(game, cheat);
+        let other =
+            |chord: Chord| slots.iter().enumerate().any(|(at, bound)| at != slot && bound.is_some_and(|bound| bound.same_keys(chord)));
+        if wanted.is_some_and(|chord| reserved(chord) || other(chord)) {
+            return None;
+        }
+        self.choose(game, &cheat.id, slot, choice);
+        Some(self.slots(game, cheat))
+    }
 }
 
 #[cfg(test)]
@@ -140,6 +164,21 @@ mod tests {
         assert!(Store::load(&paths).saved.games.is_empty());
         store.choose("g", "a", 1, Choice::Bound(Chord::from_vks(&[112]).unwrap()));
         assert_eq!(store.slots("g", &cheat()), [None, Chord::from_vks(&[112])]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_chord_held_elsewhere_or_reserved_is_refused() {
+        let dir = std::env::temp_dir().join(format!("impulse-rebind-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut store = Store::load(&Paths::new(dir.clone()));
+        let (f1, f2) = (Chord::from_vks(&[112]).unwrap(), Chord::from_vks(&[113]).unwrap());
+        assert_eq!(store.rebind("g", &cheat(), 1, Choice::Bound(f1), |_| false), None);
+        assert_eq!(store.rebind("g", &cheat(), 1, Choice::Bound(f2), |chord| chord == f2), None);
+        assert_eq!(store.rebind("g", &cheat(), 0, Choice::Bound(f1), |_| false), Some(vec![Some(f1), None]));
+        assert_eq!(store.rebind("g", &cheat(), 1, Choice::Bound(f2), |_| false), Some(vec![Some(f1), Some(f2)]));
+        assert_eq!(store.rebind("g", &cheat(), 0, Choice::Bound(f2), |_| false), None);
+        assert_eq!(store.rebind("g", &cheat(), 0, Choice::Unbound, |_| true), Some(vec![None, Some(f2)]));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

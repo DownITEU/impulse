@@ -8,6 +8,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+client.workspace = true
 disk.workspace = true
 fetch.workspace = true
 hotkeys.workspace = true
@@ -15,7 +16,6 @@ journal.workspace = true
 launchers.workspace = true
 model.workspace = true
 overlay.workspace = true
-play.workspace = true
 tray.workspace = true
 video.workspace = true
 

@@ -1,4 +1,7 @@
-//! The page's game list: every installed game with what the page shows about it.
+//! The game list: every installed game with what the app shows about it.
+
+mod picked;
+pub mod sources;
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -7,10 +10,11 @@ use std::{
     sync::Arc,
 };
 
-use gpui_kit::SharedString;
 use model::Installation;
 
-use super::{art, sources::Picked};
+pub use picked::Picked;
+
+use crate::media;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Support {
@@ -27,8 +31,8 @@ pub type Stamp = (Option<String>, Option<u32>);
 
 pub struct Game {
     pub id: Arc<str>,
-    /// Upper case, as the page prints it.
-    pub name: SharedString,
+    /// Upper case, as the app prints it.
+    pub name: Arc<str>,
     /// Lower case, for the filter.
     pub search: String,
     pub store: String,
@@ -57,13 +61,13 @@ impl Game {
     /// Uses `picked`, an executable the user picked; the launcher's install stays as the other.
     pub fn pick(&mut self, picked: Installation) {
         let previous = [Some(mem::replace(&mut self.install, picked)), self.other.take()];
-        self.other = previous.into_iter().flatten().find(|install| model::custom_exe(&install.store_id).is_none());
+        self.other = previous.into_iter().flatten().find(|install| sources::exe(install).is_none());
         self.judge();
     }
 
     /// Forgets the picked executable. `false`: it was the only install.
     pub fn unpick(&mut self) -> bool {
-        if model::custom_exe(&self.install.store_id).is_some() {
+        if sources::exe(&self.install).is_some() {
             let Some(launcher) = self.other.take() else { return false };
             self.install = launcher;
             self.judge();
@@ -149,7 +153,7 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u3
         mods: entry.trainer.as_ref().map_or(0, |offer| offer.cheats),
         stamp: (None, None),
         // Not every Steam app has hero art.
-        hero: app.map(art::steam_hero).filter(|url| !art::known_missing(art_cache, url)).or_else(|| entry.cover.clone()),
+        hero: app.map(media::steam_hero).filter(|url| !media::known_missing(art_cache, url)).or_else(|| entry.cover.clone()),
         thumbnail: entry.thumbnail.clone(),
         source: entry,
         install: found,
