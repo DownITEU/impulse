@@ -7,9 +7,9 @@ use client::storage::Paths;
 use gpui_kit::{Context, Entity, IntoElement, Render, StyleRefinement, Window, div, prelude::*, px, rgb};
 use model::Provider;
 
-use super::{
-    Page,
+use crate::{
     map::{MapEvent, MapView},
+    page::Page,
     theme::*,
 };
 
@@ -24,7 +24,7 @@ pub struct Root {
 impl Root {
     pub fn new(provider: Arc<dyn Provider>, data_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let page = cx.new(|cx| Page::new(provider, Paths::new(data_dir), window, cx));
-        let map = page.read(cx).map.clone();
+        let map = page.read(cx).map().clone();
         cx.observe(&map, |_, _, cx| cx.notify()).detach();
         Self { page, map }
     }

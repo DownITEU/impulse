@@ -42,7 +42,8 @@ pub fn bind_keys(cx: &mut App) {
 }
 
 pub enum LogEvent {
-    Close,
+    /// Opened or closed.
+    Toggled,
     /// The error or warning count changed.
     Problems,
 }
@@ -64,6 +65,7 @@ pub struct LogView {
     filter: Entity<InputState>,
     scroll: UniformListScrollHandle,
     focus: FocusHandle,
+    open: bool,
     _pump: Task<()>,
 }
 
@@ -114,12 +116,28 @@ impl LogView {
             filter,
             scroll: UniformListScrollHandle::new(),
             focus: cx.focus_handle(),
+            open: false,
             _pump: pump,
         }
     }
 
-    pub fn focus(&self, window: &mut Window, cx: &mut App) {
-        self.focus.focus(window, cx);
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    pub fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open = !self.open;
+        if self.open {
+            self.focus.focus(window, cx);
+        }
+        cx.emit(LogEvent::Toggled);
+    }
+
+    pub fn close(&mut self, cx: &mut Context<Self>) {
+        if self.open {
+            self.open = false;
+            cx.emit(LogEvent::Toggled);
+        }
     }
 
     /// Buffered errors and warnings, for the status bar.
@@ -190,7 +208,7 @@ impl LogView {
                 self.anchor = Some(seq);
             }
         }
-        self.focus(window, cx);
+        self.focus.focus(window, cx);
         cx.notify();
     }
 
@@ -271,7 +289,7 @@ impl LogView {
                     cx.open_with_system(dir);
                 }
             }))
-            .child(icon_button("log-close", Icon::Close, 32., 12.).on_click(cx.listener(|_, _, _, cx| cx.emit(LogEvent::Close))))
+            .child(icon_button("log-close", Icon::Close, 32., 12.).on_click(cx.listener(|view, _, _, cx| view.close(cx))))
     }
 
     fn row(&self, record: &Record, cx: &mut Context<Self>) -> impl IntoElement {
@@ -349,7 +367,7 @@ impl Render for LogView {
                 view.selected = view.rows.iter().map(|row| row.seq).collect();
                 cx.notify();
             }))
-            .on_action(cx.listener(|_, _: &CloseLog, _, cx| cx.emit(LogEvent::Close)))
+            .on_action(cx.listener(|view, _: &CloseLog, _, cx| view.close(cx)))
             .child(self.toolbar(cx))
             .child(
                 div()

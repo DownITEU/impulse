@@ -6,7 +6,7 @@ use gpui_kit::{
     linear_gradient, prelude::*, px, rgb,
 };
 
-use super::{
+use crate::{
     assets::Icon,
     dropdown::dropdown,
     layer::{Layer, overlay_hotkey},
