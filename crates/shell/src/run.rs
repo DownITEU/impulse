@@ -103,11 +103,11 @@ pub(super) fn label(stage: Stage) -> &'static str {
 
 impl Page {
     pub(super) fn start_run(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.selected.clone() else { return };
+        let Some(id) = self.selected(cx).clone() else { return };
         if self.play.is_active() {
             return;
         }
-        let request = match self.run_request(&id) {
+        let request = match self.run_request(&id, cx) {
             Ok(request) => request,
             Err(e) => return self.fail_run(id, e, cx),
         };
@@ -126,8 +126,8 @@ impl Page {
         cx.notify();
     }
 
-    fn run_request(&self, id: &Arc<str>) -> Result<Request> {
-        let game = self.games().iter().find(|game| game.id == *id).context("the game is not in the library")?;
+    fn run_request(&self, id: &Arc<str>, cx: &App) -> Result<Request> {
+        let game = self.library.read(cx).games().iter().find(|game| game.id == *id).context("the game is not in the library")?;
         let loaded = self.trainer(Some(id)).context("the cheat list is not loaded")?;
         Ok(run::request(&game.install, &loaded.sheet.plan))
     }
@@ -190,7 +190,7 @@ impl Page {
             self.layer.read(cx).recheck();
             self.bindings.disarm();
             self.reset_values(&game);
-            self.install_deferred();
+            self.install_deferred(cx);
             cx.notify();
         }
     }
@@ -198,7 +198,7 @@ impl Page {
     fn fail_run(&mut self, id: Arc<str>, error: anyhow::Error, cx: &mut Context<Self>) {
         log::warn!("run failed: {error:#}");
         self.play = Play::Failed { game: id, error: format!("{error:#}") };
-        self.install_deferred();
+        self.install_deferred(cx);
         cx.notify();
     }
 
@@ -229,7 +229,7 @@ impl Page {
         }
         self.sync_map(cx);
         self.layer.read(cx).recheck();
-        self.install_deferred();
+        self.install_deferred(cx);
         cx.notify();
     }
 

@@ -15,7 +15,7 @@ impl Page {
             h_flex().gap(px(6.)).child(square(7., rgb(color))).child(mono(count.to_string(), 11.).text_color(rgb(color)))
         };
         let accent = rgb(accent(cx));
-        let running = self.games().iter().find(|game| Some(&game.id) == self.play.live());
+        let running = self.library.read(cx).games().iter().find(|game| Some(&game.id) == self.play.live());
         h_flex()
             .h(px(30.))
             .flex_none()

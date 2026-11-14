@@ -90,9 +90,10 @@ pub fn bind_keys(cx: &mut App) {
 
 impl Page {
     pub(super) fn hud(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let game = self.game();
+        let game = self.game(cx);
+        let game = game.as_deref();
         let mapped = game.is_some_and(|game| !game.source.maps.is_empty());
-        let running = self.is_running();
+        let running = self.is_running(cx);
         let shown = self.docks.read(cx).shown();
         let docked = shown
             .into_iter()
@@ -101,7 +102,7 @@ impl Page {
                     (MODS, Some(game)) => {
                         div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheats(game, cx)).into_any_element()
                     }
-                    (MODS, None) => div().p(px(16.)).child(self.vacant()).into_any_element(),
+                    (MODS, None) => div().p(px(16.)).child(self.vacant(cx)).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
                     (MINIMAP, Some(_)) if mapped && self.map.read(cx).live_map().read(cx).ready(cx) => {
                         self.minimap.clone().into_any_element()
@@ -177,6 +178,7 @@ impl Page {
         self.over = over;
         self.map.update(cx, |map, cx| map.set_docked(over, cx));
         self.sync_minimap_dock(window, cx);
+        let live = self.play.live().filter(|&live| over && self.selected(cx).as_ref() != Some(live)).cloned();
         if over {
             // What belongs to the window closes, and the docks show the running game.
             self.menu = None;
@@ -184,11 +186,12 @@ impl Page {
             self.settings_open = false;
             self.log_open = false;
             self.cancel_capture(cx);
-            if let Some(live) = self.play.live().filter(|&live| self.selected.as_ref() != Some(live)).cloned() {
-                self.select(live, window, cx);
-            }
         }
-        self.sync_map_dock(window, cx);
+        match live {
+            // Its `Opened` syncs the map dock.
+            Some(live) => self.select(live, cx),
+            None => self.sync_map_dock(window, cx),
+        }
         // An open map keeps the focus: its Escape closes its own things first, then leaves.
         if over && !self.map.read(cx).is_open(cx) {
             self.hud_focus.focus(window, cx);
@@ -197,7 +200,7 @@ impl Page {
 
     /// Only a live game with a map has a minimap to toggle.
     pub(super) fn minimap_key(&mut self, cx: &mut Context<Self>) {
-        let live = self.play.live().and_then(|live| self.games().iter().find(|game| game.id == *live));
+        let live = self.play.live().and_then(|live| self.library.read(cx).games().iter().find(|game| game.id == *live));
         if live.is_some_and(|game| !game.source.maps.is_empty()) {
             self.docks.update(cx, |docks, cx| docks.toggle(MINIMAP_DOCK, cx));
         }
@@ -215,7 +218,7 @@ impl Page {
     /// The map is open while its dock shows over a game that has one.
     pub(super) fn sync_map_dock(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let shown = DOCKS.iter().find(|spec| spec.id == MAP).is_some_and(|spec| self.docks.read(cx).is_shown(spec));
-        let docked = self.over && shown && self.game().is_some_and(|game| !game.source.maps.is_empty());
+        let docked = self.over && shown && self.game(cx).is_some_and(|game| !game.source.maps.is_empty());
         if docked != self.map.read(cx).is_open(cx) {
             match docked {
                 true => self.open_map(window, cx),

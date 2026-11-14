@@ -12,7 +12,7 @@ impl Page {
     pub(super) fn header(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
         let maximize = if window.is_maximized() { Icon::WinRestore } else { Icon::WinMax };
-        let search = match &self.library {
+        let search = match self.library.read(cx).list() {
             Load::Ready(library) => {
                 let count = library.trainers;
                 format!("search {},{:03} trainers", count / 1000, count % 1000)

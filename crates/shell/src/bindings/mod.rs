@@ -145,7 +145,7 @@ impl Page {
 
     /// Starts binding the open trainer's slot.
     fn capture(&mut self, index: usize, slot: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.selected.clone() else { return };
+        let Some(game) = self.selected(cx).clone() else { return };
         let Some(cheat) = self.trainer(Some(&game)).map(|loaded| loaded.sheet.cheats[index].id.clone()) else { return };
         self.start_capture(Target::Slot { game, cheat, slot }, window, cx);
     }

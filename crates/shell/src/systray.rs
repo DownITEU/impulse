@@ -79,9 +79,13 @@ impl Page {
         false
     }
 
-    fn sync_tray(&mut self, _: &mut Context<Self>) {
+    fn sync_tray(&mut self, cx: &mut Context<Self>) {
         let Some(tray) = &self.tray else { return };
-        let playing = self.play.live().and_then(|id| self.games().iter().find(|game| game.id == *id)).map(|game| game.name.to_string());
+        let playing = self
+            .play
+            .live()
+            .and_then(|id| self.library.read(cx).games().iter().find(|game| game.id == *id))
+            .map(|game| game.name.to_string());
         tray.set_menu(Menu { playing, over: self.over });
     }
 }

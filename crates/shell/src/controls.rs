@@ -26,7 +26,7 @@ impl Page {
         match loaded.sheet.step(index, slot) {
             Some(Step::Press(pressed)) => {
                 self.push_value(index, pressed, cx);
-                if self.selected.as_ref() == Some(&game) {
+                if self.selected(cx).as_ref() == Some(&game) {
                     self.flash(Flash::Cheat(index), cx);
                 }
             }
@@ -40,7 +40,7 @@ impl Page {
     }
 
     fn set_value(&mut self, index: usize, value: f64, cx: &mut Context<Self>) {
-        if let Some(loaded) = self.loaded_mut() {
+        if let Some(loaded) = self.loaded_mut(cx) {
             loaded.sheet.values[index] = value;
         }
         self.push_value(index, value, cx);
@@ -92,7 +92,7 @@ impl Page {
                 let nudge = |id: &'static str, label: &'static str, by: f64| {
                     button(label).id((id, index)).w(px(26.)).px_0().font_family(MONO).text_size(px(14.)).on_click(cx.listener(
                         move |page, _, _, cx| {
-                            if running && let Some(loaded) = page.loaded_mut() {
+                            if running && let Some(loaded) = page.loaded_mut(cx) {
                                 let next = loaded.sheet.cheats[index].args.clamp(value + by);
                                 page.set_value(index, next, cx);
                             }
@@ -141,7 +141,7 @@ impl Page {
                 }
                 // A cheat with a text field takes its value from it; a button cheat sends its own and
                 // keeps no state.
-                let (typed, fired) = page.trainer(page.selected.as_ref()).map_or((None, None), |loaded| {
+                let (typed, fired) = page.trainer(page.selected(cx).as_ref()).map_or((None, None), |loaded| {
                     let cheat = &loaded.sheet.cheats[index];
                     let typed = loaded.inputs.get(&index).and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
                     (typed, (cheat.kind == Kind::Button).then_some(cheat.args.pressed))

@@ -61,7 +61,7 @@ pub(super) struct Editor {
 
 impl Page {
     pub(super) fn collections_bar(&self, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let collections = &self.profiles.of(self.selected.as_deref().unwrap_or_default()).collections;
+        let collections = &self.profiles.of(self.selected(cx).as_deref().unwrap_or_default()).collections;
         // A new one is made of the mods that are on.
         let addable = running && loaded.sheet.active() > 0;
         let chips = collections
@@ -144,7 +144,7 @@ impl Page {
     }
 
     fn toggle_collection(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.selected.clone() else { return };
+        let Some(game) = self.selected(cx).clone() else { return };
         let Some(mods) = self.profiles.of(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
         let Some(loaded) = self.trainer(Some(&game)) else { return };
         let values = if loaded.sheet.holds(&mods) { loaded.sheet.rest(&mods) } else { mods };
@@ -152,7 +152,7 @@ impl Page {
     }
 
     fn delete_collection(&mut self, at: usize, cx: &mut Context<Self>) {
-        let Some(game) = self.selected.clone() else { return };
+        let Some(game) = self.selected(cx).clone() else { return };
         self.profiles.edit(&game, |profile| {
             if at < profile.collections.len() {
                 profile.collections.remove(at);
@@ -163,7 +163,7 @@ impl Page {
 
     /// Opens the editor on the collection at `at`, or on a new one of the mods that are on.
     fn edit_collection(&mut self, at: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.selected.clone() else { return };
+        let Some(game) = self.selected(cx).clone() else { return };
         let changed = at.and_then(|at| self.profiles.of(&game).collections.get(at));
         let (title, key, mods) = match (changed, at) {
             (Some(collection), _) => (collection.name.clone(), listed(&collection.icon).0, collection.mods.clone()),

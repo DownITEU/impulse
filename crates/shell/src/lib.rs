@@ -17,6 +17,7 @@ mod header;
 mod hero;
 mod hud;
 mod layer;
+mod library;
 mod loaded;
 mod log_view;
 mod map;
@@ -59,6 +60,7 @@ use docks::Docks;
 use folders::FolderRow;
 use glance::Glance;
 use layer::{Layer, MinimapKey};
+use library::{Library, LibraryEvent};
 use loaded::Loaded;
 use log_view::{LogEvent, LogView};
 use map::{MapEvent, MapView, Minimap};
@@ -70,12 +72,7 @@ use sources::Picker;
 use theme::*;
 use widgets::grid;
 
-use client::{
-    library::{Game, Library, Picked},
-    media::Media,
-    profile::Profiles,
-    storage::Paths,
-};
+use client::{library::Game, media::Media, profile::Profiles, storage::Paths};
 use model::{Account, Provider};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -124,12 +121,11 @@ enum Flash {
 }
 
 pub struct Page {
-    paths: Paths,
     provider: Arc<dyn Provider>,
     account: Option<Account>,
     // No session: the header says so when no account is known.
     signed_out: bool,
-    library: Load<Library>,
+    library: Entity<Library>,
     // By game id, for the games opened in this run.
     // `Pending` while a first download runs.
     trainers: HashMap<Arc<str>, Load<Loaded>>,
@@ -137,11 +133,9 @@ pub struct Page {
     loading: HashSet<Arc<str>>,
     // A newer copy of the running game's trainer: installed when the run ends.
     deferred: Option<(Arc<str>, Loaded)>,
-    selected: Option<Arc<str>>,
     play: Play,
     bindings: Bindings,
     profiles: Profiles,
-    picked: Picked,
     // `+ ADD`'s choice of game.
     picker: Option<Picker>,
     settings: Entity<Settings>,
@@ -177,10 +171,7 @@ pub struct Page {
 impl Page {
     pub fn new(provider: Arc<dyn Provider>, paths: Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let settings = cx.new(|cx| Settings::new(&paths, cx));
-        let (game, hidden) = {
-            let prefs = settings.read(cx).prefs();
-            (prefs.game.as_deref().map(Arc::from), prefs.hide_from_capture)
-        };
+        let hidden = settings.read(cx).prefs().hide_from_capture;
         let mut excluded = hidden;
         cx.observe_in(&settings, window, move |_, settings, window, cx| {
             let hidden = settings.read(cx).prefs().hide_from_capture;
@@ -193,6 +184,9 @@ impl Page {
             cx.notify();
         })
         .detach();
+        let library = cx.new(|cx| Library::new(provider.clone(), &paths, settings.clone(), cx));
+        cx.observe(&library, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&library, window, Self::library_changed).detach();
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
             if matches!(event, LogEvent::Close) {
@@ -256,19 +250,15 @@ impl Page {
         let page = Self {
             bindings: Bindings::load(&paths),
             profiles: Profiles::load(&paths),
-            picked: Picked::load(&paths),
             picker: None,
-            paths,
             provider,
             account: None,
             signed_out: false,
             folders: Vec::new(),
-            library: Load::Pending,
+            library,
             trainers: HashMap::new(),
             loading: HashSet::new(),
             deferred: None,
-            // Opens once the library lists it.
-            selected: game,
             play: Play::Idle,
             settings,
             editor: None,
@@ -292,21 +282,18 @@ impl Page {
             game_filter,
             mod_filter,
         };
-        page.boot(window, cx);
+        page.sign_in(window, cx);
         page.scan_folders(window, cx);
         page
     }
 
-    fn games(&self) -> &[Game] {
-        match &self.library {
-            Load::Ready(library) => &library.games,
-            _ => &[],
-        }
+    /// The open game, held while drawing.
+    fn game(&self, cx: &App) -> Option<Arc<Game>> {
+        self.library.read(cx).opened().cloned()
     }
 
-    fn game(&self) -> Option<&Game> {
-        let id = self.selected.as_ref()?;
-        self.games().iter().find(|game| game.id == *id)
+    fn selected(&self, cx: &App) -> Option<Arc<str>> {
+        self.library.read(cx).open_id().cloned()
     }
 
     fn trainer(&self, id: Option<&Arc<str>>) -> Option<&Loaded> {
@@ -317,28 +304,42 @@ impl Page {
     }
 
     /// The open game's trainer.
-    fn loaded_mut(&mut self) -> Option<&mut Loaded> {
-        match self.trainers.get_mut(self.selected.as_ref()?)? {
+    fn loaded_mut(&mut self, cx: &App) -> Option<&mut Loaded> {
+        match self.trainers.get_mut(&self.selected(cx)?)? {
             Load::Ready(loaded) => Some(loaded),
             _ => None,
         }
     }
 
-    fn is_running(&self) -> bool {
-        self.play.live().is_some_and(|game| Some(game) == self.selected.as_ref())
+    fn is_running(&self, cx: &App) -> bool {
+        self.play.live().is_some_and(|game| self.library.read(cx).open_id() == Some(game))
     }
 
-    fn select(&mut self, id: Arc<str>, window: &mut Window, cx: &mut Context<Self>) {
-        self.cancel_capture(cx);
-        self.map.update(cx, |map, cx| map.hide(window, cx));
-        self.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.game = Some(id.to_string()), cx));
-        self.selected = Some(id);
-        // Another trainer's names: the old filter would hide them.
-        self.mod_filter.update(cx, |filter, cx| filter.set_value("", window, cx));
-        self.drop_cheat_state();
-        self.open_trainer(window, cx);
-        // Over a game, its dock opens the new game's map.
-        self.sync_map_dock(window, cx);
+    fn select(&self, id: Arc<str>, cx: &mut App) {
+        self.library.update(cx, |library, cx| library.open(id, cx));
+    }
+
+    fn library_changed(&mut self, _: &Entity<Library>, event: &LibraryEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match event {
+            LibraryEvent::Opened => {
+                self.cancel_capture(cx);
+                self.map.update(cx, |map, cx| map.hide(window, cx));
+                // Another trainer's names: the old filter would hide them.
+                self.mod_filter.update(cx, |filter, cx| filter.set_value("", window, cx));
+                self.drop_cheat_state();
+                self.open_trainer(window, cx);
+                // Over a game, its dock opens the new game's map.
+                self.sync_map_dock(window, cx);
+            }
+            LibraryEvent::Listed => {
+                let library = self.library.read(cx);
+                if !self.play.game().is_some_and(|game| library.game(game).is_some()) {
+                    self.stop_run(cx);
+                }
+                self.open_trainer(window, cx);
+            }
+            LibraryEvent::Switched => self.open_trainer(window, cx),
+        }
         cx.notify();
     }
 

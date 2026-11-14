@@ -26,7 +26,7 @@ const GRAPH: &[(&str, &[&str])] = &[
     ("overlay", &[]),
     ("pe", &[]),
     ("play", &["agent", "model"]),
-    ("shell", &["client", "disk", "fetch", "hotkeys", "journal", "launchers", "model", "overlay", "tray", "video"]),
+    ("shell", &["client", "disk", "fetch", "hotkeys", "journal", "model", "overlay", "tray", "video"]),
     ("tray", &[]),
     ("video", &[]),
     ("wand", &["agent", "disk", "fetch", "hotkeys", "model", "pe"]),

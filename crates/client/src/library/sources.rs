@@ -1,6 +1,6 @@
 //! A game's sources, as Wand calls them: its launcher's install and an executable the user picked.
 
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
 use model::Installation;
 
@@ -47,6 +47,17 @@ pub fn exe(install: &Installation) -> Option<&Path> {
     model::custom_exe(&install.store_id)
 }
 
+/// The catalog games that keep their executable where `exe` is, by index (blocking).
+pub fn owners(games: &[model::Game], exe: &Path) -> Vec<usize> {
+    let owners: HashSet<&str> = launchers::owners(games, exe).into_iter().map(|(game, _)| game.id.as_str()).collect();
+    (0..games.len()).filter(|&at| owners.contains(games[at].id.as_str())).collect()
+}
+
+/// `exe` as an install of `game` (blocking); `None` when it is not a file.
+pub fn install(game: &model::Game, exe: &Path) -> Option<Installation> {
+    launchers::install(game, exe)
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -71,9 +82,10 @@ mod tests {
             stamp: (None, None),
             hero: None,
             thumbnail: None,
-            source: model::Game::default(),
+            source: Default::default(),
             install,
             other,
+            page: None,
         }
     }
 

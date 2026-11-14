@@ -13,7 +13,6 @@ disk.workspace = true
 fetch.workspace = true
 hotkeys.workspace = true
 journal.workspace = true
-launchers.workspace = true
 model.workspace = true
 overlay.workspace = true
 tray.workspace = true

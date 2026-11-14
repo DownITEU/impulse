@@ -52,8 +52,8 @@ impl Page {
 
     /// Turns every live mod off; with no run, forgets the kept ones.
     fn reset_mods(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.selected.clone() else { return };
-        if !self.is_running() {
+        let Some(game) = self.selected(cx).clone() else { return };
+        if !self.is_running(cx) {
             self.profiles.edit(&game, |profile| profile.values.clear());
             return cx.notify();
         }
@@ -64,7 +64,7 @@ impl Page {
 
     /// The right of the filter row: the game's save switch and the reset.
     pub(super) fn saved_bar(&self, loaded: &Loaded, running: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let profile = self.profiles.of(self.selected.as_deref().unwrap_or_default());
+        let profile = self.profiles.of(self.selected(cx).as_deref().unwrap_or_default());
         let (save, kept) = (profile.save_mods, profile.values.len());
         let resettable = if running { loaded.sheet.active() > 0 } else { kept > 0 };
         let label = match kept {
@@ -83,7 +83,7 @@ impl Page {
                     .cursor_pointer()
                     .tooltip(|window, cx| tip("The mods a run leaves on come back on at the next one.".into(), window, cx))
                     .on_click(cx.listener(move |page, _, _, cx| {
-                        let Some(game) = page.selected.clone() else { return };
+                        let Some(game) = page.selected(cx).clone() else { return };
                         page.profiles.edit(&game, |profile| {
                             profile.save_mods = !save;
                             profile.values.clear();

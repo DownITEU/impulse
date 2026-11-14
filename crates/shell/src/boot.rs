@@ -2,42 +2,15 @@
 
 use std::sync::Arc;
 
-use blocking::unblock;
-use client::{
-    library::{self, Library, Support},
-    media::Media,
-    trainer::Sheet,
-};
+use client::{library::Support, trainer::Sheet};
 use futures::StreamExt;
-use gpui_kit::{AsyncWindowContext, Context, WeakEntity, Window};
-use model::{Provider, SignIn, Snapshot};
+use gpui_kit::{App, Context, Window};
+use model::{SignIn, Snapshot};
 
 use super::{Load, Page, loaded::Loaded};
 
 impl Page {
-    pub(super) fn boot(&self, window: &Window, cx: &mut Context<Self>) {
-        let mut games = self.provider.games();
-        cx.spawn_in(window, async move |page, cx| {
-            let mut have_copy = false;
-            while let Some(snapshot) = games.next().await {
-                match snapshot {
-                    Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => {
-                        have_copy = true;
-                        rescan(&page, all, cx).await;
-                    }
-                    Snapshot::Fresh(Err(e)) if !have_copy => {
-                        page.update(cx, |page, cx| {
-                            page.library = Load::Failed(format!("{e:#}"));
-                            cx.notify();
-                        })
-                        .ok();
-                    }
-                    _ => {}
-                }
-            }
-        })
-        .detach();
-
+    pub(super) fn sign_in(&self, window: &Window, cx: &mut Context<Self>) {
         let mut sign_in = self.provider.sign_in();
         cx.spawn_in(window, async move |page, cx| {
             while let Some(state) = sign_in.next().await {
@@ -57,34 +30,20 @@ impl Page {
     /// Fills the page anew after a provider's store was cleared. The session stays: it is not a cache.
     pub(super) fn reload(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         log::info!("caches cleared");
-        self.library = Load::Pending;
-        // `boot` asks for the session again.
+        self.library.update(cx, |library, cx| library.reload(cx));
+        // The session is asked for again.
         self.signed_out = false;
         // The run keeps what it leaves on first, from the trainers about to go.
         self.stop_run(cx);
         self.trainers.clear();
         self.deferred = None;
-        self.boot(window, cx);
-        cx.notify();
-    }
-
-    pub(super) fn set_library(&mut self, library: Library, window: &mut Window, cx: &mut Context<Self>) {
-        let listed = |id: &Option<Arc<str>>| id.as_ref().is_some_and(|id| library.games.iter().any(|game| game.id == *id));
-        if !listed(&self.selected) {
-            self.selected = library.games.first().map(|game| game.id.clone());
-            self.drop_cheat_state();
-        }
-        if !listed(&self.play.game().cloned()) {
-            self.stop_run(cx);
-        }
-        self.library = Load::Ready(library);
-        self.open_trainer(window, cx);
+        self.sign_in(window, cx);
         cx.notify();
     }
 
     /// Brings the open game's trainer. Nothing is downloaded for a game the user did not open.
     pub(super) fn open_trainer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.game() else {
+        let Some(game) = self.game(cx) else {
             return;
         };
         let current =
@@ -106,7 +65,7 @@ impl Page {
                             let hotkeys = page.bindings.slots(&id, &trainer.cheats);
                             let sheet = Sheet::new(trainer, hotkeys, stamp.clone(), page.profiles.of(&id));
                             let loaded = Loaded::new(sheet, window, cx);
-                            page.install(id.clone(), loaded);
+                            page.install(id.clone(), loaded, cx);
                         }
                         // The network is next.
                         Snapshot::Cached(None) => {
@@ -121,7 +80,7 @@ impl Page {
             page.update_in(cx, |page, window, cx| {
                 page.loading.remove(&id);
                 // The source changed while it loaded: this trainer is for the old build.
-                if page.game().is_some_and(|game| game.id == id && game.stamp != stamp) {
+                if page.game(cx).is_some_and(|game| game.id == id && game.stamp != stamp) {
                     page.open_trainer(window, cx);
                 }
                 cx.notify();
@@ -145,13 +104,13 @@ impl Page {
     }
 
     // A newer copy may order the cheats differently.
-    fn install(&mut self, id: Arc<str>, loaded: Loaded) {
+    fn install(&mut self, id: Arc<str>, loaded: Loaded, cx: &App) {
         // A run keeps the cheat list it started with: its variables and values belong to it.
         if self.play.holds(&id) {
             self.deferred = Some((id, loaded));
             return;
         }
-        if self.selected.as_ref() == Some(&id) {
+        if self.selected(cx).as_ref() == Some(&id) {
             self.drop_cheat_state();
             // Its cap may be gone, and with it the click that ends the capture.
             self.bindings.cancel();
@@ -160,53 +119,14 @@ impl Page {
     }
 
     /// For when a run lets go of its cheat list.
-    pub(super) fn install_deferred(&mut self) {
+    pub(super) fn install_deferred(&mut self, cx: &App) {
         if let Some((id, mut loaded)) = self.deferred.take() {
             // The user may have rebound a slot, pinned a mod or folded a section while it waited.
             for (index, slots) in self.bindings.slots(&id, &loaded.sheet.cheats).into_iter().enumerate() {
                 loaded.rebind(index, slots);
             }
             loaded.sheet.restore(self.profiles.of(&id));
-            self.install(id, loaded);
+            self.install(id, loaded, cx);
         }
     }
-}
-
-/// Lists the installed games of `games` anew, with the executables the user picked.
-pub(super) async fn rescan(page: &WeakEntity<Page>, mut games: Vec<model::Game>, cx: &mut AsyncWindowContext) {
-    loop {
-        let Ok((art, picked, provider)) =
-            page.read_with(cx, |page, _| (Media::Pictures.dir(&page.paths), page.picked.clone(), page.provider.clone()))
-        else {
-            return;
-        };
-        let version = picked.version();
-        let library = unblock(move || library::scan(games, &art, &picked)).await;
-        let current = page.update_in(cx, |page, window, cx| {
-            let current = page.picked.version() == version;
-            if current {
-                page.set_library(library, window, cx);
-            }
-            current
-        });
-        if !matches!(current, Ok(false)) {
-            return;
-        }
-        // A source changed while it scanned: again, with it.
-        let Some(all) = catalog(provider.as_ref()).await else { return };
-        games = all;
-    }
-}
-
-/// The provider's games, the disk copy when there is one.
-pub(super) async fn catalog(provider: &dyn Provider) -> Option<Vec<model::Game>> {
-    let mut snapshots = provider.games();
-    while let Some(snapshot) = snapshots.next().await {
-        match snapshot {
-            Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => return Some(all),
-            Snapshot::Fresh(Err(_)) => return None,
-            Snapshot::Cached(None) => {}
-        }
-    }
-    None
 }

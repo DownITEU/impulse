@@ -15,7 +15,8 @@ use super::{
 impl Page {
     pub(in super::super) fn caps(&self, index: usize, loaded: &Loaded, cx: &mut Context<Self>) -> impl IntoElement {
         let cheat = &loaded.sheet.cheats[index];
-        let game = self.selected.as_deref().unwrap_or_default();
+        let selected = self.selected(cx);
+        let game = selected.as_deref().unwrap_or_default();
         let accent = rgb(accent(cx));
         h_flex().flex_initial().min_w_0().justify_end().gap(px(4.)).children(loaded.rows[index].keys.iter().enumerate().map(
             |(slot, label)| {

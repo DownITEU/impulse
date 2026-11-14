@@ -20,7 +20,7 @@ use super::{
 impl Page {
     pub(super) fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.game_filter.read(cx).value().to_lowercase();
-        let games = self.games();
+        let games = self.library.read(cx).games().to_vec();
         // Favorites first; the numbers follow that order and stay through the filter.
         let (starred, rest): (Vec<_>, Vec<_>) = games.iter().enumerate().partition(|(_, game)| self.profiles.of(&game.id).favorite);
         let sectioned = !starred.is_empty();
@@ -98,7 +98,7 @@ impl Page {
 
     fn game_row(&self, index: usize, number: usize, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
-        let current = Some(&game.id) == self.selected.as_ref();
+        let current = Some(&game.id) == self.selected(cx).as_ref();
         let no_trainer = game.support == Support::NoTrainer;
         let name_color = match (current, no_trainer) {
             (true, _) => accent,
@@ -134,7 +134,7 @@ impl Page {
             })
             .on_click(cx.listener({
                 let id = game.id.clone();
-                move |page, _, window, cx| page.select(id.clone(), window, cx)
+                move |page, _, _, cx| page.select(id.clone(), cx)
             }))
             .child(div().w(px(8.)).flex_none().when(current, |cell| cell.child(square(6., accent))))
             .child(lead)

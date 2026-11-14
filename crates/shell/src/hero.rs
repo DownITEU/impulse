@@ -64,7 +64,7 @@ impl Page {
 
     fn actions(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
-        let running = self.is_running();
+        let running = self.is_running(cx);
         let favorite = self.profiles.of(&game.id).favorite;
         let (id, location) = (game.id.clone(), game.install.location.clone());
         let layer = self.layer.clone();
@@ -100,7 +100,7 @@ impl Page {
                     .on_click(move |_, _, cx| cx.open_with_system(&location))
                     .child(icon(Icon::Folder, 15., rgb(MUTED))),
             )
-            .when_some(launchers::page(&game.install.store_id), |bar, (launcher, uri)| {
+            .when_some(game.page.clone(), |bar, (launcher, uri)| {
                 bar.child(
                     icon_button("launcher", format!("Open in {launcher}").into()).on_click(move |_, _, cx| cx.open_url(&uri)).child(icon(
                         Icon::External,
@@ -125,7 +125,7 @@ impl Page {
     /// LAUNCH + ATTACH, the run's stage, or STOP.
     pub(super) fn run_button(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
-        let running = self.is_running();
+        let running = self.is_running(cx);
         let starting = match &self.play {
             Play::Busy { game: busy, stage, .. } if *busy == game.id => Some(*stage),
             _ => None,

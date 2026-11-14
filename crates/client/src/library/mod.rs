@@ -29,6 +29,7 @@ pub enum Support {
 /// The offer's revision and the installed build: a trainer is asked for again when they change.
 pub type Stamp = (Option<String>, Option<u32>);
 
+#[derive(Clone)]
 pub struct Game {
     pub id: Arc<str>,
     /// Upper case, as the app prints it.
@@ -42,11 +43,13 @@ pub struct Game {
     pub hero: Option<String>,
     pub thumbnail: Option<String>,
     /// As the provider knows it, for asking for the trainer and the maps.
-    pub source: model::Game,
+    pub source: Arc<model::Game>,
     /// The install in use: a launcher's, or an executable the user picked.
     pub install: Installation,
     /// The other one, when the game has both.
     pub other: Option<Installation>,
+    /// The install's page in its launcher: the launcher's name and the URI.
+    pub page: Option<(&'static str, String)>,
 }
 
 impl Game {
@@ -87,11 +90,13 @@ impl Game {
             (Some(_), None) => Support::Unverified,
         };
         self.stamp = (offer.as_ref().and_then(|offer| offer.revision.clone()), build);
+        self.page = launchers::page(&self.install.store_id);
     }
 }
 
 pub struct Library {
-    pub games: Vec<Game>,
+    /// Shared, so a view holds one while it draws.
+    pub games: Vec<Arc<Game>>,
     /// Titles with a trainer among all the provider's games.
     pub trainers: usize,
 }
@@ -139,7 +144,7 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
     games.sort_by(|a, b| a.search.cmp(&b.search));
     let stores: Vec<String> = per_store.iter().map(|(s, n)| format!("{s} {n}")).collect();
     log::info!("Library: {} installed: {}", games.len(), stores.join(", "));
-    Library { games, trainers }
+    Library { games: games.into_iter().map(Arc::new).collect(), trainers }
 }
 
 fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u32>, art_cache: &Path) -> Game {
@@ -155,9 +160,10 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u3
         // Not every Steam app has hero art.
         hero: app.map(media::steam_hero).filter(|url| !media::known_missing(art_cache, url)).or_else(|| entry.cover.clone()),
         thumbnail: entry.thumbnail.clone(),
-        source: entry,
+        source: Arc::new(entry),
         install: found,
         other: None,
+        page: None,
     };
     game.judge();
     game

@@ -11,13 +11,15 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `init`, `Assets`, `Root::new`: all `app` calls. Everything else is private.
 - `Root`: the window root; draws `Page` with `cached`, the open map as a modal over it.
 - `Page`: the combined page, one `impl Page` block per region file (`header`, `sidebar`, `hero`, `pane`, `cheats`, `controls`, `run`, `boot`, ...).
+- `Library` (`library/`): the game list, the picked executables and the open game; emits `LibraryEvent` (`Listed`, `Opened`, `Switched`).
 
 ## Rules
 - Colors and fonts come only from `theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
 - Use the `widgets.rs` primitives (`button`, `icon_button`, `toggle`, `choice`, `notice`, `tip`, `keycap`, `mono`, `tracked`); never a raw `div` styled as one.
 - Logic without GPUI goes to `client` (its rules: `client.md`): app files are its `Stored<T>`, opened from `Paths` by the slice that owns them.
 - `Settings` (`settings/`) owns the prefs: read them with `settings.read(cx).prefs()`, change them with `Settings::edit`. It sets `Look` and GPUI's reduce motion; whoever reacts to a pref observes it.
-- Provider streams are consumed in `boot.rs`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
+- `Library` owns the open game: open one with `Library::open`, react to `LibraryEvent`. A view holds the open game as an `Arc<Game>` while it draws.
+- Provider streams: the catalog in `Library`, trainers and sign-in in `boot.rs`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
 - `open_trainer` serves the open game only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
 - A newer trainer copy for a game with a run `Busy` or `Live` waits in `deferred` (`Play::holds`); every path that ends a run calls `install_deferred`.
 - One run at a time: `start_run` refuses while `Play::is_active`. `Stopping` lasts until `Session::stop` returns.

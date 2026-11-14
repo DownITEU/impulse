@@ -6737,7 +6737,6 @@ dependencies = [
  "hotkeys",
  "image",
  "journal",
- "launchers",
  "log",
  "model",
  "overlay",

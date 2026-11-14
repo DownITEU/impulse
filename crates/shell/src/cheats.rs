@@ -20,7 +20,7 @@ const KEPT: &str = "It is kept on disk after the first download.";
 
 impl Page {
     pub(super) fn cheats(&self, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
-        let running = self.is_running();
+        let running = self.is_running(cx);
         let column = v_flex().flex_1().min_w_0().gap(px(12.));
         if game.support == Support::NoTrainer {
             return column.child(notice(
@@ -113,14 +113,14 @@ impl Page {
     }
 
     fn toggle_fold(&mut self, title: SharedString, cx: &mut Context<Self>) {
-        let Some(game) = self.selected.clone() else { return };
+        let Some(game) = self.selected(cx).clone() else { return };
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
         self.profiles.edit(&game, |profile| loaded.sheet.toggle_fold(&title, profile));
         cx.notify();
     }
 
     fn toggle_pin(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(game) = self.selected.clone() else { return };
+        let Some(game) = self.selected(cx).clone() else { return };
         let Some(Load::Ready(loaded)) = self.trainers.get_mut(&game) else { return };
         self.profiles.edit(&game, |profile| loaded.sheet.toggle_pin(index, profile));
         cx.notify();

@@ -23,7 +23,7 @@ const MAP_HEIGHT: f32 = 204.;
 
 impl Page {
     pub(super) fn open_map(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(game) = self.game() else { return };
+        let Some(game) = self.game(cx) else { return };
         let (id, offers) = (game.id.clone(), game.source.maps.clone());
         self.map.update(cx, |map, cx| map.show(&id, &offers, window, cx));
         self.sync_map(cx);
@@ -41,7 +41,7 @@ impl Page {
     pub(super) fn sync_map(&mut self, cx: &mut Context<Self>) {
         let open = self.map.read(cx).is_open(cx);
         let run = match &self.play {
-            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected.as_ref() => self
+            Play::Live { game, session, tracker, .. } if open && Some(game) == self.selected(cx).as_ref() => self
                 .trainer(Some(game))
                 .map(|loaded| map::Run { session: session.clone(), tracker: tracker.clone(), teleport: loaded.sheet.teleport }),
             _ => None,
@@ -62,7 +62,7 @@ impl Page {
         let wanted = self.docks.read(cx).is_shown(MINIMAP_DOCK);
         let minimap = match &self.play {
             Play::Live { game, session, tracker: Some(tracker), .. } if wanted => {
-                let offers = self.games().iter().find(|known| known.id == *game).map(|known| known.source.maps.clone());
+                let offers = self.library.read(cx).games().iter().find(|known| known.id == *game).map(|known| known.source.maps.clone());
                 let teleport = self.trainer(Some(game)).is_some_and(|loaded| loaded.sheet.teleport);
                 offers.map(|offers| map::LiveRun {
                     offers,
