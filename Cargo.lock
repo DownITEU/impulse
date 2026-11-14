@@ -3313,6 +3313,7 @@ dependencies = [
 name = "hotkeys"
 version = "0.1.0"
 dependencies = [
+ "model",
  "windows-sys 0.61.2",
 ]
 
@@ -4002,12 +4003,14 @@ name = "launchers"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "anyhow",
  "cbc",
  "model",
  "pe",
  "serde",
  "serde_json",
  "windows-registry 0.6.1",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4386,7 +4389,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures",
- "hotkeys",
 ]
 
 [[package]]
@@ -5523,8 +5525,8 @@ dependencies = [
  "agent",
  "anyhow",
  "blocking",
+ "launchers",
  "model",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8059,7 +8061,6 @@ dependencies = [
  "form_urlencoded",
  "futures",
  "h2",
- "hotkeys",
  "http",
  "log",
  "model",

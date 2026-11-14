@@ -106,7 +106,7 @@ impl Render for GamePicker {
         let found = &picker.found;
         let rows = picker.choices.iter().filter(|&&at| found.names[at].contains(&query)).take(shown).map(|&at| {
             let game = &found.games[at];
-            let mut store = game.store_ids.first().and_then(|id| id.split(':').next()).unwrap_or_default().to_uppercase();
+            let mut store = game.store_ids.first().map_or(String::new(), |id| id.store().to_uppercase());
             // Picking it adds a source to the listed game.
             if library.game(&game.id).is_some() {
                 store.push_str("  IN LIBRARY");

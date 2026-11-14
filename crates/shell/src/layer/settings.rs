@@ -1,7 +1,8 @@
 //! The Settings `OVERLAY` tab and the overlay's and minimap's hotkeys' rebinding.
 
 use gpui_kit::{App, Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, prelude::*, px, rgb};
-use hotkeys::{Chord, Outcome};
+use hotkeys::Outcome;
+use model::Chord;
 use overlay::Key;
 
 use super::Layer;

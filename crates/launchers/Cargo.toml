@@ -12,7 +12,9 @@ model.workspace = true
 pe.workspace = true
 
 aes.workspace = true
+anyhow.workspace = true
 cbc = { workspace = true, features = ["alloc"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 windows-registry.workspace = true
+windows-sys = { workspace = true, features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use model::Installation;
+use model::{Installation, Origin, StoreId};
 
 pub use picked::Picked;
 
@@ -82,7 +82,7 @@ impl Game {
     /// What follows from the install: the store, the build's support, the trainer's stamp.
     fn judge(&mut self) {
         let (offer, build) = (&self.source.trainer, self.install.build);
-        self.store = store(&self.install.store_id).to_uppercase();
+        self.store = store(&self.install.origin);
         self.support = match (offer, build) {
             (None, _) => Support::NoTrainer,
             (Some(offer), Some(build)) if offer.builds.contains(&build) => Support::Ready,
@@ -90,7 +90,7 @@ impl Game {
             (Some(_), None) => Support::Unverified,
         };
         self.stamp = (offer.as_ref().and_then(|offer| offer.revision.clone()), build);
-        self.page = launchers::page(&self.install.store_id);
+        self.page = self.install.origin.store_id().and_then(launchers::page);
     }
 }
 
@@ -111,7 +111,7 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
         if game.trainer.is_some() {
             with_trainer.insert(&game.title_id);
         }
-        if let Some(app) = game.store_ids.iter().find_map(|id| steam_app(id)) {
+        if let Some(app) = game.store_ids.iter().find_map(StoreId::steam_app) {
             steam_apps.entry(game.title_id.clone()).or_insert(app);
         }
     }
@@ -121,11 +121,11 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
     let mut games = Vec::<Game>::new();
     let mut at = HashMap::<String, usize>::new();
     for found in installed {
-        *per_store.entry(store(&found.store_id).to_owned()).or_default() += 1;
+        *per_store.entry(store(&found.origin)).or_default() += 1;
         log::debug!(
-            "{} [{}] v{} @ {}",
+            "{} [{:?}] v{} @ {}",
             found.game_id,
-            found.store_id,
+            found.origin,
             found.build.map_or("?".to_owned(), |v| v.to_string()),
             found.location.display()
         );
@@ -148,7 +148,7 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
 }
 
 fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u32>, art_cache: &Path) -> Game {
-    let app = steam_app(&found.store_id).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
+    let app = found.origin.store_id().and_then(StoreId::steam_app).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
     let mut game = Game {
         id: found.game_id.as_str().into(),
         name: entry.name.to_uppercase().into(),
@@ -169,10 +169,7 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u3
     game
 }
 
-fn store(store_id: &str) -> &str {
-    store_id.split(':').next().unwrap_or_default()
-}
-
-fn steam_app(store_id: &str) -> Option<u32> {
-    store_id.strip_prefix("steam:")?.parse().ok()
+/// `CUSTOM` for a picked executable, as Wand names it.
+fn store(origin: &Origin) -> String {
+    origin.store_id().map_or("CUSTOM".into(), |id| id.store().to_uppercase())
 }

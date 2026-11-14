@@ -21,8 +21,8 @@ use gpui_kit::{
     App, AsyncWindowContext, Context, Entity, EventEmitter, Styled, Task, WeakEntity, Window, WindowBackgroundAppearance,
     base::Root as Surface, transparent_black,
 };
-use hotkeys::Chord;
 pub use hud::{Entered, Hud, bind_keys};
+use model::Chord;
 use overlay::{Event, Key, Watch};
 pub use settings::{OverlaySettings, overlay_hotkey};
 use store::Store;

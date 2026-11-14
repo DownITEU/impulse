@@ -10,7 +10,8 @@ What the UI, a run and the providers share, in no provider's terms: data and tra
 ## Surface
 - `Provider`: a source of games, trainers, maps, an account, folders and caches. `Snapshot`, `SignIn`, `Account`, `Folder`, `Store`, `Clear` are its answers.
 - `Game`, `Offer`, `Standalone`, `Locator`: a game a provider lists, with its store ids, `exe`, art and offers.
-- `Installation`: a game on this machine (store id, location, build). `custom_store_id`, `custom_exe`: the id of an executable the user picked (`custom:<path>`, as Wand names it).
+- `StoreId`: a launcher's id for a game, `<store>:<id>`, the one place that splits one (`store`, `id`, `steam_app`). `Installation`: a game on this machine (`Origin`: a launcher's `StoreId` or the picked executable, location, build).
+- `Chord`, `Held`, `mouse`: a hotkey in Wand's key codes, its names (`Display`), the keys being pressed.
 - `Process`, `Rule`: the game's process and how a trainer says which one to look for.
 - `Trainer`, `Cheat`, `Kind`, `Args`, `Plan`: the cheat list and what running exactly this list takes.
 - `Runner`, `Attach`, `Live`, `Session`, `Event`: a run. `prepare`, then `attach(Process)`, then set values and stop.
@@ -30,5 +31,6 @@ What the UI, a run and the providers share, in no provider's terms: data and tra
 - A pin description links to another pin with `PIN_LINK`. A provider rewrites or drops its own link forms.
 - A `Frame` is valid: `axes` a permutation of 0, 1, 2, `scale` never zero.
 - `set_folder` calls are ordered: an older one never saves over a newer.
-- No I/O here, and no provider name or UI text except the custom store id.
+- No I/O here, and no provider name or UI text except the chord names.
+- `model` names no crate of ours.
 

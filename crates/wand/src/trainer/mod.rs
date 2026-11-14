@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use blocking::unblock;
-use hotkeys::Chord;
+use model::Chord;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

@@ -1,4 +1,7 @@
-use crate::mouse;
+//! A hotkey chord in Wand's key codes, its names, and the keys being pressed.
+
+pub mod mouse;
+mod names;
 
 /// Modifier bits in byte 0, up to seven other keys above it, the newest in byte 1.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -47,7 +50,7 @@ impl Chord {
     }
 
     /// A modifier is in it when its bit is set, any other key when it is among the keys.
-    pub(crate) fn contains(self, vk: u8) -> bool {
+    pub fn contains(self, vk: u8) -> bool {
         match bit(vk) {
             Some(bit) => self.0 & u64::from(bit) != 0,
             None => self.keys().any(|key| key == vk),
@@ -74,7 +77,7 @@ impl Chord {
     }
 
     /// The keys besides modifiers, in press order.
-    pub(crate) fn keys(self) -> impl Iterator<Item = u8> {
+    pub fn keys(self) -> impl Iterator<Item = u8> {
         let byte = move |at: usize| (self.0 >> (8 * at)) as u8;
         let count = (1..=MAX_KEYS).take_while(|&at| byte(at) != 0).count();
         (1..=count).rev().map(byte)
@@ -87,7 +90,7 @@ fn bit(vk: u8) -> Option<u8> {
 
 /// The keys held now, tracked as Easymic's `KeyChord` does.
 #[derive(Default)]
-pub(crate) struct Held(u64);
+pub struct Held(u64);
 
 impl Held {
     pub fn press(&mut self, vk: u8) {

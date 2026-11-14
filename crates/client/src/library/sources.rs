@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, path::Path};
 
-use model::Installation;
+use model::{Installation, Origin};
 
 use super::Game;
 
@@ -30,7 +30,7 @@ pub fn entries(game: &Game) -> (Vec<(Entry, String)>, usize) {
         .map(|(other, install)| {
             let label = match exe(install) {
                 Some(exe) => format!("EXE  {}", exe.file_name().unwrap_or_default().to_string_lossy()),
-                None => super::store(&install.store_id).to_uppercase(),
+                None => super::store(&install.origin),
             };
             (Entry::Use(other), label)
         })
@@ -44,7 +44,10 @@ pub fn entries(game: &Game) -> (Vec<(Entry, String)>, usize) {
 
 /// The executable the user picked as this install.
 pub fn exe(install: &Installation) -> Option<&Path> {
-    model::custom_exe(&install.store_id)
+    match &install.origin {
+        Origin::Picked(exe) => Some(exe),
+        Origin::Launcher(_) => None,
+    }
 }
 
 /// The catalog games that keep their executable where `exe` is, by index (blocking).
@@ -60,15 +63,14 @@ pub fn install(game: &model::Game, exe: &Path) -> Option<Installation> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
 
-    use model::{Installation, custom_store_id};
+    use model::{Installation, Origin, StoreId};
 
     use super::{super::Game, Entry, entries};
     use crate::library::Support;
 
-    fn install(store_id: String) -> Installation {
-        Installation { game_id: "g".into(), store_id, location: Default::default(), build: None }
+    fn install(origin: Origin) -> Installation {
+        Installation { game_id: "g".into(), origin, location: Default::default(), build: None }
     }
 
     fn game(install: Installation, other: Option<Installation>) -> Game {
@@ -91,7 +93,8 @@ mod tests {
 
     #[test]
     fn the_launcher_comes_first_and_a_picked_exe_can_be_changed_or_removed() {
-        let (steam, exe) = (install("steam:1".into()), install(custom_store_id(Path::new(r"C:\g\game.exe"))));
+        let steam = install(Origin::Launcher(StoreId::parse("steam:1").unwrap()));
+        let exe = install(Origin::Picked(r"C:\g\game.exe".into()));
         let (only, current) = entries(&game(steam.clone(), None));
         assert_eq!((only, current), (vec![(Entry::Use(false), "STEAM".into()), (Entry::Pick, "+ ADD .EXE".into())], 0));
         let (both, current) = entries(&game(exe, Some(steam)));

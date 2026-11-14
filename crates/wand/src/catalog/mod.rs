@@ -5,7 +5,7 @@ mod cache;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use model::{Game, Locator, MapOffer, Offer, Standalone};
+use model::{Game, Locator, MapOffer, Offer, Standalone, StoreId};
 use serde::Deserialize;
 
 pub use cache::{cached, forget, refresh, size};
@@ -131,7 +131,7 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
             }),
             id: entry.id,
             title_id: entry.title_id,
-            store_ids: entry.correlation_ids,
+            store_ids: entry.correlation_ids.iter().filter_map(|id| StoreId::parse(id)).collect(),
             exe: entry.version_path,
         })
     });

@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fmt};
 
-use crate::{Chord, mouse};
+use super::{Chord, mouse};
 
 /// `CTRL+SHIFT+F6`: the modifiers first, then the keys in press order.
 impl fmt::Display for Chord {

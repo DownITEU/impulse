@@ -5,10 +5,10 @@ paths:
 
 # Platform leaves
 
-Small Windows and I/O crates with no dependency on our other crates. Each is data in, data out.
+Small Windows and I/O crates with no dependency on our other crates but `model` (`hotkeys`). Each is data in, data out.
 
 ## hotkeys
-- `Chord`, `Matcher` (matches as Wand does: longest chord wins, a chord bound twice fires both), `Capture`, `Hook`, `foreground_pid`.
+- `Matcher` over `model::Chord` (matches as Wand does: longest chord wins, a chord bound twice fires both), `Capture`, `Hook`, `foreground_pid`.
 - `Hook` runs on its own thread, never the tao/WebView2 thread: Windows removes a hook that stalls. Its handler returns at once (forward to a channel); true on a down hides it from every app.
 - The mouse hook runs on every move: start it only when a chord `uses_mouse()`. A later hook sees keys first.
 

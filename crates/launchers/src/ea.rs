@@ -39,7 +39,7 @@ fn match_folders(games: &[Game], folders: &[PathBuf]) -> Vec<App> {
     let games: Vec<(&str, &str)> = games
         .iter()
         .filter_map(|game| {
-            let id = game.store_ids.iter().find(|id| id.starts_with("origin:"))?;
+            let id = game.store_ids.iter().find(|id| id.store() == "origin")?;
             Some((id.as_str(), game.exe.as_deref()?))
         })
         .collect();
@@ -53,11 +53,17 @@ fn match_folders(games: &[Game], folders: &[PathBuf]) -> Vec<App> {
 
 #[cfg(test)]
 mod tests {
+    use model::StoreId;
+
     use super::*;
 
     #[test]
     fn matches_origin_games_by_version_path() {
-        let game = |store_id: &str, exe: &str| Game { store_ids: vec![store_id.to_owned()], exe: Some(exe.to_owned()), ..Game::default() };
+        let game = |store_id: &str, exe: &str| Game {
+            store_ids: vec![StoreId::parse(store_id).unwrap()],
+            exe: Some(exe.to_owned()),
+            ..Game::default()
+        };
         let games = [
             game("origin:Origin.OFR.50.0000001", r"bin\game.exe"),
             game("steam:1", r"bin\game.exe"),

@@ -8,6 +8,5 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-hotkeys.workspace = true
 anyhow.workspace = true
 futures.workspace = true

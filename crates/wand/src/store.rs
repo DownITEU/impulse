@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use hotkeys::Chord;
+use model::Chord;
 use rusty_leveldb::{DB, Options};
 use serde::Deserialize;
 use serde_json::Value;

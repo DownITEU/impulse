@@ -9,8 +9,8 @@ workspace = true
 
 [dependencies]
 agent.workspace = true
+launchers.workspace = true
 model.workspace = true
 
 anyhow.workspace = true
 blocking.workspace = true
-windows-sys = { workspace = true, features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

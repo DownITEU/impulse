@@ -1,8 +1,7 @@
 //! Recording a chord for rebinding, after Easymic's `HotkeyCapture`.
 
-use crate::{
-    Chord,
-    chord::Held,
+use model::{
+    Chord, Held,
     mouse::{LBUTTON, RBUTTON},
 };
 

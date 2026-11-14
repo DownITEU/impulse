@@ -16,8 +16,8 @@ use futures::{
     channel::{mpsc, oneshot},
 };
 use gpui_kit::{App, Context, Entity, Task, Window};
-use hotkeys::{Binding, Capture, Chord, Fired, Hook, Matcher, Outcome, Step};
-use model::Cheat;
+use hotkeys::{Binding, Capture, Fired, Hook, Matcher, Outcome, Step};
+use model::{Cheat, Chord};
 
 use crate::{
     library::{Library, LibraryEvent},

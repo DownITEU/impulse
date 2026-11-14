@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use hotkeys::Chord;
+use crate::Chord;
 
 use crate::Runner;
 

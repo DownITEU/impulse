@@ -18,18 +18,18 @@ const GRAPH: &[(&str, &[&str])] = &[
     ("client", &["disk", "launchers", "model", "play"]),
     ("disk", &[]),
     ("fetch", &[]),
-    ("hotkeys", &[]),
+    ("hotkeys", &["model"]),
     ("impulse", &["journal", "model", "shell", "tray", "wand"]),
     ("journal", &[]),
     ("launchers", &["model", "pe"]),
-    ("model", &["hotkeys"]),
+    ("model", &[]),
     ("overlay", &[]),
     ("pe", &[]),
-    ("play", &["agent", "model"]),
+    ("play", &["agent", "launchers", "model"]),
     ("shell", &["client", "disk", "fetch", "hotkeys", "journal", "model", "overlay", "tray", "video"]),
     ("tray", &[]),
     ("video", &[]),
-    ("wand", &["agent", "disk", "fetch", "hotkeys", "model", "pe"]),
+    ("wand", &["agent", "disk", "fetch", "model", "pe"]),
 ];
 
 /// The packages that may use GPUI: the UI and the app that opens its window.

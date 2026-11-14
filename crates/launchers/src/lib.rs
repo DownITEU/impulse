@@ -7,6 +7,7 @@ mod gog;
 mod registry;
 mod rockstar;
 mod standalone;
+mod start;
 mod steam;
 mod ubisoft;
 mod vdf;
@@ -17,9 +18,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use model::{Game, Installation};
+use model::{Game, Installation, Origin, StoreId};
 
 pub use custom::{Custom, install, owners};
+pub use start::start;
 
 /// An install as a launcher reports it.
 struct App {
@@ -34,7 +36,7 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
     let mut by_store_id = HashMap::<String, Vec<&Game>>::new();
     for game in games {
         for id in &game.store_ids {
-            by_store_id.entry(id.to_ascii_lowercase()).or_default().push(game);
+            by_store_id.entry(id.as_str().to_ascii_lowercase()).or_default().push(game);
         }
     }
     let apps = [
@@ -50,9 +52,10 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for app in apps.into_iter().flatten() {
+        let Some(id) = StoreId::parse(&app.store_id) else { continue };
         for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
             if seen.insert(game.id.as_str()) {
-                out.push(installation(game, &app));
+                out.push(installation(game, Origin::Launcher(id.clone()), app.location.clone()));
             }
         }
     }
@@ -62,18 +65,18 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
 }
 
 /// The build is the PE TimeDateStamp of the game's `exe` in the install.
-fn installation(game: &Game, app: &App) -> Installation {
-    let build = game.exe.as_deref().and_then(|exe| pe::header(&app.location.join(exe))).map(|header| header.timestamp);
-    Installation { game_id: game.id.clone(), store_id: app.store_id.clone(), location: app.location.clone(), build }
+fn installation(game: &Game, origin: Origin, location: PathBuf) -> Installation {
+    let build = game.exe.as_deref().and_then(|exe| pe::header(&location.join(exe))).map(|header| header.timestamp);
+    Installation { game_id: game.id.clone(), origin, location, build }
 }
 
 /// The launcher's name and the URI of the game's page in it, for the stores that have one.
-pub fn page(store_id: &str) -> Option<(&'static str, String)> {
-    let (store, id) = store_id.split_once(':')?;
+pub fn page(store_id: &StoreId) -> Option<(&'static str, String)> {
+    let id = store_id.id();
     // Ids come from local records: only plain ones reach a URI.
     let only = |ok: fn(u8) -> bool| !id.is_empty() && id.bytes().all(ok);
     let digits = only(|b| b.is_ascii_digit());
-    match store {
+    match store_id.store() {
         "steam" if digits => Some(("Steam", format!("steam://nav/games/details/{id}"))),
         "gog" if digits => Some(("GOG Galaxy", format!("goggalaxy://openGameView/{id}"))),
         "uwp" if only(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)) => {
@@ -94,9 +97,10 @@ mod tests {
 
     #[test]
     fn pages_only_for_plain_ids_of_known_launchers() {
+        let page = |id: &str| page(&StoreId::parse(id).unwrap());
         assert_eq!(page("steam:1203620").unwrap().1, "steam://nav/games/details/1203620");
         assert_eq!(page("uwp:Game.Name_8wekyb3d8bbwe").unwrap().0, "Microsoft Store");
-        for id in ["steam:", "steam:12&x", "gog:1 2", "uwp:a/b", "epic:Fortnite", "custom:C:\\a.exe"] {
+        for id in ["steam:", "steam:12&x", "gog:1 2", "uwp:a/b", "epic:Fortnite"] {
             assert!(page(id).is_none(), "{id}");
         }
     }

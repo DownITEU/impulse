@@ -1,7 +1,7 @@
 //! Which bindings a key fires, matched as Wand does: Easymic's `HotkeyService` without multi-press,
 //! tap-only or per-app scopes.
 
-use crate::Chord;
+use model::Chord;
 
 pub struct Binding<T> {
     pub action: T,

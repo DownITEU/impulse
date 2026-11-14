@@ -9,7 +9,7 @@ use crate::profile::{Profile, Values};
 pub fn request(install: &Installation, plan: &Plan) -> Request {
     Request {
         runner: plan.runner.clone(),
-        store_id: install.store_id.clone(),
+        origin: install.origin.clone(),
         rule: Rule { image: plan.image.clone(), location: install.location.clone(), minimum_age: plan.minimum_age },
         launch: plan.launch,
     }

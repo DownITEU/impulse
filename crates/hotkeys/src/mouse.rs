@@ -1,38 +1,13 @@
-//! The mouse in Wand's codes: the buttons' virtual keys, and 10 and 11 (reserved by Windows) for a
-//! wheel notch.
+//! Mouse hook messages in Wand's codes (`model::mouse`).
 
+use model::mouse::{LBUTTON, MBUTTON, RBUTTON, WHEEL_DOWN, WHEEL_UP, XBUTTON1, XBUTTON2};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
 };
 
-pub(crate) const LBUTTON: u8 = 0x01;
-pub(crate) const RBUTTON: u8 = 0x02;
-const MBUTTON: u8 = 0x04;
-const XBUTTON1: u8 = 0x05;
-const XBUTTON2: u8 = 0x06;
-const WHEEL_UP: u8 = 0x0A;
-const WHEEL_DOWN: u8 = 0x0B;
-
-pub(crate) fn is_mouse(vk: u8) -> bool {
-    matches!(vk, LBUTTON | RBUTTON | MBUTTON | XBUTTON1 | XBUTTON2 | WHEEL_UP | WHEEL_DOWN)
-}
-
 /// A notch has no release of its own: the hook adds one.
 pub(crate) fn is_notch(vk: u8) -> bool {
     matches!(vk, WHEEL_UP | WHEEL_DOWN)
-}
-
-pub(crate) fn name(vk: u8) -> Option<&'static str> {
-    Some(match vk {
-        LBUTTON => "LMB",
-        RBUTTON => "RMB",
-        MBUTTON => "MMB",
-        XBUTTON1 => "MB4",
-        XBUTTON2 => "MB5",
-        WHEEL_UP => "WHEEL UP",
-        WHEEL_DOWN => "WHEEL DN",
-        _ => return None,
-    })
 }
 
 /// The code and whether it went down, from a `WH_MOUSE_LL` message and its `mouseData`; a notch is a down.

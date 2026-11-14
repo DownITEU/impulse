@@ -4,9 +4,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use blocking::unblock;
-use model::{Live, Process, Rule, Runner};
-
-use super::launch;
+use model::{Live, Origin, Process, Rule, Runner};
 
 // Wand's wait after it starts a game itself; when the user has to start it there is more to do.
 const LAUNCHED_WITHIN: Duration = Duration::from_secs(45);
@@ -14,7 +12,7 @@ const STARTED_BY_USER_WITHIN: Duration = Duration::from_secs(180);
 
 pub struct Request {
     pub runner: Arc<dyn Runner>,
-    pub store_id: String,
+    pub origin: Origin,
     pub rule: Rule,
     /// Start the game when it is not running; `false` waits for the user to start it.
     pub launch: bool,
@@ -49,8 +47,8 @@ async fn wait_for_game(request: &Request, stage: &mut impl FnMut(Stage)) -> Resu
     let mut started = false;
     if request.launch {
         stage(Stage::Launching);
-        let store_id = request.store_id.clone();
-        started = unblock(move || launch::start(&store_id)).await?;
+        let origin = request.origin.clone();
+        started = unblock(move || launchers::start(&origin)).await?;
     }
     stage(Stage::WaitingForGame);
     let within = if started { LAUNCHED_WITHIN } else { STARTED_BY_USER_WITHIN };

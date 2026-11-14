@@ -7,9 +7,9 @@ use std::{
     slice,
 };
 
-use model::{Game, Installation};
+use model::{Game, Installation, Origin};
 
-use super::{App, installation};
+use super::installation;
 
 /// Folders above a picked executable tried as the install: `Binaries\Win64\x.exe` is three down.
 const DEPTH: usize = 5;
@@ -51,7 +51,7 @@ pub fn install(game: &Game, exe: &Path) -> Option<Installation> {
         return None;
     }
     let location = owners(slice::from_ref(game), exe).pop().map(|(_, dir)| dir).or_else(|| exe.parent().map(Path::to_owned))?;
-    Some(installation(game, &App { store_id: model::custom_store_id(exe), location }))
+    Some(installation(game, Origin::Picked(exe.to_owned()), location))
 }
 
 #[cfg(test)]
@@ -82,7 +82,7 @@ mod tests {
 
         let installed = install(&games[0], &bin.join("Game.exe")).unwrap();
         assert_eq!(installed.location, root);
-        assert_eq!(model::custom_exe(&installed.store_id), Some(bin.join("Game.exe").as_path()));
+        assert_eq!(installed.origin, Origin::Picked(bin.join("Game.exe")));
         // Without its `exe` around, the picked file's folder is the install.
         assert_eq!(install(&games[2], &bin.join("Game.exe")).unwrap().location, bin);
         assert!(install(&games[0], &bin.join("Gone.exe")).is_none());

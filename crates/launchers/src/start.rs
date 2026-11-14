@@ -2,21 +2,23 @@
 
 use std::{ffi::OsStr, io, os::windows::ffi::OsStrExt, path::Path, ptr};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
+use model::Origin;
 use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
-/// Starts the game of `store_id`: a Steam app, or the executable the user picked, in its own folder.
+/// Starts a Steam app, or the executable the user picked in its own folder (blocking).
 /// `false`: no way to start this store's games from here, so the user starts the game and the run waits for it.
-pub fn start(store_id: &str) -> Result<bool> {
-    if let Some(exe) = model::custom_exe(store_id) {
-        open(exe.as_os_str(), exe.parent())?;
-        return Ok(true);
-    }
-    let Some(app) = store_id.strip_prefix("steam:") else {
-        return Ok(false);
+pub fn start(origin: &Origin) -> Result<bool> {
+    let id = match origin {
+        Origin::Picked(exe) => {
+            open(exe.as_os_str(), exe.parent())?;
+            return Ok(true);
+        }
+        Origin::Launcher(id) if id.store() == "steam" => id,
+        Origin::Launcher(_) => return Ok(false),
     };
-    // The id comes from the catalog, a remote file: only digits reach the URI.
-    ensure!(!app.is_empty() && app.bytes().all(|b| b.is_ascii_digit()), "unexpected Steam app id '{app}'");
+    // The id comes from the catalog, a remote file: only a number reaches the URI.
+    let app = id.steam_app().with_context(|| format!("unexpected Steam app id '{}'", id.id()))?;
     open(OsStr::new(&format!("steam://rungameid/{app}")), None)?;
     Ok(true)
 }
@@ -34,10 +36,13 @@ fn open(target: &OsStr, dir: Option<&Path>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use model::StoreId;
+
     use super::*;
 
     #[test]
     fn other_stores_are_not_started_and_odd_ids_are_refused() {
+        let start = |id: &str| start(&Origin::Launcher(StoreId::parse(id).unwrap()));
         assert!(!start("epic:abc").unwrap());
         assert!(!start("gog:123").unwrap());
         for id in ["steam:", "steam:12 34", "steam:1&calc", "steam:../x"] {

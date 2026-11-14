@@ -26,7 +26,7 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 - `play` - one run: prepare, find or start the game, attach.
 - `agent` - every operation on a game's process.
 - `launchers` - installed games from the launchers' own records.
-- `hotkeys`, `overlay`, `tray`, `video` - Win32 and media leaves: key hooks and chords, the overlay's window calls, the tray icon, clips on the GPU.
+- `hotkeys`, `overlay`, `tray`, `video` - Win32 and media leaves: key hooks, the overlay's window calls, the tray icon, clips on the GPU.
 - `journal`, `disk`, `fetch`, `pe` - the log, atomic file writes, public CDN GETs, PE headers.
 - `checks` - tests holding the crate graph, file sizes and the rule files' globs.
 
