@@ -24,6 +24,7 @@ use crate::{
     trainer::{TrainerEvent, Trainers},
 };
 
+pub use caps::{cap, caps};
 pub use settings::HotkeySettings;
 
 pub const PRESS_KEYS: &str = "PRESS KEYS";
@@ -216,7 +217,7 @@ impl Hotkeys {
         }
         let slots = self.slots(game, &sheet.cheats);
         self.trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
-        if self.runs.read(cx).live() == Some(game) {
+        if self.runs.read(cx).is_live(game) {
             self.arm(cx);
         }
     }

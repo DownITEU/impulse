@@ -2,10 +2,10 @@ use std::time::Duration;
 
 use gpui_kit::{
     AnyView, App, Bounds, Context, Div, ElementId, Entity, FontWeight, Hsla, InteractiveText, IntoElement, Rgba, SharedString, Stateful,
-    StyledText, Svg, Task, Window, canvas,
+    StyledText, Subscription, Svg, Task, Window, canvas,
     component::{
         h_flex,
-        input::{Input, InputState},
+        input::{Input, InputEvent, InputState},
         tooltip::Tooltip,
         v_flex,
     },
@@ -196,6 +196,17 @@ fn button_frame() -> Div {
 }
 
 /// `/ filter` field: the accent slash and a bare mono input.
+/// The text of a `filter`; `V` repaints as it changes (`set_value` sends no change).
+pub fn filter_input<V: 'static>(placeholder: &'static str, window: &mut Window, cx: &mut Context<V>) -> (Entity<InputState>, Subscription) {
+    let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+    let typed = cx.subscribe(&state, |_, _, event: &InputEvent, cx| {
+        if matches!(event, InputEvent::Change) {
+            cx.notify();
+        }
+    });
+    (state, typed)
+}
+
 pub fn filter(state: &Entity<InputState>, cx: &App) -> Div {
     h_flex()
         .gap(px(8.))

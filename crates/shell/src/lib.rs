@@ -7,8 +7,6 @@ mod assets;
 mod bindings;
 mod boot;
 mod cheats;
-mod collections;
-mod controls;
 mod crash;
 mod dialog;
 mod docks;
@@ -25,11 +23,8 @@ mod pane;
 mod resources;
 mod root;
 mod run;
-mod saved;
 mod settings;
 mod side;
-mod sidebar;
-mod sources;
 mod status;
 mod systray;
 mod theme;
@@ -39,12 +34,8 @@ mod widgets;
 use std::{path::Path, sync::Arc};
 
 use gpui_kit::{
-    App, Context, Entity, FocusHandle, IntoElement, Render, Task, Window,
-    component::{
-        h_flex,
-        input::{InputEvent, InputState},
-        v_flex,
-    },
+    App, Context, Entity, FocusHandle, IntoElement, Render, Window,
+    component::{h_flex, v_flex},
     div,
     prelude::*,
     rgb,
@@ -54,28 +45,25 @@ use account::Account;
 pub use assets::Assets;
 use bindings::HotkeySettings;
 use bindings::Hotkeys;
-use collections::Editor;
+use cheats::{CheatList, EditorClosed};
 use docks::Docks;
 use glance::Glance;
 use layer::OverlaySettings;
 use layer::{Layer, MinimapKey};
-use library::{Library, LibraryEvent};
+use library::{GamePicker, Library, LibraryEvent, Marks, Sidebar};
 use log_view::{LogEvent, LogView};
 use map::{MapEvent, MapView, Maps, Minimap};
 use resources::{Resources, ResourcesEvent, ResourcesView};
 pub use root::Root;
 use run::{RunEvent, Runs};
 use settings::{Folders, Looked, Settings, SettingsView, Tabs};
-use sources::Picker;
 use theme::*;
-use trainer::{Printed, Trainers};
+use trainer::Trainers;
 use widgets::grid;
 
 use client::{Load, library::Game, media::Media, storage::Paths, trainer::Sheet};
 use model::Provider;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-const SIDEBAR_WIDTH: f32 = 248.;
 
 pub fn init(data_dir: &Path, cx: &mut App) {
     crash::install();
@@ -98,31 +86,19 @@ fn hwnd(window: &Window) -> Option<isize> {
 /// The open dropdown.
 #[derive(Clone, Copy, PartialEq)]
 enum Menu {
-    Cheat(usize),
-    /// A collection chip's actions.
-    Collection(usize),
     /// The open game's sources.
     Source,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Flash {
-    Cheat(usize),
 }
 
 pub struct Page {
     account: Entity<Account>,
     library: Entity<Library>,
     trainers: Entity<Trainers>,
-    // The open game's cheat list as printed; the cheat list's own until it is a view.
-    printed: Option<Printed>,
     runs: Entity<Runs>,
     hotkeys: Entity<Hotkeys>,
-    // `+ ADD`'s choice of game.
-    picker: Option<Picker>,
+    sidebar: Entity<Sidebar>,
+    picker: Entity<GamePicker>,
     settings: Entity<Settings>,
-    // The collection being named.
-    editor: Option<Editor>,
     settings_view: Entity<SettingsView>,
     // The window is the overlay over a game: the HUD replaces the page.
     over: bool,
@@ -136,17 +112,13 @@ pub struct Page {
     // The minimap in its dock over the game.
     minimap: Entity<Minimap>,
     hud_focus: FocusHandle,
-    dialog_focus: FocusHandle,
     menu: Option<Menu>,
-    // The press-only button showing its confirmation.
-    flashed: Option<(Flash, Task<()>)>,
     log: Entity<LogView>,
     log_open: bool,
     maps: Entity<Maps>,
     map: Entity<MapView>,
     resources: Entity<Resources>,
-    game_filter: Entity<InputState>,
-    mod_filter: Entity<InputState>,
+    cheat_list: Entity<CheatList>,
 }
 
 impl Page {
@@ -173,7 +145,6 @@ impl Page {
         cx.subscribe_in(&library, window, Self::library_changed).detach();
         let trainers = cx.new(|cx| Trainers::new(provider.clone(), &paths, library.clone(), cx));
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
-        cx.subscribe_in(&trainers, window, Self::trainer_changed).detach();
         let runs = cx.new(|cx| Runs::new(library.clone(), trainers.clone(), cx));
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
         cx.subscribe(&runs, Self::run_changed).detach();
@@ -194,23 +165,33 @@ impl Page {
             ResourcesEvent::Cleared => page.reload(cx),
         })
         .detach();
-        let mut filter = |placeholder: &'static str| {
-            let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
-            cx.subscribe(&state, |_, _, event: &InputEvent, cx| {
-                if matches!(event, InputEvent::Change) {
-                    cx.notify();
-                }
-            })
-            .detach();
-            state
+        let picker = cx.new(|cx| GamePicker::new(library.clone(), cx));
+        cx.observe(&picker, |_, _, cx| cx.notify()).detach();
+        let marks = {
+            let (trainers, runs) = (trainers.clone(), runs.clone());
+            move |game: &str, cx: &App| Marks { favorite: trainers.read(cx).profile(game).favorite, live: runs.read(cx).is_live(game) }
         };
-        let (game_filter, mod_filter) = (filter("filter"), filter("filter mods"));
+        let sidebar = cx.new(|cx| {
+            // What `marks` reads.
+            cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
+            cx.observe(&runs, |_, _, cx| cx.notify()).detach();
+            Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, window, cx)
+        });
         let layer = cx.new(|cx| Layer::new(&paths, &runs, window, cx));
         // The overlay's and the minimap's hotkeys are not the trainer's to take.
         let reserved = layer.downgrade();
         let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
         let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), reserved, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
+        let cheat_list = cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), window, cx));
+        cx.observe(&cheat_list, |_, _, cx| cx.notify()).detach();
+        // The focus must not stay in the gone editor, or Escape would reach nothing.
+        cx.subscribe_in(&cheat_list, window, |page, _, _: &EditorClosed, window, cx| {
+            if page.over {
+                page.hud_focus.focus(window, cx);
+            }
+        })
+        .detach();
         let tabs = Tabs {
             overlay: cx.new(|cx| OverlaySettings::new(layer.clone(), hotkeys.clone(), trainers.clone(), cx)).into(),
             hotkeys: cx.new(|cx| HotkeySettings::new(hotkeys.clone(), cx)).into(),
@@ -244,14 +225,13 @@ impl Page {
         .detach();
         let page = Self {
             hotkeys,
-            picker: None,
+            sidebar,
+            picker,
             account,
             library,
             trainers,
-            printed: None,
             runs,
             settings,
-            editor: None,
             settings_view,
             over: false,
             tray: Self::start_tray(window, cx),
@@ -261,16 +241,13 @@ impl Page {
             _glance: glance,
             minimap,
             hud_focus: cx.focus_handle(),
-            dialog_focus: cx.focus_handle(),
             menu: None,
-            flashed: None,
             log,
             log_open: false,
             maps,
             map,
             resources,
-            game_filter,
-            mod_filter,
+            cheat_list,
         };
         page.dock_minimap(cx);
         page
@@ -290,7 +267,7 @@ impl Page {
     }
 
     fn is_running(&self, cx: &App) -> bool {
-        self.runs.read(cx).live().is_some_and(|game| self.library.read(cx).open_id() == Some(game))
+        self.library.read(cx).open_id().is_some_and(|game| self.runs.read(cx).is_live(game))
     }
 
     fn select(&self, id: Arc<str>, cx: &mut App) {
@@ -301,10 +278,6 @@ impl Page {
         match event {
             LibraryEvent::Opened => {
                 self.map.update(cx, |map, cx| map.hide(window, cx));
-                // Another trainer's names: the old filter would hide them.
-                self.mod_filter.update(cx, |filter, cx| filter.set_value("", window, cx));
-                self.drop_cheat_state();
-                self.print(window, cx);
                 // Over a game, its dock opens the new game's map.
                 self.sync_map_dock(window, cx);
             }
@@ -315,37 +288,11 @@ impl Page {
 
     fn run_changed(&mut self, _: Entity<Runs>, event: &RunEvent, cx: &mut Context<Self>) {
         match event {
-            RunEvent::Pressed(index) => {
-                if self.is_running(cx) {
-                    self.flash(Flash::Cheat(*index), cx);
-                }
-            }
             // The tray's quit waited for the trainer to stop.
             RunEvent::Ended if self.quitting => cx.quit(),
-            RunEvent::Live | RunEvent::Stopping | RunEvent::Ended => {}
+            _ => {}
         }
         cx.notify();
-    }
-
-    /// The open menu and flash are keyed by cheat index, which means another cheat in another trainer.
-    fn drop_cheat_state(&mut self) {
-        if matches!(self.menu, Some(Menu::Cheat(_) | Menu::Collection(_))) {
-            self.menu = None;
-        }
-        self.editor = None;
-        if matches!(self.flashed, Some((Flash::Cheat(_), _))) {
-            self.flashed = None;
-        }
-    }
-
-    fn flash(&mut self, button: Flash, cx: &mut Context<Self>) {
-        let timer = widgets::flash(cx, |page: &mut Self| page.flashed = None);
-        self.flashed = Some((button, timer));
-        cx.notify();
-    }
-
-    fn is_flashed(&self, button: Flash) -> bool {
-        self.flashed.as_ref().is_some_and(|(at, _)| *at == button)
     }
 }
 
@@ -365,7 +312,7 @@ impl Render for Page {
                     .flex_1()
                     .min_h_0()
                     .items_start()
-                    .child(self.sidebar(cx))
+                    .child(self.sidebar.clone())
                     .child(self.pane(window, cx))
                     .when(self.log_open, |body| {
                         body.child(div().occlude().absolute().top_0().left_0().size_full().child(self.log.clone()))
@@ -373,8 +320,8 @@ impl Render for Page {
             )
             .child(self.status_bar(cx))
             .when(self.settings_view.read(cx).is_open(), |page| page.child(self.settings_view.clone()))
-            .children(self.collection_editor(cx))
-            .children(self.game_picker(cx))
+            .children(self.cheat_list.read(cx).editor().cloned())
+            .when(self.picker.read(cx).is_open(), |page| page.child(self.picker.clone()))
             .into_any_element()
     }
 }

@@ -8,7 +8,7 @@ use client::{
     trainer::Sheet,
 };
 use gpui_kit::{
-    Context, Div, Entity, IntoElement, MouseButton, Stateful, Subscription, Window,
+    Context, Div, Entity, EventEmitter, FocusHandle, IntoElement, MouseButton, Render, Stateful, Subscription, Window,
     component::{
         h_flex,
         input::{Input, InputEvent, InputState},
@@ -20,13 +20,13 @@ use gpui_kit::{
     px, rgb,
 };
 
-use super::{
-    Menu, Page,
+use super::{CheatList, EditorClosed, Menu, open_menu};
+use crate::{
     assets::Icon,
     dialog::dialog,
-    dropdown::picks,
-    open_menu,
+    dropdown::{close, picks},
     theme::*,
+    trainer::Trainers,
     widgets::{button, icon, icon_button, mono, tip},
 };
 
@@ -53,20 +53,9 @@ fn listed(key: &str) -> (&'static str, Icon) {
     *ICONS.iter().find(|(known, _)| *known == key).unwrap_or(&ICONS[0])
 }
 
-/// The dialog that names a collection and picks its icon.
-pub(super) struct Editor {
-    game: Arc<str>,
-    /// The collection being changed; `None` makes one of `mods`.
-    at: Option<usize>,
-    mods: Values,
-    icon: &'static str,
-    name: Entity<InputState>,
-    _typed: Subscription,
-}
-
-impl Page {
-    pub(super) fn collections_bar(&self, sheet: &Sheet, running: bool, cx: &Context<Self>) -> impl IntoElement {
-        let collections = &self.trainers.read(cx).profile(self.selected(cx).as_deref().unwrap_or_default()).collections;
+impl CheatList {
+    pub(super) fn collections_bar(&self, game: &str, sheet: &Sheet, running: bool, cx: &Context<Self>) -> impl IntoElement {
+        let collections = &self.trainers.read(cx).profile(game).collections;
         // A new one is made of the mods that are on.
         let addable = running && sheet.active() > 0;
         let chips = collections
@@ -97,7 +86,7 @@ impl Page {
                 icon_button("collection-add", Icon::Plus, 28., 13.)
                     .tooltip(|window, cx| tip("Keeps the mods that are on now as a collection.".into(), window, cx))
                     .when(!addable, |add| add.opacity(0.4).cursor_default())
-                    .when(addable, |add| add.on_click(cx.listener(|page, _, window, cx| page.edit_collection(None, window, cx)))),
+                    .when(addable, |add| add.on_click(cx.listener(|list, _, window, cx| list.edit_collection(None, window, cx)))),
             )
     }
 
@@ -124,26 +113,21 @@ impl Page {
             .when(running, |chip| {
                 chip.cursor_pointer()
                     .hover(|style| style.bg(rgb(RAISED_HOVER)))
-                    .on_click(cx.listener(move |page, _, _, cx| page.toggle_collection(at, cx)))
+                    .on_click(cx.listener(move |list, _, _, cx| list.toggle_collection(at, cx)))
             })
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |page, _, _, cx| {
-                    page.menu = Some(menu);
+                cx.listener(move |list, _, _, cx| {
+                    list.menu = Some(menu);
                     cx.notify();
                 }),
             )
-            .on_mouse_down_out(cx.listener(move |page, _, _, cx| {
-                if page.menu == Some(menu) {
-                    page.menu = None;
-                    cx.notify();
-                }
-            }))
+            .on_mouse_down_out(cx.listener(move |list, _, _, cx| close(list, open_menu, menu, cx)))
             .when(self.menu == Some(menu), |chip| {
                 let actions =
-                    picks(vec!["EDIT".into(), "DELETE".into()], usize::MAX, open_menu, cx, move |page, pick, window, cx| match pick {
-                        0 => page.edit_collection(Some(at), window, cx),
-                        _ => page.delete_collection(at, cx),
+                    picks(vec!["EDIT".into(), "DELETE".into()], usize::MAX, open_menu, cx, move |list, pick, window, cx| match pick {
+                        0 => list.edit_collection(Some(at), window, cx),
+                        _ => list.delete_collection(at, cx),
                     });
                 chip.child(deferred(actions.left(px(-1.)).min_w(px(110.))))
             })
@@ -176,11 +160,51 @@ impl Page {
         if mods.is_empty() {
             return;
         }
+        let trainers = self.trainers.clone();
+        let editor = cx.new(|cx| CollectionEditor::new(trainers, game, at, mods, key, title, window, cx));
+        cx.subscribe(&editor, |list, _, _: &EditorClosed, cx| {
+            list.editor = None;
+            cx.emit(EditorClosed);
+            cx.notify();
+        })
+        .detach();
+        self.editor = Some(editor);
+        cx.notify();
+    }
+}
+
+/// The dialog that names a collection and picks its icon.
+pub struct CollectionEditor {
+    trainers: Entity<Trainers>,
+    game: Arc<str>,
+    /// The collection being changed; `None` makes one of `mods`.
+    at: Option<usize>,
+    mods: Values,
+    icon: &'static str,
+    name: Entity<InputState>,
+    focus: FocusHandle,
+    _typed: Subscription,
+}
+
+impl EventEmitter<EditorClosed> for CollectionEditor {}
+
+impl CollectionEditor {
+    #[expect(clippy::too_many_arguments, reason = "the collection's game, place, mods, icon and name")]
+    fn new(
+        trainers: Entity<Trainers>,
+        game: Arc<str>,
+        at: Option<usize>,
+        mods: Values,
+        icon: &'static str,
+        title: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let name = cx.new(|cx| {
             InputState::new(window, cx).placeholder("name").validate(|text, _| text.chars().count() <= NAME_LENGTH).default_value(title)
         });
-        let typed = cx.subscribe_in(&name, window, |page, _, event: &InputEvent, window, cx| match event {
-            InputEvent::PressEnter { .. } => page.keep_collection(window, cx),
+        let typed = cx.subscribe_in(&name, window, |editor, _, event: &InputEvent, window, cx| match event {
+            InputEvent::PressEnter { .. } => editor.keep(window, cx),
             _ => cx.notify(),
         });
         // Typing replaces the old name.
@@ -188,38 +212,31 @@ impl Page {
             name.focus(window, cx);
             name.select_all(window, cx);
         });
-        self.editor = Some(Editor { game, at, mods, icon: key, name, _typed: typed });
-        cx.notify();
+        Self { trainers, game, at, mods, icon, name, focus: cx.focus_handle(), _typed: typed }
     }
 
-    fn keep_collection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(editor) = &self.editor else { return };
-        let name = editor.name.read(cx).value().trim().to_owned();
+    fn keep(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let name = self.name.read(cx).value().trim().to_owned();
         if name.is_empty() {
             return;
         }
-        let (game, at) = (editor.game.clone(), editor.at);
-        let collection = Collection { name, icon: editor.icon.to_owned(), mods: editor.mods.clone() };
+        let collection = Collection { name, icon: self.icon.to_owned(), mods: self.mods.clone() };
+        let (game, at) = (self.game.clone(), self.at);
         self.trainers.update(cx, |trainers, cx| trainers.keep_collection(&game, at, collection, cx));
-        self.close_editor(window, cx);
+        self.close(window, cx);
     }
 
-    pub(super) fn close_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.editor.take().is_some() {
-            // The focus must not stay in the gone field, or Escape would reach nothing.
-            if self.over {
-                self.hud_focus.focus(window, cx);
-            }
-            cx.notify();
-        }
+    pub(super) fn close(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        cx.emit(EditorClosed);
     }
+}
 
-    pub(super) fn collection_editor(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let editor = self.editor.as_ref()?;
+impl Render for CollectionEditor {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let accent = rgb(accent(cx));
-        let named = !editor.name.read(cx).value().trim().is_empty();
+        let named = !self.name.read(cx).value().trim().is_empty();
         let tiles = ICONS.map(|(key, glyph)| {
-            let current = key == editor.icon;
+            let current = key == self.icon;
             div()
                 .id(key)
                 .size(px(TILE))
@@ -231,12 +248,10 @@ impl Page {
                 .bg(rgb(RAISED))
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(RAISED_HOVER)))
-                .on_click(cx.listener(move |page, _, window, cx| {
-                    if let Some(editor) = &mut page.editor {
-                        editor.icon = key;
-                        // Enter keeps saving from the field.
-                        editor.name.update(cx, |name, cx| name.focus(window, cx));
-                    }
+                .on_click(cx.listener(move |editor, _, window, cx| {
+                    editor.icon = key;
+                    // Enter keeps saving from the field.
+                    editor.name.update(cx, |name, cx| name.focus(window, cx));
                     cx.notify();
                 }))
                 .child(icon(glyph, 18., if current { accent } else { rgb(MUTED) }))
@@ -247,17 +262,17 @@ impl Page {
             .border_1()
             .border_color(line(0.14))
             .bg(rgb(SUNKEN))
-            .child(Input::new(&editor.name).appearance(false).px_0().font_family(MONO).text_size(px(12.5)));
+            .child(Input::new(&self.name).appearance(false).px_0().font_family(MONO).text_size(px(12.5)));
         let buttons = h_flex()
             .gap(px(8.))
-            .child(button("CANCEL").id("collection-cancel").on_click(cx.listener(|page, _, window, cx| page.close_editor(window, cx))))
+            .child(button("CANCEL").id("collection-cancel").on_click(cx.listener(|editor, _, window, cx| editor.close(window, cx))))
             .child(
                 button("SAVE")
                     .id("collection-save")
                     .border_color(accent)
                     .text_color(accent)
                     .when(!named, |save| save.opacity(0.4).cursor_default())
-                    .on_click(cx.listener(|page, _, window, cx| page.keep_collection(window, cx))),
+                    .on_click(cx.listener(|editor, _, window, cx| editor.keep(window, cx))),
             );
         let body = v_flex()
             .p(px(16.))
@@ -265,15 +280,12 @@ impl Page {
             .child(part("NAME").child(field))
             .child(part("ICON").child(h_flex().flex_wrap().gap(px(TILE_GAP)).children(tiles)))
             .child(
-                h_flex()
-                    .justify_between()
-                    .child(mono(format!("{:02} MODS", editor.mods.len()), 10.5).text_color(rgb(FAINT)))
-                    .child(buttons),
+                h_flex().justify_between().child(mono(format!("{:02} MODS", self.mods.len()), 10.5).text_color(rgb(FAINT))).child(buttons),
             );
-        let title = if editor.at.is_some() { "EDIT COLLECTION" } else { "NEW COLLECTION" };
+        let title = if self.at.is_some() { "EDIT COLLECTION" } else { "NEW COLLECTION" };
         // Six tiles across, inside the padding and the borders.
         let width = 6. * TILE + 5. * TILE_GAP + 34.;
-        Some(dialog("collection", title, width, &self.dialog_focus, Self::close_editor, body, cx))
+        dialog("collection", title, width, &self.focus, Self::close, body, cx)
     }
 }
 

@@ -3,8 +3,8 @@
 use client::run::Stage;
 use gpui_kit::{App, Div, prelude::*, rgb};
 
-use super::State;
-use crate::{Page, theme::*, widgets::mono};
+use super::{Runs, State};
+use crate::{theme::*, widgets::mono};
 
 pub const STOPPING: &str = "STOPPING THE TRAINER";
 
@@ -17,14 +17,12 @@ pub fn label(stage: Stage) -> &'static str {
     }
 }
 
-impl Page {
-    /// The line above the cheat list while the trainer is not live.
-    pub(crate) fn run_note(&self, game: &str, cx: &App) -> Div {
-        match self.runs.read(cx).state(game) {
-            State::Failed(error) => mono(error.to_owned(), 11.).text_color(rgb(WARN)),
-            State::Starting(stage) => mono(label(stage), 11.).text_color(rgb(accent(cx))),
-            State::Stopping => mono(STOPPING, 11.).text_color(rgb(accent(cx))),
-            State::Idle | State::Live => mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),
-        }
+/// The line above the cheat list while the trainer is not live.
+pub fn run_note(runs: &Runs, game: &str, cx: &App) -> Div {
+    match runs.state(game) {
+        State::Failed(error) => mono(error.to_owned(), 11.).text_color(rgb(WARN)),
+        State::Starting(stage) => mono(label(stage), 11.).text_color(rgb(accent(cx))),
+        State::Stopping => mono(STOPPING, 11.).text_color(rgb(accent(cx))),
+        State::Idle | State::Live => mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),
     }
 }

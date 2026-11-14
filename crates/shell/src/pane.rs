@@ -1,14 +1,18 @@
 //! The open game's pane: the hero, the map and session panels and the cheat list.
 
 use gpui_kit::{
-    AnyElement, App, Context, IntoElement, Window,
+    AnyElement, Context, IntoElement, Window,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div,
     prelude::*,
     px,
 };
 
-use super::{Load, Page, SIDEBAR_WIDTH, settings::Panels, widgets::notice};
+use super::{
+    Page,
+    library::{SIDEBAR_WIDTH, vacant},
+    settings::Panels,
+};
 
 // Below this pane width the side panels drop under the cheat list.
 const WIDE_PANE: f32 = 900.;
@@ -18,10 +22,10 @@ const SESSION_WIDTH: f32 = 300.;
 impl Page {
     pub(super) fn pane(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let Some(game) = self.game(cx) else {
-            return div().flex_1().p(px(24.)).child(self.vacant(cx)).into_any_element();
+            return div().flex_1().p(px(24.)).child(vacant(self.library.read(cx))).into_any_element();
         };
         let game = &*game;
-        let cheats = self.cheats(game, cx).into_any_element();
+        let cheats = self.cheat_list.clone().into_any_element();
         let (running, mapped) = (self.is_running(cx), !game.source.maps.is_empty());
         let body = div().flex().gap(px(20.)).px(px(24.)).pt(px(20.)).pb(px(28.));
         let body = match self.settings.read(cx).prefs().panels {
@@ -46,22 +50,5 @@ impl Page {
             }
         };
         v_flex().id("pane").flex_1().min_w_0().h_full().child(self.hero(game, cx)).child(body).overflow_y_scrollbar().into_any_element()
-    }
-
-    // The pane before there is a game to open.
-    pub(super) fn vacant(&self, cx: &App) -> impl IntoElement {
-        match self.library.read(cx).list() {
-            Load::Pending => notice("[ SCANNING ]", "LOOKING FOR INSTALLED GAMES", "Reading the game catalog and your launchers."),
-            Load::Failed(why) => notice(
-                "[ NO CATALOG ]",
-                "THE GAME CATALOG IS UNAVAILABLE",
-                &format!("It could not be downloaded: {why}. Impulse tries again on the next start."),
-            ),
-            Load::Ready(_) => notice(
-                "[ NO GAMES ]",
-                "NO INSTALLED GAMES FOUND",
-                "Impulse looks in Steam, Epic, GOG, Ubisoft, Xbox, Rockstar and EA for games it has trainers for.",
-            ),
-        }
     }
 }

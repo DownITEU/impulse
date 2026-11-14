@@ -1,8 +1,6 @@
 //! The trainers of the games opened in this run: the open game's loading, which copy shows while a run holds it,
 //! and what the user keeps about a game (`games.json`).
 
-mod printed;
-
 use std::{collections::HashSet, sync::Arc};
 
 use client::{
@@ -16,7 +14,6 @@ use client::{
 use futures::{StreamExt, channel::oneshot};
 use gpui_kit::{Context, Entity, EventEmitter};
 use model::{Chord, Provider, Snapshot};
-pub use printed::{Printed, cap, number};
 
 use crate::library::{Library, LibraryEvent};
 

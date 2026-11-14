@@ -1,11 +1,15 @@
 //! `+ ADD`: a game by its executable. The catalog games that keep their `exe` beside it are offered;
 //! one is added at once, several or none open the picker, where the user finds it by name.
 
+use std::path::PathBuf;
+
+use anyhow::Result;
+use futures::channel::oneshot;
 use gpui_kit::{
-    Context, Entity, IntoElement, Subscription, Window,
+    App, Context, Entity, FocusHandle, IntoElement, PathPromptOptions, Render, Subscription, Window,
     component::{
         h_flex,
-        input::{Input, InputEvent, InputState},
+        input::{Input, InputState},
         v_flex,
     },
     div,
@@ -13,13 +17,17 @@ use gpui_kit::{
     px, rgb,
 };
 
-use super::{picked_file, prompt};
-use crate::{Page, dialog::dialog, library::Found, theme::*, widgets::mono};
+use super::{Found, Library};
+use crate::{
+    dialog::dialog,
+    theme::*,
+    widgets::{filter_input, mono},
+};
 
 /// Rows shown at once: the filter narrows the rest.
 const SHOWN: usize = 50;
 
-pub struct Picker {
+struct Picker {
     found: Found,
     /// Indices into the catalog: those the executable belongs to, else every game with a trainer.
     choices: Vec<usize>,
@@ -28,20 +36,35 @@ pub struct Picker {
     _typed: Subscription,
 }
 
-impl Page {
-    pub(crate) fn add_game(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+pub struct GamePicker {
+    library: Entity<Library>,
+    picker: Option<Picker>,
+    focus: FocusHandle,
+}
+
+impl GamePicker {
+    pub fn new(library: Entity<Library>, cx: &mut Context<Self>) -> Self {
+        Self { library, picker: None, focus: cx.focus_handle() }
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.picker.is_some()
+    }
+
+    /// Asks for the game's executable, then adds it or opens the picker.
+    pub fn add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (paths, library) = (prompt(cx), self.library.clone());
-        cx.spawn_in(window, async move |page, cx| {
+        cx.spawn_in(window, async move |view, cx| {
             let Some(exe) = picked_file(paths).await else { return };
             let Some(found) = library.update(cx, |library, cx| library.find(exe, cx)).await else { return };
-            page.update_in(cx, |page, window, cx| page.offer(found, window, cx)).ok();
+            view.update_in(cx, |view, window, cx| view.offer(found, window, cx)).ok();
         })
         .detach();
     }
 
     fn offer(&mut self, found: Found, window: &mut Window, cx: &mut Context<Self>) {
         if let [at] = found.owners[..] {
-            return self.add(found, at, cx);
+            return self.added(found, at, cx);
         }
         let owned = !found.owners.is_empty();
         let mut choices = match owned {
@@ -49,36 +72,33 @@ impl Page {
             false => (0..found.games.len()).filter(|&at| found.games[at].trainer.is_some()).collect(),
         };
         choices.sort_by(|&a, &b| found.names[a].cmp(&found.names[b]));
-        let filter = cx.new(|cx| InputState::new(window, cx).placeholder("game name"));
-        let typed = cx.subscribe(&filter, |_, _, event: &InputEvent, cx| {
-            if matches!(event, InputEvent::Change) {
-                cx.notify();
-            }
-        });
+        let (filter, typed) = filter_input("game name", window, cx);
         filter.update(cx, |filter, cx| filter.focus(window, cx));
         self.picker = Some(Picker { found, choices, owned, filter, _typed: typed });
         cx.notify();
     }
 
-    fn choose(&mut self, at: usize, _: &mut Window, cx: &mut Context<Self>) {
+    fn choose(&mut self, at: usize, cx: &mut Context<Self>) {
         if let Some(picker) = self.picker.take() {
-            self.add(picker.found, at, cx);
+            self.added(picker.found, at, cx);
         }
     }
 
-    fn add(&mut self, Found { exe, games, .. }: Found, at: usize, cx: &mut Context<Self>) {
+    fn added(&mut self, Found { exe, games, .. }: Found, at: usize, cx: &mut Context<Self>) {
         self.library.update(cx, |library, cx| library.add(exe, games, at, cx));
         cx.notify();
     }
 
-    pub(crate) fn close_picker(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    fn close(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if self.picker.take().is_some() {
             cx.notify();
         }
     }
+}
 
-    pub(crate) fn game_picker(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let picker = self.picker.as_ref()?;
+impl Render for GamePicker {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let Some(picker) = self.picker.as_ref() else { return div().into_any_element() };
         let query = picker.filter.read(cx).value().trim().to_lowercase();
         // The whole catalog waits for a name.
         let shown = if picker.owned || !query.is_empty() { SHOWN } else { 0 };
@@ -100,7 +120,7 @@ impl Page {
                 .justify_between()
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(ROW_HOVER)))
-                .on_click(cx.listener(move |page, _, window, cx| page.choose(at, window, cx)))
+                .on_click(cx.listener(move |view, _, _, cx| view.choose(at, cx)))
                 .child(mono(game.name.to_uppercase(), 12.).text_color(rgb(TEXT_2)).overflow_hidden().text_ellipsis())
                 .child(mono(store, 10.5).text_color(rgb(FAINT)))
         });
@@ -122,6 +142,32 @@ impl Page {
             .child(mono(caption, 10.5).text_color(rgb(DIM)))
             .child(field)
             .child(div().id("choices").max_h(px(320.)).overflow_y_scroll().flex().flex_col().children(rows));
-        Some(dialog("picker", "ADD A GAME", 520., &self.dialog_focus, Self::close_picker, body, cx))
+        dialog("picker", "ADD A GAME", 520., &self.focus, Self::close, body, cx).into_any_element()
     }
+}
+
+pub(super) fn prompt(cx: &mut App) -> oneshot::Receiver<Result<Option<Vec<PathBuf>>>> {
+    cx.prompt_for_paths(PathPromptOptions {
+        files: true,
+        directories: false,
+        multiple: false,
+        prompt: Some("Select the game's .exe".into()),
+    })
+}
+
+/// The file picked, if it is an executable; a shortcut comes as its target.
+pub(super) async fn picked_file(paths: oneshot::Receiver<Result<Option<Vec<PathBuf>>>>) -> Option<PathBuf> {
+    let exe = match paths.await {
+        Ok(Ok(Some(paths))) => paths.into_iter().next()?,
+        Ok(Err(e)) => {
+            log::warn!("file picker: {e:#}");
+            return None;
+        }
+        _ => return None,
+    };
+    let is_exe = exe.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("exe"));
+    if !is_exe {
+        log::warn!("{} is not an .exe", exe.display());
+    }
+    is_exe.then_some(exe)
 }

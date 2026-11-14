@@ -14,6 +14,7 @@ use super::{
     assets::Icon,
     docks::{self, Spec},
     layer::Layer,
+    library::vacant,
     theme::*,
     widgets::{icon_button, notice},
 };
@@ -99,10 +100,10 @@ impl Page {
             .into_iter()
             .filter_map(|spec| {
                 let content = match (spec.id, game) {
-                    (MODS, Some(game)) => {
-                        div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheats(game, cx)).into_any_element()
+                    (MODS, Some(_)) => {
+                        div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheat_list.clone()).into_any_element()
                     }
-                    (MODS, None) => div().p(px(16.)).child(self.vacant(cx)).into_any_element(),
+                    (MODS, None) => div().p(px(16.)).child(vacant(self.library.read(cx))).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
                     (MINIMAP, Some(_)) if mapped && self.maps.read(cx).live_map().read(cx).ready(cx) => {
                         self.minimap.clone().into_any_element()
@@ -161,7 +162,7 @@ impl Page {
             .child(bar)
             .children(frames)
             .child(docks::input(&self.docks))
-            .children(self.collection_editor(cx))
+            .children(self.cheat_list.read(cx).editor().cloned())
             .into_any_element()
     }
 
@@ -183,7 +184,7 @@ impl Page {
         if over {
             // What belongs to the window closes, and the docks show the running game.
             self.menu = None;
-            self.editor = None;
+            self.cheat_list.update(cx, |list, cx| list.close(cx));
             self.settings_view.update(cx, |view, cx| view.close(cx));
             self.log_open = false;
             self.hotkeys.update(cx, |hotkeys, cx| hotkeys.cancel(cx));
@@ -242,8 +243,8 @@ impl Page {
 
     fn leave_overlay(&mut self, _: &LeaveOverlay, window: &mut Window, cx: &mut Context<Self>) {
         // An open dialog or menu closes first.
-        if self.editor.is_some() {
-            return self.close_editor(window, cx);
+        if self.cheat_list.update(cx, |list, cx| list.close_top(window, cx)) {
+            return;
         }
         if self.menu.take().is_some() {
             return cx.notify();

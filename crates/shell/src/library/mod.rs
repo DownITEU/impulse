@@ -1,6 +1,10 @@
 //! The game list: the provider's catalog joined with the installed games and the executables the user picked,
 //! and the game open in the page.
 
+mod picker;
+mod sidebar;
+mod source_menu;
+
 use std::{mem, path::PathBuf, sync::Arc};
 
 use blocking::unblock;
@@ -14,6 +18,9 @@ use gpui_kit::{AsyncApp, Context, Entity, EventEmitter, Task, WeakEntity};
 use model::{Provider, Snapshot};
 
 use crate::{Load, settings::Settings};
+pub use picker::GamePicker;
+pub use sidebar::{Marks, Sidebar, WIDTH as SIDEBAR_WIDTH, vacant};
+pub use source_menu::{pick_source, source_options};
 
 pub enum LibraryEvent {
     /// A new list.

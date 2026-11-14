@@ -6,6 +6,8 @@ use client::trainer::Sheet;
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use model::{Cheat, Chord, Kind};
 
+use crate::bindings::cap;
+
 const INPUT_DIGITS: usize = 6;
 
 /// What a cheat row prints, made once so a frame allocates nothing for it.
@@ -68,7 +70,7 @@ impl Printed {
     }
 }
 
-/// What `Page::control` draws for the cheat, across.
+/// What `CheatList::control` draws for the cheat, across.
 fn control_width(cheat: &Cheat) -> f32 {
     match cheat.kind {
         Kind::Toggle => 70.,
@@ -82,18 +84,6 @@ fn control_width(cheat: &Cheat) -> f32 {
 }
 
 const UNBOUND: &str = "-";
-
-/// A slot's cap: a pair's arrow (`Kind::slots` order), then `body`.
-pub fn cap(kind: Kind, slot: usize, body: &str) -> SharedString {
-    let arrow = match (kind, slot) {
-        (Kind::Selection, 0) => "← ",
-        (Kind::Selection, _) => "→ ",
-        (Kind::Number | Kind::Slider, 0) => "↓ ",
-        (Kind::Number | Kind::Slider, _) => "↑ ",
-        _ => "",
-    };
-    format!("{arrow}{body}").into()
-}
 
 fn caps(kind: Kind, slots: &[Option<Chord>]) -> Vec<SharedString> {
     let body = |chord: &Option<Chord>| chord.map_or_else(|| UNBOUND.to_owned(), |chord| chord.to_string());

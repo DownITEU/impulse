@@ -9,6 +9,7 @@ use super::{
     assets::Icon,
     dropdown::dropdown,
     layer::overlay_hotkey,
+    library::{pick_source, source_options},
     open_menu,
     run::{STOPPING, State, label},
     theme::*,
@@ -113,7 +114,7 @@ impl Page {
             })
             // A run holds its install.
             .when(!self.runs.read(cx).holds(&game.id), |bar| {
-                let (options, current) = Page::source_options(game);
+                let (options, current) = source_options(game);
                 let more = icon_button("source", "Game source".into()).child(icon(Icon::More, 15., rgb(MUTED)));
                 let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
                 bar.child(dropdown(
@@ -125,7 +126,11 @@ impl Page {
                     current,
                     place,
                     cx,
-                    |page, at, window, cx| page.source_picked(at, window, cx),
+                    |page, at, _, cx| {
+                        if let Some(game) = page.game(cx) {
+                            pick_source(&page.library, &game, at, cx);
+                        }
+                    },
                 ))
             })
     }

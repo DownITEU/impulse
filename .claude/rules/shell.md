@@ -10,9 +10,11 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 ## Surface
 - `init`, `Assets`, `Root::new`: all `app` calls. Everything else is private.
 - `Root`: the window root; draws `Page` with `cached`, the open map as a modal over it.
-- `Page`: the combined page, one `impl Page` block per region file (`header`, `sidebar`, `hero`, `pane`, `cheats`, `controls`, `run`, `boot`, ...).
+- `Page`: the combined page, one `impl Page` block per region file (`header`, `hero`, `pane`, `run`, `boot`, ...).
+- `Sidebar`, `GamePicker` (`library/`): the game list with its filter and the add-game dialog. The page gives the sidebar its `Marks` (favorite, live) as a function and makes the sidebar observe what it reads.
 - `Library` (`library/`): the game list, the picked executables and the open game; emits `LibraryEvent` (`Listed`, `Opened`, `Switched`).
-- `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`). `Printed` is the cheat list's projection of the open game's sheet.
+- `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`).
+- `CheatList` (`cheats/`): the open game's cheat list, drawn by the page and the HUD; its `Printed` projection, filter, menus, flash and `CollectionEditor` (emits `EditorClosed`; whoever draws `editor()` takes the focus back).
 - `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`).
 - `Hotkeys` (`bindings/`: a `hotkeys` module would shadow the crate): `hotkeys.json`, the live run's hook, the capture; `capture`, `cancel`, `rebind`, `set_enabled`, `set_game_only`.
 - `Account` (`account.rs`): the provider's session, read by the header; `reload` asks again.
@@ -30,7 +32,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Trainers` loads the open game's trainer only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
 - A starting or live run carries its game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
 - `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, the page's `run_changed`). It stops a run whose game left the list.
-- `Printed` is made on `Opened` and `Installed` of the open game, re-capped on `Rebound`; a number field follows `Set`. The cheat-list helpers take `&Context<Page>`, so they read the sheet in place.
+- `Printed` is made on `Opened` and `Installed` of the open game, re-capped on `Rebound`; a number field follows `Set`. The cheat list reads the sheet in place through `Trainers`.
 - One run at a time: `Runs::start` refuses while `is_active`. `Stopping` lasts until `Session::stop` returns.
 - A cheat value goes one way: `Runs::set`, `step` or `apply` change the live sheet through `Trainers` and send it; they do nothing without a live run. A run's time and mods are kept once (`closed` flag), on end, STOP, quit and release.
 - Every live session is followed by `crash::watch`: a UI-thread panic stops it before the process ends.
@@ -43,7 +45,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 
 ## Traps
 - `Page` is drawn cached: it re-renders only when it notifies, so an entity it reads must be observed. The session clock notifies it once a second while a run is live. A changed global reaches cached views only through `cx.refresh_windows()`.
-- `Menu::Cheat(i)` and `Flash::Cheat(i)` hold a cheat index: `drop_cheat_state` whenever the trainer or game changes. A capture targets a cheat by id, not index: a newer list may arrive meanwhile.
+- The cheat list's menu, flash and editor hold an index: `CheatList::drop_state` whenever the trainer or game changes. A capture targets a cheat by id, not index: a newer list may arrive meanwhile.
 - `reload` (caches cleared) stops the run first: it keeps what the run leaves on, from trainers about to go.
 - `tracked` lays out one element per `char`: short captions only. `keycap` and `fitted` cut text only inside a parent with `min_w_0`.
 

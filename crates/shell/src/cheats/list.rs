@@ -1,31 +1,34 @@
+//! The rows: pinned first, then the trainer's categories, each foldable; a filter over them.
+
 use client::{
     Load,
     library::{Game, Support},
     trainer::Sheet,
 };
 use gpui_kit::{
-    AnyElement, Context, Entity, FontWeight, IntoElement, SharedString, Window,
+    AnyElement, Context, Div, FontWeight, IntoElement, SharedString,
     component::{h_flex, v_flex},
     div,
     prelude::*,
     px, rgb,
 };
 
-use super::{
-    Page,
+use super::{CheatList, Printed};
+use crate::{
     assets::Icon,
+    bindings::caps,
+    run::run_note,
     theme::*,
-    trainer::{Printed, TrainerEvent, Trainers},
     widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
 };
 
 const PINNED: &str = "PINNED";
 const KEPT: &str = "It is kept on disk after the first download.";
 
-impl Page {
-    pub(super) fn cheats(&self, game: &Game, cx: &Context<Self>) -> impl IntoElement {
-        let running = self.is_running(cx);
+impl CheatList {
+    pub(super) fn cheats(&self, game: Option<&Game>, cx: &Context<Self>) -> Div {
         let column = v_flex().flex_1().min_w_0().gap(px(12.));
+        let Some(game) = game else { return column };
         if game.support == Support::NoTrainer {
             return column.child(notice(
                 "[ NO TRAINER ]",
@@ -33,6 +36,7 @@ impl Page {
                 "There is no trainer for this game yet. Impulse will flag it in your library as soon as one ships.",
             ));
         }
+        let running = self.is_running(cx);
         let trainers = self.trainers.read(cx);
         let sheet = match trainers.get(&game.id) {
             Some(Load::Ready(sheet)) => sheet,
@@ -53,50 +57,12 @@ impl Page {
         let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == game.id) else { return column };
         column
             .when(game.support == Support::UpdatePending, |column| column.child(update_callout()))
-            .when(!running, |column| column.child(self.run_note(&game.id, cx)))
-            .child(self.cheat_list(sheet, printed, running, cx))
+            .when(!running, |column| column.child(run_note(self.runs.read(cx), &game.id, cx)))
+            .child(self.cheat_list(game, sheet, printed, running, cx))
     }
 
-    /// The open game's cheat list as printed, made anew when another game opens or another copy shows.
-    pub(super) fn print(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let game = self.selected(cx);
-        self.printed = self.trainers.update(cx, |trainers, cx| {
-            let game = game?;
-            Some(Printed::new(game.clone(), trainers.sheet(&game)?, window, cx))
-        });
-    }
-
-    pub(super) fn trainer_changed(
-        &mut self,
-        trainers: &Entity<Trainers>,
-        event: &TrainerEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            TrainerEvent::Installed(game) => {
-                if self.selected(cx).as_ref() == Some(game) {
-                    self.drop_cheat_state();
-                    self.print(window, cx);
-                }
-            }
-            TrainerEvent::Rebound(game) => {
-                if let Some(printed) = self.printed.as_mut().filter(|printed| printed.game == *game)
-                    && let Some(sheet) = trainers.read(cx).sheet(game)
-                {
-                    printed.recap(sheet);
-                }
-            }
-            TrainerEvent::Set { game, index, value } => {
-                if let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == *game) {
-                    printed.put(*index, *value, window, cx);
-                }
-            }
-        }
-    }
-
-    fn cheat_list(&self, sheet: &Sheet, printed: &Printed, running: bool, cx: &Context<Self>) -> impl IntoElement {
-        let query = self.mod_filter.read(cx).value().to_lowercase();
+    fn cheat_list(&self, game: &Game, sheet: &Sheet, printed: &Printed, running: bool, cx: &Context<Self>) -> impl IntoElement {
+        let query = self.filter.read(cx).value().to_lowercase();
         // Pinned first, then categories in the trainer's own order.
         let mut sections: Vec<(SharedString, Vec<usize>)> = vec![(PINNED.into(), Vec::new())];
         for (index, row) in printed.rows.iter().enumerate() {
@@ -141,9 +107,9 @@ impl Page {
             .border_1()
             .border_color(line(0.09))
             .bg(alpha(BG, 0.78))
-            .child(self.collections_bar(sheet, running, cx))
+            .child(self.collections_bar(&game.id, sheet, running, cx))
             .child(
-                filter(&self.mod_filter, cx)
+                filter(&self.filter, cx)
                     .h(px(38.))
                     .pl(px(14.))
                     .pr(px(8.))
@@ -151,7 +117,7 @@ impl Page {
                     .border_b_1()
                     .border_color(line(0.09))
                     .child(mono(format!("{shown:02} MODS"), 10.5).flex_none().text_color(rgb(GHOST)))
-                    .child(self.saved_bar(sheet, running, cx)),
+                    .child(self.saved_bar(&game.id, sheet, running, cx)),
             )
             .children(rows)
             .when(shown == 0, |list| list.child(mono("NO MODS MATCH THE FILTER", 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
@@ -183,7 +149,7 @@ impl Page {
             .child(div().flex_1())
             .child(
                 icon_button(("fold", at), chevron, 26., 13.)
-                    .on_click(cx.listener(move |page, _, _, cx| page.toggle_fold(title.clone(), cx))),
+                    .on_click(cx.listener(move |list, _, _, cx| list.toggle_fold(title.clone(), cx))),
             )
     }
 
@@ -263,7 +229,7 @@ impl Page {
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .on_click(cx.listener(move |page, _, _, cx| page.toggle_pin(index, cx)))
+                            .on_click(cx.listener(move |list, _, _, cx| list.toggle_pin(index, cx)))
                             .child(
                                 icon(Icon::Pin, 12., if pinned { accent } else { rgb(GHOST) })
                                     .id(("pin-icon", index))
@@ -271,7 +237,7 @@ impl Page {
                             ),
                     ),
             )
-            .child(self.caps(index, sheet, printed, cx))
+            .child(caps(&self.hotkeys, &printed.game, sheet, index, &row.keys, cx))
             .child(
                 h_flex()
                     .w(px(printed.control_width))

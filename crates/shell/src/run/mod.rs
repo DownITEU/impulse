@@ -19,7 +19,7 @@ use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
 use model::{Event, Live, Process, Session};
 pub use tracker::{Fix, Lease, Tracked, Tracker};
-pub use view::{STOPPING, label};
+pub use view::{STOPPING, label, run_note};
 
 use crate::{
     library::{Library, LibraryEvent},
@@ -118,6 +118,10 @@ impl Runs {
 
     pub fn live(&self) -> Option<&Arc<str>> {
         self.live_run().map(|(game, _)| game)
+    }
+
+    pub fn is_live(&self, game: &str) -> bool {
+        self.live().is_some_and(|live| **live == *game)
     }
 
     pub fn live_run(&self) -> Option<(&Arc<str>, &Run)> {
