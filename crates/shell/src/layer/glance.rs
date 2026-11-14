@@ -10,9 +10,11 @@ use gpui_kit::{
 };
 
 use super::{
+    Layer, Playing,
     docks::{self, Docks},
     hud::MINIMAP_DOCK,
-    layer::{Layer, Playing},
+};
+use crate::{
     map::{LiveMap, Minimap},
     settings::Settings,
     theme::*,
@@ -29,7 +31,7 @@ enum Call {
     Hide(isize),
 }
 
-struct Hud {
+struct Popup {
     window: WindowHandle<Card>,
     hwnd: isize,
     placed: Option<Rect>,
@@ -43,7 +45,7 @@ pub(super) struct Glance {
     following: bool,
     // From screen capture.
     hidden: bool,
-    hud: Option<Hud>,
+    hud: Option<Popup>,
     _calls: Task<()>,
 }
 
@@ -159,7 +161,7 @@ async fn calls(glance: WeakEntity<Glance>, mut woken: mpsc::UnboundedReceiver<()
     Ok(())
 }
 
-fn open(live: Entity<LiveMap>, cx: &mut AsyncApp) -> Result<Hud> {
+fn open(live: Entity<LiveMap>, cx: &mut AsyncApp) -> Result<Popup> {
     let options = WindowOptions {
         titlebar: None,
         focus: false,
@@ -176,8 +178,8 @@ fn open(live: Entity<LiveMap>, cx: &mut AsyncApp) -> Result<Hud> {
             cx.new(|_| Card { minimap })
         })
     })?;
-    let hwnd = window.update(cx, |_, window, _| super::hwnd(window))?.ok_or_else(|| anyhow::anyhow!("the HUD has no window handle"))?;
-    Ok(Hud { window, hwnd, placed: None })
+    let hwnd = window.update(cx, |_, window, _| crate::hwnd(window))?.ok_or_else(|| anyhow::anyhow!("the HUD has no window handle"))?;
+    Ok(Popup { window, hwnd, placed: None })
 }
 
 struct Card {

@@ -55,7 +55,7 @@ impl Page {
         v_flex().id("pane").flex_1().min_w_0().h_full().child(self.hero.clone()).child(body).overflow_y_scrollbar().into_any_element()
     }
 
-    pub(super) fn session(&self, game: &Game, strip: bool, cx: &App) -> Div {
+    fn session(&self, game: &Game, strip: bool, cx: &App) -> Div {
         session_panel(self.runs.read(cx), self.trainers.read(cx), game, strip, hotkeys_scope(&self.hotkeys, cx), cx)
     }
 }

@@ -1,17 +1,17 @@
 ---
 paths:
-  - "crates/shell/src/{layer/**,docks/**,glance.rs,hud.rs}"
+  - "crates/shell/src/layer/**"
 ---
 
 # shell overlay
 
-The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD view (`hud.rs`).
+The overlay slice, `layer/` (an `overlay` module would shadow the crate): `Layer` (window mode), `Hud` (`hud.rs`), `Glance` (`glance.rs`), `Docks`, the overlay settings tab.
 
 ## Surface
-- `Layer`: `toggle`, `leave`, `is_over`, `hotkey`, `minimap_hotkey`, `takes` (the reserved test `Hotkeys` gets), setters. Emits `Playing` and `MinimapKey`.
+- `Layer`: `toggle`, `leave`, `is_over`, `hotkey`, `minimap_hotkey`, `takes` (the reserved test `Hotkeys` gets), setters. Emits `Playing` and `MinimapKey`. It observes `Settings` to hide the main window from capture.
 - `Glance`: the HUD minimap window; it observes `Settings` for capture exclusion.
 - `Docks`, `Spec`: floating panels; `DOCKS` and `MINIMAP_DOCK` live in `hud.rs`.
-- `Page::hud`: draws the overlay in place of the page while `over`.
+- `Hud`: the overlay's view, drawn by the page in place of itself while `Layer::is_over`. It makes the `Docks`, the dock's `Minimap` and the `Glance`, and emits `Entered` when the window goes over a game.
 
 ## Rules
 - Hotkey, foreground events, activation loss and UI asks are `Ask`s, run one at a time by the one `switch` task. Win32 calls that move, show, raise, lower or cloak Impulse's own window run there (or in `Glance`'s call task), never inside a GPUI update: they run GPUI's callbacks at once.
@@ -20,12 +20,12 @@ The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD vie
 - The minimap hotkey is registered only while the live game is in front or under the overlay (`hold_minimap_key`). `set_hotkey` registers the new key before the old watch drops, so a refused key keeps the old one; the old watch takes the minimap key with it, so hold it again.
 - The overlay's and the minimap's keys are bound by asking `Hotkeys` for a capture (`Target::Key`) and applying its outcome here: refused when the other key or a cheat's chord holds it. `Layer::takes` keeps trainer chords off them.
 - `Glance` is a `PopUp` that never takes input: `focus: false`, `show: false`, `pass_through` before the first show. It is placed over the MINIMAP dock's minimap on the game's monitor, hidden (tiles dropped) when the live map is not placed, closed on `Playing::Idle` and on release. It honours `hide_from_capture`.
-- Entering the overlay closes what belongs to the window (menu, editor, settings, log, capture) and selects the live game. Escape closes the editor, then the menu, then leaves.
-- The map in the MAP dock is the page's `MapView`: `sync_map_dock` opens and hides it, and the focus must not stay in a gone map. The overlay tells `Maps` whether the MINIMAP dock is shown (`set_minimap`), at start and on each `Docks` change.
+- Entering the overlay closes the cheat list's menu and editor and the capture, selects the live game and emits `Entered`; the page closes its own parts on it (sources menu, settings, log). Escape closes the editor, then the menu, then leaves.
+- The map in the MAP dock is the page's `MapView`. Over a game the `Hud` opens and hides it (`place_map`) on each `Docks` and `Maps` change, so it does not depend on who hides it first (`MapView` hides itself when another game opens); the focus must not stay in a gone map. Out of the overlay the open map is the page's modal. The overlay tells `Maps` whether the MINIMAP dock is shown (`set_minimap`), at start and on each `Docks` change.
 - Dock layout is one for all games, in `docks.json`, saved blocking on toggle, raise and release; a drag's bounds stay in its `Grab` until the release. A missing or damaged file means each `Spec`'s first bounds. `fit` keeps a dock on screen.
 
 ## Traps
-- `MINIMAP_DOCK` is `DOCKS[3]`: keep the order. A new dock is a `Spec` in `DOCKS` and an arm in `Page::hud`.
+- `MINIMAP_DOCK` is `DOCKS[3]`: keep the order. A new dock is a `Spec` in `DOCKS` and an arm in `Hud::render`.
 - Windows refuses `SetForegroundWindow` to a process without the last input: `take_input` shares the front window's input with `AttachThreadInput` for the call. The registered hotkey's press (not a hook's) lets the process take the foreground.
 - Raise only after GPUI's fullscreen switch, or the layer's rect is saved for the way back. Unminimize first: a minimized window has no rect. `lower` never goes behind a topmost window, or it turns topmost.
 - Do not read the foreground from a foreground event: it may be late; `switch` reads `overlay::foreground()` itself.

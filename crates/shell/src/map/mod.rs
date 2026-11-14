@@ -24,6 +24,7 @@ use model::{Group, Map, MapOffer, Pin};
 
 use crate::{
     assets::Icon,
+    library::{Library, LibraryEvent},
     theme::*,
     widgets::{icon_button, mono},
 };
@@ -64,7 +65,14 @@ pub struct MapView {
 }
 
 impl MapView {
-    pub fn new(maps: Entity<Maps>, paths: &Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(maps: Entity<Maps>, library: &Entity<Library>, paths: &Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // The open map is the open game's.
+        cx.subscribe_in(library, window, |view, _, event: &LibraryEvent, window, cx| {
+            if matches!(event, LibraryEvent::Opened) {
+                view.hide(window, cx);
+            }
+        })
+        .detach();
         let board = maps.read(cx).board().clone();
         cx.observe(&maps, |_, _, cx| cx.notify()).detach();
         cx.observe(&board, |_, _, cx| cx.notify()).detach();

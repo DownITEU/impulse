@@ -1,8 +1,11 @@
 //! The overlay's window: the hotkey turns Impulse's window into a transparent layer over the game in
 //! front, topmost on its monitor and with the input, and back into the window behind the game. Leaving the
 //! game for another window turns it back too, and the game in front again brings the overlay back. It also
-//! tells the HUD (`glance.rs`) whether the live game is in front, and holds the minimap's hotkey meanwhile.
+//! tells `Glance` whether the live game is in front, and holds the minimap's hotkey meanwhile.
 
+mod docks;
+mod glance;
+mod hud;
 mod settings;
 mod store;
 
@@ -19,13 +22,17 @@ use gpui_kit::{
     base::Root as Surface, transparent_black,
 };
 use hotkeys::Chord;
+pub use hud::{Entered, Hud, bind_keys};
 use overlay::{Event, Key, Watch};
 pub use settings::{OverlaySettings, overlay_hotkey};
 use store::Store;
 
 use client::storage::Paths;
 
-use crate::run::{RunEvent, Runs};
+use crate::{
+    run::{RunEvent, Runs},
+    settings::Settings,
+};
 
 // GPUI switches fullscreen in a task of its own: how often and how long to look for it.
 const TICK: Duration = Duration::from_millis(8);
@@ -78,9 +85,23 @@ pub(super) struct Layer {
 }
 
 impl Layer {
-    pub fn new(paths: &Paths, runs: &Entity<Runs>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(paths: &Paths, runs: &Entity<Runs>, settings: &Entity<Settings>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (asks, asked) = mpsc::unbounded();
-        let hwnd = super::hwnd(window);
+        let hwnd = crate::hwnd(window);
+        let mut excluded = settings.read(cx).prefs().hide_from_capture;
+        if excluded && let Some(hwnd) = hwnd {
+            overlay::exclude_from_capture(hwnd, true);
+        }
+        cx.observe(settings, move |layer, settings, cx| {
+            let hidden = settings.read(cx).prefs().hide_from_capture;
+            if hidden != excluded
+                && let Some(hwnd) = layer.hwnd
+            {
+                overlay::exclude_from_capture(hwnd, hidden);
+            }
+            excluded = hidden;
+        })
+        .detach();
         let store = Store::load(paths);
         let watch = hwnd.and_then(|_| watch(store.hotkey(), &asks).inspect_err(|e| log::warn!("overlay hotkey: {e}")).ok());
         // A foreground event can be missed; the overlay losing the input is one too.

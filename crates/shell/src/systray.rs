@@ -70,7 +70,7 @@ impl Page {
             self.quit(hwnd, cx);
             return false;
         }
-        match self.over {
+        match self.layer.read(cx).is_over() {
             true => self.layer.read(cx).leave(),
             false => tray::hide(hwnd),
         }
@@ -80,6 +80,6 @@ impl Page {
     fn sync_tray(&mut self, cx: &mut Context<Self>) {
         let Some(tray) = &self.tray else { return };
         let playing = self.runs.read(cx).live().and_then(|id| self.library.read(cx).game(id)).map(|game| game.name.to_string());
-        tray.set_menu(Menu { playing, over: self.over });
+        tray.set_menu(Menu { playing, over: self.layer.read(cx).is_over() });
     }
 }

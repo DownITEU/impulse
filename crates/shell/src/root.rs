@@ -56,8 +56,7 @@ impl Root {
 
 impl Render for Root {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let page = self.page.read(cx);
-        let modal = !page.over && page.maps.read(cx).is_open(cx);
+        let modal = self.page.read(cx).map_modal(cx);
         div()
             .relative()
             .size_full()
