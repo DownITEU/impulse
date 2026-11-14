@@ -32,12 +32,12 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - Provider streams: the catalog in `Library`, trainers in `Trainers`, sign-in in `Account`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
 - `Trainers` loads the open game's trainer only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
 - A starting or live run carries its game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
-- `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, the page's `run_changed`). It stops a run whose game left the list.
+- `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, `TrayIcon`). It stops a run whose game left the list.
 - `Printed` is made on `Opened` and `Installed` of the open game, re-capped on `Rebound`; a number field follows `Set`. The cheat list reads the sheet in place through `Trainers`.
 - One run at a time: `Runs::start` refuses while `is_active`. `Stopping` lasts until `Session::stop` returns.
 - A cheat value goes one way: `Runs::set`, `step` or `apply` change the live sheet through `Trainers` and send it; they do nothing without a live run. A run's time and mods are kept once (`closed` flag), on end, STOP, quit and release.
 - Every live session is followed by `crash::watch`: a UI-thread panic stops it before the process ends.
-- Quit: `quit` drops the tray icon first (quitting skips drops), stops a live trainer, then quits on `RunEvent::Ended` or after 5 s. Closing the window follows `quit_on_close`: quit, else hide in the tray.
+- `TrayIcon` (`systray.rs`) owns the icon, its menu (it observes `Runs`, `Library`, `Layer`), the close button and quitting. Quit: `quit` drops the tray icon first (quitting skips drops), stops a live trainer, then quits on `RunEvent::Ended` or after 5 s. Closing the window follows `quit_on_close`: quit, else hide in the tray.
 - `Hotkeys` arms the live run's hook on `RunEvent`s and lays the user's choices over each copy on `Installed`. It never names the overlay: the overlay's keys reach it as the `reserved` test it is built with.
 - A capture's outcome goes to its asker (`capture` returns a receiver), who applies it: the cheat list with `Hotkeys::rebind`, the overlay tab with the layer's setters. A capture hides keys from every app; it ends on its outcome, a click outside the cap, the window going inactive, another game opening, a copy of its game's trainer showing, the overlay opening or the run's hook arming.
 - A hook handler only forwards to a channel; no GPUI call, no lock.

@@ -49,8 +49,9 @@ use log_view::{LogEvent, LogView};
 use map::{MapEvent, MapView, Maps};
 use resources::{Resources, ResourcesEvent, ResourcesView};
 pub use root::Root;
-use run::{RunEvent, Runs};
+use run::Runs;
 use settings::{Folders, Looked, Settings, SettingsView, Tabs};
+use systray::TrayIcon;
 use theme::*;
 use trainer::Trainers;
 use widgets::grid;
@@ -87,9 +88,7 @@ pub struct Page {
     picker: Entity<GamePicker>,
     settings: Entity<Settings>,
     settings_view: Entity<SettingsView>,
-    tray: Option<tray::Tray>,
-    // Impulse ends once the trainer is stopped.
-    quitting: bool,
+    _tray: Entity<TrayIcon>,
     layer: Entity<Layer>,
     // Drawn in place of the page while over a game.
     hud: Entity<Hud>,
@@ -115,7 +114,6 @@ impl Page {
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         let runs = cx.new(|cx| Runs::new(library.clone(), trainers.clone(), cx));
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
-        cx.subscribe(&runs, Self::run_changed).detach();
         crash::watch(&runs, cx);
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
@@ -194,12 +192,7 @@ impl Page {
             cx.notify();
         })
         .detach();
-        // Quitting skips drops: the icon would stay until a hover.
-        cx.on_app_quit(|page, _| {
-            page.tray = None;
-            async {}
-        })
-        .detach();
+        let tray = cx.new(|cx| TrayIcon::new(library.clone(), runs.clone(), layer.clone(), settings.clone(), window, cx));
         Self {
             hotkeys,
             sidebar,
@@ -210,8 +203,7 @@ impl Page {
             runs,
             settings,
             settings_view,
-            tray: Self::start_tray(window, cx),
-            quitting: false,
+            _tray: tray,
             layer,
             hud,
             log,
@@ -232,15 +224,6 @@ impl Page {
     /// The open map shows over the page; over a game it is in a dock.
     fn map_modal(&self, cx: &App) -> bool {
         !self.layer.read(cx).is_over() && self.maps.read(cx).is_open(cx)
-    }
-
-    fn run_changed(&mut self, _: Entity<Runs>, event: &RunEvent, cx: &mut Context<Self>) {
-        match event {
-            // The tray's quit waited for the trainer to stop.
-            RunEvent::Ended if self.quitting => cx.quit(),
-            _ => {}
-        }
-        cx.notify();
     }
 }
 

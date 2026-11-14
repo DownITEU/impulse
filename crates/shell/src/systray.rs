@@ -5,35 +5,78 @@
 use std::time::Duration;
 
 use futures::{StreamExt, channel::mpsc};
-use gpui_kit::{Context, Window};
+use gpui_kit::{App, Context, Entity, Window};
 use tray::{Event, Menu, Tray};
 
-use super::{Page, hwnd};
+use super::{
+    hwnd,
+    layer::Layer,
+    library::Library,
+    run::{RunEvent, Runs},
+    settings::Settings,
+};
 
 // Quitting waits this long at most for a live trainer to stop.
 const STOP_WAIT: Duration = Duration::from_secs(5);
 
-impl Page {
-    /// The icon, and the close button wired to it; `None` when the notification area refused it.
-    pub(super) fn start_tray(window: &mut Window, cx: &mut Context<Self>) -> Option<Tray> {
-        let hwnd = hwnd(window)?;
+pub struct TrayIcon {
+    /// `None` when the notification area refused it.
+    tray: Option<Tray>,
+    library: Entity<Library>,
+    runs: Entity<Runs>,
+    layer: Entity<Layer>,
+    settings: Entity<Settings>,
+    // Impulse ends once the trainer is stopped.
+    quitting: bool,
+}
+
+impl TrayIcon {
+    /// The icon, and the window's close button wired to it.
+    pub fn new(
+        library: Entity<Library>,
+        runs: Entity<Runs>,
+        layer: Entity<Layer>,
+        settings: Entity<Settings>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let mut icon = Self { tray: None, library, runs, layer, settings, quitting: false };
+        let Some(hwnd) = hwnd(window) else { return icon };
         // Without the icon too: a close that quits stops a live trainer first.
-        let page = cx.weak_entity();
-        window.on_window_should_close(cx, move |_, cx| page.update(cx, |page, cx| page.may_close(hwnd, cx)).unwrap_or(true));
-        let (events, mut received) = mpsc::unbounded();
-        let tray = Tray::new("Impulse", move |event| drop(events.unbounded_send(event))).inspect_err(|e| log::warn!("tray: {e}")).ok()?;
-        cx.spawn_in(window, async move |page, cx| {
-            while let Some(event) = received.next().await {
-                page.update(cx, |page, cx| page.tray_event(event, hwnd, cx)).ok();
+        let this = cx.weak_entity();
+        window.on_window_should_close(cx, move |_, cx| this.update(cx, |icon, cx| icon.may_close(hwnd, cx)).unwrap_or(true));
+        // Quitting skips drops: the icon would stay until a hover.
+        cx.on_app_quit(|icon, _| {
+            icon.tray = None;
+            async {}
+        })
+        .detach();
+        cx.subscribe(&icon.runs, |icon, _, event: &RunEvent, cx| {
+            // The quit waited for the trainer to stop.
+            if matches!(event, RunEvent::Ended) && icon.quitting {
+                cx.quit();
             }
         })
         .detach();
-        // Any change may be the run's or the overlay's.
-        cx.observe_self(Self::sync_tray).detach();
-        Some(tray)
+        let (events, mut received) = mpsc::unbounded();
+        icon.tray = Tray::new("Impulse", move |event| drop(events.unbounded_send(event))).inspect_err(|e| log::warn!("tray: {e}")).ok();
+        if icon.tray.is_none() {
+            return icon;
+        }
+        cx.spawn_in(window, async move |icon, cx| {
+            while let Some(event) = received.next().await {
+                icon.update(cx, |icon, cx| icon.clicked(event, hwnd, cx)).ok();
+            }
+        })
+        .detach();
+        // The menu names the live game and the overlay's state.
+        cx.observe(&icon.runs, |icon, _, cx| icon.set_menu(cx)).detach();
+        cx.observe(&icon.library, |icon, _, cx| icon.set_menu(cx)).detach();
+        cx.observe(&icon.layer, |icon, _, cx| icon.set_menu(cx)).detach();
+        icon
     }
 
-    fn tray_event(&mut self, event: Event, hwnd: isize, cx: &mut Context<Self>) {
+    fn clicked(&mut self, event: Event, hwnd: isize, cx: &mut Context<Self>) {
         match event {
             Event::Open => tray::show(hwnd),
             Event::Stop => self.runs.update(cx, |runs, cx| runs.stop(cx)),
@@ -51,7 +94,6 @@ impl Page {
         if !self.runs.read(cx).is_stopping() {
             return cx.quit();
         }
-        // `run_changed` quits on `Ended`.
         self.quitting = true;
         tray::hide(hwnd);
         cx.spawn(async move |_, cx| {
@@ -77,7 +119,7 @@ impl Page {
         false
     }
 
-    fn sync_tray(&mut self, cx: &mut Context<Self>) {
+    fn set_menu(&self, cx: &App) {
         let Some(tray) = &self.tray else { return };
         let playing = self.runs.read(cx).live().and_then(|id| self.library.read(cx).game(id)).map(|game| game.name.to_string());
         tray.set_menu(Menu { playing, over: self.layer.read(cx).is_over() });
