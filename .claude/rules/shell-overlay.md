@@ -8,7 +8,7 @@ paths:
 The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD view (`hud.rs`).
 
 ## Surface
-- `Layer`: `toggle`, `leave`, `is_over`, `hotkey`, `minimap_hotkey`, setters. Emits `Playing` and `MinimapKey`.
+- `Layer`: `toggle`, `leave`, `is_over`, `hotkey`, `minimap_hotkey`, `takes` (the reserved test `Hotkeys` gets), setters. Emits `Playing` and `MinimapKey`.
 - `Glance`: the HUD minimap window; it observes `Settings` for capture exclusion.
 - `Docks`, `Spec`: floating panels; `DOCKS` and `MINIMAP_DOCK` live in `hud.rs`.
 - `Page::hud`: draws the overlay in place of the page while `over`.
@@ -18,7 +18,7 @@ The overlay: `Layer` (window mode), `Glance` (`glance.rs`), `Docks`, the HUD vie
 - The window stays cloaked until a frame of the new layout shows (`reveal`: two next-frame callbacks, 500 ms at most).
 - `Playing` is emitted on change only. `Front` needs the foreground hook and is never set while over. It reads the live pid from `Runs` and rechecks on `Live`, `Stopping` and `Ended`.
 - The minimap hotkey is registered only while the live game is in front or under the overlay (`hold_minimap_key`). `set_hotkey` registers the new key before the old watch drops, so a refused key keeps the old one; the old watch takes the minimap key with it, so hold it again.
-- Overlay and minimap keys are rebound through the capture in `bindings` (`Target::Overlay`, `Target::Minimap`), which keeps them apart from trainer chords.
+- The overlay's and the minimap's keys are bound by asking `Hotkeys` for a capture (`Target::Key`) and applying its outcome here: refused when the other key or a cheat's chord holds it. `Layer::takes` keeps trainer chords off them.
 - `Glance` is a `PopUp` that never takes input: `focus: false`, `show: false`, `pass_through` before the first show. It is placed over the MINIMAP dock's minimap on the game's monitor, hidden (tiles dropped) when the live map is not placed, closed on `Playing::Idle` and on release. It honours `hide_from_capture`.
 - Entering the overlay closes what belongs to the window (menu, editor, settings, log, capture) and selects the live game. Escape closes the editor, then the menu, then leaves.
 - The map in the MAP dock is the page's `MapView`: `sync_map_dock` opens and hides it, and the focus must not stay in a gone map.

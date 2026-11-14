@@ -18,6 +18,7 @@ use gpui_kit::{
     App, AsyncWindowContext, Context, Entity, EventEmitter, Styled, Task, WeakEntity, Window, WindowBackgroundAppearance,
     base::Root as Surface, transparent_black,
 };
+use hotkeys::Chord;
 use overlay::{Event, Key, Watch};
 use store::Store;
 
@@ -132,6 +133,11 @@ impl Layer {
 
     pub fn hotkey(&self) -> Key {
         self.store.hotkey()
+    }
+
+    /// Whether the overlay's or the minimap's hotkey fires on `chord`.
+    pub fn takes(&self, chord: Chord) -> bool {
+        self.hotkey().fired_by(chord.vks()) || self.minimap_hotkey().is_some_and(|key| key.fired_by(chord.vks()))
     }
 
     /// Fails, keeping the old one, when another app holds `key`.

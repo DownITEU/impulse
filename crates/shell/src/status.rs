@@ -1,9 +1,10 @@
 //! The status bar: the live run, the log's problems and the hotkeys' state.
 
-use gpui_kit::{Context, IntoElement, component::h_flex, div, prelude::*, px, rgb};
+use gpui_kit::{App, Context, Div, IntoElement, component::h_flex, div, prelude::*, px, rgb};
 
 use super::{
     Page,
+    bindings::Target,
     theme::*,
     widgets::{mono, square},
 };
@@ -56,5 +57,21 @@ impl Page {
             )
             .child(self.hotkeys_status(cx))
             .child(mono("IMPULSE 0.1", 11.).text_color(rgb(GHOST)))
+    }
+
+    /// The hotkeys' state; while binding, the keys that end it.
+    fn hotkeys_status(&self, cx: &App) -> Div {
+        let hotkeys = self.hotkeys.read(cx);
+        if let Some(target) = hotkeys.capturing() {
+            let keys = match target {
+                Target::Key { required: true, .. } => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT",
+                _ => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND",
+            };
+            return mono(keys, 11.).text_color(rgb(accent(cx)));
+        }
+        match hotkeys.is_armed() {
+            true => mono("HOTKEYS ON", 11.),
+            false => mono("HOTKEYS OFF", 11.).text_color(rgb(GHOST)),
+        }
     }
 }

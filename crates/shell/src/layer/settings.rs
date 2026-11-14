@@ -1,6 +1,6 @@
 //! The Settings `OVERLAY` tab and the overlay's and minimap's hotkeys' rebinding.
 
-use gpui_kit::{App, Context, IntoElement, SharedString, component::v_flex, prelude::*, px, rgb};
+use gpui_kit::{App, Context, IntoElement, SharedString, Window, component::v_flex, prelude::*, px, rgb};
 use hotkeys::{Chord, Outcome};
 use overlay::Key;
 
@@ -11,6 +11,9 @@ use super::super::{
     theme::*,
     widgets::{choice, keycap, segmented},
 };
+
+const OVERLAY: Target = Target::Key { name: "overlay", required: true };
+const MINIMAP: Target = Target::Key { name: "minimap", required: false };
 
 impl Page {
     pub(in super::super) fn overlay_settings(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -30,19 +33,19 @@ impl Page {
             )
             .child(row("HOTKEY", "modifiers and one key, free in other apps and mods", 64.).child(self.hotkey_cap(
                 "overlay-hotkey",
-                Target::Overlay,
+                OVERLAY,
                 overlay,
                 cx,
             )))
             .child(
                 row("MINIMAP HOTKEY", "shows or hides the minimap; held only while the game is in front", 64.)
                     .border_b_0()
-                    .child(self.hotkey_cap("minimap-hotkey", Target::Minimap, minimap, cx)),
+                    .child(self.hotkey_cap("minimap-hotkey", MINIMAP, minimap, cx)),
             )
     }
 
     fn hotkey_cap(&self, id: &'static str, target: Target, key: Option<Key>, cx: &mut Context<Self>) -> impl IntoElement {
-        let held = self.bindings.layer_held(&target);
+        let held = self.hotkeys.read(cx).held(&target);
         let text: SharedString = match held {
             Some(held) => held.map_or_else(|| PRESS_KEYS.into(), |chord| chord.to_string().into()),
             None => key_text(key),
@@ -57,9 +60,26 @@ impl Page {
             .cursor_pointer()
             .hover(|style| style.border_color(line(0.3)))
             .when(held.is_some(), |cap| {
-                cap.border_color(accent).text_color(accent).on_mouse_down_out(cx.listener(|page, _, _, cx| page.cancel_capture(cx)))
+                cap.border_color(accent)
+                    .text_color(accent)
+                    .on_mouse_down_out(cx.listener(|page, _, _, cx| page.hotkeys.update(cx, |hotkeys, cx| hotkeys.cancel(cx))))
             })
-            .on_click(cx.listener(move |page, _, window, cx| page.start_capture(target.clone(), window, cx)))
+            .on_click(cx.listener(move |page, _, window, cx| page.bind_layer_key(target.clone(), window, cx)))
+    }
+
+    /// Binds the overlay's or the minimap's hotkey by what the user presses.
+    fn bind_layer_key(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
+        let overlay = target == OVERLAY;
+        let Some(outcome) = self.hotkeys.update(cx, |hotkeys, cx| hotkeys.capture(target, window, cx)) else { return };
+        cx.spawn(async move |page, cx| {
+            let Ok(outcome) = outcome.await else { return };
+            page.update(cx, |page, cx| match overlay {
+                true => page.rebind_overlay(outcome, cx),
+                false => page.rebind_minimap(outcome, cx),
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub(in super::super) fn overlay_hotkey(&self, cx: &App) -> SharedString {
@@ -67,7 +87,7 @@ impl Page {
     }
 
     /// A refused chord keeps the old hotkey; the tab's hint says what is allowed.
-    pub(in super::super) fn rebind_overlay(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
+    fn rebind_overlay(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
         let key = match outcome {
             Outcome::Bound(chord) => Key::from_vks(chord.vks()),
             Outcome::Reset => Some(Key::DEFAULT),
@@ -81,7 +101,7 @@ impl Page {
         }
     }
 
-    pub(in super::super) fn rebind_minimap(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
+    fn rebind_minimap(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
         let key = match outcome {
             Outcome::Bound(chord) => match Key::from_vks(chord.vks()) {
                 Some(key) => Some(key),

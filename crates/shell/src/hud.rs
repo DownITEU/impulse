@@ -186,7 +186,7 @@ impl Page {
             self.editor = None;
             self.settings_open = false;
             self.log_open = false;
-            self.cancel_capture(cx);
+            self.hotkeys.update(cx, |hotkeys, cx| hotkeys.cancel(cx));
         }
         match live {
             // Its `Opened` syncs the map dock.

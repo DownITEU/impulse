@@ -50,7 +50,7 @@ use gpui_kit::{
 };
 
 pub use assets::Assets;
-use bindings::Bindings;
+use bindings::Hotkeys;
 use collections::Editor;
 use docks::Docks;
 use folders::FolderRow;
@@ -119,7 +119,7 @@ pub struct Page {
     // The open game's cheat list as printed; the cheat list's own until it is a view.
     printed: Option<Printed>,
     runs: Entity<Runs>,
-    bindings: Bindings,
+    hotkeys: Entity<Hotkeys>,
     // `+ ADD`'s choice of game.
     picker: Option<Picker>,
     settings: Entity<Settings>,
@@ -176,7 +176,7 @@ impl Page {
         cx.subscribe_in(&trainers, window, Self::trainer_changed).detach();
         let runs = cx.new(|cx| Runs::new(library.clone(), trainers.clone(), cx));
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
-        cx.subscribe_in(&runs, window, Self::run_changed).detach();
+        cx.subscribe(&runs, Self::run_changed).detach();
         crash::watch(&runs, cx);
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |page, _, event: &LogEvent, cx| {
@@ -204,14 +204,12 @@ impl Page {
             state
         };
         let (game_filter, mod_filter) = (filter("filter"), filter("filter mods"));
-        // A capture hides keys from every app: it must not outlive the user's attention.
-        cx.observe_window_activation(window, |page, window, cx| {
-            if !window.is_window_active() {
-                page.cancel_capture(cx);
-            }
-        })
-        .detach();
         let layer = cx.new(|cx| Layer::new(&paths, &runs, window, cx));
+        // The overlay's and the minimap's hotkeys are not the trainer's to take.
+        let reserved = layer.downgrade();
+        let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
+        let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), reserved, window, cx));
+        cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         cx.observe_in(&layer, window, Self::overlay_changed).detach();
         cx.subscribe(&layer, |page, _, _: &MinimapKey, cx| page.minimap_key(cx)).detach();
         let docks = cx.new(|_| Docks::load(&paths, &hud::DOCKS));
@@ -236,7 +234,7 @@ impl Page {
         })
         .detach();
         let page = Self {
-            bindings: Bindings::load(&paths),
+            hotkeys,
             picker: None,
             provider,
             account: None,
@@ -297,7 +295,6 @@ impl Page {
     fn library_changed(&mut self, _: &Entity<Library>, event: &LibraryEvent, window: &mut Window, cx: &mut Context<Self>) {
         match event {
             LibraryEvent::Opened => {
-                self.cancel_capture(cx);
                 self.map.update(cx, |map, cx| map.hide(window, cx));
                 // Another trainer's names: the old filter would hide them.
                 self.mod_filter.update(cx, |filter, cx| filter.set_value("", window, cx));
@@ -311,7 +308,7 @@ impl Page {
         cx.notify();
     }
 
-    fn run_changed(&mut self, _: &Entity<Runs>, event: &RunEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn run_changed(&mut self, _: Entity<Runs>, event: &RunEvent, cx: &mut Context<Self>) {
         match event {
             RunEvent::Pressed(index) => {
                 if self.is_running(cx) {
@@ -320,10 +317,7 @@ impl Page {
             }
             // The tray's quit waited for the trainer to stop.
             RunEvent::Ended if self.quitting => cx.quit(),
-            RunEvent::Live | RunEvent::Stopping | RunEvent::Ended => {
-                self.sync_map(cx);
-                self.arm_hotkeys(window, cx);
-            }
+            RunEvent::Live | RunEvent::Stopping | RunEvent::Ended => self.sync_map(cx),
         }
         cx.notify();
     }

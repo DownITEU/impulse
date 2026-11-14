@@ -75,15 +75,8 @@ impl Page {
     ) {
         match event {
             TrainerEvent::Installed(game) => {
-                // The user's hotkey choices over the provider's.
-                let slots = trainers.read(cx).sheet(game).map(|sheet| self.bindings.slots(game, &sheet.cheats));
-                if let Some(slots) = slots {
-                    trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
-                }
                 if self.selected(cx).as_ref() == Some(game) {
                     self.drop_cheat_state();
-                    // Its cap may be gone, and with it the click that ends the capture.
-                    self.bindings.cancel();
                     self.print(window, cx);
                 }
             }
