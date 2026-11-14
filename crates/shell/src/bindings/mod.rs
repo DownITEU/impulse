@@ -24,6 +24,8 @@ use crate::{
     trainer::{TrainerEvent, Trainers},
 };
 
+pub use settings::HotkeySettings;
+
 pub const PRESS_KEYS: &str = "PRESS KEYS";
 
 /// What a capture binds.

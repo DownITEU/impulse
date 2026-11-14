@@ -2,17 +2,19 @@
 
 use client::trainer::{Sheet, Span, TOP_TICK};
 use gpui_kit::{
-    AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful, Window,
-    component::{h_flex, input::Input, v_flex},
-    deferred, div,
+    AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful,
+    component::{h_flex, input::Input},
+    div,
     prelude::*,
-    px, relative, rgb,
+    px, rgb,
 };
 use model::Kind;
 
 use super::{
     Flash, Menu, Page,
     assets::Icon,
+    dropdown::{dropdown, span},
+    open_menu,
     theme::*,
     trainer::{Printed, number},
     widgets::{button, flash_button, icon, mono, toggle},
@@ -107,7 +109,8 @@ impl Page {
                 if !running {
                     return trigger.into_any_element();
                 }
-                self.dropdown(trigger, Menu::Cheat(index), options, current, span, cx, move |page, option, _, cx| {
+                let menu = Menu::Cheat(index);
+                dropdown(trigger, menu, open_menu, self.menu == Some(menu), options, current, span, cx, move |page, option, _, cx| {
                     page.set_value(index, option as f64, cx)
                 })
                 .into_any_element()
@@ -176,72 +179,6 @@ impl Page {
                     .child(div().w(px(6.)).h(px(15.)).bg(rgb(if tick <= level { lit } else { TICK })))
             }))
     }
-
-    /// Makes `trigger` open a list of `options` under itself, set across by `place`.
-    #[expect(clippy::too_many_arguments, reason = "a menu's trigger, options, placement and pick")]
-    pub(super) fn dropdown(
-        &self,
-        trigger: Stateful<Div>,
-        menu: Menu,
-        options: Vec<SharedString>,
-        current: usize,
-        place: fn(Div) -> Div,
-        cx: &Context<Self>,
-        pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
-    ) -> Stateful<Div> {
-        trigger
-            .relative()
-            .on_click(cx.listener(move |page, _, _, cx| {
-                page.menu = (page.menu != Some(menu)).then_some(menu);
-                cx.notify();
-            }))
-            .on_mouse_down_out(cx.listener(move |page, _, _, cx| {
-                if page.menu == Some(menu) {
-                    page.menu = None;
-                    cx.notify();
-                }
-            }))
-            .when(self.menu == Some(menu) && !options.is_empty(), |trigger| {
-                trigger.child(deferred(place(self.picks(options, current, cx, pick))))
-            })
-    }
-
-    /// An open menu's list, under what opened it; the caller places it across.
-    pub(super) fn picks(
-        &self,
-        options: Vec<SharedString>,
-        current: usize,
-        cx: &Context<Self>,
-        pick: impl Fn(&mut Page, usize, &mut Window, &mut Context<Page>) + Copy + 'static,
-    ) -> Div {
-        let accent = rgb(accent(cx));
-        v_flex().occlude().absolute().top(relative(1.)).mt(px(3.)).py(px(4.)).border_1().border_color(line(0.2)).bg(rgb(PANEL)).children(
-            options.into_iter().enumerate().map(|(at, option)| {
-                h_flex()
-                    .id(("option", at))
-                    .h(px(28.))
-                    .px(px(10.))
-                    .cursor_pointer()
-                    .text_color(if at == current { accent } else { rgb(TEXT_2) })
-                    .hover(|style| style.bg(rgb(ROW_HOVER)))
-                    // Mouse down, not click: the outside-press close removes the list first.
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |page, _, window, cx| {
-                            pick(page, at, window, cx);
-                            page.menu = None;
-                            cx.notify();
-                        }),
-                    )
-                    .child(mono(option, 12.))
-            }),
-        )
-    }
-}
-
-/// A dropdown's list across its trigger, borders included.
-pub(super) fn span(list: Div) -> Div {
-    list.left(px(-1.)).right(px(-1.))
 }
 
 fn value_box(value: impl Into<SharedString>) -> Div {

@@ -20,6 +20,7 @@ use gpui_kit::{
 };
 use hotkeys::Chord;
 use overlay::{Event, Key, Watch};
+pub use settings::{OverlaySettings, overlay_hotkey};
 use store::Store;
 
 use client::storage::Paths;

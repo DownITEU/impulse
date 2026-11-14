@@ -1,47 +1,32 @@
 //! The Settings `OVERLAY` tab and the overlay's and minimap's hotkeys' rebinding.
 
-use gpui_kit::{App, Context, IntoElement, SharedString, Window, component::v_flex, prelude::*, px, rgb};
+use gpui_kit::{App, Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, prelude::*, px, rgb};
 use hotkeys::{Chord, Outcome};
 use overlay::Key;
 
-use super::super::{
-    Page,
-    bindings::{PRESS_KEYS, Target},
+use super::Layer;
+use crate::{
+    bindings::{Hotkeys, PRESS_KEYS, Target},
     settings::row,
     theme::*,
+    trainer::Trainers,
     widgets::{choice, keycap, segmented},
 };
 
 const OVERLAY: Target = Target::Key { name: "overlay", required: true };
 const MINIMAP: Target = Target::Key { name: "minimap", required: false };
 
-impl Page {
-    pub(in super::super) fn overlay_settings(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let layer = self.layer.read(cx);
-        let (overlay, minimap) = (Some(layer.hotkey()), layer.minimap_hotkey());
-        v_flex()
-            .flex_1()
-            .px(px(18.))
-            .py(px(6.))
-            .child(
-                row("MODE", "in-game, drawn inside the game: later", 64.).child(
-                    segmented()
-                        .h(px(26.))
-                        .child(choice("overlay-over", "OVER THE GAME", true, cx))
-                        .child(choice("overlay-in-game", "IN-GAME", false, cx).cursor_default().opacity(0.4)),
-                ),
-            )
-            .child(row("HOTKEY", "modifiers and one key, free in other apps and mods", 64.).child(self.hotkey_cap(
-                "overlay-hotkey",
-                OVERLAY,
-                overlay,
-                cx,
-            )))
-            .child(
-                row("MINIMAP HOTKEY", "shows or hides the minimap; held only while the game is in front", 64.)
-                    .border_b_0()
-                    .child(self.hotkey_cap("minimap-hotkey", MINIMAP, minimap, cx)),
-            )
+pub struct OverlaySettings {
+    layer: Entity<Layer>,
+    hotkeys: Entity<Hotkeys>,
+    trainers: Entity<Trainers>,
+}
+
+impl OverlaySettings {
+    pub fn new(layer: Entity<Layer>, hotkeys: Entity<Hotkeys>, trainers: Entity<Trainers>, cx: &mut Context<Self>) -> Self {
+        cx.observe(&layer, |_, _, cx| cx.notify()).detach();
+        cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
+        Self { layer, hotkeys, trainers }
     }
 
     fn hotkey_cap(&self, id: &'static str, target: Target, key: Option<Key>, cx: &mut Context<Self>) -> impl IntoElement {
@@ -62,28 +47,24 @@ impl Page {
             .when(held.is_some(), |cap| {
                 cap.border_color(accent)
                     .text_color(accent)
-                    .on_mouse_down_out(cx.listener(|page, _, _, cx| page.hotkeys.update(cx, |hotkeys, cx| hotkeys.cancel(cx))))
+                    .on_mouse_down_out(cx.listener(|view, _, _, cx| view.hotkeys.update(cx, |hotkeys, cx| hotkeys.cancel(cx))))
             })
-            .on_click(cx.listener(move |page, _, window, cx| page.bind_layer_key(target.clone(), window, cx)))
+            .on_click(cx.listener(move |view, _, window, cx| view.bind(target.clone(), window, cx)))
     }
 
     /// Binds the overlay's or the minimap's hotkey by what the user presses.
-    fn bind_layer_key(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
+    fn bind(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
         let overlay = target == OVERLAY;
         let Some(outcome) = self.hotkeys.update(cx, |hotkeys, cx| hotkeys.capture(target, window, cx)) else { return };
-        cx.spawn(async move |page, cx| {
+        cx.spawn(async move |view, cx| {
             let Ok(outcome) = outcome.await else { return };
-            page.update(cx, |page, cx| match overlay {
-                true => page.rebind_overlay(outcome, cx),
-                false => page.rebind_minimap(outcome, cx),
+            view.update(cx, |view, cx| match overlay {
+                true => view.rebind_overlay(outcome, cx),
+                false => view.rebind_minimap(outcome, cx),
             })
             .ok();
         })
         .detach();
-    }
-
-    pub(in super::super) fn overlay_hotkey(&self, cx: &App) -> SharedString {
-        key_text(Some(self.layer.read(cx).hotkey()))
     }
 
     /// A refused chord keeps the old hotkey; the tab's hint says what is allowed.
@@ -119,6 +100,41 @@ impl Page {
     fn cheats_hold(&self, key: Key, cx: &App) -> bool {
         self.trainers.read(cx).sheets().any(|sheet| sheet.hotkeys.iter().flatten().flatten().any(|bound| key.fired_by(bound.vks())))
     }
+}
+
+impl Render for OverlaySettings {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let layer = self.layer.read(cx);
+        let (overlay, minimap) = (Some(layer.hotkey()), layer.minimap_hotkey());
+        v_flex()
+            .flex_1()
+            .px(px(18.))
+            .py(px(6.))
+            .child(
+                row("MODE", "in-game, drawn inside the game: later", 64.).child(
+                    segmented()
+                        .h(px(26.))
+                        .child(choice("overlay-over", "OVER THE GAME", true, cx))
+                        .child(choice("overlay-in-game", "IN-GAME", false, cx).cursor_default().opacity(0.4)),
+                ),
+            )
+            .child(row("HOTKEY", "modifiers and one key, free in other apps and mods", 64.).child(self.hotkey_cap(
+                "overlay-hotkey",
+                OVERLAY,
+                overlay,
+                cx,
+            )))
+            .child(
+                row("MINIMAP HOTKEY", "shows or hides the minimap; held only while the game is in front", 64.)
+                    .border_b_0()
+                    .child(self.hotkey_cap("minimap-hotkey", MINIMAP, minimap, cx)),
+            )
+    }
+}
+
+/// The overlay's hotkey as the hero shows it.
+pub fn overlay_hotkey(layer: &Layer) -> SharedString {
+    key_text(Some(layer.hotkey()))
 }
 
 fn key_text(key: Option<Key>) -> SharedString {

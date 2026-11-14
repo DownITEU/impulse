@@ -23,6 +23,9 @@ use gpui_kit::{
 use super::{
     Menu, Page,
     assets::Icon,
+    dialog::dialog,
+    dropdown::picks,
+    open_menu,
     theme::*,
     widgets::{button, icon, icon_button, mono, tip},
 };
@@ -137,10 +140,11 @@ impl Page {
                 }
             }))
             .when(self.menu == Some(menu), |chip| {
-                let actions = self.picks(vec!["EDIT".into(), "DELETE".into()], usize::MAX, cx, move |page, pick, window, cx| match pick {
-                    0 => page.edit_collection(Some(at), window, cx),
-                    _ => page.delete_collection(at, cx),
-                });
+                let actions =
+                    picks(vec!["EDIT".into(), "DELETE".into()], usize::MAX, open_menu, cx, move |page, pick, window, cx| match pick {
+                        0 => page.edit_collection(Some(at), window, cx),
+                        _ => page.delete_collection(at, cx),
+                    });
                 chip.child(deferred(actions.left(px(-1.)).min_w(px(110.))))
             })
     }
@@ -269,7 +273,7 @@ impl Page {
         let title = if editor.at.is_some() { "EDIT COLLECTION" } else { "NEW COLLECTION" };
         // Six tiles across, inside the padding and the borders.
         let width = 6. * TILE + 5. * TILE_GAP + 34.;
-        Some(self.dialog("collection", title, width, Self::close_editor, body, cx))
+        Some(dialog("collection", title, width, &self.dialog_focus, Self::close_editor, body, cx))
     }
 }
 

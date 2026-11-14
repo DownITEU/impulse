@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 
 use super::{picked_file, prompt};
-use crate::{Page, library::Found, theme::*, widgets::mono};
+use crate::{Page, dialog::dialog, library::Found, theme::*, widgets::mono};
 
 /// Rows shown at once: the filter narrows the rest.
 const SHOWN: usize = 50;
@@ -122,6 +122,6 @@ impl Page {
             .child(mono(caption, 10.5).text_color(rgb(DIM)))
             .child(field)
             .child(div().id("choices").max_h(px(320.)).overflow_y_scroll().flex().flex_col().children(rows));
-        Some(self.dialog("picker", "ADD A GAME", 520., Self::close_picker, body, cx))
+        Some(dialog("picker", "ADD A GAME", 520., &self.dialog_focus, Self::close_picker, body, cx))
     }
 }

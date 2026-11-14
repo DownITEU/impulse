@@ -12,7 +12,7 @@ mod controls;
 mod crash;
 mod dialog;
 mod docks;
-mod folders;
+mod dropdown;
 mod glance;
 mod header;
 mod hero;
@@ -52,10 +52,12 @@ use gpui_kit::{
 
 use account::Account;
 pub use assets::Assets;
+use bindings::HotkeySettings;
 use bindings::Hotkeys;
 use collections::Editor;
 use docks::Docks;
 use glance::Glance;
+use layer::OverlaySettings;
 use layer::{Layer, MinimapKey};
 use library::{Library, LibraryEvent};
 use log_view::{LogEvent, LogView};
@@ -63,7 +65,7 @@ use map::{MapEvent, MapView, Maps, Minimap};
 use resources::{Resources, ResourcesEvent, ResourcesView};
 pub use root::Root;
 use run::{RunEvent, Runs};
-use settings::{Folders, Settings, Tab};
+use settings::{Folders, Looked, Settings, SettingsView, Tabs};
 use sources::Picker;
 use theme::*;
 use trainer::{Printed, Trainers};
@@ -97,8 +99,6 @@ fn hwnd(window: &Window) -> Option<isize> {
 #[derive(Clone, Copy, PartialEq)]
 enum Menu {
     Cheat(usize),
-    /// A folder row's picks.
-    Choices(usize),
     /// A collection chip's actions.
     Collection(usize),
     /// The open game's sources.
@@ -123,11 +123,7 @@ pub struct Page {
     settings: Entity<Settings>,
     // The collection being named.
     editor: Option<Editor>,
-    settings_open: bool,
-    settings_tab: Tab,
-    folders: Entity<Folders>,
-    // The folder rows' path fields, one per row of `folders`.
-    folder_fields: Vec<Entity<InputState>>,
+    settings_view: Entity<SettingsView>,
     // The window is the overlay over a game: the HUD replaces the page.
     over: bool,
     tray: Option<tray::Tray>,
@@ -149,7 +145,6 @@ pub struct Page {
     maps: Entity<Maps>,
     map: Entity<MapView>,
     resources: Entity<Resources>,
-    resources_view: Entity<ResourcesView>,
     game_filter: Entity<InputState>,
     mod_filter: Entity<InputState>,
 }
@@ -171,8 +166,6 @@ impl Page {
         })
         .detach();
         let folders = cx.new(|cx| Folders::new(provider.clone(), cx));
-        cx.observe(&folders, |_, _, cx| cx.notify()).detach();
-        cx.subscribe_in(&folders, window, Self::folder_shown).detach();
         let account = cx.new(|cx| Account::new(provider.clone(), cx));
         cx.observe(&account, |_, _, cx| cx.notify()).detach();
         let library = cx.new(|cx| Library::new(provider.clone(), &paths, settings.clone(), cx));
@@ -197,7 +190,6 @@ impl Page {
         let map = cx.new(|cx| MapView::new(maps.clone(), &paths, window, cx));
         cx.subscribe_in(&map, window, |page, _, _: &MapEvent, window, cx| page.close_map(window, cx)).detach();
         let resources = cx.new(|cx| Resources::new(provider, &paths, cx));
-        let resources_view = cx.new(|cx| ResourcesView::new(resources.clone(), cx));
         cx.subscribe(&resources, |page, _, event: &ResourcesEvent, cx| match event {
             ResourcesEvent::Cleared => page.reload(cx),
         })
@@ -219,6 +211,14 @@ impl Page {
         let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
         let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), reserved, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
+        let tabs = Tabs {
+            overlay: cx.new(|cx| OverlaySettings::new(layer.clone(), hotkeys.clone(), trainers.clone(), cx)).into(),
+            hotkeys: cx.new(|cx| HotkeySettings::new(hotkeys.clone(), cx)).into(),
+            resources: cx.new(|cx| ResourcesView::new(resources.clone(), cx)).into(),
+        };
+        let settings_view = cx.new(|cx| SettingsView::new(settings.clone(), folders, tabs, window, cx));
+        cx.observe(&settings_view, |_, _, cx| cx.notify()).detach();
+        cx.subscribe(&settings_view, |page, _, _: &Looked, cx| page.resources.update(cx, |resources, cx| resources.measure(cx))).detach();
         cx.observe_in(&layer, window, Self::overlay_changed).detach();
         cx.subscribe(&layer, |page, _, _: &MinimapKey, cx| page.minimap_key(cx)).detach();
         let docks = cx.new(|_| Docks::load(&paths, &hud::DOCKS));
@@ -246,16 +246,13 @@ impl Page {
             hotkeys,
             picker: None,
             account,
-            folders,
-            folder_fields: Vec::new(),
             library,
             trainers,
             printed: None,
             runs,
             settings,
             editor: None,
-            settings_open: false,
-            settings_tab: Tab::Appearance,
+            settings_view,
             over: false,
             tray: Self::start_tray(window, cx),
             quitting: false,
@@ -272,7 +269,6 @@ impl Page {
             maps,
             map,
             resources,
-            resources_view,
             game_filter,
             mod_filter,
         };
@@ -376,9 +372,14 @@ impl Render for Page {
                     }),
             )
             .child(self.status_bar(cx))
-            .when(self.settings_open, |page| page.child(self.settings_modal(cx)))
+            .when(self.settings_view.read(cx).is_open(), |page| page.child(self.settings_view.clone()))
             .children(self.collection_editor(cx))
             .children(self.game_picker(cx))
             .into_any_element()
     }
+}
+
+/// The page's open menu, for its dropdowns.
+fn open_menu(page: &mut Page) -> &mut Option<Menu> {
+    &mut page.menu
 }

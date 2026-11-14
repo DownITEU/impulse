@@ -7,6 +7,9 @@ use gpui_kit::{
 use super::{
     Menu, Page,
     assets::Icon,
+    dropdown::dropdown,
+    layer::overlay_hotkey,
+    open_menu,
     run::{STOPPING, State, label},
     theme::*,
     widgets::{icon, mono, square, tip, tracked},
@@ -81,7 +84,7 @@ impl Page {
                         .on_click(move |_, _, cx| layer.read(cx).toggle())
                         .child(icon(Icon::Layers, 14., rgb(TEXT)))
                         .child(tracked("OVERLAY", 12.5, 0.14))
-                        .child(tracked(&self.overlay_hotkey(cx), 12.5, 0.14).text_color(rgb(FAINT))),
+                        .child(tracked(&overlay_hotkey(self.layer.read(cx)), 12.5, 0.14).text_color(rgb(FAINT))),
                 )
             })
             .child(
@@ -113,11 +116,17 @@ impl Page {
                 let (options, current) = Page::source_options(game);
                 let more = icon_button("source", "Game source".into()).child(icon(Icon::More, 15., rgb(MUTED)));
                 let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
-                bar.child(
-                    self.dropdown(more, Menu::Source, options, current, place, cx, |page, at, window, cx| {
-                        page.source_picked(at, window, cx)
-                    }),
-                )
+                bar.child(dropdown(
+                    more,
+                    Menu::Source,
+                    open_menu,
+                    self.menu == Some(Menu::Source),
+                    options,
+                    current,
+                    place,
+                    cx,
+                    |page, at, window, cx| page.source_picked(at, window, cx),
+                ))
             })
     }
 

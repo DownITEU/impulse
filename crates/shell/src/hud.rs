@@ -184,7 +184,7 @@ impl Page {
             // What belongs to the window closes, and the docks show the running game.
             self.menu = None;
             self.editor = None;
-            self.settings_open = false;
+            self.settings_view.update(cx, |view, cx| view.close(cx));
             self.log_open = false;
             self.hotkeys.update(cx, |hotkeys, cx| hotkeys.cancel(cx));
         }

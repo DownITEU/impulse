@@ -95,13 +95,7 @@ impl Page {
     }
 
     fn open_settings(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        // A focused filter would keep taking keys behind the modal, and Escape closes it.
-        self.dialog_focus.focus(window, cx);
-        self.settings_open = true;
-        // An update may have installed a newer version since the last look.
-        self.folders.update(cx, |folders, cx| folders.scan(cx));
-        self.resources.update(cx, |resources, cx| resources.measure(cx));
-        cx.notify();
+        self.settings_view.update(cx, |view, cx| view.open(window, cx));
     }
 }
 

@@ -16,7 +16,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`).
 - `Hotkeys` (`bindings/`: a `hotkeys` module would shadow the crate): `hotkeys.json`, the live run's hook, the capture; `capture`, `cancel`, `rebind`, `set_enabled`, `set_game_only`.
 - `Account` (`account.rs`): the provider's session, read by the header; `reload` asks again.
-- `Folders` (`settings/`): the provider's folders and the user's edits checked through it (`scan`, `set`); emits `Shown(at)` when a row's field must show the provider's path. The page holds the fields.
+- `Folders` (`settings/`): the provider's folders and the user's edits checked through it (`scan`, `set`); emits `Shown(at)` when a row's field must show the provider's path. `SettingsView` holds the fields.
 - `Resources` (`resources/`): sizes, clear, the media limit; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.
 
 ## Rules
