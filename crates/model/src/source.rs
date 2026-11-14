@@ -1,29 +1,49 @@
-//! Where games, trainers and the account come from.
+//! Where games, trainers, maps and the account come from: a source, and what it can do, one trait each.
 
 use std::path::PathBuf;
 
 use anyhow::Result;
 use futures::{future::BoxFuture, stream::BoxStream};
 
-use crate::{Game, Installation, Map, MapOffer, Trainer};
+use crate::{Game, Installation, Map, MapOffer, Offer, Ref, SourceId, Trainer};
 
-pub trait Provider: Send + Sync {
+pub trait Source: Send + Sync {
+    /// The source of every `Ref` it mints.
+    fn id(&self) -> SourceId;
+}
+
+pub trait Accounts: Source {
     fn sign_in(&self) -> BoxStream<'static, SignIn>;
+}
+
+pub trait Games: Source {
     fn games(&self) -> BoxStream<'static, Snapshot<Vec<Game>>>;
-    fn trainer(&self, game: &Game, install: &Installation) -> BoxStream<'static, Snapshot<Trainer>>;
+}
+
+pub trait Trainers: Source {
+    fn trainer(&self, offer: &Offer, install: &Installation) -> BoxStream<'static, Snapshot<Trainer>>;
+}
+
+pub trait Maps: Source {
     fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<Map>>;
+}
+
+pub trait Folders: Source {
     fn folders(&self) -> BoxFuture<'static, Vec<Folder>>;
     /// Saves `path` when its status is `Ok`. Calls are ordered: an older one never saves over a newer.
-    fn set_folder(&self, id: &'static str, path: PathBuf) -> BoxFuture<'static, Folder>;
+    fn set_folder(&self, id: &Ref, path: PathBuf) -> BoxFuture<'static, Folder>;
+}
+
+pub trait Caches: Source {
     /// What it keeps on disk (sizes are read when asked).
     fn stores(&self) -> BoxFuture<'static, Vec<Store>>;
     /// Empties the store `id` names; the next use downloads it again.
-    fn clear(&self, id: &'static str) -> BoxFuture<'static, ()>;
+    fn clear(&self, id: &Ref) -> BoxFuture<'static, ()>;
 }
 
-/// Files a provider keeps, of one kind.
+/// Files a source keeps, of one kind.
 pub struct Store {
-    pub id: &'static str,
+    pub id: Ref,
     pub name: &'static str,
     pub hint: &'static str,
     pub bytes: u64,
@@ -50,7 +70,7 @@ pub enum Snapshot<T> {
 pub enum SignIn {
     /// Cached first, then fresh.
     Account(Account),
-    /// No session: signed out, offline or the provider cannot start. The provider logs why.
+    /// No session: signed out, offline or the source cannot start. The source logs why.
     Failed,
 }
 
@@ -58,12 +78,12 @@ pub struct Account {
     pub name: String,
 }
 
-/// A folder a provider reads from, set in Settings.
+/// A folder a source reads from, set in Settings.
 pub struct Folder {
-    pub id: &'static str,
+    pub id: Ref,
     pub label: &'static str,
     pub hint: &'static str,
-    /// The saved choice, else the provider's default.
+    /// The saved choice, else the source's default.
     pub path: Option<PathBuf>,
     /// What `path` holds, or why it cannot be used.
     pub status: Result<String, String>,

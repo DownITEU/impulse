@@ -6,7 +6,7 @@ mod title;
 use std::{collections::HashSet, sync::Arc};
 
 use client::{
-    Load,
+    Load, Registry,
     library::{GameId, Support},
     profile::{Collection, GameProfile, Profiles, TrainerProfile, Values},
     run,
@@ -15,7 +15,7 @@ use client::{
 };
 use futures::{StreamExt, channel::oneshot};
 use gpui_kit::{Context, Entity, EventEmitter};
-use model::{Chord, Provider, Snapshot};
+use model::{Chord, Snapshot};
 
 use crate::library::{Library, LibraryEvent};
 pub use title::title;
@@ -35,7 +35,7 @@ pub struct Hold {
 }
 
 pub struct Trainers {
-    provider: Arc<dyn Provider>,
+    registry: Arc<Registry>,
     library: Entity<Library>,
     profiles: Profiles,
     shelf: Shelf,
@@ -46,9 +46,9 @@ pub struct Trainers {
 impl EventEmitter<TrainerEvent> for Trainers {}
 
 impl Trainers {
-    pub fn new(provider: Arc<dyn Provider>, paths: &Paths, library: Entity<Library>, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, paths: &Paths, library: Entity<Library>, cx: &mut Context<Self>) -> Self {
         cx.subscribe(&library, |trainers, _, _: &LibraryEvent, cx| trainers.open(cx)).detach();
-        Self { provider, library, profiles: Profiles::load(paths), shelf: Shelf::default(), loading: HashSet::new() }
+        Self { registry, library, profiles: Profiles::load(paths), shelf: Shelf::default(), loading: HashSet::new() }
     }
 
     pub fn get(&self, game: &GameId) -> Option<&Load<Sheet>> {
@@ -108,7 +108,7 @@ impl Trainers {
         cx.notify();
     }
 
-    /// The hotkeys in effect, by cheat: the user's choices over the provider's.
+    /// The hotkeys in effect, by cheat: the user's choices over the source's.
     pub fn bind(&mut self, game: &GameId, hotkeys: Vec<Vec<Option<Chord>>>, cx: &mut Context<Self>) {
         let Some(sheet) = self.shelf.sheet_mut(game) else { return };
         sheet.hotkeys = hotkeys;
@@ -204,7 +204,7 @@ impl Trainers {
     /// The open game's trainer. Nothing is downloaded for a game the user did not open.
     fn open(&mut self, cx: &mut Context<Self>) {
         let Some(game) = self.library.read(cx).opened().cloned() else { return };
-        let Some(offer) = game.source.trainer.as_ref().map(|offer| offer.id.clone()) else { return };
+        let Some(offer) = game.source.trainer.as_ref() else { return };
         if game.support == Support::NoTrainer || self.shelf.is_current(&game.id, &game.stamp) {
             return;
         }
@@ -212,15 +212,15 @@ impl Trainers {
         if !self.loading.insert(game.id.clone()) {
             return;
         }
-        let (id, stamp) = (game.id.clone(), game.stamp.clone());
-        let mut snapshots = self.provider.trainer(&game.source, &game.install);
+        let (id, stamp, trainer_id) = (game.id.clone(), game.stamp.clone(), offer.id.clone());
+        let mut snapshots = self.registry.trainer(offer, &game.install);
         cx.spawn(async move |trainers, cx| {
             while let Some(snapshot) = snapshots.next().await {
                 trainers
                     .update(cx, |trainers, cx| {
                         match snapshot {
                             Snapshot::Cached(Some(trainer)) | Snapshot::Fresh(Ok(trainer)) => {
-                                let sheet = Sheet::new(trainer, offer.clone(), stamp.clone(), trainers.profiles.trainer(&offer));
+                                let sheet = Sheet::new(trainer, trainer_id.clone(), stamp.clone(), trainers.profiles.trainer(&trainer_id));
                                 if trainers.shelf.put(id.clone(), sheet) {
                                     trainers.installed(id.clone(), cx);
                                 }

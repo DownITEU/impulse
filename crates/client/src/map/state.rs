@@ -62,7 +62,7 @@ impl Default for Saved {
 }
 
 impl Saved {
-    /// A map seen for the first time hides what its provider hides by default.
+    /// A map seen for the first time hides what its source hides by default.
     pub fn first(map: &Map) -> Self {
         let hidden = map.categories.iter().filter(|category| !category.shown);
         Self { hidden: hidden.flat_map(|category| category.groups.iter().map(|group| group.id.clone())).collect(), ..Self::default() }

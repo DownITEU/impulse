@@ -44,7 +44,7 @@ pub struct Game {
     pub stamp: Stamp,
     pub hero: Option<String>,
     pub thumbnail: Option<String>,
-    /// As the provider knows it, for asking for the trainer and the maps.
+    /// As the source knows it, for asking for the trainer and the maps.
     pub source: Arc<model::Game>,
     /// The install in use: a launcher's, or an executable the user picked.
     pub install: Installation,
@@ -99,7 +99,7 @@ impl Game {
 pub struct Library {
     /// Shared, so a view holds one while it draws.
     pub games: Vec<Arc<Game>>,
-    /// Titles with a trainer among all the provider's games.
+    /// Titles with a trainer among all the source's games.
     pub trainers: usize,
 }
 

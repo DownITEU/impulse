@@ -2,7 +2,7 @@
 
 use crate::Ref;
 
-/// A map a provider has for a game, before it is opened.
+/// A map a source has for a game, before it is opened.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MapOffer {
     pub id: Ref,

@@ -41,7 +41,7 @@ pub struct TrainerProfile {
     /// What the last run left on.
     pub values: Values,
     pub collections: Vec<Collection>,
-    /// Cheat ids; `None` until the user pins or unpins: the provider's pins.
+    /// Cheat ids; `None` until the user pins or unpins: the source's pins.
     pub pinned: Option<BTreeSet<String>>,
     /// Section ids.
     pub folded: BTreeSet<String>,

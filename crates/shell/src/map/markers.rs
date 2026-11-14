@@ -77,7 +77,7 @@ impl Images {
         self.made.entry(key).or_insert_with(|| render(&svg(), pixels, pixels, cx)).clone()
     }
 
-    /// A group's icon in `color`; a small square where the provider has none.
+    /// A group's icon in `color`; a small square where the source has none.
     pub fn glyph(&mut self, map: &Map, at: (usize, usize), color: u32, side: f32, window: &Window, cx: &App) -> AnyElement {
         let image =
             map.categories[at.0].groups[at.1].icon.as_ref().and_then(|glyph| self.icon(at, glyph, color, side, window.scale_factor(), cx));

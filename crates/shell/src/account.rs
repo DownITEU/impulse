@@ -1,21 +1,22 @@
-//! The provider's session: the account it signed in, or that it could not.
+//! The source's session: the account it signed in, or that it could not.
 
 use std::sync::Arc;
 
+use client::Registry;
 use futures::StreamExt;
 use gpui_kit::{Context, Task};
-use model::{Provider, SignIn};
+use model::SignIn;
 
 pub struct Account {
-    provider: Arc<dyn Provider>,
+    registry: Arc<Registry>,
     user: Option<model::Account>,
     signed_out: bool,
     _sign_in: Task<()>,
 }
 
 impl Account {
-    pub fn new(provider: Arc<dyn Provider>, cx: &mut Context<Self>) -> Self {
-        let mut account = Self { provider, user: None, signed_out: false, _sign_in: Task::ready(()) };
+    pub fn new(registry: Arc<Registry>, cx: &mut Context<Self>) -> Self {
+        let mut account = Self { registry, user: None, signed_out: false, _sign_in: Task::ready(()) };
         account.sign_in(cx);
         account
     }
@@ -37,7 +38,7 @@ impl Account {
     }
 
     fn sign_in(&mut self, cx: &mut Context<Self>) {
-        let mut sign_in = self.provider.sign_in();
+        let mut sign_in = self.registry.sign_in();
         self._sign_in = cx.spawn(async move |account, cx| {
             while let Some(state) = sign_in.next().await {
                 let known = account.update(cx, |account, cx| {

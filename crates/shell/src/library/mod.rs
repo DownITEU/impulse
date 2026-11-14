@@ -1,4 +1,4 @@
-//! The game list: the provider's catalog joined with the installed games and the executables the user picked,
+//! The game list: the source's catalog joined with the installed games and the executables the user picked,
 //! and the game open in the page.
 
 mod picker;
@@ -9,13 +9,14 @@ use std::{mem, path::PathBuf, sync::Arc};
 
 use blocking::unblock;
 use client::{
+    Registry,
     library::{self as listing, Game, GameId, Picked, sources},
     media::Media,
     storage::Paths,
 };
 use futures::StreamExt;
 use gpui_kit::{AsyncApp, Context, Entity, EventEmitter, Task, WeakEntity};
-use model::{Provider, Snapshot};
+use model::Snapshot;
 
 use crate::{Load, settings::Settings};
 pub use picker::GamePicker;
@@ -43,7 +44,7 @@ pub struct Found {
 }
 
 pub struct Library {
-    provider: Arc<dyn Provider>,
+    registry: Arc<Registry>,
     settings: Entity<Settings>,
     art: PathBuf,
     picked: Picked,
@@ -56,12 +57,12 @@ pub struct Library {
 impl EventEmitter<LibraryEvent> for Library {}
 
 impl Library {
-    pub fn new(provider: Arc<dyn Provider>, paths: &Paths, settings: Entity<Settings>, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, paths: &Paths, settings: Entity<Settings>, cx: &mut Context<Self>) -> Self {
         // Opens once the list holds it.
         let open = settings.read(cx).prefs().game.clone();
         Self {
-            _listing: listen(&provider, cx),
-            provider,
+            _listing: listen(&registry, cx),
+            registry,
             settings,
             art: Media::Pictures.dir(paths),
             picked: Picked::load(paths),
@@ -70,10 +71,10 @@ impl Library {
         }
     }
 
-    /// Lists anew after the provider's caches were cleared.
+    /// Lists anew after the source's caches were cleared.
     pub fn reload(&mut self, cx: &mut Context<Self>) {
         self.list = Load::Pending;
-        self._listing = listen(&self.provider, cx);
+        self._listing = listen(&self.registry, cx);
         cx.notify();
     }
 
@@ -152,9 +153,9 @@ impl Library {
 
     /// The catalog and the games `exe` may belong to.
     pub fn find(&self, exe: PathBuf, cx: &mut Context<Self>) -> Task<Option<Found>> {
-        let provider = self.provider.clone();
+        let registry = self.registry.clone();
         cx.spawn(async move |_, _| {
-            let Some(games) = catalog(provider.as_ref()).await else {
+            let Some(games) = catalog(registry.as_ref()).await else {
                 log::warn!("no catalog to add {} from", exe.display());
                 return None;
             };
@@ -213,8 +214,8 @@ fn switched(cx: &mut Context<Library>) {
     cx.notify();
 }
 
-fn listen(provider: &Arc<dyn Provider>, cx: &mut Context<Library>) -> Task<()> {
-    let mut games = provider.games();
+fn listen(registry: &Arc<Registry>, cx: &mut Context<Library>) -> Task<()> {
+    let mut games = registry.games();
     cx.spawn(async move |library, cx| {
         let mut have_copy = false;
         while let Some(snapshot) = games.next().await {
@@ -240,8 +241,8 @@ fn listen(provider: &Arc<dyn Provider>, cx: &mut Context<Library>) -> Task<()> {
 /// Lists the installed games of `games` anew, with the executables the user picked.
 async fn rescan(library: &WeakEntity<Library>, mut games: Vec<model::Game>, cx: &mut AsyncApp) {
     loop {
-        let Ok((art, picked, provider)) =
-            library.read_with(cx, |library, _| (library.art.clone(), library.picked.clone(), library.provider.clone()))
+        let Ok((art, picked, registry)) =
+            library.read_with(cx, |library, _| (library.art.clone(), library.picked.clone(), library.registry.clone()))
         else {
             return;
         };
@@ -258,14 +259,14 @@ async fn rescan(library: &WeakEntity<Library>, mut games: Vec<model::Game>, cx: 
             return;
         }
         // A source changed while it scanned: again, with it.
-        let Some(all) = catalog(provider.as_ref()).await else { return };
+        let Some(all) = catalog(registry.as_ref()).await else { return };
         games = all;
     }
 }
 
-/// The provider's games, the disk copy when there is one.
-async fn catalog(provider: &dyn Provider) -> Option<Vec<model::Game>> {
-    let mut snapshots = provider.games();
+/// The source's games, the disk copy when there is one.
+async fn catalog(registry: &Registry) -> Option<Vec<model::Game>> {
+    let mut snapshots = registry.games();
     while let Some(snapshot) = snapshots.next().await {
         match snapshot {
             Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => return Some(all),

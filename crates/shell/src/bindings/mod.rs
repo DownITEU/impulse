@@ -87,7 +87,7 @@ impl Hotkeys {
         .detach();
         cx.subscribe(&trainers, |hotkeys, trainers, event: &TrainerEvent, cx| {
             let TrainerEvent::Installed(game) = event else { return };
-            // The user's choices over the provider's.
+            // The user's choices over the source's.
             let slots = trainers.read(cx).sheet(game).map(|sheet| hotkeys.slots(sheet));
             if let Some(slots) = slots {
                 trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
@@ -114,7 +114,7 @@ impl Hotkeys {
         Self { store: Store::load(paths), trainers, runs, reserved: Box::new(reserved), armed: None, capture: None }
     }
 
-    /// Each cheat's slots, with the user's choices laid over the provider's.
+    /// Each cheat's slots, with the user's choices laid over the source's.
     pub fn slots(&self, sheet: &Sheet) -> Vec<Vec<Option<Chord>>> {
         sheet.cheats.iter().map(|cheat| self.store.slots(&sheet.trainer, cheat)).collect()
     }

@@ -5,7 +5,7 @@ mod cache;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use model::{Game, Locator, MapOffer, Offer, Ref, SourceId, Standalone, StoreId};
+use model::{Game, Locator, MapOffer, Offer, Ref, Standalone, StoreId};
 use serde::Deserialize;
 
 pub use cache::{cached, forget, refresh, size};
@@ -94,13 +94,10 @@ enum LocatorKind {
     Unknown,
 }
 
-/// The source id of every `Ref` Wand mints.
-pub(crate) const SOURCE: &str = "wand";
-
 /// A game whose title is missing is left out.
 fn parse(json: &[u8]) -> Result<Vec<Game>> {
     let Catalog { games, titles, platforms, maps } = serde_json::from_slice(json).context("parse catalog")?;
-    let wand = SourceId::new(SOURCE).context("source id")?;
+    let wand = crate::source();
     let mut maps_of: HashMap<String, Vec<MapOffer>> = HashMap::new();
     for map in maps {
         maps_of.entry(map.title_id).or_default().push(MapOffer {

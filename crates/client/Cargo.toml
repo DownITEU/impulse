@@ -14,10 +14,8 @@ model.workspace = true
 play.workspace = true
 
 anyhow.workspace = true
+futures.workspace = true
 log.workspace = true
 rustc-hash.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json.workspace = true
-
-[dev-dependencies]
-futures.workspace = true

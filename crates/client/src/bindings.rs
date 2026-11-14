@@ -1,4 +1,4 @@
-//! `hotkeys.json`: the user's own hotkey choices over the provider's, and whether and where hotkeys fire.
+//! `hotkeys.json`: the user's own hotkey choices over the source's, and whether and where hotkeys fire.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -7,14 +7,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::storage::{Paths, Stored};
 
-/// Slot: VKs, or `null` for unbound; a missing slot is the provider's.
+/// Slot: VKs, or `null` for unbound; a missing slot is the source's.
 type Slots = BTreeMap<usize, Option<Vec<u16>>>;
 
 /// What `choose` sets a slot to.
 pub enum Choice {
     Bound(Chord),
     Unbound,
-    /// Back to the provider's binding.
+    /// Back to the source's binding.
     Default,
 }
 
@@ -62,7 +62,7 @@ impl Store {
         self.saved.edit(|saved| saved.game_only = on);
     }
 
-    /// The cheat's slots: the provider's bindings with the user's choices laid over them. A default
+    /// The cheat's slots: the source's bindings with the user's choices laid over them. A default
     /// holding the keys of a choice is dropped: a newer cheat list may bring it after the choice.
     pub fn slots(&self, trainer: &Ref, cheat: &Cheat) -> Vec<Option<Chord>> {
         let chosen = self.saved.trainers.get(trainer).and_then(|cheats| cheats.get(&cheat.id));
@@ -146,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn choices_lay_over_the_provider_and_survive_a_reload() {
+    fn choices_lay_over_the_source_and_survive_a_reload() {
         let dir = std::env::temp_dir().join(format!("impulse-hotkeys-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let paths = Paths::new(dir.clone());

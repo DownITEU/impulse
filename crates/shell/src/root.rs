@@ -3,9 +3,8 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use client::storage::Paths;
+use client::{Registry, storage::Paths};
 use gpui_kit::{Context, Entity, IntoElement, Render, StyleRefinement, Window, div, prelude::*, px, rgb};
-use model::Provider;
 
 use crate::{
     map::{MapEvent, MapView},
@@ -22,8 +21,8 @@ pub struct Root {
 }
 
 impl Root {
-    pub fn new(provider: Arc<dyn Provider>, data_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let page = cx.new(|cx| Page::new(provider, Paths::new(data_dir), window, cx));
+    pub fn new(registry: Arc<Registry>, data_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let page = cx.new(|cx| Page::new(registry, Paths::new(data_dir), window, cx));
         let map = page.read(cx).map().clone();
         cx.observe(&map, |_, _, cx| cx.notify()).detach();
         Self { page, map }

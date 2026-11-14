@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::{MapOffer, Origin, Ref, StoreId};
 
-/// A game a provider knows; the store releases of one title are separate games.
+/// A game a source knows; the store releases of one title are separate games.
 pub struct Game {
     pub id: Ref,
     /// Shared by one title's store releases.

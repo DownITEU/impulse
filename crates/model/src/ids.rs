@@ -2,11 +2,16 @@
 
 use std::{fmt, sync::Arc};
 
-/// A source's name: `[a-z0-9-]{1,32}`. `app` is the app's own (`app:pinned`), never a source.
+/// A source's name: `[a-z0-9-]{1,32}`.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct SourceId(Arc<str>);
 
 impl SourceId {
+    /// The app's own ids (`app:pinned`, its media stores): never a source's.
+    pub fn app() -> Self {
+        Self("app".into())
+    }
+
     pub fn new(name: &str) -> Option<Self> {
         let plain = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-';
         ((1..=32).contains(&name.len()) && name.bytes().all(plain)).then(|| Self(name.into()))

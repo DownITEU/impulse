@@ -20,7 +20,7 @@ pub struct Sheet {
     /// Its profile's key.
     pub trainer: Ref,
     pub cheats: Vec<Cheat>,
-    /// By cheat, then slot: the provider's bindings, with the user's choices once their owner lays them over.
+    /// By cheat, then slot: the source's bindings, with the user's choices once their owner lays them over.
     pub hotkeys: Vec<Vec<Option<Chord>>>,
     /// What it was asked for; another stamp on the game means it is stale.
     pub stamp: Stamp,
@@ -68,7 +68,7 @@ impl Sheet {
         sheet
     }
 
-    /// The user's pins, once there are any, replace the provider's; the folds are theirs.
+    /// The user's pins, once there are any, replace the source's; the folds are theirs.
     pub fn restore(&mut self, profile: &TrainerProfile) {
         if let Some(own) = &profile.pinned {
             self.pinned = (0..self.cheats.len()).filter(|&index| own.contains(&self.cheats[index].id)).collect();

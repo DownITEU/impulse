@@ -4,10 +4,11 @@
 use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
 use anyhow::Result;
+use client::Registry;
 use client::storage::{Paths, Stored};
 use futures::StreamExt;
 use gpui_kit::{App, AsyncApp, Context, Entity, EntityId, Subscription, Task, WeakEntity};
-use model::{Map, MapOffer, Provider, Snapshot};
+use model::{Map, MapOffer, Snapshot};
 use serde::{Deserialize, Serialize};
 
 use super::board::{Board, BoardEvent};
@@ -40,7 +41,7 @@ impl Default for Kept {
 }
 
 pub struct LiveMap {
-    provider: Arc<dyn Provider>,
+    registry: Arc<Registry>,
     pub(super) board: Entity<Board>,
     big: Entity<Board>,
     pub(super) tile_dir: PathBuf,
@@ -58,7 +59,7 @@ pub struct LiveMap {
 
 impl LiveMap {
     pub(super) fn new(
-        provider: Arc<dyn Provider>,
+        registry: Arc<Registry>,
         board: Entity<Board>,
         big: Entity<Board>,
         tile_dir: PathBuf,
@@ -86,7 +87,7 @@ impl LiveMap {
         let kept = Stored::<Kept>::load(paths.minimap());
         let zoom = kept.zoom;
         Self {
-            provider,
+            registry,
             board,
             big,
             tile_dir,
@@ -163,9 +164,9 @@ impl LiveMap {
         if let Some(at) = offers.iter().position(|offer| Some(&offer.id) == self.big.read(cx).id()) {
             offers[..=at].rotate_right(1);
         }
-        let (provider, board, big) = (self.provider.clone(), self.board.downgrade(), self.big.downgrade());
+        let (registry, board, big) = (self.registry.clone(), self.board.downgrade(), self.big.downgrade());
         self._load = cx.spawn(async move |live, cx| {
-            let _ = load(live, board, big, provider, offers, cx).await;
+            let _ = load(live, board, big, registry, offers, cx).await;
         });
     }
 
@@ -215,7 +216,7 @@ async fn load(
     live: WeakEntity<LiveMap>,
     board: WeakEntity<Board>,
     big: WeakEntity<Board>,
-    provider: Arc<dyn Provider>,
+    registry: Arc<Registry>,
     offers: Vec<MapOffer>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
@@ -225,7 +226,7 @@ async fn load(
         if let Some(map) = shared {
             board.update(cx, |board, cx| board.install(map, cx))?;
         } else {
-            let mut snapshots = provider.map(&offer);
+            let mut snapshots = registry.map(&offer);
             while let Some(snapshot) = snapshots.next().await {
                 board.update(cx, |board, cx| match snapshot {
                     // The big board shared its copy meanwhile.

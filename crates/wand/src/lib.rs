@@ -17,3 +17,7 @@ mod trainer;
 mod transport;
 
 pub use provider::Wand;
+
+fn source() -> model::SourceId {
+    model::SourceId::new(Wand::SOURCE).expect("a valid source id")
+}

@@ -1,5 +1,5 @@
-//! A row per provider folder (`Folders`): a path field, the provider's ready picks and a folder picker.
-//! The provider checks and saves every edit; the row shows what it answers.
+//! A row per source folder (`Folders`): a path field, the source's ready picks and a folder picker.
+//! The source checks and saves every edit; the row shows what it answers.
 
 use std::path::PathBuf;
 
@@ -24,7 +24,7 @@ use crate::ui::{
 };
 
 impl SettingsView {
-    /// A row's field shows the provider's path; a new row gets its field.
+    /// A row's field shows the source's path; a new row gets its field.
     pub(super) fn folder_shown(&mut self, folders: &Entity<Folders>, at: usize, window: &mut Window, cx: &mut Context<Self>) {
         if at == self.fields.len() {
             let input = cx.new(|cx| InputState::new(window, cx).placeholder("path to the folder"));

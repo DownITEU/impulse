@@ -18,9 +18,9 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `CheatList` (`cheats/`): the open game's cheat list, drawn by the page and the HUD; its `Printed` projection, filter, menus, flash and `CollectionEditor` (emits `EditorClosed`; whoever draws `editor()` takes the focus back).
 - `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`, `can_start`, `is_live`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`). Views: `run_button`, `session_panel` (the hotkeys' scope comes in as a slot: `run` cannot name `bindings`), `run_note`.
 - `Hotkeys` (`bindings/`: a `hotkeys` module would shadow the crate): `hotkeys.json`, the live run's hook, the capture; `capture`, `cancel`, `rebind`, `set_enabled`, `set_game_only`. Views: `caps`, `hotkeys_scope`, `HotkeySettings`.
-- `Account` (`account.rs`): the provider's session, read by the header; `reload` asks again.
-- `Folders` (`settings/`): the provider's folders and the user's edits checked through it (`scan`, `set`); emits `Shown(at)` when a row's field must show the provider's path. `SettingsView` holds the fields.
-- `Resources` (`resources/`): sizes, clear, the media limit; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.
+- `Account` (`account.rs`): the first source's session, read by the header; `reload` asks again.
+- `Folders` (`settings/`): every source's folders and the user's edits checked by their source (`scan`, `set`); emits `Shown(at)` when a row's field must show the source's path. `SettingsView` holds the fields.
+- `Resources` (`resources/`): sizes, clear, the media limit; clears the media (`app:` stores) itself and the rest through the registry; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.
 
 ## Rules
 - Colors and fonts come only from `ui/theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
@@ -29,7 +29,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Settings` (`settings/`) owns the prefs: read them with `settings.read(cx).prefs()`, change them with `Settings::edit`. It sets `Look` and GPUI's reduce motion; whoever reacts to a pref observes it.
 - `Library` owns the open game: open one with `Library::open`, react to `LibraryEvent`. A view holds the open game as an `Arc<Game>` while it draws.
 - `Trainers` owns the sheets and the profiles: read them through it, change them with its commands. It never knows the run: a run holds its game's copy with `hold`.
-- Provider streams: the catalog in `Library`, trainers in `Trainers`, sign-in in `Account`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
+- Sources come only through the `Arc<Registry>` the entities hold. Its streams: the catalog in `Library`, trainers in `Trainers`, sign-in in `Account`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy.
 - `Trainers` loads the open game's trainer only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
 - A starting or live run carries its game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
 - `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, `TrayIcon`). It stops a run whose game left the list.

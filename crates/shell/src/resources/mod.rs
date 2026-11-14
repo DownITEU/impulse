@@ -7,9 +7,10 @@ use std::{sync::Arc, time::Duration};
 
 use blocking::unblock;
 use gpui_kit::{Context, EventEmitter, Task};
-use model::{Clear, Provider, Store};
+use model::{Clear, Ref, SourceId, Store};
 
 use client::{
+    Registry,
     media::{Media, limit},
     storage::{Paths, Stored},
 };
@@ -19,7 +20,7 @@ pub use view::ResourcesView;
 const SWEEP_EVERY: Duration = Duration::from_secs(600);
 
 pub enum ResourcesEvent {
-    /// A provider's store was emptied: what came from it is asked for again.
+    /// A source's store was emptied: what came from it is asked for again.
     Cleared,
 }
 
@@ -32,7 +33,7 @@ struct Usage {
 }
 
 pub struct Resources {
-    provider: Arc<dyn Provider>,
+    registry: Arc<Registry>,
     paths: Paths,
     usage: Option<Usage>,
     kept: Stored<limit::Kept>,
@@ -43,21 +44,21 @@ pub struct Resources {
 impl EventEmitter<ResourcesEvent> for Resources {}
 
 impl Resources {
-    pub fn new(provider: Arc<dyn Provider>, paths: &Paths, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, paths: &Paths, cx: &mut Context<Self>) -> Self {
         let kept = Stored::load(paths.resources());
-        let mut resources = Self { provider, paths: paths.clone(), usage: None, kept, _measure: Task::ready(()), _sweep: Task::ready(()) };
+        let mut resources = Self { registry, paths: paths.clone(), usage: None, kept, _measure: Task::ready(()), _sweep: Task::ready(()) };
         resources.keep_limit(cx);
         resources
     }
 
     /// Reads every size again.
     pub fn measure(&mut self, cx: &mut Context<Self>) {
-        let (stores, paths) = (self.provider.stores(), self.paths.clone());
+        let (stores, paths) = (self.registry.stores(), self.paths.clone());
         self._measure = cx.spawn(async move |view, cx| {
             let own = unblock(move || {
                 let media = Media::ALL.map(|media| {
-                    let (id, name, hint) = describe(media);
-                    Store { id, name, hint, bytes: disk::size(&media.dir(&paths)), clear: Clear::Now }
+                    let (_, name, hint) = describe(media);
+                    Store { id: store_ref(media), name, hint, bytes: disk::size(&media.dir(&paths)), clear: Clear::Now }
                 });
                 let logs = journal::dir().map_or(0, disk::size);
                 (media, disk::size(&paths.map_state()), disk::size(&paths.hotkeys()), logs)
@@ -76,19 +77,19 @@ impl Resources {
         self.kept.limit
     }
 
-    /// Empties the stores `ids` name, then reads the sizes again.
-    pub fn clear(&mut self, ids: Vec<&'static str>, cx: &mut Context<Self>) {
-        let (provider, paths) = (self.provider.clone(), self.paths.clone());
+    /// Empties the stores `ids` name, then reads the sizes again: the app's media here, the rest through their source.
+    pub fn clear(&mut self, ids: Vec<Ref>, cx: &mut Context<Self>) {
+        let (registry, paths) = (self.registry.clone(), self.paths.clone());
         cx.spawn(async move |view, cx| {
             let mut provided = false;
             for id in ids {
-                match Media::ALL.into_iter().find(|media| describe(*media).0 == id) {
+                match media_of(&id) {
                     Some(media) => {
                         let dir = media.dir(&paths);
                         unblock(move || std::fs::remove_dir_all(dir)).await.ok();
                     }
                     None => {
-                        provider.clear(id).await;
+                        registry.clear(&id).await;
                         provided = true;
                     }
                 }
@@ -131,6 +132,15 @@ impl Resources {
 }
 
 /// A media folder's store id, name and what it holds.
+fn store_ref(media: Media) -> Ref {
+    Ref::new(&SourceId::app(), describe(media).0)
+}
+
+fn media_of(id: &Ref) -> Option<Media> {
+    let app = *id.source() == SourceId::app();
+    Media::ALL.into_iter().find(|media| app && describe(*media).0 == id.id())
+}
+
 fn describe(media: Media) -> (&'static str, &'static str, &'static str) {
     match media {
         Media::Pictures => ("pictures", "PICTURES", "game art and pin pictures"),

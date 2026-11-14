@@ -8,6 +8,7 @@ mod status;
 use std::sync::Arc;
 
 use client::{
+    Registry,
     library::{Game, GameId},
     storage::Paths,
 };
@@ -18,7 +19,6 @@ use gpui_kit::{
     prelude::*,
     px, rgb,
 };
-use model::Provider;
 
 use crate::{
     account::Account,
@@ -68,22 +68,22 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new(provider: Arc<dyn Provider>, paths: Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, paths: Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let settings = cx.new(|cx| Settings::new(&paths, cx));
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
-        let folders = cx.new(|cx| Folders::new(provider.clone(), cx));
-        let account = cx.new(|cx| Account::new(provider.clone(), cx));
+        let folders = cx.new(|cx| Folders::new(registry.clone(), cx));
+        let account = cx.new(|cx| Account::new(registry.clone(), cx));
         cx.observe(&account, |_, _, cx| cx.notify()).detach();
-        let library = cx.new(|cx| Library::new(provider.clone(), &paths, settings.clone(), cx));
+        let library = cx.new(|cx| Library::new(registry.clone(), &paths, settings.clone(), cx));
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
-        let trainers = cx.new(|cx| Trainers::new(provider.clone(), &paths, library.clone(), cx));
+        let trainers = cx.new(|cx| Trainers::new(registry.clone(), &paths, library.clone(), cx));
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         let runs = cx.new(|cx| Runs::new(library.clone(), trainers.clone(), cx));
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
         crash::watch(&runs, cx);
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |_, _, _: &LogEvent, cx| cx.notify()).detach();
-        let maps = cx.new(|cx| Maps::new(provider.clone(), &paths, library.clone(), runs.clone(), cx));
+        let maps = cx.new(|cx| Maps::new(registry.clone(), &paths, library.clone(), runs.clone(), cx));
         let map = cx.new(|cx| MapView::new(maps.clone(), &library, &paths, window, cx));
         cx.subscribe_in(&map, window, |page, map, _: &MapEvent, window, cx| {
             // Over a game the map is a dock, and Escape's last step leaves the overlay.
@@ -93,7 +93,7 @@ impl Page {
             map.update(cx, |map, cx| map.hide(window, cx));
         })
         .detach();
-        let resources = cx.new(|cx| Resources::new(provider, &paths, cx));
+        let resources = cx.new(|cx| Resources::new(registry, &paths, cx));
         cx.subscribe(&resources, |page, _, event: &ResourcesEvent, cx| match event {
             ResourcesEvent::Cleared => page.reload(cx),
         })
@@ -193,7 +193,7 @@ impl Page {
         !self.layer.read(cx).is_over() && self.maps.read(cx).is_open(cx)
     }
 
-    /// Fills the page anew after a provider's caches were cleared. The session stays: it is not a cache, but it
+    /// Fills the page anew after a source's caches were cleared. The session stays: it is not a cache, but it
     /// is asked for again.
     fn reload(&mut self, cx: &mut Context<Self>) {
         log::info!("caches cleared");

@@ -7,7 +7,7 @@ use gpui_kit::{
     prelude::*,
     px, relative, rgb,
 };
-use model::Clear;
+use model::{Clear, Ref};
 
 use super::Resources;
 use crate::{
@@ -64,30 +64,30 @@ impl Render for ResourcesView {
             )
             .child(bar);
         let caches = usage.caches.iter().enumerate().map(|(index, store)| {
-            let id = store.id;
+            let id = store.id.clone();
             let action = match store.clear {
                 _ if store.bytes == 0 => None,
                 Clear::Now => Some(
                     button("CLEAR")
                         .id(("clear", index))
-                        .on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id], cx)))
+                        .on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id.clone()], cx)))
                         .into_any_element(),
                 ),
                 Clear::NextStart { asked: false } => Some(
                     button("ON RESTART")
                         .id(("clear", index))
-                        .on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id], cx)))
+                        .on_click(cx.listener(move |view, _, _, cx| view.clear(vec![id.clone()], cx)))
                         .into_any_element(),
                 ),
                 Clear::NextStart { asked: true } => Some(mono("CLEARS ON RESTART", 10.5).text_color(rgb(accent(cx))).into_any_element()),
             };
             entry(Some(color(index)), store.name, store.hint, store.bytes).children(action)
         });
-        let clearable: Vec<&'static str> = usage
+        let clearable: Vec<Ref> = usage
             .caches
             .iter()
             .filter(|store| store.bytes > 0 && store.clear != Clear::NextStart { asked: true })
-            .map(|store| store.id)
+            .map(|store| store.id.clone())
             .collect();
         let clear_all = row("CLEAR ALL CACHES", "your data below stays", 64.)
             .child(button("CLEAR ALL").id("clear-all").on_click(cx.listener(move |view, _, _, cx| view.clear(clearable.clone(), cx))));
@@ -117,7 +117,7 @@ impl Render for ResourcesView {
 }
 
 impl ResourcesView {
-    fn clear(&mut self, ids: Vec<&'static str>, cx: &mut Context<Self>) {
+    fn clear(&mut self, ids: Vec<Ref>, cx: &mut Context<Self>) {
         self.resources.update(cx, |resources, cx| resources.clear(ids, cx));
     }
 

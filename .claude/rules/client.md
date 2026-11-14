@@ -8,6 +8,7 @@ paths:
 The app's logic without GPUI: what `shell`'s entities hold and decide, and the files that keep it. Data in, data out; the async work and the UI stay in `shell`.
 
 ## Surface
+- `Registry`: the sources by capability, built in `app`. A `Ref` goes to the source it names, an unknown one answers `Fresh(Err)` (a folder: an error status); `folders` and `stores` join every source's; `games` and `sign_in` are the first source's.
 - `storage`: `Paths` names every app file and folder; `Stored<T>`; `read`, `write` for the per-map files; `migrate` (v1 files to v2, run by `app` before the window); `by_ref` (serde for a map keyed by `Ref`); `name` (an id as a file name).
 - `media`: `Media` (a cache folder per kind), the file per URL, `known_missing`, `steam_hero`; `limit` (`Kept`, `sweep`).
 - `profile`: `Profiles` (`games.json`): a `GameProfile` by `GameId`, a `TrainerProfile` by the trainer's `Ref`; `Collection`, `Values`.

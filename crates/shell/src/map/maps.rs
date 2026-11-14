@@ -3,10 +3,10 @@
 
 use std::{rc::Rc, sync::Arc, time::Duration};
 
-use client::{library::GameId, media::Media, storage::Paths};
+use client::{Registry, library::GameId, media::Media, storage::Paths};
 use futures::StreamExt;
 use gpui_kit::{App, AppContext, Context, Entity, Task};
-use model::{MapOffer, Provider, Snapshot};
+use model::{MapOffer, Snapshot};
 
 use super::{
     board::Board,
@@ -26,7 +26,7 @@ const KEPT_CLOSED: Duration = Duration::from_secs(3 * 60);
 type Camera = Box<dyn Fn(&App) -> Option<(f64, f64, f64)>>;
 
 pub struct Maps {
-    provider: Arc<dyn Provider>,
+    registry: Arc<Registry>,
     library: Entity<Library>,
     runs: Entity<Runs>,
     board: Entity<Board>,
@@ -44,7 +44,7 @@ pub struct Maps {
 }
 
 impl Maps {
-    pub fn new(provider: Arc<dyn Provider>, paths: &Paths, library: Entity<Library>, runs: Entity<Runs>, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, paths: &Paths, library: Entity<Library>, runs: Entity<Runs>, cx: &mut Context<Self>) -> Self {
         cx.subscribe(&runs, |maps, _, event: &RunEvent, cx| {
             if !matches!(event, RunEvent::Pressed(_)) {
                 maps.follow(cx);
@@ -53,9 +53,9 @@ impl Maps {
         .detach();
         let board = cx.new(|_| Board::new(paths.map_state()));
         let live_board = cx.new(|_| Board::live(paths.map_state()));
-        let live_map = cx.new(|cx| LiveMap::new(provider.clone(), live_board, board.clone(), Media::Tiles.dir(paths), paths, cx));
+        let live_map = cx.new(|cx| LiveMap::new(registry.clone(), live_board, board.clone(), Media::Tiles.dir(paths), paths, cx));
         Self {
-            provider,
+            registry,
             library,
             runs,
             board,
@@ -134,7 +134,7 @@ impl Maps {
             self._load = Task::ready(());
             return self.board.update(cx, |board, cx| board.install(map, cx));
         }
-        let mut snapshots = self.provider.map(offer);
+        let mut snapshots = self.registry.map(offer);
         let board = self.board.downgrade();
         self._load = cx.spawn(async move |_, cx| {
             while let Some(snapshot) = snapshots.next().await {

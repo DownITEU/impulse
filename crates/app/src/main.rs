@@ -2,9 +2,12 @@
 
 use std::{env, path::PathBuf, sync::Arc};
 
-use client::storage::{self, Paths};
+use client::{
+    Registry,
+    storage::{self, Paths},
+};
 use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
-use model::{Provider, SourceId};
+use model::SourceId;
 use shell::Root;
 use wand::Wand;
 
@@ -16,10 +19,18 @@ fn main() {
     let data_dir = PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("Impulse");
     journal::init(&data_dir);
     // Wand wrote every file before ids named their source.
-    let wand = SourceId::new(Wand::SOURCE).expect("a valid source id");
-    storage::migrate(&Paths::new(data_dir.clone()), &wand);
+    storage::migrate(&Paths::new(data_dir.clone()), &SourceId::new(Wand::SOURCE).expect("a valid source id"));
     // Built before the window: its browser bridge takes a moment to come up.
-    let provider: Arc<dyn Provider> = Arc::new(Wand::new(data_dir.clone()));
+    let wand = Arc::new(Wand::new(data_dir.clone()));
+    let registry = Arc::new(
+        Registry::default()
+            .with_accounts(wand.clone())
+            .with_games(wand.clone())
+            .with_trainers(wand.clone())
+            .with_maps(wand.clone())
+            .with_folders(wand.clone())
+            .with_caches(wand),
+    );
     gpui_kit::application().with_assets(shell::Assets).run(move |cx| {
         gpui_kit::init(cx);
         shell::init(&data_dir, cx);
@@ -29,7 +40,7 @@ fn main() {
             window_min_size: Some(size(px(1024.), px(640.))),
             ..Default::default()
         };
-        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(provider, data_dir, window, cx)))
+        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(registry, data_dir, window, cx)))
             .expect("failed to open window");
         // gpui-pre-windows keeps running after the last window closes.
         cx.on_window_closed(|cx, _| {

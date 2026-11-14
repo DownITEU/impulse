@@ -1,4 +1,4 @@
-//! `model::Provider` for Wand: the user's WeMod account handed off from Wand, its catalog and trainers.
+//! Wand as a source: the user's WeMod account handed off from Wand, its catalog, trainers, maps, folder and caches.
 
 use std::{
     collections::HashMap,
@@ -14,7 +14,7 @@ use futures::{
     future::{self, BoxFuture, Shared},
     stream::{self, BoxStream},
 };
-use model::{Account, Clear, Folder, Game, Installation, MapOffer, SignIn, Snapshot, Store};
+use model::{Account, Clear, Folder, Game, Installation, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
 
 use crate::{
     binary, catalog,
@@ -49,7 +49,7 @@ pub struct Wand {
 
 impl Wand {
     /// The source id of everything it mints.
-    pub const SOURCE: &str = catalog::SOURCE;
+    pub const SOURCE: &str = "wand";
 
     /// Starts the browser bridge at once: it takes a moment to come up.
     pub fn new(data_dir: PathBuf) -> Self {
@@ -80,7 +80,13 @@ impl Wand {
     }
 }
 
-impl model::Provider for Wand {
+impl model::Source for Wand {
+    fn id(&self) -> SourceId {
+        crate::source()
+    }
+}
+
+impl model::Accounts for Wand {
     fn sign_in(&self) -> BoxStream<'static, SignIn> {
         let session = {
             let mut session = self.session.lock().unwrap_or_else(PoisonError::into_inner);
@@ -112,7 +118,9 @@ impl model::Provider for Wand {
             }
         })
     }
+}
 
+impl model::Games for Wand {
     fn games(&self) -> BoxStream<'static, Snapshot<Vec<Game>>> {
         let dir = self.data_dir.clone();
         channel(|tx| async move {
@@ -135,11 +143,14 @@ impl model::Provider for Wand {
             }
         })
     }
+}
 
+impl model::Trainers for Wand {
     /// The API is asked only when the disk copy is missing or was fetched for another trainer or build.
-    fn trainer(&self, game: &Game, install: &Installation) -> BoxStream<'static, Snapshot<model::Trainer>> {
-        let stamp = Stamp { updated_at: game.trainer.as_ref().and_then(|offer| offer.revision.clone()), version: install.build };
-        let (dir, id, session, host) = (self.data_dir.clone(), game.id.id().to_owned(), self.session(), self.host.clone());
+    fn trainer(&self, offer: &Offer, install: &Installation) -> BoxStream<'static, Snapshot<model::Trainer>> {
+        let stamp = Stamp { updated_at: offer.revision.clone(), version: install.build };
+        // A trainer's id is its game's.
+        let (dir, id, session, host) = (self.data_dir.clone(), offer.id.id().to_owned(), self.session(), self.host.clone());
         let hotkeys = self.hotkeys.clone();
         channel(|tx| async move {
             let copy = {
@@ -165,7 +176,9 @@ impl model::Provider for Wand {
             send(&tx, Snapshot::Fresh(fetched.map(snapshot)));
         })
     }
+}
 
+impl model::Maps for Wand {
     /// The API is asked only when the disk copy is missing or was fetched for another revision.
     fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<model::Map>> {
         let (dir, offer, session) = (self.data_dir.clone(), offer.clone(), self.session());
@@ -197,37 +210,42 @@ impl model::Provider for Wand {
             }
         })
     }
+}
 
+impl model::Folders for Wand {
     fn folders(&self) -> BoxFuture<'static, Vec<Folder>> {
         let folder = self.folder.clone();
         unblock(move || vec![folder.folder()]).boxed()
     }
 
     // Wand has one folder.
-    fn set_folder(&self, _id: &'static str, path: PathBuf) -> BoxFuture<'static, Folder> {
+    fn set_folder(&self, _id: &Ref, path: PathBuf) -> BoxFuture<'static, Folder> {
         let (folder, call) = (self.folder.clone(), self.folder.call());
         unblock(move || folder.set(call, path)).boxed()
     }
+}
 
+impl model::Caches for Wand {
     fn stores(&self) -> BoxFuture<'static, Vec<Store>> {
         let dir = self.data_dir.clone();
         unblock(move || {
-            let now = |id, name, hint, bytes| Store { id, name, hint, bytes, clear: Clear::Now };
+            let id = |id| Ref::new(&crate::source(), id);
+            let now = |store, name, hint, bytes| Store { id: id(store), name, hint, bytes, clear: Clear::Now };
             let (profile, asked) = transport::profile(&dir);
             vec![
                 now(MAPS, "MAPS", "pins, regions and icons", map::size(&dir)),
                 now(CATALOG, "CATALOG", "the games and your account name", catalog::size(&dir) + account::size(&dir)),
                 now(TRAINERS, "TRAINERS", "cheat lists", trainer::size(&dir)),
                 now(TRAINER_FILES, "TRAINER FILES", "trainer DLLs from the CDN", binary::size(&dir)),
-                Store { id: BRIDGE, name: "BROWSER", hint: "WebView2 cache", bytes: profile, clear: Clear::NextStart { asked } },
+                Store { id: id(BRIDGE), name: "BROWSER", hint: "WebView2 cache", bytes: profile, clear: Clear::NextStart { asked } },
             ]
         })
         .boxed()
     }
 
-    fn clear(&self, id: &'static str) -> BoxFuture<'static, ()> {
-        let dir = self.data_dir.clone();
-        unblock(move || match id {
+    fn clear(&self, id: &Ref) -> BoxFuture<'static, ()> {
+        let (dir, id) = (self.data_dir.clone(), id.id().to_owned());
+        unblock(move || match id.as_str() {
             MAPS => map::forget(&dir),
             CATALOG => {
                 catalog::forget(&dir);

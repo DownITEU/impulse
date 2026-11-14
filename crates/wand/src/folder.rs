@@ -9,7 +9,7 @@ use std::{
     },
 };
 
-use model::Folder;
+use model::{Folder, Ref};
 use serde::{Deserialize, Serialize};
 
 use crate::install::{self, Install};
@@ -96,7 +96,7 @@ struct Choice {
 
 fn describe(path: Option<PathBuf>, found: Option<Install>, installs: Vec<Install>) -> Folder {
     Folder {
-        id: ID,
+        id: Ref::new(&crate::source(), ID),
         label: "WAND FOLDER",
         hint: "where the trainer binaries are read from",
         path,
