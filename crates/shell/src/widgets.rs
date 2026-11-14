@@ -38,6 +38,21 @@ pub fn tracked(text: &str, size: f32, em: f32) -> Div {
         .children(text.split(' ').map(|word| div().flex().gap(gap).children(word.chars().map(|c| SharedString::from(c.to_string())))))
 }
 
+/// A 38 px tall bordered button over art.
+pub fn action(id: &'static str) -> Stateful<Div> {
+    h_flex()
+        .id(id)
+        .occlude()
+        .h(px(38.))
+        .gap(px(10.))
+        .border_1()
+        .border_color(line(0.2))
+        .bg(alpha(BG, 0.75))
+        .font_weight(FontWeight::BOLD)
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(RAISED_HOVER)))
+}
+
 pub fn square(side: f32, color: impl Into<Hsla>) -> Div {
     div().size(px(side)).flex_none().bg(color.into())
 }

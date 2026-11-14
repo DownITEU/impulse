@@ -9,7 +9,7 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 
 ## Surface
 - `Maps`: the open game's maps, the chosen one, its load and the runs both boards follow; `is_open`, `live_map`, `set_minimap` (the overlay's docking command). `open`, `close`, `choose` are `MapView`'s.
-- `MapView`: the modal's window parts (`show`, `hide`, `set_docked`); emits `MapEvent::Close`.
+- `MapView`: the modal's window parts (`show(game)`, `hide`, `set_docked`); emits `MapEvent::Close`. `map_panel` is the page's preview that opens it.
 - `Minimap`: a mini `Stage` over the live board, one per window; `hide(window)` lets go of its tiles.
 - `LiveMap`: the live game's map for the minimap.
 - `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it.

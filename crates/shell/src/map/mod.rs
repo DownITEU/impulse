@@ -7,13 +7,12 @@ mod keys;
 mod live;
 mod maps;
 mod markers;
+mod panel;
 mod picture;
 mod sidebar;
 mod stage;
 
-use std::sync::Arc;
-
-use client::{media::Media, storage::Paths};
+use client::{library::Game, media::Media, storage::Paths};
 use gpui_kit::{
     App, Context, Entity, EventEmitter, FocusHandle, IntoElement, Render, StyleRefinement, Window,
     component::{h_flex, v_flex},
@@ -34,6 +33,7 @@ pub use keys::bind_keys;
 use keys::{CONTEXT, CloseMap, FindPlace};
 pub use live::LiveMap;
 pub use maps::Maps;
+pub use panel::map_panel;
 use sidebar::Sidebar;
 use stage::Stage;
 
@@ -82,10 +82,10 @@ impl MapView {
         cx.notify();
     }
 
-    /// Opens on `offers`, the maps of `game`.
-    pub fn show(&mut self, game: &Arc<str>, offers: &[MapOffer], window: &mut Window, cx: &mut Context<Self>) {
+    /// Opens on the maps of `game`.
+    pub fn show(&mut self, game: &Game, window: &mut Window, cx: &mut Context<Self>) {
         self.stage.update(cx, |stage, cx| stage.take_focus(window, cx));
-        self.maps.update(cx, |maps, cx| maps.open(game, offers, cx));
+        self.maps.update(cx, |maps, cx| maps.open(&game.id, &game.source.maps, cx));
     }
 
     /// Lets go of what only an open map needs.

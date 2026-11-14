@@ -15,7 +15,9 @@ use super::{
     docks::{self, Spec},
     layer::Layer,
     library::vacant,
+    run::run_button,
     theme::*,
+    trainer::title,
     widgets::{icon_button, notice},
 };
 
@@ -94,7 +96,6 @@ impl Page {
         let game = self.game(cx);
         let game = game.as_deref();
         let mapped = game.is_some_and(|game| !game.source.maps.is_empty());
-        let running = self.is_running(cx);
         let shown = self.docks.read(cx).shown();
         let docked = shown
             .into_iter()
@@ -116,7 +117,7 @@ impl Page {
                             "It follows the player while a trainer that can place them runs in a game with a map.",
                         ))
                         .into_any_element(),
-                    (SESSION, Some(game)) => div().p(px(16.)).child(self.session_panel(game, running, false, cx)).into_any_element(),
+                    (SESSION, Some(game)) => div().p(px(16.)).child(self.session(game, false, cx)).into_any_element(),
                     _ => return None,
                 };
                 Some((spec, content))
@@ -134,7 +135,13 @@ impl Page {
             .gap(px(GAP))
             .child(h_flex().flex_1().min_w_0().when_some(game, |left, game| {
                 left.child(
-                    self.title(game, 24., cx).max_w_full().px(px(14.)).py(px(8.)).bg(alpha(BG, 0.85)).border_1().border_color(line(0.1)),
+                    title(self.trainers.read(cx), game, 24., cx)
+                        .max_w_full()
+                        .px(px(14.))
+                        .py(px(8.))
+                        .bg(alpha(BG, 0.85))
+                        .border_1()
+                        .border_color(line(0.1)),
                 )
             }))
             .child(
@@ -150,7 +157,7 @@ impl Page {
                             .on_click(move |_, _, cx| layer.read(cx).leave()),
                     ),
             )
-            .child(h_flex().flex_1().justify_end().when_some(game, |right, game| right.child(self.run_button(game, cx))));
+            .child(h_flex().flex_1().justify_end().when_some(game, |right, game| right.child(run_button(&self.runs, game, cx))));
         div()
             .id("hud")
             .key_context(CONTEXT)
@@ -183,7 +190,7 @@ impl Page {
         let live = self.runs.read(cx).live().filter(|&live| over && selected.as_ref() != Some(live)).cloned();
         if over {
             // What belongs to the window closes, and the docks show the running game.
-            self.menu = None;
+            self.hero.update(cx, |hero, cx| hero.close(cx));
             self.cheat_list.update(cx, |list, cx| list.close(cx));
             self.settings_view.update(cx, |view, cx| view.close(cx));
             self.log_open = false;
@@ -226,11 +233,11 @@ impl Page {
     /// The map is open while its dock shows over a game that has one.
     pub(super) fn sync_map_dock(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let shown = DOCKS.iter().find(|spec| spec.id == MAP).is_some_and(|spec| self.docks.read(cx).is_shown(spec));
-        let docked = self.over && shown && self.game(cx).is_some_and(|game| !game.source.maps.is_empty());
-        if docked != self.maps.read(cx).is_open(cx) {
+        let docked = self.game(cx).filter(|game| self.over && shown && !game.source.maps.is_empty());
+        if docked.is_some() != self.maps.read(cx).is_open(cx) {
             match docked {
-                true => self.open_map(window, cx),
-                false => {
+                Some(game) => self.map.update(cx, |map, cx| map.show(&game, window, cx)),
+                None => {
                     self.map.update(cx, |map, cx| map.hide(window, cx));
                     // The focus must not stay in the gone map, or Escape would reach nothing.
                     if self.over {
@@ -245,9 +252,6 @@ impl Page {
         // An open dialog or menu closes first.
         if self.cheat_list.update(cx, |list, cx| list.close_top(window, cx)) {
             return;
-        }
-        if self.menu.take().is_some() {
-            return cx.notify();
         }
         self.layer.read(cx).leave();
     }

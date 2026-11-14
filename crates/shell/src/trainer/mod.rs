@@ -1,6 +1,8 @@
 //! The trainers of the games opened in this run: the open game's loading, which copy shows while a run holds it,
 //! and what the user keeps about a game (`games.json`).
 
+mod title;
+
 use std::{collections::HashSet, sync::Arc};
 
 use client::{
@@ -16,6 +18,7 @@ use gpui_kit::{Context, Entity, EventEmitter};
 use model::{Chord, Provider, Snapshot};
 
 use crate::library::{Library, LibraryEvent};
+pub use title::title;
 
 pub enum TrainerEvent {
     /// A copy of the game's trainer shows: the first, a newer one, or the one that waited.

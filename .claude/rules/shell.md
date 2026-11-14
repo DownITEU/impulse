@@ -10,13 +10,14 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 ## Surface
 - `init`, `Assets`, `Root::new`: all `app` calls. Everything else is private.
 - `Root`: the window root; draws `Page` with `cached`, the open map as a modal over it.
-- `Page`: the combined page, one `impl Page` block per region file (`header`, `hero`, `pane`, `run`, `boot`, ...).
+- `Page`: the combined page, one `impl Page` block per region file (`header`, `pane`, `status`, `boot`, ...).
+- `Hero` (`hero.rs`): the open game's art, title, run button and actions; owns the sources menu (`close`).
 - `Sidebar`, `GamePicker` (`library/`): the game list with its filter and the add-game dialog. The page gives the sidebar its `Marks` (favorite, live) as a function and makes the sidebar observe what it reads.
 - `Library` (`library/`): the game list, the picked executables and the open game; emits `LibraryEvent` (`Listed`, `Opened`, `Switched`).
-- `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`).
+- `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`). `title` draws a game's name and meta.
 - `CheatList` (`cheats/`): the open game's cheat list, drawn by the page and the HUD; its `Printed` projection, filter, menus, flash and `CollectionEditor` (emits `EditorClosed`; whoever draws `editor()` takes the focus back).
-- `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`).
-- `Hotkeys` (`bindings/`: a `hotkeys` module would shadow the crate): `hotkeys.json`, the live run's hook, the capture; `capture`, `cancel`, `rebind`, `set_enabled`, `set_game_only`.
+- `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`, `can_start`, `is_live`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`). Views: `run_button`, `session_panel` (the hotkeys' scope comes in as a slot: `run` cannot name `bindings`), `run_note`.
+- `Hotkeys` (`bindings/`: a `hotkeys` module would shadow the crate): `hotkeys.json`, the live run's hook, the capture; `capture`, `cancel`, `rebind`, `set_enabled`, `set_game_only`. Views: `caps`, `hotkeys_scope`, `HotkeySettings`.
 - `Account` (`account.rs`): the provider's session, read by the header; `reload` asks again.
 - `Folders` (`settings/`): the provider's folders and the user's edits checked through it (`scan`, `set`); emits `Shown(at)` when a row's field must show the provider's path. `SettingsView` holds the fields.
 - `Resources` (`resources/`): sizes, clear, the media limit; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.

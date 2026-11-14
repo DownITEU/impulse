@@ -2,6 +2,7 @@
 //! the saved choices. Every hook is global: a capture's runs first and hides what it takes from every app.
 
 mod caps;
+mod scope;
 mod settings;
 
 use std::sync::Arc;
@@ -25,6 +26,7 @@ use crate::{
 };
 
 pub use caps::{cap, caps};
+pub use scope::hotkeys_scope;
 pub use settings::HotkeySettings;
 
 pub const PRESS_KEYS: &str = "PRESS KEYS";

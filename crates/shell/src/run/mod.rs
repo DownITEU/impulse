@@ -19,7 +19,7 @@ use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
 use model::{Event, Live, Process, Session};
 pub use tracker::{Fix, Lease, Tracked, Tracker};
-pub use view::{STOPPING, label, run_note};
+pub use view::{run_button, run_note, session_panel};
 
 use crate::{
     library::{Library, LibraryEvent},
@@ -159,6 +159,11 @@ impl Runs {
     /// An active run of `game`: it keeps its install.
     pub fn holds(&self, game: &str) -> bool {
         self.is_active() && self.game().is_some_and(|at| **at == *game)
+    }
+
+    /// Nothing runs before the cheat list is there, and one run at a time.
+    pub fn can_start(&self, game: &str, cx: &App) -> bool {
+        !self.is_active() && self.trainers.read(cx).sheet(game).is_some()
     }
 
     pub fn state(&self, game: &str) -> State<'_> {

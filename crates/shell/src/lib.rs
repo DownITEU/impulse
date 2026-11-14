@@ -24,7 +24,6 @@ mod resources;
 mod root;
 mod run;
 mod settings;
-mod side;
 mod status;
 mod systray;
 mod theme;
@@ -48,6 +47,7 @@ use bindings::Hotkeys;
 use cheats::{CheatList, EditorClosed};
 use docks::Docks;
 use glance::Glance;
+use hero::Hero;
 use layer::OverlaySettings;
 use layer::{Layer, MinimapKey};
 use library::{GamePicker, Library, LibraryEvent, Marks, Sidebar};
@@ -61,7 +61,7 @@ use theme::*;
 use trainer::Trainers;
 use widgets::grid;
 
-use client::{Load, library::Game, media::Media, storage::Paths, trainer::Sheet};
+use client::{Load, library::Game, media::Media, storage::Paths};
 use model::Provider;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -81,13 +81,6 @@ fn hwnd(window: &Window) -> Option<isize> {
         Ok(RawWindowHandle::Win32(handle)) => Some(handle.hwnd.get()),
         _ => None,
     }
-}
-
-/// The open dropdown.
-#[derive(Clone, Copy, PartialEq)]
-enum Menu {
-    /// The open game's sources.
-    Source,
 }
 
 pub struct Page {
@@ -112,13 +105,13 @@ pub struct Page {
     // The minimap in its dock over the game.
     minimap: Entity<Minimap>,
     hud_focus: FocusHandle,
-    menu: Option<Menu>,
     log: Entity<LogView>,
     log_open: bool,
     maps: Entity<Maps>,
     map: Entity<MapView>,
     resources: Entity<Resources>,
     cheat_list: Entity<CheatList>,
+    hero: Entity<Hero>,
 }
 
 impl Page {
@@ -159,7 +152,14 @@ impl Page {
         .detach();
         let maps = cx.new(|cx| Maps::new(provider.clone(), &paths, library.clone(), runs.clone(), cx));
         let map = cx.new(|cx| MapView::new(maps.clone(), &paths, window, cx));
-        cx.subscribe_in(&map, window, |page, _, _: &MapEvent, window, cx| page.close_map(window, cx)).detach();
+        cx.subscribe_in(&map, window, |page, map, _: &MapEvent, window, cx| {
+            // Over a game the map is a dock, and Escape's last step leaves the overlay.
+            if page.over {
+                return page.layer.read(cx).leave();
+            }
+            map.update(cx, |map, cx| map.hide(window, cx));
+        })
+        .detach();
         let resources = cx.new(|cx| Resources::new(provider, &paths, cx));
         cx.subscribe(&resources, |page, _, event: &ResourcesEvent, cx| match event {
             ResourcesEvent::Cleared => page.reload(cx),
@@ -178,6 +178,7 @@ impl Page {
             Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, window, cx)
         });
         let layer = cx.new(|cx| Layer::new(&paths, &runs, window, cx));
+        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), cx));
         // The overlay's and the minimap's hotkeys are not the trainer's to take.
         let reserved = layer.downgrade();
         let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
@@ -241,13 +242,13 @@ impl Page {
             _glance: glance,
             minimap,
             hud_focus: cx.focus_handle(),
-            menu: None,
             log,
             log_open: false,
             maps,
             map,
             resources,
             cheat_list,
+            hero,
         };
         page.dock_minimap(cx);
         page
@@ -260,14 +261,6 @@ impl Page {
 
     fn selected(&self, cx: &App) -> Option<Arc<str>> {
         self.library.read(cx).open_id().cloned()
-    }
-
-    fn sheet<'a>(&self, game: &str, cx: &'a App) -> Option<&'a Sheet> {
-        self.trainers.read(cx).sheet(game)
-    }
-
-    fn is_running(&self, cx: &App) -> bool {
-        self.library.read(cx).open_id().is_some_and(|game| self.runs.read(cx).is_live(game))
     }
 
     fn select(&self, id: Arc<str>, cx: &mut App) {
@@ -324,9 +317,4 @@ impl Render for Page {
             .when(self.picker.read(cx).is_open(), |page| page.child(self.picker.clone()))
             .into_any_element()
     }
-}
-
-/// The page's open menu, for its dropdowns.
-fn open_menu(page: &mut Page) -> &mut Option<Menu> {
-    &mut page.menu
 }
