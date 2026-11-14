@@ -37,7 +37,7 @@ impl HttpClient for CdnClient {
 }
 
 // Disk first and never revalidated: files under one URL do not change.
-pub(super) fn load(cache: &Path, url: &str) -> Result<Vec<u8>> {
+pub fn load(cache: &Path, url: &str) -> Result<Vec<u8>> {
     let file = file(cache, url);
     match fs::read(&file) {
         Ok(bytes) if bytes.is_empty() => bail!("{url} does not exist"),

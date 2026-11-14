@@ -15,10 +15,12 @@ use model::Map;
 
 use super::Card;
 use crate::{
-    assets::Icon,
     map::board::{Board, plane},
-    theme::*,
-    widgets::{button, icon_button, mono},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{button, icon_button, mono},
+    },
 };
 
 const SWATCH: f32 = 18.;

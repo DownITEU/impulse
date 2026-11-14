@@ -4,7 +4,7 @@ use client::map::state::{Mark, PALETTE};
 use gpui_kit::{AnyElement, Context, IntoElement, component::h_flex, div, prelude::*, px, rgb};
 
 use super::{Sidebar, check, section};
-use crate::{map::board::Board, theme::*};
+use crate::{map::board::Board, ui::theme::*};
 
 impl Sidebar {
     pub(super) fn marks_section(&self, board: &Board, cx: &Context<Self>) -> Vec<AnyElement> {

@@ -17,8 +17,7 @@ use super::{
 use crate::{
     map::{LiveMap, Minimap},
     settings::Settings,
-    theme::*,
-    widgets::brackets,
+    ui::{theme::*, widgets::brackets},
 };
 
 /// Left, top, width, height in physical pixels.

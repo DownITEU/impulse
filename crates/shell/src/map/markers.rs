@@ -6,7 +6,7 @@ use gpui_kit::{AnyElement, App, DevicePixels, RenderImage, SvgSize, Window, comp
 use model::{Glyph, Level, Map};
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::{theme::*, widgets::square};
+use crate::ui::{theme::*, widgets::square};
 
 /// A marker's box in view pixels.
 pub const SIZE: (f64, f64) = (26., 38.);

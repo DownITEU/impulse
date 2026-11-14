@@ -30,9 +30,8 @@ use crate::{
     run::{Runs, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
     systray::TrayIcon,
-    theme::*,
     trainer::Trainers,
-    widgets::grid,
+    ui::{theme::*, widgets::grid},
 };
 use header::header;
 use hero::Hero;

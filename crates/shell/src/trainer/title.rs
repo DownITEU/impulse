@@ -4,7 +4,7 @@ use client::library::{Game, Support};
 use gpui_kit::{App, Div, FontWeight, IntoElement, component::h_flex, div, prelude::*, px, relative, rgb};
 
 use super::Trainers;
-use crate::{
+use crate::ui::{
     assets::Icon,
     theme::*,
     widgets::{icon, mono, tracked},

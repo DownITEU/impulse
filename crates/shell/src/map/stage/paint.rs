@@ -20,13 +20,12 @@ use super::{
     tiles::Key,
 };
 use crate::{
-    Load, art,
-    assets::Icon,
+    Load,
     map::{
         board::plane,
         markers::{Look, Marker, SIZE, TIP, ink},
     },
-    theme::*,
+    ui::{art, assets::Icon, theme::*},
 };
 
 const PLAYER: f32 = 34.;

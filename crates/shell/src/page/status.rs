@@ -7,9 +7,11 @@ use crate::{
     library::Library,
     log_view::LogView,
     run::Runs,
-    theme::*,
     trainer::Trainers,
-    widgets::{mono, square},
+    ui::{
+        theme::*,
+        widgets::{mono, square},
+    },
 };
 
 pub fn status_bar(

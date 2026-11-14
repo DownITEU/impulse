@@ -18,7 +18,7 @@ use gpui_kit::{
 };
 
 use super::{Found, Library};
-use crate::{
+use crate::ui::{
     dialog::dialog,
     theme::*,
     widgets::{filter_input, mono},

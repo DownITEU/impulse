@@ -10,7 +10,7 @@ use client::storage::{Paths, Stored};
 use frame::HEADER;
 pub(super) use frame::{below_header, frame, input, toolbar};
 
-use crate::assets::Icon;
+use crate::ui::assets::Icon;
 
 pub(super) struct Spec {
     pub id: &'static str,

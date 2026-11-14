@@ -11,7 +11,7 @@ use gpui_kit::{
 use model::Kind;
 
 use super::{CheatList, Menu, Printed, number, open_menu};
-use crate::{
+use crate::ui::{
     assets::Icon,
     dropdown::{dropdown, span},
     theme::*,

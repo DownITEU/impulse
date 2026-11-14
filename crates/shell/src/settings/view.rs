@@ -9,7 +9,7 @@ use gpui_kit::{
 };
 
 use super::{Folders, Lead, Panels, Prefs, Settings, Shown};
-use crate::{
+use crate::ui::{
     dialog::dialog,
     theme::*,
     widgets::{choice, mono, segmented, square, toggle, tracked},

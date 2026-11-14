@@ -18,16 +18,18 @@ use super::{
     glance::Glance,
 };
 use crate::{
-    assets::Icon,
     bindings::{Hotkeys, hotkeys_scope},
     cheats::{CheatList, EditorClosed},
     library::{Library, LibraryEvent, vacant},
     map::{MapView, Maps, Minimap},
     run::{Runs, run_button, session_panel},
     settings::Settings,
-    theme::*,
     trainer::{Trainers, title},
-    widgets::{icon_button, notice},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{icon_button, notice},
+    },
 };
 
 actions!(hud, [LeaveOverlay]);

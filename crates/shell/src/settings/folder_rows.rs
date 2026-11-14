@@ -16,7 +16,7 @@ use gpui_kit::{
 };
 
 use super::{Folders, SettingsView, label};
-use crate::{
+use crate::ui::{
     assets::Icon,
     dropdown::{dropdown, span},
     theme::*,

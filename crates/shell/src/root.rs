@@ -10,7 +10,7 @@ use model::Provider;
 use crate::{
     map::{MapEvent, MapView},
     page::Page,
-    theme::*,
+    ui::theme::*,
 };
 
 // The open map's distance from the window's edges.

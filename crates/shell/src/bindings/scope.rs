@@ -3,7 +3,7 @@
 use gpui_kit::{AnyElement, App, Entity, FontWeight, IntoElement, component::h_flex, prelude::*, px, rgb};
 
 use super::Hotkeys;
-use crate::{
+use crate::ui::{
     theme::*,
     widgets::{square, tracked},
 };

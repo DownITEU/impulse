@@ -26,9 +26,11 @@ use super::{
 };
 use crate::{
     Load,
-    assets::Icon,
-    theme::*,
-    widgets::{filter, icon, mono, square},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{filter, icon, mono, square},
+    },
 };
 
 pub const WIDTH: f32 = 320.;

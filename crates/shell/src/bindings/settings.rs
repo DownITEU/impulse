@@ -5,7 +5,7 @@ use gpui_kit::{Context, Entity, IntoElement, Render, Window, component::v_flex, 
 use super::Hotkeys;
 use crate::{
     settings::row,
-    widgets::{choice, segmented, toggle},
+    ui::widgets::{choice, segmented, toggle},
 };
 
 pub struct HotkeySettings {

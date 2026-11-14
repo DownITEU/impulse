@@ -13,10 +13,12 @@ use gpui_kit::{
 
 use super::{Runs, State};
 use crate::{
-    assets::Icon,
-    theme::*,
     trainer::Trainers,
-    widgets::{action, icon, mono, square, tracked},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{action, icon, mono, square, tracked},
+    },
 };
 
 const STOPPING: &str = "STOPPING THE TRAINER";

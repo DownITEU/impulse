@@ -12,8 +12,10 @@ use model::Clear;
 use super::Resources;
 use crate::{
     settings::{label, row},
-    theme::*,
-    widgets::{button, choice, mono, segmented, square, tracked},
+    ui::{
+        theme::*,
+        widgets::{button, choice, mono, segmented, square, tracked},
+    },
 };
 
 // One per cache, in the bar and beside its row.

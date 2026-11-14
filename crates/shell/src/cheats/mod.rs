@@ -16,7 +16,7 @@ use crate::{
     library::{Library, LibraryEvent},
     run::{RunEvent, Runs},
     trainer::{TrainerEvent, Trainers},
-    widgets,
+    ui::widgets,
 };
 pub use collections::CollectionEditor;
 use printed::{Printed, number};

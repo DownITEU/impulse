@@ -12,7 +12,6 @@ use model::{Map, PIN_LINK};
 use super::{Card, PICTURE};
 use crate::{
     Load,
-    assets::Icon,
     map::{
         CARD_WIDTH,
         board::Board,
@@ -20,8 +19,11 @@ use crate::{
         markers::{ink, legible},
         picture::{fill, picture},
     },
-    theme::*,
-    widgets::{button, flash, icon, icon_button, mono},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{button, flash, icon, icon_button, mono},
+    },
 };
 
 const BADGE: f32 = 40.;

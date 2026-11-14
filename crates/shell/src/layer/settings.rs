@@ -8,9 +8,11 @@ use super::Layer;
 use crate::{
     bindings::{Hotkeys, PRESS_KEYS, Target},
     settings::row,
-    theme::*,
     trainer::Trainers,
-    widgets::{choice, keycap, segmented},
+    ui::{
+        theme::*,
+        widgets::{choice, keycap, segmented},
+    },
 };
 
 const OVERLAY: Target = Target::Key { name: "overlay", required: true };

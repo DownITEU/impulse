@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 
 use super::MapView;
-use crate::{
+use crate::ui::{
     assets::Icon,
     theme::*,
     widgets::{brackets, grid, icon_button, mono},

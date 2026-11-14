@@ -5,11 +5,13 @@ use gpui_kit::{App, Entity, FontWeight, IntoElement, Window, WindowControlArea, 
 use crate::{
     Load,
     account::Account,
-    assets::Icon,
     library::Library,
     settings::SettingsView,
-    theme::*,
-    widgets::{icon, icon_button, mono, square, tracked},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{icon, icon_button, mono, square, tracked},
+    },
 };
 
 pub fn header(library: &Library, account: &Account, settings: &Entity<SettingsView>, window: &Window, cx: &App) -> impl IntoElement {

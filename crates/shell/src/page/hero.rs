@@ -7,14 +7,16 @@ use gpui_kit::{
 };
 
 use crate::{
-    assets::Icon,
-    dropdown::dropdown,
     layer::{Layer, overlay_hotkey},
     library::{Library, pick_source, source_options},
     run::{Runs, run_button},
-    theme::*,
     trainer::{Trainers, title},
-    widgets::{action, icon, tip, tracked},
+    ui::{
+        assets::Icon,
+        dropdown::dropdown,
+        theme::*,
+        widgets::{action, icon, tip, tracked},
+    },
 };
 
 pub struct Hero {

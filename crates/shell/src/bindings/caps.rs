@@ -7,7 +7,7 @@ use gpui_kit::{App, Entity, IntoElement, SharedString, Window, component::h_flex
 use model::Kind;
 
 use super::{Hotkeys, PRESS_KEYS, Target};
-use crate::{theme::*, widgets::keycap};
+use crate::ui::{theme::*, widgets::keycap};
 
 /// A slot's cap: a pair's arrow (`Kind::slots` order), then `body`.
 pub fn cap(kind: Kind, slot: usize, body: &str) -> SharedString {

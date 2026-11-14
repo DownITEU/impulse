@@ -24,7 +24,10 @@ use super::{
     live::LiveMap,
     markers::Images,
 };
-use crate::{Load, theme::Look, widgets::notice};
+use crate::{
+    Load,
+    ui::{theme::Look, widgets::notice},
+};
 use camera::{Camera, Glide, Pixel, extent};
 use motion::Walk;
 use pins::Marker;

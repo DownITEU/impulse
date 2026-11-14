@@ -16,10 +16,12 @@ use gpui_kit::{
 
 use super::{GamePicker, Library};
 use crate::{
-    assets::Icon,
     settings::{Lead, Settings},
-    theme::*,
-    widgets::{filter, filter_input, icon, icon_button, mono, notice, square},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{filter, filter_input, icon, icon_button, mono, notice, square},
+    },
 };
 
 pub const WIDTH: f32 = 248.;

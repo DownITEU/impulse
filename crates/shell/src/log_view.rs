@@ -21,7 +21,7 @@ use gpui_kit::{
     px, rgb, uniform_list,
 };
 
-use super::{
+use super::ui::{
     assets::Icon,
     theme::*,
     widgets::{button, filter, flash, flash_button, icon_button, mono, square, tracked},

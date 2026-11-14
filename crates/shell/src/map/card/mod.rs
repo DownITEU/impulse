@@ -29,8 +29,10 @@ use super::{
 };
 use crate::{
     Load,
-    theme::*,
-    widgets::{choice, segmented},
+    ui::{
+        theme::*,
+        widgets::{choice, segmented},
+    },
 };
 use clip::ClipView;
 use video::ID3D11Device;

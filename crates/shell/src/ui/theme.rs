@@ -1,4 +1,4 @@
-//! Design tokens (`docs/design.md`), the single source for colors and fonts.
+//! Design tokens, the single source for colors and fonts.
 
 use std::borrow::Cow;
 
@@ -61,7 +61,7 @@ pub fn line(a: f32) -> Rgba {
 
 macro_rules! font {
     ($file:literal) => {
-        Cow::Borrowed(include_bytes!(concat!("../assets/fonts/", $file, ".ttf")).as_slice())
+        Cow::Borrowed(include_bytes!(concat!("../../assets/fonts/", $file, ".ttf")).as_slice())
     };
 }
 

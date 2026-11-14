@@ -13,7 +13,6 @@ use model::Map;
 
 use super::{Stage, input::KEY_ZOOM};
 use crate::{
-    assets::Icon,
     map::{
         BUTTON, MARGIN,
         board::Board,
@@ -21,8 +20,11 @@ use crate::{
         markers::HEAD_ABOVE,
         picture::{fill, picture},
     },
-    theme::*,
-    widgets::{button, icon, mono, square},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{button, icon, mono, square},
+    },
 };
 
 // The right click menu's size, about.

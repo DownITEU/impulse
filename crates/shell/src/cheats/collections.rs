@@ -22,12 +22,14 @@ use gpui_kit::{
 
 use super::{CheatList, EditorClosed, Menu, open_menu};
 use crate::{
-    assets::Icon,
-    dialog::dialog,
-    dropdown::{close, picks},
-    theme::*,
     trainer::Trainers,
-    widgets::{button, icon, icon_button, mono, tip},
+    ui::{
+        assets::Icon,
+        dialog::dialog,
+        dropdown::{close, picks},
+        theme::*,
+        widgets::{button, icon, icon_button, mono, tip},
+    },
 };
 
 /// By the key `games.json` keeps; an unknown key shows the first.

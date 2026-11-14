@@ -15,11 +15,13 @@ use gpui_kit::{
 
 use super::{CheatList, Printed};
 use crate::{
-    assets::Icon,
     bindings::caps,
     run::run_note,
-    theme::*,
-    widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
+    },
 };
 
 const PINNED: &str = "PINNED";

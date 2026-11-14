@@ -13,7 +13,7 @@ pub(super) use folders::Folders;
 use folders::Shown;
 pub(super) use view::{Looked, SettingsView, Tabs, label, row};
 
-use super::theme::{ACCENTS, Look};
+use super::ui::theme::{ACCENTS, Look};
 
 /// The leading item of a sidebar row.
 #[derive(Clone, Copy, Default, PartialEq, Serialize, Deserialize)]

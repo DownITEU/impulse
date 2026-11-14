@@ -23,10 +23,12 @@ use gpui_kit::{
 use model::{Group, Map, MapOffer, Pin};
 
 use crate::{
-    assets::Icon,
     library::{Library, LibraryEvent},
-    theme::*,
-    widgets::{icon_button, mono},
+    ui::{
+        assets::Icon,
+        theme::*,
+        widgets::{icon_button, mono},
+    },
 };
 use board::Board;
 use card::Card;

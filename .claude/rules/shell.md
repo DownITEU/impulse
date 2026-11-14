@@ -23,8 +23,8 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Resources` (`resources/`): sizes, clear, the media limit; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.
 
 ## Rules
-- Colors and fonts come only from `theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
-- Use the `widgets.rs` primitives (`button`, `icon_button`, `toggle`, `choice`, `notice`, `tip`, `keycap`, `mono`, `tracked`); never a raw `div` styled as one.
+- Colors and fonts come only from `ui/theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
+- Use the `ui/widgets.rs` primitives (and `ui/dialog.rs`, `ui/dropdown.rs`) (`button`, `icon_button`, `toggle`, `choice`, `notice`, `tip`, `keycap`, `mono`, `tracked`); never a raw `div` styled as one.
 - Logic without GPUI goes to `client` (its rules: `client.md`): app files are its `Stored<T>`, opened from `Paths` by the slice that owns them.
 - `Settings` (`settings/`) owns the prefs: read them with `settings.read(cx).prefs()`, change them with `Settings::edit`. It sets `Look` and GPUI's reduce motion; whoever reacts to a pref observes it.
 - `Library` owns the open game: open one with `Library::open`, react to `LibraryEvent`. A view holds the open game as an `Arc<Game>` while it draws.

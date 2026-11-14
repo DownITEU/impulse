@@ -10,7 +10,7 @@ use blocking::unblock;
 use gpui_kit::{Bounds, Context, IntoElement, Pixels, Render, Task, Window, canvas, div, prelude::*, px, size};
 use video::{Frame, ID3D11Device, Playback};
 
-use crate::art;
+use crate::ui::art;
 
 // A stall is not caught up: the clip goes on from where it stopped.
 const STEP: Duration = Duration::from_millis(100);

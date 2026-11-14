@@ -7,7 +7,7 @@ use gpui_kit::{
 };
 
 use super::{Docks, Spec};
-use crate::{
+use crate::ui::{
     assets::Icon,
     theme::*,
     widgets::{icon, icon_button, square, tip, tracked},
