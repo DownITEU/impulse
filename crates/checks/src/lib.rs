@@ -1,9 +1,10 @@
-//! The workspace's rules that a test can hold: the crate graph, where GPUI may go, file sizes, the agent rules.
+//! The workspace's rules that a test can hold: the crate graph, where GPUI may go, file sizes, the agent rules, the texts.
 #![cfg(test)]
 
 mod graph;
 mod rules;
 mod size;
+mod texts;
 
 use std::{
     fs,

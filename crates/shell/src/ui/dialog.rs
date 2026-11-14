@@ -1,7 +1,7 @@
 //! A titled box over the dimmed page: Settings and the collection editor.
 
 use gpui_kit::{
-    App, Context, FocusHandle, FontWeight, IntoElement, KeyBinding, Window, actions,
+    App, Context, FocusHandle, FontWeight, IntoElement, KeyBinding, SharedString, Window, actions,
     component::{h_flex, v_flex},
     div,
     prelude::*,
@@ -25,7 +25,7 @@ pub fn bind_keys(cx: &mut App) {
 /// `close` runs on a press beside the box, on its × and on Escape while `focus` is in it.
 pub fn dialog<V: 'static>(
     id: &'static str,
-    title: &str,
+    title: impl Into<SharedString>,
     width: f32,
     focus: &FocusHandle,
     close: fn(&mut V, &mut Window, &mut Context<V>),
@@ -68,7 +68,7 @@ pub fn dialog<V: 'static>(
                         .justify_between()
                         .border_b_1()
                         .border_color(line(0.09))
-                        .child(tracked(title, 13., 0.16).font_weight(FontWeight::BOLD))
+                        .child(tracked(&title.into(), 13., 0.16).font_weight(FontWeight::BOLD))
                         .child(
                             icon_button((id, 1usize), Icon::Close, 32., 12.)
                                 .on_click(cx.listener(move |view, _, window, cx| close(view, window, cx))),

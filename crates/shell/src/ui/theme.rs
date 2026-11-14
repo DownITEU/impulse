@@ -7,6 +7,9 @@ use gpui_kit::{
     component::{Theme, ThemeMode},
     px, rgb,
 };
+use i18n::Key;
+
+use super::key;
 
 pub const UI: &str = "Chakra Petch";
 pub const MONO: &str = "JetBrains Mono";
@@ -37,7 +40,13 @@ pub const TICK: u32 = 0x1E221D;
 pub const TICK_IDLE: u32 = 0x5A6155;
 const SCROLL_THUMB: u32 = 0x2A2F28;
 
-pub const ACCENTS: [(&str, u32); 4] = [("LIME", 0xC6FF3D), ("AMBER", 0xFFB020), ("CYAN", 0x4DE2FF), ("WHITE", 0xF2F2F2)];
+/// The id kept in the prefs, the color and its name.
+pub const ACCENTS: [(&str, u32, Key); 4] = [
+    ("LIME", 0xC6FF3D, key::ACCENT_LIME),
+    ("AMBER", 0xFFB020, key::ACCENT_AMBER),
+    ("CYAN", 0x4DE2FF, key::ACCENT_CYAN),
+    ("WHITE", 0xF2F2F2, key::ACCENT_WHITE),
+];
 
 /// The look the user chose, for every widget to read; set by `Settings`.
 pub struct Look {

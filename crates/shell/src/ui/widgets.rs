@@ -14,7 +14,7 @@ use gpui_kit::{
     px, rgb, size, svg,
 };
 
-use super::{assets::Icon, theme::*};
+use super::{assets::Icon, key, text::t, theme::*};
 
 const FLASH: Duration = Duration::from_millis(900);
 const TIP_WIDTH: f32 = 320.;
@@ -99,7 +99,7 @@ pub fn tip(text: SharedString, window: &mut Window, cx: &mut App) -> AnyView {
     Tooltip::element(move |_, _| div().max_w(px(TIP_WIDTH)).child(text.clone())).build(window, cx)
 }
 
-pub fn segment(label: &'static str, fill: Option<u32>, color: u32) -> Div {
+pub fn segment(label: impl Into<SharedString>, fill: Option<u32>, color: u32) -> Div {
     mono(label, 10.)
         .font_weight(FontWeight::BOLD)
         .h_full()
@@ -115,7 +115,7 @@ pub fn segmented() -> Div {
 }
 
 /// One option of a `segmented` choice; the caller adds the click.
-pub fn choice(id: &'static str, label: &'static str, current: bool, cx: &App) -> Stateful<Div> {
+pub fn choice(id: &'static str, label: impl Into<SharedString>, current: bool, cx: &App) -> Stateful<Div> {
     let accent = accent(cx);
     div()
         .id(id)
@@ -129,8 +129,8 @@ pub fn toggle(on: bool, cx: &App) -> Div {
     let (off_color, on_color) = if on { (SEGMENT_IDLE, BG) } else { (TEXT, SEGMENT_IDLE) };
     segmented()
         .h(px(24.))
-        .child(segment("OFF", (!on).then_some(SEGMENT_OFF), off_color).w(px(34.)))
-        .child(segment("ON", on.then_some(accent), on_color).w(px(34.)))
+        .child(segment(t(cx, key::OFF), (!on).then_some(SEGMENT_OFF), off_color).w(px(34.)))
+        .child(segment(t(cx, key::ON), on.then_some(accent), on_color).w(px(34.)))
 }
 
 pub fn icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size: f32) -> Stateful<Div> {

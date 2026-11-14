@@ -6,6 +6,7 @@ mod folders;
 mod view;
 
 use gpui_kit::{App, Context};
+use i18n::Language;
 use serde::{Deserialize, Serialize};
 
 use client::{
@@ -16,7 +17,10 @@ pub(super) use folders::Folders;
 use folders::Shown;
 pub(super) use view::{Looked, SettingsView, Tabs, label, row};
 
-use super::ui::theme::{ACCENTS, Look};
+use super::ui::{
+    text::Texts,
+    theme::{ACCENTS, Look},
+};
 
 /// The leading item of a sidebar row.
 #[derive(Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
@@ -52,15 +56,26 @@ pub struct Prefs {
     pub quit_on_close: bool,
     /// Screenshots, recordings and streams show no Impulse window.
     pub hide_from_capture: bool,
+    /// A shipped language's tag; `None` or an unknown one means the system's.
+    pub language: Option<String>,
 }
 
 impl Prefs {
     pub fn accent(&self) -> u32 {
-        ACCENTS.iter().find(|(name, _)| *name == self.accent).unwrap_or(&ACCENTS[0]).1
+        ACCENTS.iter().find(|(name, ..)| *name == self.accent).unwrap_or(&ACCENTS[0]).1
     }
 
     pub fn set_accent(&mut self, color: u32) {
-        self.accent = ACCENTS.iter().find(|(_, other)| *other == color).map_or_else(String::new, |(name, _)| (*name).to_owned());
+        self.accent = ACCENTS.iter().find(|(_, other, _)| *other == color).map_or_else(String::new, |(name, ..)| (*name).to_owned());
+    }
+
+    /// The language the user picked, if it ships.
+    pub fn chosen(&self) -> Option<Language> {
+        self.language.as_deref().and_then(Language::find)
+    }
+
+    pub fn language(&self) -> Language {
+        self.chosen().unwrap_or_else(Language::system)
     }
 }
 
@@ -87,9 +102,17 @@ impl Settings {
     }
 
     fn apply(&self, cx: &mut App) {
-        let accent = self.prefs.accent();
-        if cx.try_global::<Look>().is_none_or(|look| look.accent != accent) {
+        let (accent, language) = (self.prefs.accent(), self.prefs.language());
+        let look = cx.try_global::<Look>().is_none_or(|look| look.accent != accent);
+        let texts = cx.try_global::<Texts>().is_none_or(|texts| texts.language() != language);
+        if look {
             cx.set_global(Look { accent });
+        }
+        if texts {
+            cx.set_global(Texts::new(language));
+            gpui_kit::component::set_locale(language.tag);
+        }
+        if look || texts {
             // Cached views draw again only when refreshed.
             cx.refresh_windows();
         }

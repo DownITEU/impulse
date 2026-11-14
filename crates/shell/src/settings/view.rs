@@ -1,16 +1,20 @@
 //! The SETTINGS dialog: its tabs, APPEARANCE and APP here; the others are views of their own slices.
 
 use gpui_kit::{
-    AnyView, App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, IntoElement, Render, Window,
+    AnyView, App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, IntoElement, Render, SharedString, Window,
     component::{h_flex, input::InputState, scroll::ScrollableElement, v_flex},
     div,
     prelude::*,
     px, rgb,
 };
 
+use i18n::{Key, LANGUAGES};
+
 use super::{Folders, Lead, Panels, Prefs, Settings, Shown};
 use crate::ui::{
     dialog::dialog,
+    key,
+    text::t,
     theme::*,
     widgets::{choice, mono, segmented, square, toggle, tracked},
 };
@@ -25,13 +29,13 @@ enum Tab {
 }
 
 // The tabs without a page yet are shown but not clickable.
-const TABS: [(&str, Option<Tab>); 6] = [
-    ("APPEARANCE", Some(Tab::Appearance)),
-    ("OVERLAY", Some(Tab::Overlay)),
-    ("HOTKEYS", Some(Tab::Hotkeys)),
-    ("APP", Some(Tab::App)),
-    ("RESOURCES", Some(Tab::Resources)),
-    ("ABOUT", None),
+const TABS: [(Key, Option<Tab>); 6] = [
+    (key::SETTINGS_APPEARANCE, Some(Tab::Appearance)),
+    (key::SETTINGS_OVERLAY, Some(Tab::Overlay)),
+    (key::SETTINGS_HOTKEYS, Some(Tab::Hotkeys)),
+    (key::SETTINGS_APP, Some(Tab::App)),
+    (key::SETTINGS_RESOURCES, Some(Tab::Resources)),
+    (key::SETTINGS_ABOUT, None),
 ];
 
 /// The tabs other slices draw.
@@ -96,7 +100,7 @@ impl SettingsView {
             |(name, tab)| {
                 let current = tab == Some(self.tab);
                 h_flex()
-                    .id(name)
+                    .id(name.0)
                     .h(px(34.))
                     .px(px(14.))
                     .gap(px(10.))
@@ -111,22 +115,34 @@ impl SettingsView {
                         }))
                     })
                     .child(div().w(px(6.)).when(current, |cell| cell.child(square(6., rgb(accent(cx))))))
-                    .child(tracked(name, 12., 0.12))
+                    .child(tracked(&t(cx, name), 12., 0.12))
             },
         ))
     }
 
     fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let folders = self.folder_rows(cx);
         let prefs = self.settings.read(cx).prefs();
-        let (close_to_tray, hidden) = (!prefs.quit_on_close, prefs.hide_from_capture);
+        let (close_to_tray, hidden, chosen) = (!prefs.quit_on_close, prefs.hide_from_capture, prefs.chosen().map(|language| language.tag));
+        let language = |id: &'static str, tag: Option<&'static str>, name: SharedString| {
+            choice(id, name, chosen == tag, cx)
+                .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.language = tag.map(str::to_owned), cx)))
+        };
+        let languages = LANGUAGES.iter().map(|ours| language(ours.tag, Some(ours.tag), ours.name.into()));
         v_flex()
             .flex_1()
             .min_w_0()
             .px(px(18.))
             .py(px(6.))
-            .children(self.folder_rows(cx))
+            .children(folders)
             .child(
-                row("CLOSE TO TRAY", "the close button hides Impulse; quit from the tray icon", 64.).mt(px(12.)).border_t_1().child(
+                row(t(cx, key::LANGUAGE), t(cx, key::LANGUAGE_HINT), 64.)
+                    .mt(px(12.))
+                    .border_t_1()
+                    .child(segmented().h(px(26.)).child(language("system", None, t(cx, key::LANGUAGE_SYSTEM))).children(languages)),
+            )
+            .child(
+                row(t(cx, key::CLOSE_TO_TRAY), t(cx, key::CLOSE_TO_TRAY_HINT), 64.).child(
                     div()
                         .id("close-to-tray")
                         .cursor_pointer()
@@ -135,7 +151,7 @@ impl SettingsView {
                 ),
             )
             .child(
-                row("HIDE FROM CAPTURE", "screenshots, recordings and streams show no Impulse window", 64.).border_b_0().child(
+                row(t(cx, key::HIDE_FROM_CAPTURE), t(cx, key::HIDE_FROM_CAPTURE_HINT), 64.).border_b_0().child(
                     div()
                         .id("hide-from-capture")
                         .cursor_pointer()
@@ -148,7 +164,7 @@ impl SettingsView {
     fn appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let prefs = self.settings.read(cx).prefs();
         let (accent, lead, panels, reduce_motion) = (prefs.accent(), prefs.lead, prefs.panels, prefs.reduce_motion);
-        let swatches = ACCENTS.map(|(name, color)| {
+        let swatches = ACCENTS.map(|(name, color, label)| {
             let current = color == accent;
             v_flex()
                 .id(name)
@@ -164,33 +180,37 @@ impl SettingsView {
                         .border_color(if current { rgb(color) } else { line(0.16) })
                         .child(div().size_full().bg(rgb(color))),
                 )
-                .child(mono(name, 9.5).text_color(rgb(if current { TEXT } else { FAINT })))
+                .child(mono(t(cx, label), 9.5).text_color(rgb(if current { TEXT } else { FAINT })))
         });
-        let lead = |id: &'static str, label: &'static str, choose: Lead| {
-            choice(id, label, lead == choose, cx)
+        let lead = |id: &'static str, label: Key, choose: Lead| {
+            choice(id, t(cx, label), lead == choose, cx)
                 .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.lead = choose, cx)))
         };
-        let panels = |id: &'static str, label: &'static str, choose: Panels| {
-            choice(id, label, panels == choose, cx)
+        let panels = |id: &'static str, label: Key, choose: Panels| {
+            choice(id, t(cx, label), panels == choose, cx)
                 .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.panels = choose, cx)))
         };
         v_flex()
             .flex_1()
             .px(px(18.))
             .py(px(6.))
-            .child(row("ACCENT", "marks live state only", 72.).child(h_flex().gap(px(10.)).children(swatches)))
-            .child(row("SIDEBAR", "leading item of a game row", 64.).child(
-                segmented().h(px(26.)).child(lead("lead-number", "NUMBER", Lead::Number)).child(lead(
+            .child(row(t(cx, key::ACCENT), t(cx, key::ACCENT_HINT), 72.).child(h_flex().gap(px(10.)).children(swatches)))
+            .child(row(t(cx, key::SIDEBAR), t(cx, key::SIDEBAR_HINT), 64.).child(
+                segmented().h(px(26.)).child(lead("lead-number", key::SIDEBAR_NUMBER, Lead::Number)).child(lead(
                     "lead-thumbnail",
-                    "THUMBNAIL",
+                    key::SIDEBAR_THUMBNAIL,
                     Lead::Thumbnail,
                 )),
             ))
-            .child(row("PANELS", "map and session over the mods, or beside them", 64.).child(
-                segmented().h(px(26.)).child(panels("panels-top", "TOP", Panels::Top)).child(panels("panels-side", "SIDE", Panels::Side)),
+            .child(row(t(cx, key::PANELS), t(cx, key::PANELS_HINT), 64.).child(
+                segmented().h(px(26.)).child(panels("panels-top", key::PANELS_TOP, Panels::Top)).child(panels(
+                    "panels-side",
+                    key::PANELS_SIDE,
+                    Panels::Side,
+                )),
             ))
             .child(
-                row("REDUCE MOTION", "no blinking LIVE, no transitions", 64.).border_b_0().child(
+                row(t(cx, key::REDUCE_MOTION), t(cx, key::REDUCE_MOTION_HINT), 64.).border_b_0().child(
                     div()
                         .id("reduce-motion")
                         .cursor_pointer()
@@ -212,19 +232,19 @@ impl Render for SettingsView {
                 Tab::Resources => self.tabs.resources.clone().into_any_element(),
             }),
         );
-        dialog("settings", "SETTINGS", 640., &self.focus, |view: &mut Self, _, cx| view.close(cx), body, cx)
+        dialog("settings", t(cx, key::SETTINGS), 640., &self.focus, |view: &mut Self, _, cx| view.close(cx), body, cx)
     }
 }
 
 /// A setting's name with what it does under it.
-pub fn label(title: &'static str, hint: &'static str) -> Div {
+pub fn label(title: impl Into<SharedString>, hint: impl Into<SharedString>) -> Div {
     v_flex()
         .gap(px(4.))
-        .child(tracked(title, 13., 0.1).font_weight(FontWeight::SEMIBOLD))
+        .child(tracked(&title.into(), 13., 0.1).font_weight(FontWeight::SEMIBOLD))
         .child(mono(hint, 11.).font_weight(FontWeight::NORMAL).text_color(rgb(FAINT)))
 }
 
 /// The control the caller adds keeps its width; a long hint wraps.
-pub fn row(title: &'static str, hint: &'static str, height: f32) -> Div {
+pub fn row(title: impl Into<SharedString>, hint: impl Into<SharedString>, height: f32) -> Div {
     h_flex().min_h(px(height)).gap(px(16.)).border_b_1().border_color(line(0.07)).child(label(title, hint).flex_1().min_w_0())
 }

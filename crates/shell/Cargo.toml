@@ -12,6 +12,7 @@ client.workspace = true
 disk.workspace = true
 fetch.workspace = true
 hotkeys.workspace = true
+i18n.workspace = true
 journal.workspace = true
 model.workspace = true
 overlay.workspace = true

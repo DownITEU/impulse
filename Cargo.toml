@@ -15,6 +15,7 @@ client = { path = "crates/client" }
 disk = { path = "crates/disk" }
 fetch = { path = "crates/fetch" }
 hotkeys = { path = "crates/hotkeys" }
+i18n = { path = "crates/i18n" }
 journal = { path = "crates/journal" }
 launchers = { path = "crates/launchers" }
 model = { path = "crates/model" }
@@ -33,6 +34,8 @@ bytes = "1"
 cbc = "0.1"
 chrono = { version = "0.4", default-features = false }
 embed-resource = "3"
+fluent-bundle = "0.16"
+fluent-syntax = "0.12"
 form_urlencoded = "1"
 futures = "0.3"
 gpui-kit = "=0.9.1"
@@ -46,9 +49,11 @@ rusty-leveldb = "4.0.2"
 serde = "1"
 serde_json = "1"
 sha2 = "0.10"
+sys-locale = "0.3"
 tao = "0.37.2"
 tokio = "1"
 ttf-parser = "0.25"
+unic-langid = "0.9"
 ureq = "3.5.2"
 url = "2"
 uuid = "1"
