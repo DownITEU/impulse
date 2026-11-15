@@ -1,5 +1,9 @@
 //! The rows: pinned first, then the trainer's categories, each foldable; a filter over them.
 
+use crate::ui::{
+    key,
+    text::{failed, t},
+};
 use client::{
     Load,
     library::{Game, Support},
@@ -34,7 +38,7 @@ impl CheatList {
         if game.support == Support::NoTrainer {
             return column.child(notice(
                 "[ NO TRAINER ]",
-                &format!("NO TRAINER FOR {} YET", game.name),
+                format!("NO TRAINER FOR {} YET", game.name),
                 "There is no trainer for this game yet. Impulse will flag it in your library as soon as one ships.",
             ));
         }
@@ -42,11 +46,11 @@ impl CheatList {
         let trainers = self.trainers.read(cx);
         let sheet = match trainers.get(&game.id) {
             Some(Load::Ready(sheet)) => sheet,
-            Some(Load::Failed(why)) => {
+            Some(Load::Failed(failure)) => {
                 return column.child(notice(
-                    "[ NO DATA ]",
-                    "THE CHEAT LIST IS NOT DOWNLOADED",
-                    &format!("{why}. Impulse tries again when you open the game."),
+                    t(cx, key::CHEATS_FAILED_TAG),
+                    t(cx, key::CHEATS_FAILED),
+                    failed(cx, key::CHEATS_FAILED_BODY, failure),
                 ));
             }
             // The disk answers within a frame or two: a card would only flash.

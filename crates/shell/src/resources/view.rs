@@ -1,5 +1,7 @@
 //! The RESOURCES tab: what takes how much, each cache's CLEAR, the media limit, the user's own data.
 
+use crate::ui::text::text;
+use gpui_kit::SharedString;
 use gpui_kit::{
     Context, Entity, FontWeight, IntoElement, Render, Window,
     component::{h_flex, v_flex},
@@ -81,7 +83,7 @@ impl Render for ResourcesView {
                 ),
                 Clear::NextStart { asked: true } => Some(mono("CLEARS ON RESTART", 10.5).text_color(rgb(accent(cx))).into_any_element()),
             };
-            entry(Some(color(index)), store.name, store.hint, store.bytes).children(action)
+            entry(Some(color(index)), text(cx, &store.name), text(cx, &store.hint), store.bytes).children(action)
         });
         let clearable: Vec<Ref> = usage
             .caches
@@ -111,7 +113,7 @@ impl Render for ResourcesView {
             .child(clear_all)
             .child(limit)
             .child(tracked("KEPT", 11., 0.14).pt(px(18.)).pb(px(4.)).text_color(rgb(DIM)))
-            .children(kept.map(|(name, hint, bytes)| entry(None, name, hint, bytes)))
+            .children(kept.map(|(name, hint, bytes)| entry(None, name.into(), hint.into(), bytes)))
             .into_any_element()
     }
 }
@@ -127,7 +129,7 @@ impl ResourcesView {
 }
 
 /// A store's row: its color, name, what it holds and its size; the caller adds the action.
-fn entry(color: Option<u32>, name: &'static str, hint: &'static str, bytes: u64) -> gpui_kit::Div {
+fn entry(color: Option<u32>, name: SharedString, hint: SharedString, bytes: u64) -> gpui_kit::Div {
     h_flex()
         .min_h(px(52.))
         .gap(px(12.))

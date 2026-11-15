@@ -5,7 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
+use model::{Failure, FailureKind};
 use sha2::{Digest, Sha256};
 
 // Not under `trainers`: that folder is the metadata's, and dropping it must not reach here.
@@ -31,7 +32,7 @@ pub fn ensure(data_dir: &Path, url: &str, hash: &str) -> Result<PathBuf> {
     if hash_of(&path).is_ok_and(|found| found == hash) {
         return Ok(path);
     }
-    let response = fetch::get(url, None)?;
+    let response = fetch::get(url, None).context(Failure::new(FailureKind::Offline))?;
     ensure!(response.status == 200, "GET {url}: status {}", response.status);
     ensure!(sha256(&response.body) == hash, "the downloaded trainer does not match its hash");
     disk::replace(&path, &response.body)?;

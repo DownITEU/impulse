@@ -3,10 +3,12 @@
 
 mod view;
 
+use crate::ui::{key, text::app_text};
 use std::{sync::Arc, time::Duration};
 
 use blocking::unblock;
 use gpui_kit::{Context, EventEmitter, Task};
+use i18n::Key;
 use model::{Clear, Ref, SourceId, Store};
 
 use client::{
@@ -58,6 +60,7 @@ impl Resources {
             let own = unblock(move || {
                 let media = Media::ALL.map(|media| {
                     let (_, name, hint) = describe(media);
+                    let (name, hint) = (app_text(name), app_text(hint));
                     Store { id: store_ref(media), name, hint, bytes: disk::size(&media.dir(&paths)), clear: Clear::Now }
                 });
                 let logs = journal::dir().map_or(0, disk::size);
@@ -141,10 +144,10 @@ fn media_of(id: &Ref) -> Option<Media> {
     Media::ALL.into_iter().find(|media| app && describe(*media).0 == id.id())
 }
 
-fn describe(media: Media) -> (&'static str, &'static str, &'static str) {
+fn describe(media: Media) -> (&'static str, Key, Key) {
     match media {
-        Media::Pictures => ("pictures", "PICTURES", "game art and pin pictures"),
-        Media::Tiles => ("tiles", "MAP TILES", "the ground of the maps you opened"),
-        Media::Videos => ("videos", "VIDEOS", "pin clips"),
+        Media::Pictures => ("pictures", key::MEDIA_PICTURES, key::MEDIA_PICTURES_HINT),
+        Media::Tiles => ("tiles", key::MEDIA_TILES, key::MEDIA_TILES_HINT),
+        Media::Videos => ("videos", key::MEDIA_VIDEOS, key::MEDIA_VIDEOS_HINT),
     }
 }

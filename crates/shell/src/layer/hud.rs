@@ -303,7 +303,7 @@ impl Render for Hud {
                     (MODS, Some(_)) => {
                         div().id(MODS).size_full().p(px(16.)).overflow_y_scrollbar().child(self.cheat_list.clone()).into_any_element()
                     }
-                    (MODS, None) => div().p(px(16.)).child(vacant(self.library.read(cx))).into_any_element(),
+                    (MODS, None) => div().p(px(16.)).child(vacant(self.library.read(cx), cx)).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
                     (MINIMAP, Some(_)) if mapped && self.maps.read(cx).live_map().read(cx).ready(cx) => {
                         self.minimap.clone().into_any_element()

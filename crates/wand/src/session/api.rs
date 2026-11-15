@@ -1,6 +1,7 @@
 use std::fmt;
 
 use anyhow::{Result, anyhow, bail};
+use model::{Failure, FailureKind};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -56,7 +57,12 @@ pub(super) fn is_rejected(e: &anyhow::Error) -> bool {
 fn parse<T: DeserializeOwned>(status: u16, body: &str, expect: u16) -> Result<T> {
     if !(200..300).contains(&status) {
         let error = serde_json::from_str::<Value>(body).ok().and_then(|v| v["error"].as_str().map(str::to_owned));
-        return Err(HttpError { status, error }.into());
+        let kind = match status {
+            401 | 403 => FailureKind::SignedOut,
+            404 => FailureKind::NotFound,
+            _ => FailureKind::Internal,
+        };
+        return Err(anyhow::Error::new(HttpError { status, error }).context(Failure::new(kind)));
     }
     if status != expect {
         bail!("unexpected HTTP status {status}");
@@ -71,10 +77,10 @@ mod tests {
     #[test]
     fn error_has_status_and_error_field_only() {
         let err = parse::<Value>(401, r#"{"error":"invalid_grant","access_token":"S3CRET"}"#, 200).unwrap_err();
-        assert_eq!(err.to_string(), "HTTP 401: invalid_grant");
+        assert_eq!(err.root_cause().to_string(), "HTTP 401: invalid_grant");
         assert!(is_rejected(&err));
         let err = parse::<Value>(502, "<html>S3CRET</html>", 200).unwrap_err();
-        assert_eq!(err.to_string(), "HTTP 502");
+        assert_eq!(err.root_cause().to_string(), "HTTP 502");
         assert!(!is_rejected(&err));
     }
 

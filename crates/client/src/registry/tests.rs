@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use futures::executor::block_on;
-use model::{Clear, Source};
+use model::{Clear, Source, Text};
 
 use super::*;
 
@@ -16,8 +16,8 @@ impl Fake {
     }
 
     fn folder(&self, path: Option<PathBuf>) -> Folder {
-        let status = Ok(self.id.as_str().to_owned());
-        Folder { id: Ref::new(&self.id, "f"), label: "", hint: "", path, status, choices: Vec::new(), selected: None }
+        let (label, hint, status) = (Text::Plain(String::new()), Text::Plain(String::new()), Ok(Text::Plain(self.id.as_str().to_owned())));
+        Folder { id: Ref::new(&self.id, "f"), label, hint, path, status, choices: Vec::new(), selected: None }
     }
 }
 
@@ -30,7 +30,7 @@ impl Source for Fake {
 impl Maps for Fake {
     // The error names who answered.
     fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<Map>> {
-        stream::iter([Snapshot::Fresh(Err(anyhow::anyhow!("{} has {}", self.id.as_str(), offer.id)))]).boxed()
+        stream::iter([Snapshot::Fresh(Err(anyhow::anyhow!("{} has {}", self.id.as_str(), offer.id).into()))]).boxed()
     }
 }
 
@@ -46,7 +46,8 @@ impl Folders for Fake {
 
 impl Caches for Fake {
     fn stores(&self) -> BoxFuture<'static, Vec<Store>> {
-        let store = Store { id: Ref::new(&self.id, "s"), name: "", hint: "", bytes: 1, clear: Clear::Now };
+        let (name, hint) = (Text::Plain(String::new()), Text::Plain(String::new()));
+        let store = Store { id: Ref::new(&self.id, "s"), name, hint, bytes: 1, clear: Clear::Now };
         future::ready(vec![store]).boxed()
     }
 
@@ -71,7 +72,7 @@ fn registry() -> (Registry, Arc<Fake>, Arc<Fake>) {
 fn answer(registry: &Registry, id: &str) -> String {
     let offer = MapOffer { id: Ref::parse(id).unwrap(), name: String::new(), thumbnail: None, revision: None };
     match block_on(registry.map(&offer).next()) {
-        Some(Snapshot::Fresh(Err(e))) => e.to_string(),
+        Some(Snapshot::Fresh(Err(e))) => e.detail,
         _ => panic!("one fresh error"),
     }
 }
@@ -87,7 +88,7 @@ fn a_ref_reaches_its_own_source_and_an_unknown_one_fails() {
     assert!(a.cleared.lock().unwrap().is_empty());
     assert_eq!(*b.cleared.lock().unwrap(), ["b:s"]);
     let set = block_on(registry.set_folder(&Ref::parse("b:f").unwrap(), "x".into()));
-    assert_eq!(set.status.as_deref(), Ok("b"));
+    assert!(matches!(set.status, Ok(Text::Plain(name)) if name == "b"));
     assert!(block_on(registry.set_folder(&Ref::parse("c:f").unwrap(), "x".into())).status.is_err());
 }
 

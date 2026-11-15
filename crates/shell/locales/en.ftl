@@ -35,3 +35,35 @@ hide-from-capture-hint = screenshots, recordings and streams show no Impulse win
 
 off = OFF
 on = ON
+
+## Failures: a kind's words fit after "It could not be loaded:"
+
+failure-offline = no connection
+failure-signed-out = signed out
+failure-not-found = not found
+failure-unsupported = not supported yet
+failure-setup-needed = a setting is missing: see Settings, APP
+failure-game-not-found = the game was not found
+failure-refused = refused
+failure-internal = something went wrong: the log has the details
+failure-place = { $why }: see Settings, APP
+run-no-cheats = the cheat list is not loaded
+teleport-failed = TELEPORT FAILED: { $why }
+catalog-failed-tag = [ NO CATALOG ]
+catalog-failed = THE GAME CATALOG IS UNAVAILABLE
+catalog-failed-body = It could not be downloaded: { $why }. Impulse tries again on the next start.
+cheats-failed-tag = [ NO DATA ]
+cheats-failed = THE CHEAT LIST IS NOT DOWNLOADED
+cheats-failed-body = It could not be downloaded: { $why }. Impulse tries again when you open the game.
+map-failed-tag = [ NO MAP ]
+map-failed = THE MAP IS UNAVAILABLE
+map-failed-body = It could not be loaded: { $why }.
+
+## Resources
+
+media-pictures = PICTURES
+media-pictures-hint = game art and pin pictures
+media-tiles = MAP TILES
+media-tiles-hint = the ground of the maps you opened
+media-videos = VIDEOS
+media-videos-hint = pin clips

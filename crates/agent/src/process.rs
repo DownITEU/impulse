@@ -7,9 +7,9 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use blocking::unblock;
-use model::{Process, Rule};
+use model::{Failure, FailureKind, Process, Rule};
 use windows_sys::Win32::{
     Foundation::FILETIME,
     System::{
@@ -56,7 +56,7 @@ pub async fn wait(rule: &Rule, timeout: Duration) -> Result<Process> {
             return Ok(process);
         }
         if waited >= timeout {
-            bail!("the game did not start in {} s", timeout.as_secs());
+            return Err(anyhow!("the game did not start in {} s", timeout.as_secs()).context(Failure::new(FailureKind::GameNotFound)));
         }
         // A blocking-pool sleep: the caller's executor may have no timer.
         unblock(|| thread::sleep(POLL)).await;

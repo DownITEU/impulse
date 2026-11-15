@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use futures::channel::oneshot;
+use model::{Failure, FailureKind};
 use serde::{Deserialize, Serialize};
 use tao::{
     event::{Event, StartCause},
@@ -160,7 +161,7 @@ fn reply(pending: &Pending, raw: &[u8]) {
     };
     let result = match reply.status {
         Some(status) => Ok(Response { status, body: reply.body.unwrap_or_default() }),
-        None => Err(anyhow!("fetch failed: {}", reply.error.unwrap_or_default())),
+        None => Err(anyhow!("fetch failed: {}", reply.error.unwrap_or_default()).context(Failure::new(FailureKind::Offline))),
     };
     if let Some(tx) = pending.lock().unwrap().remove(&reply.id) {
         let _ = tx.send(result);

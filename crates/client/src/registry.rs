@@ -8,8 +8,8 @@ use futures::{
     stream::{self, BoxStream},
 };
 use model::{
-    Accounts, Caches, Folder, Folders, Game, Games, Installation, Map, MapOffer, Maps, Offer, Ref, SignIn, Snapshot, SourceId, Store,
-    Trainer, Trainers,
+    Accounts, Caches, Failure, FailureKind, Files, Folder, Folders, Game, Games, Installation, Map, MapOffer, Maps, Offer, Ref, SignIn,
+    Snapshot, SourceId, Store, Text, Trainer, Trainers,
 };
 
 /// Each capability's sources, with their ids.
@@ -23,13 +23,19 @@ pub struct Registry {
     maps: List<dyn Maps>,
     folders: List<dyn Folders>,
     caches: List<dyn Caches>,
+    /// Each source's catalogs, once.
+    texts: Vec<(SourceId, Files)>,
 }
 
 macro_rules! add {
     ($($add:ident: $list:ident $trait:ident),*) => {
         impl Registry {
             $(pub fn $add(mut self, source: Arc<dyn $trait>) -> Self {
-                self.$list.push((source.id(), source));
+                let id = source.id();
+                if !self.texts.iter().any(|(known, _)| *known == id) {
+                    self.texts.push((id.clone(), source.texts()));
+                }
+                self.$list.push((id, source));
                 self
             })*
         }
@@ -46,6 +52,10 @@ add!(
 );
 
 impl Registry {
+    pub fn texts(&self) -> &[(SourceId, Files)] {
+        &self.texts
+    }
+
     /// The first source's account.
     pub fn sign_in(&self) -> BoxStream<'static, SignIn> {
         self.accounts.first().map_or_else(|| stream::iter([SignIn::Failed]).boxed(), |(_, source)| source.sign_in())
@@ -74,8 +84,9 @@ impl Registry {
         match route(&self.folders, id) {
             Some(source) => source.set_folder(id, path),
             None => {
-                let status = Err(format!("no source {}", id.source().as_str()));
-                let folder = Folder { id: id.clone(), label: "", hint: "", path: Some(path), status, choices: Vec::new(), selected: None };
+                let (label, hint) = (Text::Plain(String::new()), Text::Plain(String::new()));
+                let status = Err(unserved(id));
+                let folder = Folder { id: id.clone(), label, hint, path: Some(path), status, choices: Vec::new(), selected: None };
                 future::ready(folder).boxed()
             }
         }
@@ -98,8 +109,11 @@ fn route<'a, T: ?Sized>(list: &'a List<T>, id: &Ref) -> Option<&'a Arc<T>> {
 
 /// A fresh error for what no source serves.
 fn missing<T: Send + 'static>(what: impl std::fmt::Display) -> BoxStream<'static, Snapshot<T>> {
-    let error = anyhow::anyhow!("no source for {what}");
-    stream::iter([Snapshot::Fresh(Err(error))]).boxed()
+    stream::iter([Snapshot::Fresh(Err(unserved(what)))]).boxed()
+}
+
+fn unserved(what: impl std::fmt::Display) -> Failure {
+    Failure { detail: format!("no source for {what}"), ..Failure::new(FailureKind::Unsupported) }
 }
 
 #[cfg(test)]

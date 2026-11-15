@@ -233,7 +233,7 @@ async fn load(
                     Snapshot::Cached(Some(_)) if matches!(board.map, Load::Ready(_)) => {}
                     Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
                     Snapshot::Cached(None) => {}
-                    Snapshot::Fresh(Err(e)) => board.fail(format!("{e:#}"), cx),
+                    Snapshot::Fresh(Err(e)) => board.fail(e, cx),
                 })?;
             }
         }

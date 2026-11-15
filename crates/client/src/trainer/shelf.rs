@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use model::Failure;
+
 use super::Sheet;
 use crate::{
     Load,
@@ -58,7 +60,7 @@ impl Shelf {
     }
 
     /// A stale copy still beats an error, and the next open asks again.
-    pub fn failed(&mut self, game: GameId, error: String) {
+    pub fn failed(&mut self, game: GameId, error: Failure) {
         if let Some(sheet) = self.waiting.get_mut(&game) {
             sheet.stale = true;
         }

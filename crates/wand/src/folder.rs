@@ -9,10 +9,13 @@ use std::{
     },
 };
 
-use model::{Folder, Ref};
+use model::{Failure, FailureKind, Folder, Ref, Text};
 use serde::{Deserialize, Serialize};
 
-use crate::install::{self, Install};
+use crate::{
+    install::{self, Install},
+    texts::{FOLDER, FOLDER_EMPTY, FOLDER_HINT, text},
+};
 
 pub const ID: &str = "wand";
 const FILE: &str = "wand.json";
@@ -97,13 +100,13 @@ struct Choice {
 fn describe(path: Option<PathBuf>, found: Option<Install>, installs: Vec<Install>) -> Folder {
     Folder {
         id: Ref::new(&crate::source(), ID),
-        label: "WAND FOLDER",
-        hint: "where the trainer binaries are read from",
+        label: text(FOLDER),
+        hint: text(FOLDER_HINT),
         path,
         status: found
             .as_ref()
-            .map(|found| format!("WAND {}", found.label()))
-            .ok_or_else(|| "NO WAND TRAINER FILES IN THIS FOLDER".to_owned()),
+            .map(|found| Text::Plain(format!("WAND {}", found.label())))
+            .ok_or_else(|| Failure::new(FailureKind::SetupNeeded).saying(text(FOLDER_EMPTY))),
         choices: installs.iter().map(|install| (install.label(), install.root.clone())).collect(),
         selected: found.map(|found| found.root),
     }
@@ -133,7 +136,7 @@ mod tests {
         let (older, newer) = (setting.call(), setting.call());
         setting.set(newer, dir.join("nothing here"));
         let folder = setting.set(older, chosen.clone());
-        assert_eq!((folder.status.as_deref(), folder.selected.as_ref()), (Ok("WAND 1.0.0"), Some(&chosen)));
+        assert_eq!((folder.status.ok(), folder.selected.as_ref()), (Some(Text::Plain("WAND 1.0.0".into())), Some(&chosen)));
         assert!(setting.chosen().dir.is_none() && Setting::load(&dir).chosen().dir.is_none());
 
         let latest = setting.call();

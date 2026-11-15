@@ -8,10 +8,12 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use model::Chord;
+use model::{Chord, Failure, FailureKind};
 use rusty_leveldb::{DB, Options};
 use serde::Deserialize;
 use serde_json::Value;
+
+use crate::texts::{SIGNED_OUT, text};
 
 // Chromium layout: `_<origin>\0` + script key; both keys and values carry an encoding byte.
 const KEY: &[u8] = b"_file://\x00\x01infinity:globalStore";
@@ -82,11 +84,15 @@ fn stores() -> Result<Vec<Value>> {
     }
 }
 
+fn signed_out() -> Failure {
+    Failure::new(FailureKind::SignedOut).saying(text(SIGNED_OUT))
+}
+
 fn newest(found: Vec<(f64, String)>, now: f64) -> Result<WandToken> {
     let (expires_at, access_token) =
-        found.into_iter().max_by(|a, b| a.0.total_cmp(&b.0)).context("Wand session not found: install Wand and sign in")?;
+        found.into_iter().max_by(|a, b| a.0.total_cmp(&b.0)).context("Wand session not found").context(signed_out())?;
     if expires_at <= now {
-        bail!("Wand session expired: open Wand and sign in");
+        return Err(anyhow!("Wand session expired").context(signed_out()));
     }
     Ok(WandToken { access_token })
 }
@@ -216,10 +222,10 @@ mod tests {
 
     #[test]
     fn rejects_expired_and_missing() {
-        let expired = newest(vec![(100.0, "old".to_owned())], 100.0).unwrap_err();
-        assert_eq!(expired.to_string(), "Wand session expired: open Wand and sign in");
-        let missing = newest(vec![], 0.0).unwrap_err();
-        assert_eq!(missing.to_string(), "Wand session not found: install Wand and sign in");
+        let expired = Failure::from(newest(vec![(100.0, "old".to_owned())], 100.0).unwrap_err());
+        assert_eq!((expired.kind, expired.detail.as_str()), (FailureKind::SignedOut, "SignedOut: Wand session expired"));
+        let missing = Failure::from(newest(vec![], 0.0).unwrap_err());
+        assert_eq!((missing.kind, missing.detail.as_str()), (FailureKind::SignedOut, "SignedOut: Wand session not found"));
     }
 
     #[test]

@@ -5,18 +5,22 @@ use std::{
     sync::{Arc, Mutex, PoisonError},
 };
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use blocking::unblock;
-use futures::{FutureExt, StreamExt, future::BoxFuture};
-use model::{Attach, Live, Process};
+use futures::{FutureExt, StreamExt, TryFutureExt, future::BoxFuture};
+use model::{Attach, Failure, FailureKind, Live, Process};
 
 use crate::{
     attach::{Game, attach},
     binary,
     folder::Setting,
+    texts::{FOLDER_UNSET, text},
     tophat::{Event, Outcome, Server, Session},
     trainer::{Binary, Plan},
 };
+
+/// What a run hands back across the contract.
+type Answer<T> = std::result::Result<T, Failure>;
 
 /// Runs WeMod trainers on one Tophat server, started with the first run and kept for the app's life.
 #[derive(Clone)]
@@ -54,12 +58,14 @@ struct Runner {
 }
 
 impl model::Runner for Runner {
-    fn prepare(&self) -> BoxFuture<'_, Result<Box<dyn Attach>>> {
+    fn prepare(&self) -> BoxFuture<'_, Answer<Box<dyn Attach>>> {
         async move {
-            let Binary { url, hash } = self.binary.clone().map_err(|why| anyhow!("{why}"))?;
+            let Binary { url, hash } =
+                self.binary.clone().map_err(|why| anyhow!("{why}").context(Failure::new(FailureKind::Unsupported)))?;
             let folder = self.host.folder.clone();
             let install = unblock(move || folder.install()).await;
-            let trainerlib = install.context("Wand's folder is not set: pick it in Settings, APP")?.trainerlib();
+            let unset = || Failure::new(FailureKind::SetupNeeded).saying(text(FOLDER_UNSET));
+            let trainerlib = install.context("Wand's folder is not set").context(unset())?.trainerlib();
             let server = self.host.server()?;
             let data_dir = self.host.data_dir.clone();
             let trainer = {
@@ -82,7 +88,7 @@ struct Prepared {
 }
 
 impl Attach for Prepared {
-    fn attach(self: Box<Self>, process: Process) -> BoxFuture<'static, Result<Live>> {
+    fn attach(self: Box<Self>, process: Process) -> BoxFuture<'static, Answer<Live>> {
         async move {
             let game = Game { process: &process, trainer: &self.trainer, trainer_hash: &self.hash, variables: &self.variables };
             let (session, events) = attach(&self.server, &self.trainerlib, game).await?;
@@ -104,25 +110,25 @@ impl Attach for Prepared {
 struct Running(Session);
 
 impl model::Session for Running {
-    fn set<'a>(&'a self, key: &'a str, value: f64) -> BoxFuture<'a, Result<()>> {
+    fn set<'a>(&'a self, key: &'a str, value: f64) -> BoxFuture<'a, Answer<()>> {
         async move {
             match self.0.set_value(key, value).await? {
-                Outcome::Failed => bail!("the trainer refused it"),
+                Outcome::Failed => Err(Failure { detail: "the trainer refused it".into(), ..Failure::new(FailureKind::Refused) }),
                 Outcome::Set | Outcome::Changed => Ok(()),
             }
         }
         .boxed()
     }
 
-    fn stop(&self) -> BoxFuture<'_, Result<()>> {
-        self.0.stop().boxed()
+    fn stop(&self) -> BoxFuture<'_, Answer<()>> {
+        self.0.stop().map_err(Failure::from).boxed()
     }
 
-    fn position(&self) -> BoxFuture<'_, Result<[f64; 3]>> {
-        self.0.position().boxed()
+    fn position(&self) -> BoxFuture<'_, Answer<[f64; 3]>> {
+        self.0.position().map_err(Failure::from).boxed()
     }
 
-    fn teleport(&self, to: [f64; 3]) -> BoxFuture<'_, Result<()>> {
-        self.0.teleport(to).boxed()
+    fn teleport(&self, to: [f64; 3]) -> BoxFuture<'_, Answer<()>> {
+        self.0.teleport(to).map_err(Failure::from).boxed()
     }
 }

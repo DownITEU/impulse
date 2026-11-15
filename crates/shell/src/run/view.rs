@@ -1,5 +1,6 @@
 //! What the page shows of a run: its button and stage, the session panel and the note over the cheat list.
 
+use crate::ui::text::why;
 use std::time::Duration;
 
 use client::{
@@ -139,7 +140,7 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
 /// The line above the cheat list while the trainer is not live.
 pub fn run_note(runs: &Runs, game: &GameId, cx: &App) -> Div {
     match runs.state(game) {
-        State::Failed(error) => mono(error.to_owned(), 11.).text_color(rgb(WARN)),
+        State::Failed(error) => mono(why(cx, error), 11.).text_color(rgb(WARN)),
         State::Starting(stage) => mono(label(stage), 11.).text_color(rgb(accent(cx))),
         State::Stopping => mono(STOPPING, 11.).text_color(rgb(accent(cx))),
         State::Idle | State::Live => mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),

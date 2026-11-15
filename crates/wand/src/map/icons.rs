@@ -8,8 +8,8 @@ use std::{
     thread,
 };
 
-use anyhow::{Result, anyhow, bail};
-use model::Glyph;
+use anyhow::{Context, Result, anyhow, bail};
+use model::{Failure, FailureKind, Glyph};
 use ttf_parser::{Face, OutlineBuilder, Rect};
 
 use super::DIR;
@@ -87,7 +87,7 @@ pub fn attach(map: &mut model::Map, names: &[Vec<String>], data_dir: &Path, onli
 
 // Disk first and never revalidated: a subset under one URL does not change.
 fn download(dir: &Path, source: &Source) -> Result<()> {
-    let response = fetch::get(&source.url, None)?;
+    let response = fetch::get(&source.url, None).context(Failure::new(FailureKind::Offline))?;
     // An empty file marks a glyph the server does not have.
     let keep: &[u8] = match response.status {
         200 => &response.body,

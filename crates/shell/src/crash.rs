@@ -69,7 +69,9 @@ fn stop() {
 mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use anyhow::Result;
+    use model::Failure;
+
+    type Result<T> = std::result::Result<T, Failure>;
     use futures::{FutureExt, future::BoxFuture};
 
     use super::*;

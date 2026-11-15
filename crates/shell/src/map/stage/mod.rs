@@ -9,6 +9,10 @@ mod paint;
 mod pins;
 mod tiles;
 
+use crate::ui::{
+    key,
+    text::{failed, t},
+};
 use std::{ops::RangeInclusive, path::PathBuf, rc::Rc, sync::Arc, time::Instant};
 
 use gpui_kit::{
@@ -269,13 +273,22 @@ impl Render for Stage {
         let board = self.board.clone();
         let board = board.read(cx);
         // Keeps the focus in the map, so Escape still closes it.
-        let waiting = |tag, title, text: &str| -> AnyElement {
+        let waiting = |tag: SharedString, title: SharedString, text: SharedString| -> AnyElement {
             div().size_full().p(px(24.)).track_focus(&self.focus).child(notice(tag, title, text)).into_any_element()
         };
         let map = match &board.map {
             Load::Ready(map) => map.clone(),
-            Load::Pending => return waiting("[ LOADING ]", "LOADING THE MAP", "Pins and tiles are kept on disk after the first time."),
-            Load::Failed(why) => return waiting("[ NO MAP ]", "THE MAP IS UNAVAILABLE", &format!("It could not be loaded: {why}.")),
+            Load::Pending => {
+                return waiting(
+                    "[ LOADING ]".into(),
+                    "LOADING THE MAP".into(),
+                    "Pins and tiles are kept on disk after the first time.".into(),
+                );
+            }
+            Load::Failed(failure) => {
+                let body = failed(cx, key::MAP_FAILED_BODY, failure);
+                return waiting(t(cx, key::MAP_FAILED_TAG), t(cx, key::MAP_FAILED), body);
+            }
         };
         let view = cx.entity();
         let stage = div().id("map-stage").relative().size_full().overflow_hidden().bg(rgb(map.background));

@@ -12,6 +12,7 @@ mod provider;
 mod run;
 mod session;
 mod store;
+mod texts;
 mod tophat;
 mod trainer;
 mod transport;

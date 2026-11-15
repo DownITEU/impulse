@@ -1,6 +1,7 @@
 //! The shown map and what the user did with it, shared by the stage, the sidebar and the card.
 //! They observe it; it notifies on what a person does (clicks, typing, the player's position), never per frame.
 
+use model::Failure;
 use std::{path::PathBuf, rc::Rc, time::Duration};
 
 use client::map::{
@@ -57,7 +58,7 @@ pub struct Board {
     pub player: Option<[f64; 3]>,
     pub bearing: Option<Bearing>,
     // What went wrong last, shown on the map.
-    pub note: Option<String>,
+    pub note: Option<Failure>,
     // The player's position is asked for only while the map is on screen, this often.
     open: bool,
     every: Duration,
@@ -156,7 +157,7 @@ impl Board {
     }
 
     /// The map could not be loaded; a copy on screen stays.
-    pub fn fail(&mut self, why: String, cx: &mut Context<Self>) {
+    pub fn fail(&mut self, why: Failure, cx: &mut Context<Self>) {
         if matches!(self.map, Load::Pending) {
             self.map = Load::Failed(why);
             cx.notify();
@@ -412,7 +413,7 @@ impl Board {
             }
             board
                 .update(cx, |board, cx| {
-                    board.note = moved.err().map(|e| format!("TELEPORT FAILED: {e:#}").to_uppercase());
+                    board.note = moved.err();
                     cx.notify();
                 })
                 .ok();

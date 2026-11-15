@@ -69,7 +69,7 @@ pub struct Page {
 
 impl Page {
     pub fn new(registry: Arc<Registry>, paths: Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let settings = cx.new(|cx| Settings::new(&paths, cx));
+        let settings = cx.new(|cx| Settings::new(&paths, registry.texts().to_vec(), cx));
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
         let folders = cx.new(|cx| Folders::new(registry.clone(), cx));
         let account = cx.new(|cx| Account::new(registry.clone(), cx));
@@ -207,7 +207,7 @@ impl Page {
 
     fn pane(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let Some(game) = self.game(cx) else {
-            return div().flex_1().p(px(24.)).child(vacant(self.library.read(cx))).into_any_element();
+            return div().flex_1().p(px(24.)).child(vacant(self.library.read(cx), cx)).into_any_element();
         };
         let cheats = self.cheat_list.clone().into_any_element();
         let mapped = !game.source.maps.is_empty();

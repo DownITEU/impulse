@@ -144,7 +144,7 @@ impl Maps {
                     Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
                     // The network is next.
                     Snapshot::Cached(None) => {}
-                    Snapshot::Fresh(Err(e)) => board.fail(format!("{e:#}"), cx),
+                    Snapshot::Fresh(Err(e)) => board.fail(e, cx),
                 });
                 if shown.is_err() {
                     break;

@@ -227,7 +227,7 @@ impl Trainers {
                             }
                             // The network is next.
                             Snapshot::Cached(None) => trainers.shelf.pending(id.clone()),
-                            Snapshot::Fresh(Err(e)) => trainers.shelf.failed(id.clone(), format!("{e:#}")),
+                            Snapshot::Fresh(Err(e)) => trainers.shelf.failed(id.clone(), e),
                         }
                         cx.notify();
                     })

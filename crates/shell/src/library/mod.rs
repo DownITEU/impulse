@@ -227,7 +227,7 @@ fn listen(registry: &Arc<Registry>, cx: &mut Context<Library>) -> Task<()> {
                 Snapshot::Fresh(Err(e)) if !have_copy => {
                     library
                         .update(cx, |library, cx| {
-                            library.list = Load::Failed(format!("{e:#}"));
+                            library.list = Load::Failed(e);
                             cx.notify();
                         })
                         .ok();

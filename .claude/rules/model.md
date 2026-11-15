@@ -8,8 +8,9 @@ paths:
 What the UI, a run and the sources share, in no source's terms: data and traits, with only the logic every source must share.
 
 ## Surface
-- `Source` (`id`) and the capabilities over it: `Accounts`, `Games`, `Trainers` (by `Offer`), `Maps` (by `MapOffer`), `Folders`, `Caches`; a source implements only what it has. `Snapshot`, `SignIn`, `Account`, `Folder`, `Store`, `Clear` are their answers.
-- `SourceId`, `Ref`: a source's name and an id it minted, printed `source:id`; only `Ref` splits one.
+- `Source` (`id`, `texts`: its catalogs as `Files`) and the capabilities over it: `Accounts`, `Games`, `Trainers` (by `Offer`), `Maps` (by `MapOffer`), `Folders`, `Caches`; a source implements only what it has. `Snapshot`, `SignIn`, `Account`, `Folder`, `Store`, `Clear` are their answers.
+- `SourceId`, `Ref`: a source's name and an id it minted, printed `source:id`; only `Ref` splits one. `SourceId::APP` is the app's own.
+- `Text`: a message of a source's catalog (its domain is its `SourceId`), or plain content. `Failure`: a `FailureKind`, the source's own `message`, the English `detail`.
 - `Game`, `Offer`, `Standalone`, `Locator`: a game a source lists, with its store ids, `exe`, art and offers. `Game.id`, `Offer.id` (the trainer) and `MapOffer.id` are the source's `Ref`s.
 - `StoreId`: a launcher's id for a game, `<store>:<id>`, the one place that splits one (`store`, `id`, `steam_app`). `Installation`: a game on this machine (`Origin`: a launcher's `StoreId` or the picked executable, location, build).
 - `Chord`, `Held`, `mouse`: a hotkey in Wand's key codes, its names (`Display`), the keys being pressed.
@@ -32,6 +33,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - A pin description links to another pin with `PIN_LINK`. A source rewrites or drops its own link forms.
 - A `Frame` is valid: `axes` a permutation of 0, 1, 2, `scale` never zero.
 - `set_folder` calls are ordered: an older one never saves over a newer.
+- A crate marks an error at its origin with `.context(Failure::new(kind))`; `From<anyhow::Error>` finds the mark at the contract, else `Internal`. `detail` goes to the log only. A source names no UI place: the kind's text does.
 - No I/O here, and no source name or UI text except the chord names.
 - `model` names no crate of ours.
 

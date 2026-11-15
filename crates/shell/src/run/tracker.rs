@@ -7,9 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
 use gpui_kit::{Context, EventEmitter, Task};
-use model::{Frame, Session};
+use model::{Failure, Frame, Session};
 
 use client::map::heading::{Bearing, Heading};
 
@@ -105,7 +104,7 @@ impl Tracker {
     }
 
     /// How long to wait before asking again.
-    fn answered(&mut self, answer: Result<[f64; 3]>, every: Duration, cx: &mut Context<Self>) -> Duration {
+    fn answered(&mut self, answer: Result<[f64; 3], Failure>, every: Duration, cx: &mut Context<Self>) -> Duration {
         match answer {
             Ok(position) => {
                 self.failures = 0;
@@ -118,7 +117,7 @@ impl Tracker {
                 every
             }
             Err(e) => {
-                log::debug!("player position: {e:#}");
+                log::debug!("player position: {e}");
                 self.failures += 1;
                 if self.failures == GIVE_UP {
                     log::warn!("the trainer does not tell where the player is");

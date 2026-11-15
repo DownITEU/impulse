@@ -3,7 +3,7 @@
 use std::{ffi::OsStr, io, os::windows::ffi::OsStrExt, path::Path, ptr};
 
 use anyhow::{Context, Result, ensure};
-use model::Origin;
+use model::{Failure, FailureKind, Origin};
 use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
 /// Starts a Steam app, or the executable the user picked in its own folder (blocking).
@@ -11,7 +11,7 @@ use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWN
 pub fn start(origin: &Origin) -> Result<bool> {
     let id = match origin {
         Origin::Picked(exe) => {
-            open(exe.as_os_str(), exe.parent())?;
+            open(exe.as_os_str(), exe.parent()).context(Failure::new(FailureKind::GameNotFound))?;
             return Ok(true);
         }
         Origin::Launcher(id) if id.store() == "steam" => id,

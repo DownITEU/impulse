@@ -7,6 +7,7 @@ mod view;
 
 use gpui_kit::{App, Context};
 use i18n::Language;
+use model::{Files, SourceId};
 use serde::{Deserialize, Serialize};
 
 use client::{
@@ -81,11 +82,13 @@ impl Prefs {
 
 pub struct Settings {
     prefs: Stored<Prefs>,
+    /// The sources' catalogs, for each language's `Texts`.
+    sources: Vec<(SourceId, Files)>,
 }
 
 impl Settings {
-    pub fn new(paths: &Paths, cx: &mut Context<Self>) -> Self {
-        let settings = Self { prefs: Stored::load(paths.settings()) };
+    pub fn new(paths: &Paths, sources: Vec<(SourceId, Files)>, cx: &mut Context<Self>) -> Self {
+        let settings = Self { prefs: Stored::load(paths.settings()), sources };
         settings.apply(cx);
         settings
     }
@@ -109,7 +112,7 @@ impl Settings {
             cx.set_global(Look { accent });
         }
         if texts {
-            cx.set_global(Texts::new(language));
+            cx.set_global(Texts::new(language, &self.sources));
             gpui_kit::component::set_locale(language.tag);
         }
         if look || texts {

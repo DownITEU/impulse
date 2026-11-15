@@ -1,6 +1,7 @@
 //! A row per source folder (`Folders`): a path field, the source's ready picks and a folder picker.
 //! The source checks and saves every edit; the row shows what it answers.
 
+use crate::ui::text::{said, text};
 use std::path::PathBuf;
 
 use gpui_kit::{
@@ -105,10 +106,10 @@ impl SettingsView {
             }
         });
         let status = match &folder.status {
-            Ok(found) => mono(found.clone(), 11.).text_color(rgb(accent(cx))),
-            Err(why) => mono(why.clone(), 11.).text_color(rgb(WARN)),
+            Ok(found) => mono(text(cx, found), 11.).text_color(rgb(accent(cx))),
+            Err(failure) => mono(said(cx, failure), 11.).text_color(rgb(WARN)),
         };
-        v_flex().gap(px(8.)).py(px(12.)).child(label(folder.label, folder.hint)).child(field).child(status)
+        v_flex().gap(px(8.)).py(px(12.)).child(label(text(cx, &folder.label), text(cx, &folder.hint))).child(field).child(status)
     }
 }
 

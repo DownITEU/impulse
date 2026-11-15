@@ -6,7 +6,6 @@ use std::{
     sync::{Arc, Mutex, PoisonError},
 };
 
-use anyhow::anyhow;
 use blocking::unblock;
 use futures::{
     FutureExt, StreamExt,
@@ -14,7 +13,7 @@ use futures::{
     future::{self, BoxFuture, Shared},
     stream::{self, BoxStream},
 };
-use model::{Account, Clear, Folder, Game, Installation, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
+use model::{Account, Clear, Failure, Folder, Game, Installation, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
 
 use crate::{
     binary, catalog,
@@ -23,11 +22,12 @@ use crate::{
     run::Host,
     session::{self, Session, Source, account},
     store,
+    texts::{self, *},
     trainer::{self, Stamp, Trainer},
     transport::{self, Transport},
 };
 
-type Link = Result<(Arc<Session>, Transport), String>;
+type Link = Result<(Arc<Session>, Transport), Failure>;
 
 // Store ids.
 const MAPS: &str = "maps";
@@ -38,7 +38,7 @@ const BRIDGE: &str = "bridge";
 
 pub struct Wand {
     data_dir: PathBuf,
-    transport: Result<Transport, String>,
+    transport: Result<Transport, Failure>,
     // Shared by every caller; a failed connection is tried again by the next `sign_in`.
     session: Mutex<Shared<BoxFuture<'static, Link>>>,
     folder: Arc<Setting>,
@@ -55,7 +55,7 @@ impl Wand {
     pub fn new(data_dir: PathBuf) -> Self {
         let transport = Transport::spawn(data_dir.clone()).map_err(|e| {
             log::error!("Transport: {e:#}");
-            format!("{e:#}")
+            Failure::from(e)
         });
         let folder = Arc::new(Setting::load(&data_dir));
         Self {
@@ -83,6 +83,10 @@ impl Wand {
 impl model::Source for Wand {
     fn id(&self) -> SourceId {
         crate::source()
+    }
+
+    fn texts(&self) -> model::Files {
+        texts::FILES
     }
 }
 
@@ -138,7 +142,7 @@ impl model::Games for Wand {
                 Ok(None) => log::debug!("catalog is up to date"),
                 Err(e) => {
                     log::warn!("catalog not refreshed: {e:#}");
-                    send(&tx, Snapshot::Fresh(Err(e)));
+                    send(&tx, Snapshot::Fresh(Err(e.into())));
                 }
             }
         })
@@ -166,14 +170,14 @@ impl model::Trainers for Wand {
                 return;
             }
             let fetched = async {
-                let (session, transport) = session.await.map_err(|e| anyhow!(e))?;
+                let (session, transport) = session.await?;
                 trainer::fetch(&session, &transport, &dir, &id, stamp).await
             }
             .await;
             if let Err(e) = &fetched {
                 log::warn!("trainer {id}: {e:#}");
             }
-            send(&tx, Snapshot::Fresh(fetched.map(snapshot)));
+            send(&tx, Snapshot::Fresh(fetched.map(snapshot).map_err(Failure::from)));
         })
     }
 }
@@ -192,7 +196,7 @@ impl model::Maps for Wand {
             send(&tx, Snapshot::Cached(copy.map(|copy| copy.map)));
             if !fresh {
                 let mut fetched = async {
-                    let (session, transport) = session.await.map_err(|e| anyhow!(e))?;
+                    let (session, transport) = session.await?;
                     map::fetch(&session, &transport, &dir, offer.id.id(), offer.revision.clone()).await
                 }
                 .await;
@@ -200,7 +204,7 @@ impl model::Maps for Wand {
                     log::warn!("map {}: {e:#}", offer.id);
                 }
                 icons = fetched.as_mut().ok().and_then(|copy| copy.icons.take());
-                send(&tx, Snapshot::Fresh(fetched.map(|copy| copy.map)));
+                send(&tx, Snapshot::Fresh(fetched.map(|copy| copy.map).map_err(Failure::from)));
             }
             // The map shows first; icons it misses follow.
             if let Some(icons) = icons
@@ -230,14 +234,14 @@ impl model::Caches for Wand {
         let dir = self.data_dir.clone();
         unblock(move || {
             let id = |id| Ref::new(&crate::source(), id);
-            let now = |store, name, hint, bytes| Store { id: id(store), name, hint, bytes, clear: Clear::Now };
+            let store = |store, name, hint, bytes, clear| Store { id: id(store), name: text(name), hint: text(hint), bytes, clear };
             let (profile, asked) = transport::profile(&dir);
             vec![
-                now(MAPS, "MAPS", "pins, regions and icons", map::size(&dir)),
-                now(CATALOG, "CATALOG", "the games and your account name", catalog::size(&dir) + account::size(&dir)),
-                now(TRAINERS, "TRAINERS", "cheat lists", trainer::size(&dir)),
-                now(TRAINER_FILES, "TRAINER FILES", "trainer DLLs from the CDN", binary::size(&dir)),
-                Store { id: id(BRIDGE), name: "BROWSER", hint: "WebView2 cache", bytes: profile, clear: Clear::NextStart { asked } },
+                store(MAPS, STORE_MAPS, STORE_MAPS_HINT, map::size(&dir), Clear::Now),
+                store(CATALOG, STORE_CATALOG, STORE_CATALOG_HINT, catalog::size(&dir) + account::size(&dir), Clear::Now),
+                store(TRAINERS, STORE_TRAINERS, STORE_TRAINERS_HINT, trainer::size(&dir), Clear::Now),
+                store(TRAINER_FILES, STORE_TRAINER_FILES, STORE_TRAINER_FILES_HINT, binary::size(&dir), Clear::Now),
+                store(BRIDGE, STORE_BROWSER, STORE_BROWSER_HINT, profile, Clear::NextStart { asked }),
             ]
         })
         .boxed()
@@ -272,13 +276,13 @@ fn snapshot(trainer: Trainer, host: &Host, custom: Option<&HashMap<String, store
     trainer
 }
 
-fn connect(transport: &Result<Transport, String>, data_dir: &Path) -> Shared<BoxFuture<'static, Link>> {
+fn connect(transport: &Result<Transport, Failure>, data_dir: &Path) -> Shared<BoxFuture<'static, Link>> {
     let (transport, vault) = (transport.clone(), data_dir.join("session.bin"));
     async move {
         let transport = transport?;
         let (session, source) = session::connect(&transport, vault).await.map_err(|e| {
             log::error!("Session: {e:#}");
-            format!("{e:#}")
+            Failure::from(e)
         })?;
         let how = match source {
             Source::Restored => "restored",

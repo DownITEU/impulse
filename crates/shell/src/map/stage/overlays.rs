@@ -1,9 +1,10 @@
 //! What floats over the map and moves with it: the hovered pin's chip, the right click menu,
 //! the buttons and layers, the player's readout.
 
+use crate::ui::{key, text::failed};
 use client::map::state::Saved;
 use gpui_kit::{
-    AnyElement, App, Context, Div, FontWeight, IntoElement, Stateful,
+    AnyElement, App, Context, Div, FontWeight, IntoElement, SharedString, Stateful,
     component::{h_flex, v_flex},
     div, img,
     prelude::*,
@@ -122,7 +123,7 @@ impl Stage {
 
     /// Where the player is, and what went wrong last.
     pub(super) fn readout(&self, board: &Board, cx: &App) -> impl IntoElement {
-        let chip = |text: String, color: u32| {
+        let chip = |text: SharedString, color: u32| {
             mono(text, 10.5).px(px(7.)).py(px(3.)).border_1().border_color(alpha(color, 0.4)).bg(alpha(BG, 0.85)).text_color(rgb(color))
         };
         h_flex()
@@ -130,8 +131,8 @@ impl Stage {
             .left(px(MARGIN))
             .bottom(px(MARGIN))
             .gap(px(8.))
-            .when_some(board.player, |strip, [x, y, z]| strip.child(chip(format!("X {x:.0} · Y {y:.0} · Z {z:.0}"), accent(cx))))
-            .when_some(board.note.clone(), |strip, note| strip.child(chip(note, WARN)))
+            .when_some(board.player, |strip, [x, y, z]| strip.child(chip(format!("X {x:.0} · Y {y:.0} · Z {z:.0}").into(), accent(cx))))
+            .when_some(board.note.as_ref(), |strip, failure| strip.child(chip(failed(cx, key::TELEPORT_FAILED, failure), WARN)))
     }
 }
 

@@ -3,13 +3,13 @@
 mod tracker;
 mod view;
 
+use crate::ui::{key, text::app_text};
 use std::{
     mem,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use anyhow::{Context as _, Result};
 use client::{
     library::GameId,
     profile::Values,
@@ -18,7 +18,7 @@ use client::{
 };
 use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
-use model::{Event, Live, Process, Session};
+use model::{Event, Failure, FailureKind, Live, Process, Session};
 pub use tracker::{Fix, Lease, Tracked, Tracker};
 pub use view::{run_button, run_note, session_panel};
 
@@ -53,7 +53,7 @@ pub enum State<'a> {
     Starting(Stage),
     Live,
     Stopping,
-    Failed(&'a str),
+    Failed(&'a Failure),
 }
 
 enum Play {
@@ -87,7 +87,7 @@ enum Play {
     /// Stays until the next run, so the reason is still there when the user looks.
     Failed {
         game: GameId,
-        error: String,
+        error: Failure,
     },
 }
 
@@ -276,9 +276,10 @@ impl Runs {
         }
     }
 
-    fn request(&self, game: &GameId, cx: &App) -> Result<Request> {
-        let listed = self.library.read(cx).game(game).context("the game is not in the library")?;
-        let sheet = self.trainers.read(cx).sheet(game).context("the cheat list is not loaded")?;
+    fn request(&self, game: &GameId, cx: &App) -> Result<Request, Failure> {
+        let listed = self.library.read(cx).game(game).ok_or(Failure::new(FailureKind::GameNotFound))?;
+        let no_cheats = || Failure::new(FailureKind::NotFound).saying(app_text(key::RUN_NO_CHEATS));
+        let sheet = self.trainers.read(cx).sheet(game).ok_or_else(no_cheats)?;
         Ok(run::request(&listed.install, &sheet.plan))
     }
 
@@ -289,7 +290,7 @@ impl Runs {
         }
     }
 
-    fn attached(&mut self, game: GameId, outcome: Result<(Process, Live)>, cx: &mut Context<Self>) {
+    fn attached(&mut self, game: GameId, outcome: Result<(Process, Live), Failure>, cx: &mut Context<Self>) {
         let Play::Busy { hold, .. } = mem::replace(&mut self.play, Play::Idle) else { return };
         let (process, Live { session, events }) = match outcome {
             Ok(attached) => attached,
@@ -341,9 +342,9 @@ impl Runs {
         cx.notify();
     }
 
-    fn fail(&mut self, game: GameId, error: anyhow::Error, cx: &mut Context<Self>) {
-        log::warn!("run failed: {error:#}");
-        self.play = Play::Failed { game, error: format!("{error:#}") };
+    fn fail(&mut self, game: GameId, error: Failure, cx: &mut Context<Self>) {
+        log::warn!("run failed: {error}");
+        self.play = Play::Failed { game, error };
         cx.notify();
     }
 

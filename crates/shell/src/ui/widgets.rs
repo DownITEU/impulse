@@ -149,7 +149,7 @@ pub fn icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size:
 }
 
 /// A dashed card that stands in for content that is not there.
-pub fn notice(tag: &'static str, title: &str, text: &str) -> Div {
+pub fn notice(tag: impl Into<SharedString>, title: impl Into<SharedString>, text: impl Into<SharedString>) -> Div {
     v_flex()
         .items_center()
         .gap(px(14.))
@@ -160,8 +160,8 @@ pub fn notice(tag: &'static str, title: &str, text: &str) -> Div {
         .border_color(line(0.2))
         .bg(alpha(BG, 0.7))
         .child(mono(tag, 11.).text_color(rgb(DIM)))
-        .child(tracked(title, 22., 0.1).justify_center().font_weight(FontWeight::BOLD))
-        .child(div().max_w(px(420.)).text_center().text_color(rgb(MUTED)).child(text.to_owned()))
+        .child(tracked(&title.into(), 22., 0.1).justify_center().font_weight(FontWeight::BOLD))
+        .child(div().max_w(px(420.)).text_center().text_color(rgb(MUTED)).child(text.into()))
 }
 
 pub fn button(label: &str) -> Div {

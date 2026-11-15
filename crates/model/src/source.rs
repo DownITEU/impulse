@@ -2,15 +2,21 @@
 
 use std::path::PathBuf;
 
-use anyhow::Result;
 use futures::{future::BoxFuture, stream::BoxStream};
 
-use crate::{Game, Installation, Map, MapOffer, Offer, Ref, SourceId, Trainer};
+use crate::{Failure, Game, Installation, Map, MapOffer, Offer, Ref, SourceId, Text, Trainer};
 
 pub trait Source: Send + Sync {
-    /// The source of every `Ref` it mints.
+    /// The source of every `Ref` it mints, and the domain of its texts.
     fn id(&self) -> SourceId;
+
+    fn texts(&self) -> Files {
+        &[]
+    }
 }
+
+/// Catalogs: a language tag and its Fluent source each.
+pub type Files = &'static [(&'static str, &'static str)];
 
 pub trait Accounts: Source {
     fn sign_in(&self) -> BoxStream<'static, SignIn>;
@@ -44,8 +50,8 @@ pub trait Caches: Source {
 /// Files a source keeps, of one kind.
 pub struct Store {
     pub id: Ref,
-    pub name: &'static str,
-    pub hint: &'static str,
+    pub name: Text,
+    pub hint: Text,
     pub bytes: u64,
     pub clear: Clear,
 }
@@ -64,7 +70,7 @@ pub enum Snapshot<T> {
     /// The disk copy, if any.
     Cached(Option<T>),
     /// An `Err` keeps the cached value.
-    Fresh(Result<T>),
+    Fresh(Result<T, Failure>),
 }
 
 pub enum SignIn {
@@ -81,12 +87,12 @@ pub struct Account {
 /// A folder a source reads from, set in Settings.
 pub struct Folder {
     pub id: Ref,
-    pub label: &'static str,
-    pub hint: &'static str,
+    pub label: Text,
+    pub hint: Text,
     /// The saved choice, else the source's default.
     pub path: Option<PathBuf>,
     /// What `path` holds, or why it cannot be used.
-    pub status: Result<String, String>,
+    pub status: Result<Text, Failure>,
     /// Ready picks: a label and a path.
     pub choices: Vec<(String, PathBuf)>,
     /// The pick `path` lies in.

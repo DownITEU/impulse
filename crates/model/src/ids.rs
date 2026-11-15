@@ -7,9 +7,11 @@ use std::{fmt, sync::Arc};
 pub struct SourceId(Arc<str>);
 
 impl SourceId {
-    /// The app's own ids (`app:pinned`, its media stores): never a source's.
+    /// The app's own source name: its ids (`app:pinned`, its media stores) and its texts' domain; never a source's.
+    pub const APP: &str = "app";
+
     pub fn app() -> Self {
-        Self("app".into())
+        Self(Self::APP.into())
     }
 
     pub fn new(name: &str) -> Option<Self> {

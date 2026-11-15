@@ -8,12 +8,12 @@ paths:
 The app's logic without GPUI: what `shell`'s entities hold and decide, and the files that keep it. Data in, data out; the async work and the UI stay in `shell`.
 
 ## Surface
-- `Registry`: the sources by capability, built in `app`. A `Ref` goes to the source it names, an unknown one answers `Fresh(Err)` (a folder: an error status); `folders` and `stores` join every source's; `games` and `sign_in` are the first source's.
+- `Registry`: the sources by capability, built in `app`. A `Ref` goes to the source it names, an unknown one answers `Fresh(Err)` (a folder: an error status); `folders` and `stores` join every source's; `games` and `sign_in` are the first source's; `texts`, each source's catalogs once.
 - `storage`: `Paths` names every app file and folder; `Stored<T>`; `read`, `write` for the per-map files; `migrate` (v1 files to v2, run by `app` before the window); `by_ref` (serde for a map keyed by `Ref`); `name` (an id as a file name).
 - `media`: `Media` (a cache folder per kind), the file per URL, `known_missing`, `steam_hero`; `limit` (`Kept`, `sweep`).
 - `profile`: `Profiles` (`games.json`): a `GameProfile` by `GameId`, a `TrainerProfile` by the trainer's `Ref`; `Collection`, `Values`.
 - `bindings`: `Store` (`hotkeys.json`, by trainer `Ref`), `Choice`, `rebind` with the "no chord twice" rule.
-- `Load`: something that arrives after the window opens.
+- `Load`: something that arrives after the window opens, or the `Failure` why it did not.
 - `trainer`: `Sheet`, a trainer as the app holds it, with its `Ref` and folds by section id (`PINNED` or a category), `step` (a hotkey's `Step`), `Span` (a slider), `initial`; `Shelf`, the sheets by game and the holds (a held game's newer copy waits).
 - `library`: `Game`, `GameId` (the first source's game `Ref` as text), `Library`, `Support`, `Stamp`, `scan` (launchers joined with the catalog), `Picked` (`picked.json`), `sources` (the source menu).
 - `run`: `request` (a `play::Request` from an install and a plan), `start`, `Stage`, and the bookkeeping `opened`, `closed`.

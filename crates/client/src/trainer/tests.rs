@@ -1,7 +1,7 @@
 use std::{fs, sync::Arc, time::Duration};
 
 use futures::future::BoxFuture;
-use model::{Args, Attach, Cheat, Kind, Plan, Ref, Runner, Trainer};
+use model::{Args, Attach, Cheat, Failure, FailureKind, Kind, Plan, Ref, Runner, Trainer};
 
 use super::{PINNED, Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, step};
 use crate::{
@@ -93,8 +93,8 @@ fn wheel_moves_a_coarse_step() {
 struct Idle;
 
 impl Runner for Idle {
-    fn prepare(&self) -> BoxFuture<'_, anyhow::Result<Box<dyn Attach>>> {
-        Box::pin(async { anyhow::bail!("idle") })
+    fn prepare(&self) -> BoxFuture<'_, Result<Box<dyn Attach>, Failure>> {
+        Box::pin(async { Err(Failure::new(FailureKind::Internal)) })
     }
 }
 
@@ -156,12 +156,12 @@ fn a_failed_refresh_keeps_a_copy_stale_and_fails_without_one() {
     shelf.put(g.clone(), sheet(1));
     shelf.hold(g.clone());
     shelf.put(g.clone(), sheet(2));
-    shelf.failed(g.clone(), "offline".into());
+    shelf.failed(g.clone(), Failure::new(FailureKind::Offline));
     assert!(!shelf.is_current(&g, &(None, Some(1))));
     shelf.release(&g, &profiles("stale", false));
     assert!(shelf.sheet(&g).is_some_and(|sheet| sheet.stale));
     shelf.pending(h.clone());
-    shelf.failed(h.clone(), "offline".into());
+    shelf.failed(h.clone(), Failure::new(FailureKind::Offline));
     assert!(matches!(shelf.get(&h), Some(Load::Failed(_))));
 }
 

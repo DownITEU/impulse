@@ -1,5 +1,9 @@
 //! The game list at the left: favorites first, a filter, `+ ADD`; and the pane's notice before there is a game.
 
+use crate::ui::{
+    key,
+    text::{failed, t},
+};
 use std::time::Duration;
 
 use client::{
@@ -216,14 +220,12 @@ fn section_title(title: &'static str, count: usize) -> impl IntoElement {
 }
 
 /// The pane before there is a game to open.
-pub fn vacant(library: &Library) -> impl IntoElement {
+pub fn vacant(library: &Library, cx: &App) -> impl IntoElement {
     match library.list() {
         Load::Pending => notice("[ SCANNING ]", "LOOKING FOR INSTALLED GAMES", "Reading the game catalog and your launchers."),
-        Load::Failed(why) => notice(
-            "[ NO CATALOG ]",
-            "THE GAME CATALOG IS UNAVAILABLE",
-            &format!("It could not be downloaded: {why}. Impulse tries again on the next start."),
-        ),
+        Load::Failed(failure) => {
+            notice(t(cx, key::CATALOG_FAILED_TAG), t(cx, key::CATALOG_FAILED), failed(cx, key::CATALOG_FAILED_BODY, failure))
+        }
         Load::Ready(_) => notice(
             "[ NO GAMES ]",
             "NO INSTALLED GAMES FOUND",

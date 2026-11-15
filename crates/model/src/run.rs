@@ -1,9 +1,10 @@
 //! A trainer running in a game process, whoever provides it.
 
-use anyhow::Result;
 use futures::{future::BoxFuture, stream::BoxStream};
 
-use crate::Process;
+use crate::{Failure, Process};
+
+type Result<T> = std::result::Result<T, Failure>;
 
 /// What one cheat list takes to run.
 pub trait Runner: Send + Sync {

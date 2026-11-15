@@ -17,5 +17,5 @@ pub use registry::Registry;
 pub enum Load<T> {
     Pending,
     Ready(T),
-    Failed(String),
+    Failed(model::Failure),
 }

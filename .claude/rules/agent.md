@@ -9,7 +9,7 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 
 ## Surface
 - `find(&Rule)`: the matching process that is old enough, the one with the biggest working set (blocking). Age and working set never leave the crate.
-- `wait(&Rule, within)`: polls `find` once a second; needs no runtime; dropping it stops within one poll.
+- `wait(&Rule, within)`: polls `find` once a second; needs no runtime; dropping it stops within one poll. Its timeout is marked `GameNotFound`.
 - `of(pid)`: the identity of one process now (blocking), `None` when it cannot be looked at.
 - `Image::open(path, publisher)`, `Image::path`: the only way to name a DLL that enters a game.
 - `load(&Process, &Image, export, arg)`: runs `LoadLibraryW` in the target, then starts `export` with a copy of `arg`.
