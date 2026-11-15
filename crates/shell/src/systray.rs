@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use futures::{StreamExt, channel::mpsc};
 use gpui_kit::{App, Context, Entity, Window};
-use tray::{Event, Menu, Tray};
+use tray::{Event, Menu, Tray, Words};
 
 use super::{
     hwnd,
@@ -14,6 +14,10 @@ use super::{
     library::Library,
     run::{RunEvent, Runs},
     settings::Settings,
+    ui::{
+        key,
+        text::{Texts, t},
+    },
 };
 
 // Quitting waits this long at most for a live trainer to stop.
@@ -73,6 +77,8 @@ impl TrayIcon {
         cx.observe(&icon.runs, |icon, _, cx| icon.set_menu(cx)).detach();
         cx.observe(&icon.library, |icon, _, cx| icon.set_menu(cx)).detach();
         cx.observe(&icon.layer, |icon, _, cx| icon.set_menu(cx)).detach();
+        cx.observe_global::<Texts>(|icon, cx| icon.set_menu(cx)).detach();
+        icon.set_menu(cx);
         icon
     }
 
@@ -122,6 +128,9 @@ impl TrayIcon {
     fn set_menu(&self, cx: &App) {
         let Some(tray) = &self.tray else { return };
         let playing = self.runs.read(cx).live().and_then(|id| self.library.read(cx).game(id)).map(|game| game.name.to_string());
-        tray.set_menu(Menu { playing, over: self.layer.read(cx).is_over() });
+        let word = |key| t(cx, key).to_string();
+        let words =
+            Words { open: word(key::TRAY_OPEN), stop: word(key::TRAY_STOP), overlay: word(key::TRAY_OVERLAY), quit: word(key::TRAY_QUIT) };
+        tray.set_menu(Menu { playing, over: self.layer.read(cx).is_over(), words });
     }
 }

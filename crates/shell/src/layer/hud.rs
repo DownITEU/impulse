@@ -27,6 +27,8 @@ use crate::{
     trainer::{Trainers, title},
     ui::{
         assets::Icon,
+        key,
+        text::t,
         theme::*,
         widgets::{icon_button, notice},
     },
@@ -34,7 +36,7 @@ use crate::{
 
 actions!(hud, [LeaveOverlay]);
 
-const CONTEXT: &str = "Hud";
+const CONTEXT: &str = "hud";
 const MODS: &str = "mods";
 const MAP: &str = "map";
 const SESSION: &str = "session";
@@ -50,7 +52,7 @@ const SIDE: f32 = 320.;
 pub(super) static DOCKS: [Spec; 4] = [
     Spec {
         id: MODS,
-        title: "MODS",
+        title: key::OVERLAY_DOCK_MODS,
         icon: Icon::Mods,
         first: list_first,
         smallest: Some(size(px(420.), px(240.))),
@@ -59,18 +61,26 @@ pub(super) static DOCKS: [Spec; 4] = [
     },
     Spec {
         id: MAP,
-        title: "MAP",
+        title: key::OVERLAY_DOCK_MAP,
         icon: Icon::Map,
         first: map_first,
         smallest: Some(size(px(360.), px(280.))),
         shown: true,
         body_moves: false,
     },
-    Spec { id: SESSION, title: "SESSION", icon: Icon::Clock, first: side_first, smallest: None, shown: true, body_moves: false },
+    Spec {
+        id: SESSION,
+        title: key::OVERLAY_DOCK_SESSION,
+        icon: Icon::Clock,
+        first: side_first,
+        smallest: None,
+        shown: true,
+        body_moves: false,
+    },
     // Also over the game while Impulse is behind it.
     Spec {
         id: MINIMAP,
-        title: "MINIMAP",
+        title: key::OVERLAY_DOCK_MINIMAP,
         icon: Icon::Player,
         first: minimap_first,
         smallest: Some(size(px(200.), px(200.))),
@@ -311,9 +321,9 @@ impl Render for Hud {
                     (MINIMAP, Some(_)) if mapped => div()
                         .p(px(16.))
                         .child(notice(
-                            "[ MINIMAP ]",
-                            "NO LIVE MAP",
-                            "It follows the player while a trainer that can place them runs in a game with a map.",
+                            t(cx, key::OVERLAY_MINIMAP_TAG),
+                            t(cx, key::OVERLAY_NO_LIVE_MAP),
+                            t(cx, key::OVERLAY_NO_LIVE_MAP_HINT),
                         ))
                         .into_any_element(),
                     (SESSION, Some(game)) => div().p(px(16.)).child(self.session(game, cx)).into_any_element(),

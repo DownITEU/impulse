@@ -11,12 +11,15 @@ use gpui_kit::{
     prelude::*,
     px, rgb,
 };
+use i18n::{Arg, Key};
 use model::Kind;
 
 use super::{CheatList, Menu, Printed, number, open_menu};
 use crate::ui::{
     assets::Icon,
     dropdown::{dropdown, span},
+    key,
+    text::{t, tf},
     theme::*,
     widgets::{button, flash_button, icon, mono, tip, toggle},
 };
@@ -72,7 +75,7 @@ impl CheatList {
                         ),
                     )
                 })
-                .child(self.press(index, "SET", "OK", running, cx))
+                .child(self.press(index, key::CHEATS_SET, key::CHEATS_SET_DONE, running, cx))
                 .into_any_element(),
             Kind::Number => {
                 let step = cheat.args.step.unwrap_or(1.);
@@ -95,7 +98,7 @@ impl CheatList {
                     .child(nudge("increase", "+", step))
                     .into_any_element()
             }
-            Kind::Button => self.press(index, "EXECUTE", "APPLIED", running, cx).px(px(14.)).into_any_element(),
+            Kind::Button => self.press(index, key::CHEATS_EXECUTE, key::CHEATS_EXECUTE_DONE, running, cx).px(px(14.)).into_any_element(),
             Kind::Selection => {
                 let options = printed.rows[index].options.clone();
                 let current = value as usize;
@@ -123,28 +126,30 @@ impl CheatList {
     }
 
     /// A button with no state of its own: it confirms the press for a moment.
-    fn press(&self, index: usize, label: &str, done: &str, running: bool, cx: &Context<Self>) -> Stateful<Div> {
-        flash_button(label, done, self.is_flashed(index), cx).id(("press", index)).on_click(cx.listener(move |list, _, _, cx| {
-            if !running {
-                return;
-            }
-            // A cheat with a text field takes its value from it; a button cheat sends its own and
-            // keeps no state.
-            let Some(game) = list.selected(cx) else { return };
-            let (typed, button) = list.trainers.read(cx).sheet(&game).map_or((None, false), |sheet| {
-                let cheat = &sheet.cheats[index];
-                let input = list.printed.as_ref().and_then(|printed| printed.inputs.get(&index));
-                let typed = input.and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
-                (typed, cheat.kind == Kind::Button)
-            });
-            if let Some(value) = typed {
-                list.set_value(index, value, cx);
-            }
-            if button {
-                list.runs.update(cx, |runs, cx| runs.press(index, cx));
-            }
-            list.flash(index, cx);
-        }))
+    fn press(&self, index: usize, label: Key, done: Key, running: bool, cx: &Context<Self>) -> Stateful<Div> {
+        flash_button(&t(cx, label), &t(cx, done), self.is_flashed(index), cx).id(("press", index)).on_click(cx.listener(
+            move |list, _, _, cx| {
+                if !running {
+                    return;
+                }
+                // A cheat with a text field takes its value from it; a button cheat sends its own and
+                // keeps no state.
+                let Some(game) = list.selected(cx) else { return };
+                let (typed, button) = list.trainers.read(cx).sheet(&game).map_or((None, false), |sheet| {
+                    let cheat = &sheet.cheats[index];
+                    let input = list.printed.as_ref().and_then(|printed| printed.inputs.get(&index));
+                    let typed = input.and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
+                    (typed, cheat.kind == Kind::Button)
+                });
+                if let Some(value) = typed {
+                    list.set_value(index, value, cx);
+                }
+                if button {
+                    list.runs.update(cx, |runs, cx| runs.press(index, cx));
+                }
+                list.flash(index, cx);
+            },
+        ))
     }
 
     /// Ten ticks: click or drag across them, or use the wheel.
@@ -198,10 +203,14 @@ impl CheatList {
         let (save, kept) = (profile.save_mods, profile.values.len());
         let resettable = if running { sheet.active() > 0 } else { kept > 0 };
         let label = match kept {
-            0 => "SAVE".to_owned(),
-            _ if running => "SAVE".to_owned(),
-            kept => format!("SAVED {kept:02}"),
+            0 => t(cx, key::CHEATS_SAVE),
+            _ if running => t(cx, key::CHEATS_SAVE),
+            kept => {
+                let padded = format!("{kept:02}");
+                tf(cx, key::CHEATS_SAVED, &[("saved", Arg::Str(&padded)), ("count", Arg::Num(kept as f64))])
+            }
         };
+        let save_tip = t(cx, key::CHEATS_SAVE_TIP);
         h_flex()
             .flex_none()
             .gap(px(10.))
@@ -211,7 +220,7 @@ impl CheatList {
                     .id("save-mods")
                     .gap(px(8.))
                     .cursor_pointer()
-                    .tooltip(|window, cx| tip("The mods a run leaves on come back on at the next one.".into(), window, cx))
+                    .tooltip(move |window, cx| tip(save_tip.clone(), window, cx))
                     .on_click(cx.listener(move |list, _, _, cx| {
                         let Some(game) = list.selected(cx) else { return };
                         list.trainers.update(cx, |trainers, cx| trainers.set_save_mods(&game, !save, cx));
@@ -220,7 +229,7 @@ impl CheatList {
                     .child(toggle(save, cx)),
             )
             .child(
-                button("RESET")
+                button(&t(cx, key::CHEATS_RESET))
                     .id("reset-mods")
                     .h(px(24.))
                     .when(!resettable, |button| button.opacity(0.4).cursor_default())

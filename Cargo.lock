@@ -899,6 +899,7 @@ name = "checks"
 version = "0.1.0"
 dependencies = [
  "fluent-syntax",
+ "proc-macro2",
  "serde_json",
 ]
 
@@ -6814,6 +6815,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tray",
+ "unicode-segmentation",
  "video",
 ]
 

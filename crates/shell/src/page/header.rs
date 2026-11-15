@@ -1,6 +1,9 @@
 //! The custom title bar: gaps drag the window, controls occlude the drag area.
 
-use gpui_kit::{App, Entity, FontWeight, IntoElement, Window, WindowControlArea, component::h_flex, div, prelude::*, px, rgb};
+use gpui_kit::{
+    App, Entity, FontWeight, IntoElement, SharedString, Window, WindowControlArea, component::h_flex, div, prelude::*, px, rgb,
+};
+use i18n::Arg;
 
 use crate::{
     Load,
@@ -9,6 +12,8 @@ use crate::{
     settings::SettingsView,
     ui::{
         assets::Icon,
+        key,
+        text::{t, tf},
         theme::*,
         widgets::{icon, icon_button, mono, square, tracked},
     },
@@ -20,14 +25,15 @@ pub fn header(library: &Library, account: &Account, settings: &Entity<SettingsVi
     let search = match library.list() {
         Load::Ready(library) => {
             let count = library.trainers;
-            format!("search {},{:03} trainers", count / 1000, count % 1000)
+            let trainers = format!("{},{:03}", count / 1000, count % 1000);
+            tf(cx, key::PAGE_SEARCH, &[("trainers", Arg::Str(&trainers)), ("count", Arg::Num(count as f64))])
         }
-        _ => "search trainers".to_owned(),
+        _ => t(cx, key::PAGE_SEARCH_NONE),
     };
     let name = match (account.user(), account.signed_out()) {
-        (Some(user), _) => user.name.clone(),
-        (None, true) => "NOT SIGNED IN".to_owned(),
-        (None, false) => String::new(),
+        (Some(user), _) => user.name.clone().into(),
+        (None, true) => t(cx, key::PAGE_SIGNED_OUT),
+        (None, false) => SharedString::default(),
     };
     let settings = settings.clone();
     h_flex()
@@ -59,7 +65,13 @@ pub fn header(library: &Library, account: &Account, settings: &Entity<SettingsVi
                 .child(mono(">", 13.).font_weight(FontWeight::BOLD).text_color(accent))
                 .child(mono(search, 13.).font_weight(FontWeight::NORMAL).flex_1())
                 .child(
-                    mono("CTRL K", 10.5).px(px(6.)).py(px(2.)).rounded(px(2.)).border_1().border_color(line(0.16)).text_color(rgb(MUTED)),
+                    mono(t(cx, key::PAGE_SEARCH_KEY), 10.5)
+                        .px(px(6.))
+                        .py(px(2.))
+                        .rounded(px(2.))
+                        .border_1()
+                        .border_color(line(0.16))
+                        .text_color(rgb(MUTED)),
                 ),
         )
         .child(div().flex_1())

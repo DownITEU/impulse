@@ -8,8 +8,8 @@ mod pin;
 use std::{mem, path::PathBuf, sync::Arc};
 
 use gpui_kit::{
-    AnyElement, Bounds, ClickEvent, Context, Div, Entity, IntoElement, ObjectFit, Pixels, Render, RenderImage, Stateful, Task, Window,
-    canvas,
+    AnyElement, Bounds, ClickEvent, Context, Div, Entity, IntoElement, ObjectFit, Pixels, Render, RenderImage, SharedString, Stateful,
+    Subscription, Task, Window, canvas,
     component::{
         h_flex,
         input::{InputState, TextareaState},
@@ -30,6 +30,8 @@ use super::{
 use crate::{
     Load,
     ui::{
+        key,
+        text::{Texts, t},
         theme::*,
         widgets::{choice, segmented},
     },
@@ -63,23 +65,32 @@ pub struct Card {
     clip: Option<Clip>,
     // The pins closest to the selected one, worked out once: the card redraws with each frame of its clip.
     near: Vec<usize>,
+    // The selected pin's "hide group" line, made once per pin and language: the card redraws with each frame of its clip.
+    hide: Option<(usize, SharedString)>,
     images: Images,
     // Images to drop from the atlas when the card is next drawn.
     stale: Vec<Arc<RenderImage>>,
     // As last laid out: the map's, which the card spans and the lightbox fills.
     bounds: Bounds<Pixels>,
     _flash: Task<()>,
+    // The name field's placeholder follows the language.
+    _relabel: Subscription,
 }
 
 impl Card {
     pub fn new(board: Entity<Board>, video_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let (mark_name, mark_note) = mark::inputs(window, cx);
+        let (mark_name, mark_note, relabel) = mark::inputs(window, cx);
         cx.observe(&board, |_, _, cx| cx.notify()).detach();
+        cx.observe_global::<Texts>(|card, cx| {
+            card.hide = None;
+            cx.notify();
+        })
+        .detach();
         cx.subscribe_in(&board, window, |card, board, event: &BoardEvent, window, cx| match event {
             // Pin indexes may point elsewhere in a fresher copy.
             BoardEvent::Installed { .. } => {
                 (card.lightbox, card.confirm, card.clip) = (false, false, None);
-                card.near.clear();
+                (card.near, card.hide) = (Vec::new(), None);
                 card.stale.extend(card.images.clear());
             }
             BoardEvent::Selected => {
@@ -102,10 +113,12 @@ impl Card {
             mark_note,
             clip: None,
             near: Vec::new(),
+            hide: None,
             images: Images::default(),
             stale: Vec::new(),
             bounds: Bounds::default(),
             _flash: Task::ready(()),
+            _relabel: relabel,
         }
     }
 
@@ -199,8 +212,8 @@ impl Card {
             let choices = segmented()
                 .h(px(26.))
                 .bg(alpha(PANEL, 0.9))
-                .child(choice("lightbox-video", "VIDEO", !self.photo, cx).on_click(pick(false)))
-                .child(choice("lightbox-photo", "PHOTO", self.photo, cx).on_click(pick(true)));
+                .child(choice("lightbox-video", t(cx, key::MAP_VIDEO), !self.photo, cx).on_click(pick(false)))
+                .child(choice("lightbox-photo", t(cx, key::MAP_PHOTO), self.photo, cx).on_click(pick(true)));
             h_flex().absolute().top(px(LIGHTBOX_PADDING / 2.)).left_0().w_full().justify_center().child(choices)
         });
         let shut = cx.listener(|card, _, _, cx| {

@@ -1,0 +1,177 @@
+//! No literal caption in `shell`: a text the user reads comes from a catalog.
+
+use std::{fs, str::FromStr};
+
+use proc_macro2::{Delimiter, TokenStream, TokenTree};
+
+use crate::{files, root, verdict};
+
+/// Calls whose string arguments the user never reads.
+const QUIET: &[&str] = &[
+    "Key",
+    "id",
+    "expect",
+    "context",
+    "with_context",
+    "trace",
+    "debug",
+    "info",
+    "warn",
+    "error",
+    "anyhow",
+    "bail",
+    "include_str",
+    "include_bytes",
+    "font",
+    "assert",
+    "assert_eq",
+    "debug_assert",
+    "unreachable",
+    "panic",
+    "var",
+    "var_os",
+];
+/// Calls that show every string they take: an id-shaped literal given to one is a caption.
+const SINKS: &[&str] = &["child", "tracked", "mono", "button", "flash_button", "segment", "tip", "notice", "placeholder", "row", "label"];
+/// Names, not words: fonts, key contexts, the saved accent ids, the brand.
+const NAMES: &[&str] = &[
+    "Chakra Petch",
+    "JetBrains Mono",
+    "Dialog",
+    "MapView",
+    "MapStage",
+    "LIME",
+    "AMBER",
+    "CYAN",
+    "WHITE",
+    "Impulse",
+    "IMPULSE",
+    "IMPULSE 0.1",
+];
+
+/// A string literal outside tests and attributes: its line and the call it is an argument of.
+struct Literal {
+    line: usize,
+    text: String,
+    call: Option<String>,
+}
+
+fn literals(source: &str) -> Vec<Literal> {
+    let mut found = Vec::new();
+    walk(TokenStream::from_str(source).expect("the file parses"), None, &mut found);
+    found
+}
+
+/// `call`: the call or macro these tokens are arguments of; a block, a tuple or an array keeps its parent's.
+fn walk(tokens: TokenStream, call: Option<&str>, found: &mut Vec<Literal>) {
+    let tokens: Vec<TokenTree> = tokens.into_iter().collect();
+    let punct = |at: usize, char| matches!(tokens.get(at), Some(TokenTree::Punct(punct)) if punct.as_char() == char);
+    let mut i = 0;
+    while i < tokens.len() {
+        // An attribute (`#[..]`, `#![..]`) holds no caption; a test one hides the item after it, up to its block or the
+        // `;` or `,` that ends it.
+        let inner = usize::from(punct(i + 1, '!'));
+        if let (true, Some(TokenTree::Group(attribute))) = (punct(i, '#'), tokens.get(i + 1 + inner)) {
+            let body = attribute.stream().to_string().replace(' ', "");
+            i += 2 + inner;
+            if body == "test" || body.starts_with("cfg(test") {
+                while let Some(token) = tokens.get(i) {
+                    i += 1;
+                    match token {
+                        TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => break,
+                        TokenTree::Punct(punct) if matches!(punct.as_char(), ';' | ',') => break,
+                        _ => {}
+                    }
+                }
+            }
+            continue;
+        }
+        match &tokens[i] {
+            TokenTree::Group(group) => {
+                let bang = i > 0 && punct(i - 1, '!');
+                let named = match i.checked_sub(1 + usize::from(bang)).map(|at| &tokens[at]) {
+                    Some(TokenTree::Ident(ident)) if bang || group.delimiter() == Delimiter::Parenthesis => Some(ident.to_string()),
+                    _ => None,
+                };
+                walk(group.stream(), named.as_deref().or(call), found);
+            }
+            TokenTree::Literal(literal) => {
+                if let Some(text) = text(&literal.to_string()) {
+                    found.push(Literal { line: literal.span().start().line, text, call: call.map(str::to_owned) });
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+}
+
+/// A string literal's text as written; `None` for bytes, chars and numbers.
+fn text(written: &str) -> Option<String> {
+    if let Some(quoted) = written.strip_prefix('"') {
+        return quoted.strip_suffix('"').map(str::to_owned);
+    }
+    let raw = written.strip_prefix('r')?;
+    let fence = raw.len() - raw.trim_start_matches('#').len();
+    raw.get(fence..raw.len() - fence)?.strip_prefix('"')?.strip_suffix('"').map(str::to_owned)
+}
+
+/// A literal the user would read: a word that is not a name, markup, path data or a time format, or an id kept off the screen.
+fn caption(literal: &Literal) -> bool {
+    let (mut depth, mut escaped) = (0, false);
+    let words: String = literal
+        .text
+        .chars()
+        .filter(|&c| {
+            depth += i32::from(c == '{');
+            let outside = depth == 0 && !escaped && c != '\\';
+            depth -= i32::from(c == '}' && depth > 0);
+            escaped = c == '\\' && !escaped;
+            outside && c != '}'
+        })
+        .collect();
+    let text = literal.text.as_str();
+    let path = text.starts_with('M') && text[1..].starts_with(|c: char| c.is_ascii_digit());
+    let call = literal.call.as_deref().unwrap_or("");
+    let id = words.bytes().all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' | b':' | b'/' | b'-'));
+    words.chars().any(char::is_alphabetic)
+        && !text.starts_with('<')
+        && !text.starts_with('%')
+        && !path
+        && !QUIET.contains(&call)
+        && !NAMES.contains(&text)
+        && !(id && !SINKS.contains(&call))
+}
+
+#[test]
+fn shell_has_no_literal_caption() {
+    let mut complaints = Vec::new();
+    let ours = |path: &&String| path.starts_with("crates/shell/src/") && path.ends_with(".rs") && !path.ends_with("/tests.rs");
+    for path in files().iter().filter(ours) {
+        let source = fs::read_to_string(root().join(path)).unwrap();
+        let found = literals(&source).into_iter().filter(caption);
+        complaints.extend(found.map(|literal| format!("{path}:{}: {:?}", literal.line, literal.text)));
+    }
+    verdict(complaints);
+}
+
+#[test]
+fn captions_are_told_from_names() {
+    let source = r##"
+        fn f() { div().id("row-1").child("SAVE").child(format!("{n:02} MODS")).placeholder("name").font_family("x"); }
+        fn g() { tracing::warn!("no file: {e}"); x.context("reading the file")?; let a = '"'; let s = r#"<svg/>"#; }
+        fn h<'a>(x: &'a str) { if open { "OPEN" } else { "shut" }; vec!["ROW"]; b"BYTES \" B"; format!("{}\n{}"); "M1 2z"; }
+        // child("COMMENT")
+        /* child("BLOCK") */
+        #[cfg(test)]
+        mod tests { fn t() { child("TEST") } }
+        #[derive(Clone)] struct S; fn k() { child("LAST") }
+        fn n() { x.child(if a { "on" } else { "off" }); }
+        #[expect(clippy::x, reason = "a ] b")] fn p() { x.child("REAL"); }
+        struct T { #[cfg(test)] a: u8, b: u8 } fn q() { x.child("MORE"); }
+    "##;
+    let shown: Vec<_> = literals(source).into_iter().filter(caption).map(|literal| (literal.line, literal.text)).collect();
+    let expected = [(2, "SAVE"), (2, "{n:02} MODS"), (2, "name"), (4, "OPEN"), (4, "ROW"), (9, "LAST")];
+    let expected = expected.into_iter().chain([(10, "on"), (10, "off"), (11, "REAL"), (12, "MORE")]);
+    assert_eq!(shown, expected.map(|(line, text)| (line, text.to_owned())).collect::<Vec<_>>());
+}

@@ -1,6 +1,7 @@
 //! The status bar: the live run, the log's problems and the hotkeys' state.
 
 use gpui_kit::{App, Div, Entity, IntoElement, component::h_flex, div, prelude::*, px, rgb};
+use i18n::Arg;
 
 use crate::{
     bindings::{Hotkeys, Target},
@@ -9,6 +10,8 @@ use crate::{
     run::Runs,
     trainer::Trainers,
     ui::{
+        key,
+        text::{t, tf},
         theme::*,
         widgets::{mono, square},
     },
@@ -42,11 +45,11 @@ pub fn status_bar(
         .map(|bar| match running {
             Some(game) => {
                 let (active, total) = trainers.sheet(&game.id).map_or((0, 0), |sheet| (sheet.active(), sheet.cheats.len()));
-                bar.child(h_flex().gap(px(8.)).child(square(7., accent)).child(mono("LIVE", 11.).text_color(accent)))
+                bar.child(h_flex().gap(px(8.)).child(square(7., accent)).child(mono(t(cx, key::PAGE_LIVE), 11.).text_color(accent)))
                     .child(mono(game.name.clone(), 11.))
-                    .child(mono(format!("{active}/{total} ACTIVE"), 11.))
+                    .child(mono(tf(cx, key::PAGE_ACTIVE, &[("active", Arg::Num(active as f64)), ("total", Arg::Num(total as f64))]), 11.))
             }
-            None => bar.child(mono("IDLE", 11.)),
+            None => bar.child(mono(t(cx, key::PAGE_IDLE), 11.)),
         })
         .child(div().flex_1())
         .child(
@@ -58,7 +61,7 @@ pub fn status_bar(
                 .hover(|style| style.text_color(rgb(TEXT)))
                 .when(open, |item| item.text_color(rgb(TEXT)))
                 .on_click(move |_, window, cx| log.update(cx, |log, cx| log.toggle(window, cx)))
-                .child(mono("LOG", 11.))
+                .child(mono(t(cx, key::PAGE_LOG), 11.))
                 .when(errors > 0, |item| item.child(problem(errors, DANGER)))
                 .when(warnings > 0, |item| item.child(problem(warnings, WARN))),
         )
@@ -70,13 +73,13 @@ pub fn status_bar(
 fn hotkeys_status(hotkeys: &Hotkeys, cx: &App) -> Div {
     if let Some(target) = hotkeys.capturing() {
         let keys = match target {
-            Target::Key { required: true, .. } => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT",
-            _ => "PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND",
+            Target::Key { required: true, .. } => t(cx, key::PAGE_BINDING),
+            _ => t(cx, key::PAGE_BINDING_UNBIND),
         };
         return mono(keys, 11.).text_color(rgb(accent(cx)));
     }
     match hotkeys.is_armed() {
-        true => mono("HOTKEYS ON", 11.),
-        false => mono("HOTKEYS OFF", 11.).text_color(rgb(GHOST)),
+        true => mono(t(cx, key::PAGE_HOTKEYS_ON), 11.),
+        false => mono(t(cx, key::PAGE_HOTKEYS_OFF), 11.).text_color(rgb(GHOST)),
     }
 }

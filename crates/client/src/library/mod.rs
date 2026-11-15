@@ -38,7 +38,8 @@ pub struct Game {
     pub name: Arc<str>,
     /// Lower case, for the filter.
     pub search: String,
-    pub store: String,
+    /// The launcher's name in upper case; `None` for a picked executable.
+    pub store: Option<String>,
     pub support: Support,
     pub mods: u32,
     pub stamp: Stamp,
@@ -119,7 +120,7 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
     }
     let trainers = with_trainer.len();
     let mut by_id: HashMap<Ref, model::Game> = all.into_iter().map(|game| (game.id.clone(), game)).collect();
-    let mut per_store = BTreeMap::<String, usize>::new();
+    let mut per_store = BTreeMap::<Option<String>, usize>::new();
     let mut games = Vec::<Game>::new();
     let mut at = HashMap::<Ref, usize>::new();
     for found in installed {
@@ -144,7 +145,7 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
         }
     }
     games.sort_by(|a, b| a.search.cmp(&b.search));
-    let stores: Vec<String> = per_store.iter().map(|(s, n)| format!("{s} {n}")).collect();
+    let stores: Vec<String> = per_store.iter().map(|(s, n)| format!("{} {n}", s.as_deref().unwrap_or("CUSTOM"))).collect();
     log::info!("Library: {} installed: {}", games.len(), stores.join(", "));
     Library { games: games.into_iter().map(Arc::new).collect(), trainers }
 }
@@ -155,7 +156,7 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u3
         id: GameId::of(&found.game),
         name: entry.name.to_uppercase().into(),
         search: entry.name.to_lowercase(),
-        store: String::new(),
+        store: None,
         support: Support::NoTrainer,
         mods: entry.trainer.as_ref().map_or(0, |offer| offer.cheats),
         stamp: (None, None),
@@ -171,7 +172,7 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u3
     game
 }
 
-/// `CUSTOM` for a picked executable, as Wand names it.
-fn store(origin: &Origin) -> String {
-    origin.store_id().map_or("CUSTOM".into(), |id| id.store().to_uppercase())
+/// The launcher's name; `None` for a picked executable.
+fn store(origin: &Origin) -> Option<String> {
+    origin.store_id().map(|id| id.store().to_uppercase())
 }

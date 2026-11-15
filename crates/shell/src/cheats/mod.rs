@@ -16,7 +16,7 @@ use crate::{
     library::{Library, LibraryEvent},
     run::{RunEvent, Runs},
     trainer::{TrainerEvent, Trainers},
-    ui::widgets,
+    ui::{key, widgets},
 };
 pub use collections::CollectionEditor;
 use printed::{Printed, number};
@@ -78,7 +78,7 @@ impl CheatList {
             }
         })
         .detach();
-        let (filter, typed) = widgets::filter_input("filter mods", window, cx);
+        let (filter, typed) = widgets::filter_input(key::CHEATS_FILTER, window, cx);
         typed.detach();
         Self { library, trainers, runs, hotkeys, printed: None, filter, menu: None, flashed: None, editor: None }
     }

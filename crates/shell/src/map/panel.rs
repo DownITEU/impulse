@@ -14,6 +14,8 @@ use gpui_kit::{
 use super::MapView;
 use crate::ui::{
     assets::Icon,
+    key,
+    text::t,
     theme::*,
     widgets::{brackets, grid, icon_button, mono},
 };
@@ -40,7 +42,7 @@ pub fn map_panel(view: &Entity<MapView>, game: &Arc<Game>, cx: &App) -> Div {
                     h_flex()
                         .gap(px(6.))
                         .text_color(rgb(MUTED))
-                        .child(mono("MAP", 10.5))
+                        .child(mono(t(cx, key::MAP_TITLE), 10.5))
                         .child(mono("/", 10.5).text_color(rgb(GHOST)))
                         .child(mono(offer.map_or("-".into(), |offer| offer.name.to_uppercase()), 10.5)),
                 )
@@ -68,7 +70,7 @@ pub fn map_panel(view: &Entity<MapView>, game: &Arc<Game>, cx: &App) -> Div {
                 .justify_center()
                 .text_center()
                 .text_color(rgb(FAINT))
-                .child(mono("NO INTERACTIVE MAP FOR THIS GAME", 11.))
+                .child(mono(t(cx, key::MAP_NONE), 11.))
                 .into_any_element(),
         })
         .children(brackets(cx))

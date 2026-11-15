@@ -1,14 +1,13 @@
 //! A row per source folder (`Folders`): a path field, the source's ready picks and a folder picker.
 //! The source checks and saves every edit; the row shows what it answers.
 
-use crate::ui::text::{said, text};
 use std::path::PathBuf;
 
 use gpui_kit::{
     Context, Div, Entity, PathPromptOptions, SharedString, Stateful, Window,
     component::{
         h_flex,
-        input::{Input, InputEvent, InputState},
+        input::{Input, InputEvent},
         v_flex,
     },
     div,
@@ -20,24 +19,28 @@ use super::{Folders, SettingsView, label};
 use crate::ui::{
     assets::Icon,
     dropdown::{dropdown, span},
+    key,
+    text::{said, t, text},
     theme::*,
-    widgets::{icon_button, mono},
+    widgets::{icon_button, input, mono},
 };
 
 impl SettingsView {
     /// A row's field shows the source's path; a new row gets its field.
     pub(super) fn folder_shown(&mut self, folders: &Entity<Folders>, at: usize, window: &mut Window, cx: &mut Context<Self>) {
         if at == self.fields.len() {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("path to the folder"));
+            // One per row, kept for the life of the dialog.
+            let (state, relabel) = input(key::FOLDER_PATH, window, cx);
+            relabel.detach();
             // Only typing emits `Change`; `set_value` does not.
-            cx.subscribe(&input, move |view, input, event: &InputEvent, cx| {
+            cx.subscribe(&state, move |view, input, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
                     let text = input.read(cx).value().to_string();
                     view.folders.update(cx, |folders, cx| folders.set(at, &text, cx));
                 }
             })
             .detach();
-            self.fields.push(input);
+            self.fields.push(state);
         }
         let text = folders.read(cx).get(at).path.as_ref().map(|path| path.to_string_lossy().into_owned()).unwrap_or_default();
         self.fields[at].update(cx, |input, cx| input.set_value(text, window, cx));
@@ -54,7 +57,7 @@ impl SettingsView {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("Select the folder".into()),
+            prompt: Some(t(cx, key::FOLDER_SELECT)),
         });
         cx.spawn_in(window, async move |view, cx| match picked.await {
             Ok(Ok(Some(paths))) => {

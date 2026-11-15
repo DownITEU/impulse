@@ -1,11 +1,16 @@
 //! The app's texts in the user's language: the `Texts` global over the catalogs, set by `Settings`.
 
-use std::{cell::RefCell, env, sync::Arc};
+use std::{
+    cell::RefCell,
+    env,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 use gpui_kit::{App, Global, SharedString};
 use i18n::{Arg, Catalog, Key, Language};
 use model::{Failure, FailureKind, Files, SourceId, Text};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHasher};
 
 use super::key;
 
@@ -16,7 +21,25 @@ pub struct Texts {
     catalog: Catalog,
     // Messages without arguments by domain, each made once per language.
     made: RefCell<FxHashMap<String, FxHashMap<Arc<str>, SharedString>>>,
+    // Messages with arguments by a hash of key and arguments, checked against the copy kept, so a redraw formats nothing.
+    formatted: RefCell<FxHashMap<u64, (Made, SharedString)>>,
 }
+
+/// A message's key and arguments, owned.
+#[derive(PartialEq)]
+struct Made {
+    key: &'static str,
+    args: Vec<(String, Owned)>,
+}
+
+#[derive(PartialEq)]
+enum Owned {
+    Str(String),
+    Num(u64),
+}
+
+/// Bounds the formatted messages kept; past it they are made again.
+const FORMATTED: usize = 1024;
 
 impl Global for Texts {}
 
@@ -26,7 +49,7 @@ impl Texts {
         // `IMPULSE_LOCALE=pseudo` in a debug build shows cuts and English left in the code.
         let pseudo = cfg!(debug_assertions) && env::var_os("IMPULSE_LOCALE").is_some_and(|value| value == "pseudo");
         let domains = [(APP, FILES)].into_iter().chain(sources.iter().map(|(id, files)| (id.as_str(), *files)));
-        Self { catalog: Catalog::new(language, pseudo, domains), made: RefCell::default() }
+        Self { catalog: Catalog::new(language, pseudo, domains), made: RefCell::default(), formatted: RefCell::default() }
     }
 
     pub fn language(&self) -> Language {
@@ -42,6 +65,46 @@ impl Texts {
         made.entry(domain.to_owned()).or_default().insert(key.into(), text.clone());
         text
     }
+
+    fn formatted(&self, key: Key, args: &[(&str, Arg)]) -> SharedString {
+        let mut hasher = FxHasher::default();
+        key.0.hash(&mut hasher);
+        for (name, arg) in args {
+            name.hash(&mut hasher);
+            match arg {
+                Arg::Str(text) => text.hash(&mut hasher),
+                Arg::Num(number) => number.to_bits().hash(&mut hasher),
+            }
+        }
+        let hash = hasher.finish();
+        let same = |made: &Made| {
+            made.key == key.0
+                && made.args.len() == args.len()
+                && made.args.iter().zip(args).all(|((name, kept), (given, arg))| {
+                    name == given
+                        && match (kept, arg) {
+                            (Owned::Str(kept), Arg::Str(text)) => kept == text,
+                            (Owned::Num(kept), Arg::Num(number)) => *kept == number.to_bits(),
+                            _ => false,
+                        }
+                })
+        };
+        let mut formatted = self.formatted.borrow_mut();
+        if let Some((_, text)) = formatted.get(&hash).filter(|(made, _)| same(made)) {
+            return text.clone();
+        }
+        if formatted.len() >= FORMATTED {
+            formatted.clear();
+        }
+        let text: SharedString = self.catalog.text(APP, key.0, args).into();
+        let owned = |arg: &Arg| match arg {
+            Arg::Str(text) => Owned::Str((*text).to_owned()),
+            Arg::Num(number) => Owned::Num(number.to_bits()),
+        };
+        let made = Made { key: key.0, args: args.iter().map(|(name, arg)| ((*name).to_owned(), owned(arg))).collect() };
+        formatted.insert(hash, (made, text.clone()));
+        text
+    }
 }
 
 /// A message without arguments.
@@ -49,9 +112,9 @@ pub fn t(cx: &App, key: Key) -> SharedString {
     cx.global::<Texts>().made(APP, key.0)
 }
 
-/// A message with arguments: made when its data changes, or while drawing a rare state.
+/// A message with arguments, formatted once per distinct arguments.
 pub fn tf(cx: &App, key: Key, args: &[(&str, Arg)]) -> SharedString {
-    cx.global::<Texts>().catalog.text(APP, key.0, args).into()
+    cx.global::<Texts>().formatted(key, args)
 }
 
 /// The app's own message as a `Text`, for what a source would say.
@@ -104,5 +167,22 @@ fn kind(kind: FailureKind) -> Key {
         FailureKind::GameNotFound => key::FAILURE_GAME_NOT_FOUND,
         FailureKind::Refused => key::FAILURE_REFUSED,
         FailureKind::Internal => key::FAILURE_INTERNAL,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use i18n::{Arg, ENGLISH};
+
+    use super::{Texts, key};
+
+    #[test]
+    fn a_message_is_made_again_only_for_other_arguments() {
+        let texts = Texts::new(ENGLISH, &[]);
+        let made = |count: f64| texts.formatted(key::TRAINER_MODS, &[("count", Arg::Num(count))]);
+        assert_eq!(made(28.).as_ref(), "28 MODS");
+        assert_eq!(made(28.).as_ref(), "28 MODS");
+        assert_eq!(made(3.).as_ref(), "3 MODS");
+        assert_eq!(texts.formatted.borrow().len(), 2);
     }
 }

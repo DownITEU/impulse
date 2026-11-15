@@ -2,19 +2,34 @@
 
 use client::library::{
     Game,
-    sources::{Entry, entries},
+    sources::{Entry, Label, entries},
 };
 use gpui_kit::{App, Entity, SharedString};
+use i18n::Arg;
 
 use super::{
     Library,
     picker::{picked_file, prompt},
 };
+use crate::ui::{
+    key,
+    text::{t, tf},
+};
 
 /// The menu's options and the one in use.
-pub fn source_options(game: &Game) -> (Vec<SharedString>, usize) {
+pub fn source_options(game: &Game, cx: &App) -> (Vec<SharedString>, usize) {
     let (entries, current) = entries(game);
-    (entries.into_iter().map(|(_, label)| label.into()).collect(), current)
+    (entries.into_iter().map(|(_, label)| caption(&label, cx)).collect(), current)
+}
+
+fn caption(label: &Label, cx: &App) -> SharedString {
+    match label {
+        Label::Store(store) => store.clone().into(),
+        Label::Exe(file) => tf(cx, key::LIBRARY_SOURCE_EXE, &[("file", Arg::Str(file))]),
+        Label::Add => t(cx, key::LIBRARY_SOURCE_ADD),
+        Label::Change => t(cx, key::LIBRARY_SOURCE_CHANGE),
+        Label::Remove => t(cx, key::LIBRARY_SOURCE_REMOVE),
+    }
 }
 
 /// A pick in `game`'s menu.

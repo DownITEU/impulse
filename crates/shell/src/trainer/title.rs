@@ -1,11 +1,14 @@
 //! A game's name over its mods, version, store and play time.
 
 use client::library::{Game, Support};
-use gpui_kit::{App, Div, FontWeight, IntoElement, component::h_flex, div, prelude::*, px, relative, rgb};
+use gpui_kit::{App, Div, FontWeight, IntoElement, SharedString, component::h_flex, div, prelude::*, px, relative, rgb};
+use i18n::Arg;
 
 use super::Trainers;
 use crate::ui::{
     assets::Icon,
+    key,
+    text::{t, tf},
     theme::*,
     widgets::{icon, mono, tracked},
 };
@@ -27,16 +30,16 @@ pub fn title(trainers: &Trainers, game: &Game, size: f32, cx: &App) -> Div {
 fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
     let slash = || mono("/", 12.).text_color(rgb(GHOST));
     let mods = match game.support {
-        Support::NoTrainer => "NO TRAINER".to_owned(),
+        Support::NoTrainer => t(cx, key::TRAINER_NONE),
         // The catalog count, until the trainer itself is there.
         _ => {
             let count = trainers.sheet(&game.id).map_or(game.mods as usize, |sheet| sheet.cheats.len());
-            format!("{count} MODS")
+            tf(cx, key::TRAINER_MODS, &[("count", Arg::Num(count as f64))])
         }
     };
     let version = match game.install.build {
-        Some(version) => format!("V{version}"),
-        None => "VERSION UNKNOWN".to_owned(),
+        Some(version) => tf(cx, key::TRAINER_VERSION, &[("version", Arg::Num(version.into()))]),
+        None => t(cx, key::TRAINER_VERSION_UNKNOWN),
     };
     let profile = trainers.game_profile(&game.id);
     h_flex()
@@ -51,20 +54,25 @@ fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
                 .gap(px(6.))
                 .child(mono(version, 12.))
                 .when(game.support == Support::Ready, |version| version.child(icon(Icon::Check, 13., rgb(accent(cx)))))
-                .when(game.support == Support::UpdatePending, |version| version.child(mono("UPDATE PENDING", 12.).text_color(rgb(WARN)))),
+                .when(game.support == Support::UpdatePending, |version| {
+                    version.child(mono(t(cx, key::TRAINER_UPDATE_PENDING), 12.).text_color(rgb(WARN)))
+                }),
         )
         .child(slash())
-        .child(mono(game.store.clone(), 12.))
+        .child(mono(game.store.clone().map_or_else(|| t(cx, key::PAGE_CUSTOM), Into::into), 12.))
         .when(profile.sessions > 0, |meta| {
-            let sessions = if profile.sessions == 1 { "1 SESSION".to_owned() } else { format!("{} SESSIONS", profile.sessions) };
-            meta.child(slash()).child(mono(played(profile.played), 12.)).child(slash()).child(mono(sessions, 12.))
+            let sessions = tf(cx, key::TRAINER_SESSIONS, &[("count", Arg::Num(profile.sessions as f64))]);
+            meta.child(slash()).child(mono(played(profile.played, cx), 12.)).child(slash()).child(mono(sessions, 12.))
         })
 }
 
 /// `42 MIN PLAYED`, then `1.2 H PLAYED`.
-fn played(secs: u64) -> String {
+fn played(secs: u64, cx: &App) -> SharedString {
     match secs {
-        0..3600 => format!("{} MIN PLAYED", secs / 60),
-        _ => format!("{:.1} H PLAYED", secs as f64 / 3600.),
+        0..3600 => tf(cx, key::TRAINER_PLAYED_MIN, &[("count", Arg::Num((secs / 60) as f64))]),
+        _ => {
+            let hours = secs as f64 / 3600.;
+            tf(cx, key::TRAINER_PLAYED_HOURS, &[("hours", Arg::Str(&format!("{hours:.1}"))), ("count", Arg::Num(hours))])
+        }
     }
 }

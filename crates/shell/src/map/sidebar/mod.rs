@@ -6,8 +6,8 @@ mod marks;
 use std::{collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui_kit::{
-    AnyElement, App, Context, Div, ElementId, Entity, Focusable, FontWeight, IntoElement, MouseButton, Render, RenderImage, Stateful,
-    Window,
+    AnyElement, App, Context, Div, ElementId, Entity, Focusable, FontWeight, IntoElement, MouseButton, Render, RenderImage, SharedString,
+    Stateful, Subscription, Window,
     component::{
         h_flex,
         input::{InputEvent, InputState},
@@ -17,6 +17,7 @@ use gpui_kit::{
     prelude::*,
     px, relative, rgb,
 };
+use i18n::Arg;
 use model::Map;
 
 use super::{
@@ -28,8 +29,10 @@ use crate::{
     Load,
     ui::{
         assets::Icon,
+        key,
+        text::{t, tf},
         theme::*,
-        widgets::{filter, icon, mono, square},
+        widgets::{filter, icon, input, mono, square},
     },
 };
 
@@ -41,6 +44,8 @@ const ICON: f32 = 16.;
 pub struct Sidebar {
     board: Entity<Board>,
     search: Entity<InputState>,
+    // The search's placeholder follows the language.
+    _relabel: Subscription,
     folded: HashSet<usize>,
     regions_open: bool,
     marks_open: bool,
@@ -53,7 +58,7 @@ pub struct Sidebar {
 
 impl Sidebar {
     pub fn new(board: Entity<Board>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("find a place, a group, a word"));
+        let (search, relabel) = input(key::MAP_SEARCH, window, cx);
         cx.subscribe(&search, |sidebar, search, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
                 let query = search.read(cx).value().trim().to_lowercase();
@@ -77,6 +82,7 @@ impl Sidebar {
         Self {
             board,
             search,
+            _relabel: relabel,
             folded: HashSet::new(),
             regions_open: false,
             marks_open: true,
@@ -106,7 +112,7 @@ impl Sidebar {
         let mut rows = vec![progress(map, board, cx).into_any_element()];
         if map.unfinished {
             let notice = h_flex().gap(px(8.)).mx(px(14.)).mb(px(8.)).child(icon(Icon::Warn, 12., rgb(WARN)));
-            let text = div().text_size(px(11.5)).text_color(rgb(MUTED)).child("Still being mapped: pins may be missing or move.");
+            let text = div().text_size(px(11.5)).text_color(rgb(MUTED)).child(t(cx, key::MAP_UNFINISHED));
             rows.push(notice.child(text).into_any_element());
         }
         rows.push(quick_filters(map, board, cx).into_any_element());
@@ -131,11 +137,12 @@ impl Sidebar {
             return Vec::new();
         }
         let open = self.regions_open;
-        let header =
-            section("map-regions", open, "REGIONS", names.len().to_string(), None, cx).on_click(cx.listener(|sidebar, _, _, cx| {
+        let header = section("map-regions", open, &t(cx, key::MAP_REGIONS), names.len().to_string(), None, cx).on_click(cx.listener(
+            |sidebar, _, _, cx| {
                 sidebar.regions_open ^= true;
                 cx.notify();
-            }));
+            },
+        ));
         let mut rows = vec![header.into_any_element()];
         if open {
             for (index, (id, name, color)) in names.into_iter().enumerate() {
@@ -252,11 +259,12 @@ impl Sidebar {
 
     fn results(&mut self, map: &Map, board: &Board, window: &Window, cx: &Context<Self>) -> Vec<AnyElement> {
         let matching = self.matches(map, board);
-        let header = mono(format!("{} PLACES", matching.len()), 10.).text_color(rgb(DIM)).px(px(14.)).pt(px(12.)).pb(px(6.));
+        let places = matching.len().to_string();
+        let places = tf(cx, key::MAP_PLACES, &[("places", Arg::Str(&places)), ("count", Arg::Num(matching.len() as f64))]);
+        let header = mono(places, 10.).text_color(rgb(DIM)).px(px(14.)).pt(px(12.)).pb(px(6.));
         let mut rows = vec![header.into_any_element()];
         if matching.is_empty() {
-            let empty =
-                div().px(px(14.)).text_size(px(12.)).text_color(rgb(FAINT)).child("Nothing matches. Try a group or a shorter word.");
+            let empty = div().px(px(14.)).text_size(px(12.)).text_color(rgb(FAINT)).child(t(cx, key::MAP_NO_MATCHES));
             rows.push(empty.into_any_element());
         }
         for &index in matching.iter().take(LISTED) {
@@ -333,7 +341,7 @@ fn progress(map: &Map, board: &Board, cx: &App) -> Div {
         .child(
             h_flex()
                 .justify_between()
-                .child(mono("FOUND", 10.5).text_color(rgb(DIM)))
+                .child(mono(t(cx, key::MAP_FOUND_COUNT), 10.5).text_color(rgb(DIM)))
                 .child(mono(format!("{found} / {total}"), 11.).text_color(rgb(if found > 0 { accent(cx) } else { MUTED }))),
         )
         .child(div().h(px(3.)).bg(line(0.08)).child(div().h_full().w(relative(share)).bg(rgb(accent(cx)))))
@@ -342,7 +350,7 @@ fn progress(map: &Map, board: &Board, cx: &App) -> Div {
 fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoElement {
     let saved = &board.saved;
     let all_hidden = map.categories.iter().flat_map(|category| &category.groups).all(|group| saved.hidden.contains(&group.id));
-    let cell = |id: &'static str, label: &'static str, on: bool, enabled: bool| {
+    let cell = |id: &'static str, label: SharedString, on: bool, enabled: bool| {
         let color = match (enabled, on) {
             (false, _) => GHOST,
             (true, true) => BG,
@@ -376,12 +384,12 @@ fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoEl
         .gap(px(6.))
         .px(px(14.))
         .pb(px(12.))
-        .child(cell("map-all", if all_hidden { "SHOW ALL" } else { "HIDE ALL" }, false, true).on_click(toggle_all))
+        .child(cell("map-all", t(cx, if all_hidden { key::MAP_SHOW_ALL } else { key::MAP_HIDE_ALL }), false, true).on_click(toggle_all))
         .child(
-            cell("map-teleportable", "TELEPORT", saved.teleport_only, map.teleport)
+            cell("map-teleportable", t(cx, key::MAP_FILTER_TELEPORT), saved.teleport_only, map.teleport)
                 .when(map.teleport, |cell| cell.on_click(change(|saved| saved.teleport_only ^= true))),
         )
-        .child(cell("map-unfound", "UNFOUND", saved.unfound_only, true).on_click(change(|saved| saved.unfound_only ^= true)))
+        .child(cell("map-unfound", t(cx, key::MAP_UNFOUND), saved.unfound_only, true).on_click(change(|saved| saved.unfound_only ^= true)))
 }
 
 fn tally(found: usize, total: usize) -> String {

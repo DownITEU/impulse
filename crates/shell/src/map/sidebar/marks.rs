@@ -1,10 +1,18 @@
 //! The sidebar's list of the user's own pins, with a switch for all of them.
 
 use client::map::state::{Mark, PALETTE};
-use gpui_kit::{AnyElement, Context, IntoElement, component::h_flex, div, prelude::*, px, rgb};
+use gpui_kit::{AnyElement, App, Context, IntoElement, SharedString, component::h_flex, div, prelude::*, px, rgb};
+use i18n::Arg;
 
 use super::{Sidebar, check, section};
-use crate::{map::board::Board, ui::theme::*};
+use crate::{
+    map::board::Board,
+    ui::{
+        key,
+        text::{t, tf},
+        theme::*,
+    },
+};
 
 impl Sidebar {
     pub(super) fn marks_section(&self, board: &Board, cx: &Context<Self>) -> Vec<AnyElement> {
@@ -13,17 +21,18 @@ impl Sidebar {
             cx.stop_propagation();
             sidebar.board.update(cx, |board, cx| board.filter(|saved| saved.marks_shown ^= true, cx));
         }));
-        let header = section("map-marks", self.marks_open, "MY PINS", marks.len().to_string(), Some(toggle.into_any_element()), cx)
-            .on_click(cx.listener(|sidebar, _, _, cx| {
-                sidebar.marks_open ^= true;
-                cx.notify();
-            }));
+        let header =
+            section("map-marks", self.marks_open, &t(cx, key::MAP_MY_PINS), marks.len().to_string(), Some(toggle.into_any_element()), cx)
+                .on_click(cx.listener(|sidebar, _, _, cx| {
+                    sidebar.marks_open ^= true;
+                    cx.notify();
+                }));
         let mut rows = vec![header.into_any_element()];
         if !self.marks_open {
             return rows;
         }
         if marks.is_empty() {
-            let hint = div().px(px(32.)).pb(px(8.)).text_size(px(12.)).text_color(rgb(FAINT)).child("Right click the map to add one.");
+            let hint = div().px(px(32.)).pb(px(8.)).text_size(px(12.)).text_color(rgb(FAINT)).child(t(cx, key::MAP_NO_PINS));
             rows.push(hint.into_any_element());
         }
         for (index, mark) in marks.iter().enumerate() {
@@ -44,7 +53,7 @@ impl Sidebar {
                         .truncate()
                         .text_size(px(13.))
                         .text_color(rgb(if shown { TEXT_2 } else { FAINT }))
-                        .child(title(index, mark)),
+                        .child(title(index, mark, cx)),
                 )
                 .on_click(cx.listener(move |sidebar, _, _, cx| sidebar.board.update(cx, |board, cx| board.select_mark(index, true, cx))));
             rows.push(row.into_any_element());
@@ -54,6 +63,11 @@ impl Sidebar {
 }
 
 /// An unnamed mark goes by its place in the list.
-fn title(index: usize, mark: &Mark) -> String {
-    if mark.name.trim().is_empty() { format!("My pin {}", index + 1) } else { mark.name.clone() }
+fn title(index: usize, mark: &Mark, cx: &App) -> SharedString {
+    if mark.name.trim().is_empty() {
+        let number = (index + 1).to_string();
+        tf(cx, key::MAP_PIN_NAME, &[("number", Arg::Str(&number)), ("count", Arg::Num((index + 1) as f64))])
+    } else {
+        mark.name.clone().into()
+    }
 }

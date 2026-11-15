@@ -1,8 +1,10 @@
-use std::time::Duration;
+use std::{cell::RefCell, time::Duration};
 
 use gpui_kit::{
     AnyView, App, Bounds, Context, Div, ElementId, Entity, FontWeight, Hsla, InteractiveText, IntoElement, Rgba, SharedString, Stateful,
-    StyledText, Subscription, Svg, Task, Window, canvas,
+    StyledText, Subscription, Svg, Task, Window,
+    base::input::{InputBaseState, InputModeKind},
+    canvas,
     component::{
         h_flex,
         input::{Input, InputEvent, InputState},
@@ -14,7 +16,17 @@ use gpui_kit::{
     px, rgb, size, svg,
 };
 
-use super::{assets::Icon, key, text::t, theme::*};
+use rustc_hash::FxHashMap;
+use unicode_segmentation::UnicodeSegmentation;
+
+use i18n::Key;
+
+use super::{
+    assets::Icon,
+    key,
+    text::{Texts, t},
+    theme::*,
+};
 
 const FLASH: Duration = Duration::from_millis(900);
 const TIP_WIDTH: f32 = 320.;
@@ -35,7 +47,21 @@ pub fn tracked(text: &str, size: f32, em: f32) -> Div {
         .flex_wrap()
         .gap_x(px(size * 0.28) + gap)
         .text_size(px(size))
-        .children(text.split(' ').map(|word| div().flex().gap(gap).children(word.chars().map(|c| SharedString::from(c.to_string())))))
+        .children(text.split(' ').map(|word| div().flex().gap(gap).children(word.graphemes(true).map(letter))))
+}
+
+/// One cluster as a string with no allocation per frame: ASCII from a table, the rest made once.
+fn letter(cluster: &str) -> SharedString {
+    const ASCII: &[u8] = b" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+    thread_local!(static MADE: RefCell<FxHashMap<Box<str>, SharedString>> = RefCell::default());
+    if let &[byte @ b' '..=b'~'] = cluster.as_bytes() {
+        let at = usize::from(byte - b' ');
+        return SharedString::new_static(str::from_utf8(&ASCII[at..=at]).unwrap_or_default());
+    }
+    MADE.with_borrow_mut(|made| match made.get(cluster) {
+        Some(letter) => letter.clone(),
+        None => made.entry(cluster.into()).or_insert_with(|| SharedString::from(cluster.to_owned())).clone(),
+    })
 }
 
 /// A 38 px tall bordered button over art.
@@ -212,14 +238,34 @@ fn button_frame() -> Div {
 
 /// `/ filter` field: the accent slash and a bare mono input.
 /// The text of a `filter`; `V` repaints as it changes (`set_value` sends no change).
-pub fn filter_input<V: 'static>(placeholder: &'static str, window: &mut Window, cx: &mut Context<V>) -> (Entity<InputState>, Subscription) {
-    let state = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+pub fn filter_input<V: 'static>(placeholder: Key, window: &mut Window, cx: &mut Context<V>) -> (Entity<InputState>, Subscription) {
+    let (state, relabel) = input(placeholder, window, cx);
     let typed = cx.subscribe(&state, |_, _, event: &InputEvent, cx| {
         if matches!(event, InputEvent::Change) {
             cx.notify();
         }
     });
-    (state, typed)
+    (state, Subscription::join(typed, relabel))
+}
+
+/// An input whose placeholder follows the language while the subscription lives.
+pub fn input<V: 'static>(placeholder: Key, window: &mut Window, cx: &mut Context<V>) -> (Entity<InputState>, Subscription) {
+    let state = cx.new(|cx| InputState::new(window, cx).placeholder(t(cx, placeholder)));
+    let relabel = relabel(&state, placeholder, window, cx);
+    (state, relabel)
+}
+
+/// Keeps an input's placeholder in the user's language while the subscription lives.
+pub fn relabel<V: 'static, M: InputModeKind>(
+    state: &Entity<InputBaseState<M>>,
+    placeholder: Key,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> Subscription {
+    let state = state.downgrade();
+    cx.observe_global_in::<Texts>(window, move |_, window, cx| {
+        state.update(cx, |state, cx| state.set_placeholder(t(cx, placeholder), window, cx)).ok();
+    })
 }
 
 pub fn filter(state: &Entity<InputState>, cx: &App) -> Div {
@@ -253,4 +299,16 @@ pub fn grid(step: f32, color: Rgba) -> impl IntoElement {
     .top_0()
     .left_0()
     .size_full()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::letter;
+
+    #[test]
+    fn a_letter_is_its_cluster() {
+        for cluster in (' '..='~').map(String::from).chain(["É".into(), "e\u{301}".into()]) {
+            assert_eq!(letter(&cluster).as_ref(), cluster);
+        }
+    }
 }

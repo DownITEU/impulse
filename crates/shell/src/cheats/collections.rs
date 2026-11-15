@@ -7,7 +7,7 @@ use client::{
     trainer::Sheet,
 };
 use gpui_kit::{
-    Context, Div, Entity, EventEmitter, FocusHandle, IntoElement, MouseButton, Render, Stateful, Subscription, Window,
+    Context, Div, Entity, EventEmitter, FocusHandle, IntoElement, MouseButton, Render, SharedString, Stateful, Subscription, Window,
     component::{
         h_flex,
         input::{Input, InputEvent, InputState},
@@ -19,6 +19,8 @@ use gpui_kit::{
     px, rgb,
 };
 
+use i18n::Arg;
+
 use super::{CheatList, EditorClosed, Menu, open_menu};
 use crate::{
     trainer::Trainers,
@@ -26,8 +28,10 @@ use crate::{
         assets::Icon,
         dialog::dialog,
         dropdown::{close, picks},
+        key,
+        text::{t, tf},
         theme::*,
-        widgets::{button, icon, icon_button, mono, tip},
+        widgets::{button, icon, icon_button, input, mono, tip},
     },
 };
 
@@ -59,6 +63,7 @@ impl CheatList {
         let collections = &self.trainers.read(cx).trainer_profile(game).collections;
         // A new one is made of the mods that are on.
         let addable = running && sheet.active() > 0;
+        let add_tip = t(cx, key::CHEATS_COLLECT_TIP);
         let chips = collections
             .iter()
             .enumerate()
@@ -78,14 +83,14 @@ impl CheatList {
                     .min_w_0()
                     .h_full()
                     .gap(px(6.))
-                    .when(collections.is_empty(), |bar| bar.child(mono("NO COLLECTIONS", 10.5).text_color(rgb(GHOST))))
+                    .when(collections.is_empty(), |bar| bar.child(mono(t(cx, key::CHEATS_NO_COLLECTIONS), 10.5).text_color(rgb(GHOST))))
                     .children(chips)
                     // The kit's scroller: inside the pane's, a plain one never gets the wheel.
                     .overflow_x_scrollbar(),
             )
             .child(
                 icon_button("collection-add", Icon::Plus, 28., 13.)
-                    .tooltip(|window, cx| tip("Keeps the mods that are on now as a collection.".into(), window, cx))
+                    .tooltip(move |window, cx| tip(add_tip.clone(), window, cx))
                     .when(!addable, |add| add.opacity(0.4).cursor_default())
                     .when(addable, |add| add.on_click(cx.listener(|list, _, window, cx| list.edit_collection(None, window, cx)))),
             )
@@ -125,11 +130,11 @@ impl CheatList {
             )
             .on_mouse_down_out(cx.listener(move |list, _, _, cx| close(list, open_menu, menu, cx)))
             .when(self.menu == Some(menu), |chip| {
-                let actions =
-                    picks(vec!["EDIT".into(), "DELETE".into()], usize::MAX, open_menu, cx, move |list, pick, window, cx| match pick {
-                        0 => list.edit_collection(Some(at), window, cx),
-                        _ => list.delete_collection(at, cx),
-                    });
+                let options = vec![t(cx, key::CHEATS_EDIT), t(cx, key::CHEATS_DELETE)];
+                let actions = picks(options, usize::MAX, open_menu, cx, move |list, pick, window, cx| match pick {
+                    0 => list.edit_collection(Some(at), window, cx),
+                    _ => list.delete_collection(at, cx),
+                });
                 chip.child(deferred(actions.left(px(-1.)).min_w(px(110.))))
             })
     }
@@ -184,6 +189,7 @@ pub struct CollectionEditor {
     icon: &'static str,
     name: Entity<InputState>,
     focus: FocusHandle,
+    // Typing, and the placeholder's language.
     _typed: Subscription,
 }
 
@@ -201,13 +207,16 @@ impl CollectionEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let name = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("name").validate(|text, _| text.chars().count() <= NAME_LENGTH).default_value(title)
+        let (name, relabel) = input(key::CHEATS_NAME_FIELD, window, cx);
+        name.update(cx, |name, cx| {
+            name.set_value(title, window, cx);
+            name.set_validator(|text, _| text.chars().count() <= NAME_LENGTH, cx);
         });
         let typed = cx.subscribe_in(&name, window, |editor, _, event: &InputEvent, window, cx| match event {
             InputEvent::PressEnter { .. } => editor.keep(window, cx),
             _ => cx.notify(),
         });
+        let typed = Subscription::join(typed, relabel);
         // Typing replaces the old name.
         name.update(cx, |name, cx| {
             name.focus(window, cx);
@@ -266,24 +275,29 @@ impl Render for CollectionEditor {
             .child(Input::new(&self.name).appearance(false).px_0().font_family(MONO).text_size(px(12.5)));
         let buttons = h_flex()
             .gap(px(8.))
-            .child(button("CANCEL").id("collection-cancel").on_click(cx.listener(|editor, _, window, cx| editor.close(window, cx))))
             .child(
-                button("SAVE")
+                button(&t(cx, key::CHEATS_CANCEL))
+                    .id("collection-cancel")
+                    .on_click(cx.listener(|editor, _, window, cx| editor.close(window, cx))),
+            )
+            .child(
+                button(&t(cx, key::CHEATS_SAVE))
                     .id("collection-save")
                     .border_color(accent)
                     .text_color(accent)
                     .when(!named, |save| save.opacity(0.4).cursor_default())
                     .on_click(cx.listener(|editor, _, window, cx| editor.keep(window, cx))),
             );
+        let count = self.mods.len();
+        let padded = format!("{count:02}");
+        let mods = tf(cx, key::CHEATS_COLLECTION_MODS, &[("mods", Arg::Str(&padded)), ("count", Arg::Num(count as f64))]);
         let body = v_flex()
             .p(px(16.))
             .gap(px(16.))
-            .child(part("NAME").child(field))
-            .child(part("ICON").child(h_flex().flex_wrap().gap(px(TILE_GAP)).children(tiles)))
-            .child(
-                h_flex().justify_between().child(mono(format!("{:02} MODS", self.mods.len()), 10.5).text_color(rgb(FAINT))).child(buttons),
-            );
-        let title = if self.at.is_some() { "EDIT COLLECTION" } else { "NEW COLLECTION" };
+            .child(part(t(cx, key::CHEATS_NAME)).child(field))
+            .child(part(t(cx, key::CHEATS_ICON)).child(h_flex().flex_wrap().gap(px(TILE_GAP)).children(tiles)))
+            .child(h_flex().justify_between().child(mono(mods, 10.5).text_color(rgb(FAINT))).child(buttons));
+        let title = t(cx, if self.at.is_some() { key::CHEATS_EDIT_COLLECTION } else { key::CHEATS_NEW_COLLECTION });
         // Six tiles across, inside the padding and the borders.
         let width = 6. * TILE + 5. * TILE_GAP + 34.;
         dialog("collection", title, width, &self.focus, Self::close, body, cx)
@@ -291,6 +305,6 @@ impl Render for CollectionEditor {
 }
 
 /// A captioned part of the editor.
-fn part(caption: &'static str) -> Div {
+fn part(caption: SharedString) -> Div {
     v_flex().gap(px(8.)).child(mono(caption, 10.5).text_color(rgb(DIM)))
 }

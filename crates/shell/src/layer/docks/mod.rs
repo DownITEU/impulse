@@ -11,10 +11,11 @@ use frame::HEADER;
 pub(super) use frame::{below_header, frame, input, toolbar};
 
 use crate::ui::assets::Icon;
+use i18n::Key;
 
 pub(super) struct Spec {
     pub id: &'static str,
-    pub title: &'static str,
+    pub title: Key,
     pub icon: Icon,
     /// Where it opens first, on a screen this size.
     pub first: fn(Size<Pixels>) -> Bounds<Pixels>,

@@ -1,9 +1,5 @@
 //! The game list at the left: favorites first, a filter, `+ ADD`; and the pane's notice before there is a game.
 
-use crate::ui::{
-    key,
-    text::{failed, t},
-};
 use std::time::Duration;
 
 use client::{
@@ -23,6 +19,8 @@ use crate::{
     settings::{Lead, Settings},
     ui::{
         assets::Icon,
+        key,
+        text::{failed, t},
         theme::*,
         widgets::{filter, filter_input, icon, icon_button, mono, notice, square},
     },
@@ -58,7 +56,7 @@ impl Sidebar {
     ) -> Self {
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
-        let (filter, typed) = filter_input("filter", window, cx);
+        let (filter, typed) = filter_input(key::LIBRARY_FILTER, window, cx);
         typed.detach();
         Self { library, settings, picker, filter, marks: Box::new(marks) }
     }
@@ -129,7 +127,7 @@ impl Render for Sidebar {
         let sectioned = !starred.is_empty();
         let mut number = 0;
         let mut rows = Vec::new();
-        for (title, section) in [("FAVORITES", starred), ("GAMES", rest)] {
+        for (title, section) in [(t(cx, key::LIBRARY_FAVORITES), starred), (t(cx, key::LIBRARY_GAMES), rest)] {
             let shown: Vec<_> = section
                 .into_iter()
                 .map(|found| {
@@ -144,7 +142,7 @@ impl Render for Sidebar {
             rows.extend(shown.into_iter().map(|(number, (index, game))| self.game_row(index, number, game, cx).into_any_element()));
         }
         if rows.is_empty() && !games.is_empty() {
-            rows.push(mono("NO GAMES MATCH", 11.).px(px(16.)).py(px(10.)).text_color(rgb(FAINT)).into_any_element());
+            rows.push(mono(t(cx, key::LIBRARY_NO_MATCH), 11.).px(px(16.)).py(px(10.)).text_color(rgb(FAINT)).into_any_element());
         }
         v_flex()
             .w(px(WIDTH))
@@ -165,7 +163,7 @@ impl Render for Sidebar {
                     .child(
                         h_flex()
                             .gap(px(7.))
-                            .child(mono("GAMES", 11.).text_color(rgb(DIM)))
+                            .child(mono(t(cx, key::LIBRARY_GAMES), 11.).text_color(rgb(DIM)))
                             .child(mono("/", 11.).text_color(rgb(GHOST)))
                             .child(mono(games.len().to_string(), 11.).text_color(rgb(TEXT_2))),
                     )
@@ -195,13 +193,13 @@ impl Render for Sidebar {
                     .text_color(rgb(DIM))
                     .hover(|style| style.text_color(rgb(TEXT)))
                     .on_click(cx.listener(|view, _, window, cx| view.picker.update(cx, |picker, cx| picker.add(window, cx))))
-                    .child(mono("+ ADD", 11.)),
+                    .child(mono(t(cx, key::LIBRARY_ADD), 11.)),
             )
     }
 }
 
 fn live_label(cx: &App) -> impl IntoElement {
-    let label = mono("LIVE", 10.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx)));
+    let label = mono(t(cx, key::LIBRARY_LIVE), 10.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx)));
     label
         .with_animation("live", Animation::new(Duration::from_millis(1200)).repeat(), |label, t| {
             label.opacity(if t < 0.5 { 1. } else { 0.35 })
@@ -209,7 +207,7 @@ fn live_label(cx: &App) -> impl IntoElement {
         .into_any_element()
 }
 
-fn section_title(title: &'static str, count: usize) -> impl IntoElement {
+fn section_title(title: SharedString, count: usize) -> impl IntoElement {
     h_flex()
         .h(px(26.))
         .flex_none()
@@ -222,14 +220,10 @@ fn section_title(title: &'static str, count: usize) -> impl IntoElement {
 /// The pane before there is a game to open.
 pub fn vacant(library: &Library, cx: &App) -> impl IntoElement {
     match library.list() {
-        Load::Pending => notice("[ SCANNING ]", "LOOKING FOR INSTALLED GAMES", "Reading the game catalog and your launchers."),
+        Load::Pending => notice(t(cx, key::LIBRARY_SCANNING_TAG), t(cx, key::LIBRARY_SCANNING), t(cx, key::LIBRARY_SCANNING_BODY)),
         Load::Failed(failure) => {
             notice(t(cx, key::CATALOG_FAILED_TAG), t(cx, key::CATALOG_FAILED), failed(cx, key::CATALOG_FAILED_BODY, failure))
         }
-        Load::Ready(_) => notice(
-            "[ NO GAMES ]",
-            "NO INSTALLED GAMES FOUND",
-            "Impulse looks in Steam, Epic, GOG, Ubisoft, Xbox, Rockstar and EA for games it has trainers for.",
-        ),
+        Load::Ready(_) => notice(t(cx, key::LIBRARY_EMPTY_TAG), t(cx, key::LIBRARY_EMPTY), t(cx, key::LIBRARY_EMPTY_BODY)),
     }
 }

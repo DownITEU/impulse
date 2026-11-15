@@ -279,11 +279,7 @@ impl Render for Stage {
         let map = match &board.map {
             Load::Ready(map) => map.clone(),
             Load::Pending => {
-                return waiting(
-                    "[ LOADING ]".into(),
-                    "LOADING THE MAP".into(),
-                    "Pins and tiles are kept on disk after the first time.".into(),
-                );
+                return waiting(t(cx, key::MAP_LOADING_TAG), t(cx, key::MAP_LOADING), t(cx, key::MAP_LOADING_BODY));
             }
             Load::Failed(failure) => {
                 let body = failed(cx, key::MAP_FAILED_BODY, failure);

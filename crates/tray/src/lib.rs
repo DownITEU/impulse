@@ -42,6 +42,15 @@ pub struct Menu {
     /// The game a trainer runs in.
     pub playing: Option<String>,
     pub over: bool,
+    pub words: Words,
+}
+
+#[derive(Clone, Default)]
+pub struct Words {
+    pub open: String,
+    pub stop: String,
+    pub overlay: String,
+    pub quit: String,
 }
 
 struct Inner {
@@ -199,16 +208,17 @@ fn pick(window: HWND, menu: &Menu) -> Option<Event> {
     let id = unsafe {
         let popup = CreatePopupMenu();
         let item = |flags, id, text: &str| AppendMenuW(popup, flags, id, wide(text).as_ptr());
-        item(MF_STRING, OPEN, "Open Impulse");
+        let Words { open, stop, overlay, quit } = &menu.words;
+        item(MF_STRING, OPEN, open);
         SetMenuDefaultItem(popup, OPEN as u32, 0);
         if let Some(game) = &menu.playing {
             item(MF_SEPARATOR, 0, "");
             item(MF_STRING | MF_GRAYED, 0, game);
-            item(MF_STRING, STOP, "Stop trainer");
-            item(MF_STRING | if menu.over { MF_CHECKED } else { 0 }, OVERLAY, "Overlay");
+            item(MF_STRING, STOP, stop);
+            item(MF_STRING | if menu.over { MF_CHECKED } else { 0 }, OVERLAY, overlay);
         }
         item(MF_SEPARATOR, 0, "");
-        item(MF_STRING, QUIT, "Quit");
+        item(MF_STRING, QUIT, quit);
         let mut at = POINT { x: 0, y: 0 };
         GetCursorPos(&mut at);
         // Without the foreground the menu would not close on a click beside it.

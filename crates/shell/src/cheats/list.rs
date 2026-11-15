@@ -1,9 +1,5 @@
 //! The rows: pinned first, then the trainer's categories, each foldable; a filter over them.
 
-use crate::ui::{
-    key,
-    text::{failed, t},
-};
 use client::{
     Load,
     library::{Game, Support},
@@ -17,19 +13,20 @@ use gpui_kit::{
     px, rgb,
 };
 
+use i18n::Arg;
+
 use super::{CheatList, Printed};
 use crate::{
     bindings::caps,
     run::run_note,
     ui::{
         assets::Icon,
+        key,
+        text::{failed, t, tf},
         theme::*,
         widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
     },
 };
-
-const PINNED: &str = "PINNED";
-const KEPT: &str = "It is kept on disk after the first download.";
 
 impl CheatList {
     pub(super) fn cheats(&self, game: Option<&Game>, cx: &Context<Self>) -> Div {
@@ -37,9 +34,9 @@ impl CheatList {
         let Some(game) = game else { return column };
         if game.support == Support::NoTrainer {
             return column.child(notice(
-                "[ NO TRAINER ]",
-                format!("NO TRAINER FOR {} YET", game.name),
-                "There is no trainer for this game yet. Impulse will flag it in your library as soon as one ships.",
+                t(cx, key::CHEATS_NO_TRAINER_TAG),
+                tf(cx, key::CHEATS_NO_TRAINER, &[("game", Arg::Str(&game.name))]),
+                t(cx, key::CHEATS_NO_TRAINER_BODY),
             ));
         }
         let running = self.is_running(cx);
@@ -56,13 +53,13 @@ impl CheatList {
             // The disk answers within a frame or two: a card would only flash.
             None if trainers.is_loading(&game.id) => return column,
             _ => {
-                return column.child(notice("[ LOADING ]", "LOADING THE CHEAT LIST", KEPT));
+                return column.child(notice(t(cx, key::CHEATS_LOADING_TAG), t(cx, key::CHEATS_LOADING), t(cx, key::CHEATS_KEPT)));
             }
         };
         // Printed as the sheet shows, before a frame draws.
         let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == game.id) else { return column };
         column
-            .when(game.support == Support::UpdatePending, |column| column.child(update_callout()))
+            .when(game.support == Support::UpdatePending, |column| column.child(update_callout(cx)))
             .when(!running, |column| column.child(run_note(self.runs.read(cx), &game.id, cx)))
             .child(self.cheat_list(game, sheet, printed, running, cx))
     }
@@ -70,7 +67,7 @@ impl CheatList {
     fn cheat_list(&self, game: &Game, sheet: &Sheet, printed: &Printed, running: bool, cx: &Context<Self>) -> impl IntoElement {
         let query = self.filter.read(cx).value().to_lowercase();
         // Pinned first, then categories in the trainer's own order.
-        let mut sections: Vec<(SharedString, SharedString, Vec<usize>)> = vec![(PINNED_ID.into(), PINNED.into(), Vec::new())];
+        let mut sections: Vec<(SharedString, SharedString, Vec<usize>)> = vec![(PINNED_ID.into(), t(cx, key::CHEATS_PINNED), Vec::new())];
         for (index, row) in printed.rows.iter().enumerate() {
             let at = match sheet.pinned.contains(&index) {
                 true => 0,
@@ -120,11 +117,11 @@ impl CheatList {
                     .gap(px(10.))
                     .border_b_1()
                     .border_color(line(0.09))
-                    .child(mono(format!("{shown:02} MODS"), 10.5).flex_none().text_color(rgb(GHOST)))
+                    .child(mono(shown_text(shown, cx), 10.5).flex_none().text_color(rgb(GHOST)))
                     .child(self.saved_bar(&game.id, sheet, running, cx)),
             )
             .children(rows)
-            .when(shown == 0, |list| list.child(mono("NO MODS MATCH THE FILTER", 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
+            .when(shown == 0, |list| list.child(mono(t(cx, key::CHEATS_NO_MATCH), 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
     }
 
     fn toggle_fold(&mut self, section: &str, cx: &mut Context<Self>) {
@@ -259,7 +256,12 @@ impl CheatList {
     }
 }
 
-fn update_callout() -> impl IntoElement {
+fn shown_text(shown: usize, cx: &Context<CheatList>) -> SharedString {
+    let padded = format!("{shown:02}");
+    tf(cx, key::CHEATS_SHOWN, &[("shown", Arg::Str(&padded)), ("count", Arg::Num(shown as f64))])
+}
+
+fn update_callout(cx: &Context<CheatList>) -> impl IntoElement {
     h_flex()
         .items_start()
         .gap(px(12.))
@@ -270,11 +272,9 @@ fn update_callout() -> impl IntoElement {
         .bg(alpha(WARN, 0.06))
         .child(icon(Icon::Warn, 18., rgb(WARN)))
         .child(
-            v_flex().gap(px(3.)).child(tracked("GAME UPDATED", 12.5, 0.14).font_weight(FontWeight::BOLD).text_color(rgb(WARN))).child(
-                div()
-                    .text_size(px(13.5))
-                    .text_color(rgb(TEXT_2))
-                    .child("This build is newer than the trainer supports. Mods may not work until the trainer is updated."),
-            ),
+            v_flex()
+                .gap(px(3.))
+                .child(tracked(&t(cx, key::CHEATS_UPDATED), 12.5, 0.14).font_weight(FontWeight::BOLD).text_color(rgb(WARN)))
+                .child(div().text_size(px(13.5)).text_color(rgb(TEXT_2)).child(t(cx, key::CHEATS_UPDATED_BODY))),
         )
 }

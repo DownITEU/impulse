@@ -2,7 +2,7 @@
 
 use client::map::state::{Mark, PALETTE};
 use gpui_kit::{
-    AnyElement, Context, Entity, EventEmitter, FontWeight, Window,
+    AnyElement, Context, Entity, EventEmitter, FontWeight, Subscription, Window,
     component::{
         h_flex,
         input::{Input, InputEvent, InputState, Textarea, TextareaState},
@@ -18,24 +18,27 @@ use crate::{
     map::board::{Board, plane},
     ui::{
         assets::Icon,
+        key,
+        text::t,
         theme::*,
-        widgets::{button, icon_button, mono},
+        widgets::{button, icon_button, input, mono, relabel},
     },
 };
 
 const SWATCH: f32 = 18.;
 
 /// The open mark's name and note fields; edits go straight into the mark.
-pub(super) fn inputs(window: &mut Window, cx: &mut Context<Card>) -> (Entity<InputState>, Entity<TextareaState>) {
-    let name = cx.new(|cx| InputState::new(window, cx).placeholder("name this pin"));
+pub(super) fn inputs(window: &mut Window, cx: &mut Context<Card>) -> (Entity<InputState>, Entity<TextareaState>, Subscription) {
+    let (name, named) = input(key::MAP_NAME_FIELD, window, cx);
     let note = cx.new(|cx| {
-        let mut note = TextareaState::new(window, cx).placeholder("a note");
+        let mut note = TextareaState::new(window, cx).placeholder(t(cx, key::MAP_NOTE_FIELD));
         note.set_auto_grow(2, 6, cx);
         note
     });
+    let relabels = Subscription::join(named, relabel(&note, key::MAP_NOTE_FIELD, window, cx));
     edits(&name, |input| input.value().to_string(), |mark| &mut mark.name, cx);
     edits(&note, |input| input.value().to_string(), |mark| &mut mark.note, cx);
-    (name, note)
+    (name, note, relabels)
 }
 
 fn edits<T: EventEmitter<InputEvent>>(
@@ -86,12 +89,12 @@ impl Card {
                 }))
         });
         let teleport = board.can_teleport_to_plane(map).then(|| {
-            button("TELEPORT")
+            button(&t(cx, key::MAP_TELEPORT))
                 .id("mark-teleport")
                 .flex_1()
                 .on_click(cx.listener(move |card, _, _, cx| card.board.update(cx, |board, cx| board.teleport_to_plane(plane(at), cx))))
         });
-        let delete = button("DELETE")
+        let delete = button(&t(cx, key::MAP_DELETE))
             .id("mark-delete")
             .flex_1()
             .on_click(cx.listener(move |card, _, _, cx| card.board.update(cx, |board, cx| board.delete_mark(index, cx))));
@@ -101,7 +104,7 @@ impl Card {
         let head = h_flex()
             .gap(px(10.))
             .child(div().size(px(14.)).flex_none().bg(rgb(color)))
-            .child(mono("MY PIN", 10.).flex_1().text_color(rgb(DIM)))
+            .child(mono(t(cx, key::MAP_MY_PIN), 10.).flex_1().text_color(rgb(DIM)))
             .child(close);
         let card = self
             .panel("mark-card")

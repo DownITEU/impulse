@@ -1,0 +1,57 @@
+//! The cheat list, its collections, the hotkeys and the trainer's title.
+
+use i18n::Key;
+
+pub const CHEATS_FAILED_TAG: Key = Key("cheats-failed-tag");
+pub const CHEATS_FAILED: Key = Key("cheats-failed");
+pub const CHEATS_FAILED_BODY: Key = Key("cheats-failed-body");
+pub const CHEATS_FILTER: Key = Key("cheats-filter");
+
+pub const CHEATS_PINNED: Key = Key("cheats-pinned");
+pub const CHEATS_KEPT: Key = Key("cheats-kept");
+pub const CHEATS_NO_TRAINER_TAG: Key = Key("cheats-no-trainer-tag");
+pub const CHEATS_NO_TRAINER: Key = Key("cheats-no-trainer");
+pub const CHEATS_NO_TRAINER_BODY: Key = Key("cheats-no-trainer-body");
+pub const CHEATS_LOADING_TAG: Key = Key("cheats-loading-tag");
+pub const CHEATS_LOADING: Key = Key("cheats-loading");
+pub const CHEATS_SHOWN: Key = Key("cheats-shown");
+pub const CHEATS_NO_MATCH: Key = Key("cheats-no-match");
+pub const CHEATS_UPDATED: Key = Key("cheats-updated");
+pub const CHEATS_UPDATED_BODY: Key = Key("cheats-updated-body");
+pub const CHEATS_SET: Key = Key("cheats-set");
+pub const CHEATS_SET_DONE: Key = Key("cheats-set-done");
+pub const CHEATS_EXECUTE: Key = Key("cheats-execute");
+pub const CHEATS_EXECUTE_DONE: Key = Key("cheats-execute-done");
+pub const CHEATS_SAVE: Key = Key("cheats-save");
+pub const CHEATS_SAVED: Key = Key("cheats-saved");
+pub const CHEATS_SAVE_TIP: Key = Key("cheats-save-tip");
+pub const CHEATS_RESET: Key = Key("cheats-reset");
+pub const CHEATS_NO_COLLECTIONS: Key = Key("cheats-no-collections");
+pub const CHEATS_COLLECT_TIP: Key = Key("cheats-collect-tip");
+pub const CHEATS_EDIT: Key = Key("cheats-edit");
+pub const CHEATS_DELETE: Key = Key("cheats-delete");
+pub const CHEATS_NAME_FIELD: Key = Key("cheats-name-field");
+pub const CHEATS_CANCEL: Key = Key("cheats-cancel");
+pub const CHEATS_NAME: Key = Key("cheats-name");
+pub const CHEATS_ICON: Key = Key("cheats-icon");
+pub const CHEATS_COLLECTION_MODS: Key = Key("cheats-collection-mods");
+pub const CHEATS_EDIT_COLLECTION: Key = Key("cheats-edit-collection");
+pub const CHEATS_NEW_COLLECTION: Key = Key("cheats-new-collection");
+
+pub const HOTKEYS_PRESS_KEYS: Key = Key("hotkeys-press-keys");
+pub const HOTKEYS_OFF: Key = Key("hotkeys-off");
+pub const HOTKEYS_IN_GAME: Key = Key("hotkeys-in-game");
+pub const HOTKEYS_GLOBAL: Key = Key("hotkeys-global");
+pub const HOTKEYS_ENABLED: Key = Key("hotkeys-enabled");
+pub const HOTKEYS_ENABLED_HINT: Key = Key("hotkeys-enabled-hint");
+pub const HOTKEYS_WORKS_IN: Key = Key("hotkeys-works-in");
+pub const HOTKEYS_WORKS_IN_HINT: Key = Key("hotkeys-works-in-hint");
+
+pub const TRAINER_NONE: Key = Key("trainer-none");
+pub const TRAINER_MODS: Key = Key("trainer-mods");
+pub const TRAINER_VERSION: Key = Key("trainer-version");
+pub const TRAINER_VERSION_UNKNOWN: Key = Key("trainer-version-unknown");
+pub const TRAINER_UPDATE_PENDING: Key = Key("trainer-update-pending");
+pub const TRAINER_SESSIONS: Key = Key("trainer-sessions");
+pub const TRAINER_PLAYED_MIN: Key = Key("trainer-played-min");
+pub const TRAINER_PLAYED_HOURS: Key = Key("trainer-played-hours");

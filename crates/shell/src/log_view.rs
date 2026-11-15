@@ -7,8 +7,8 @@ use std::{
 
 use futures::StreamExt;
 use gpui_kit::{
-    App, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyBinding, Modifiers, Render, Task,
-    UniformListScrollHandle, Window, actions,
+    App, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, FontWeight, IntoElement, KeyBinding, Modifiers, Render, SharedString,
+    Subscription, Task, UniformListScrollHandle, Window, actions,
     base::SelectableText,
     component::{
         h_flex,
@@ -23,14 +23,17 @@ use gpui_kit::{
 
 use super::ui::{
     assets::Icon,
+    key,
+    text::{Texts, t, tf},
     theme::*,
-    widgets::{button, filter, flash, flash_button, icon_button, mono, square, tracked},
+    widgets::{button, filter, flash, flash_button, icon_button, input, mono, square, tracked},
 };
+use i18n::{Arg, Key, Language};
 use journal::{Level, Record};
 
 actions!(log_view, [CopyRows, SelectAllRows, CloseLog]);
 
-const CONTEXT: &str = "LogView";
+const CONTEXT: &str = "log_view";
 const LEVELS: [Level; 4] = [Level::Error, Level::Warn, Level::Info, Level::Debug];
 
 pub fn bind_keys(cx: &mut App) {
@@ -62,10 +65,13 @@ pub struct LogView {
     follow: bool,
     // Runs while the copy button shows its confirmation.
     copied: Option<Task<()>>,
+    // The COPY n caption of the last count and language.
+    copy_label: Option<(usize, Language, SharedString)>,
     filter: Entity<InputState>,
     scroll: UniformListScrollHandle,
     focus: FocusHandle,
     open: bool,
+    _relabel: Subscription,
     _pump: Task<()>,
 }
 
@@ -75,18 +81,19 @@ fn slot(level: Level) -> usize {
     LEVELS.iter().position(|l| *l == level).unwrap_or(LEVELS.len() - 1)
 }
 
-fn look(level: Level) -> (&'static str, u32) {
+/// A level's caption and color.
+fn look(level: Level) -> (Key, u32) {
     match level {
-        Level::Error => ("ERROR", DANGER),
-        Level::Warn => ("WARN", WARN),
-        Level::Info => ("INFO", MUTED),
-        _ => ("DEBUG", GHOST),
+        Level::Error => (key::LOG_ERROR, DANGER),
+        Level::Warn => (key::LOG_WARN, WARN),
+        Level::Info => (key::LOG_INFO, MUTED),
+        _ => (key::LOG_DEBUG, GHOST),
     }
 }
 
 impl LogView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let filter = cx.new(|cx| InputState::new(window, cx).placeholder("filter log"));
+        let (filter, relabel) = input(key::LOG_FILTER, window, cx);
         cx.subscribe(&filter, |view, filter, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
                 view.query = filter.read(cx).value().to_lowercase();
@@ -113,10 +120,12 @@ impl LogView {
             anchor: None,
             follow: true,
             copied: None,
+            copy_label: None,
             filter,
             scroll: UniformListScrollHandle::new(),
             focus: cx.focus_handle(),
             open: false,
+            _relabel: relabel,
             _pump: pump,
         }
     }
@@ -236,11 +245,29 @@ impl LogView {
         cx.notify();
     }
 
-    fn toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    // Made when the count or the language changes, not per repaint.
+    fn copy_text(&mut self, cx: &App) -> SharedString {
+        let count = self.selected.len();
+        if count == 0 {
+            return t(cx, key::LOG_COPY_ALL);
+        }
+        let language = cx.global::<Texts>().language();
+        match &self.copy_label {
+            Some((n, lang, text)) if *n == count && *lang == language => text.clone(),
+            _ => {
+                let text = tf(cx, key::LOG_COPY, &[("count", Arg::Num(count as f64))]);
+                self.copy_label = Some((count, language, text.clone()));
+                text
+            }
+        }
+    }
+
+    fn toolbar(&self, copy: &str, cx: &mut Context<Self>) -> impl IntoElement {
         let chips = LEVELS.into_iter().enumerate().map(|(slot, level)| {
             let (label, color) = look(level);
+            let label = t(cx, label);
             h_flex()
-                .id(label)
+                .id(("log-level", slot))
                 .h(px(26.))
                 .px(px(8.))
                 .gap(px(6.))
@@ -256,10 +283,6 @@ impl LogView {
                 .child(mono(label, 10.5).font_weight(FontWeight::BOLD))
                 .child(mono(self.counts[slot].to_string(), 10.5).text_color(rgb(FAINT)))
         });
-        let copy = match self.selected.len() {
-            0 => "COPY ALL".to_owned(),
-            n => format!("COPY {n}"),
-        };
         h_flex()
             .h(px(48.))
             .flex_none()
@@ -268,23 +291,28 @@ impl LogView {
             .gap(px(10.))
             .border_b_1()
             .border_color(line(0.09))
-            .child(tracked("LOG", 13., 0.16).font_weight(FontWeight::BOLD))
+            .child(tracked(&t(cx, key::LOG_TITLE), 13., 0.16).font_weight(FontWeight::BOLD))
             .children(chips)
             .child(filter(&self.filter, cx).flex_1().min_w(px(120.)).h(px(28.)).px(px(10.)).border_1().border_color(line(0.1)))
-            .child(button("FOLLOW").id("follow").when(self.follow, |button| button.child(square(7., rgb(accent(cx))))).on_click(
-                cx.listener(|view, _, _, cx| {
-                    view.follow = !view.follow;
-                    if view.follow {
-                        view.scroll.scroll_to_bottom();
-                    }
-                    cx.notify();
-                }),
-            ))
             .child(
-                flash_button(&copy, "COPIED", self.copied.is_some(), cx).id("copy").on_click(cx.listener(|view, _, _, cx| view.copy(cx))),
+                button(&t(cx, key::LOG_FOLLOW))
+                    .id("follow")
+                    .when(self.follow, |button| button.child(square(7., rgb(accent(cx)))))
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.follow = !view.follow;
+                        if view.follow {
+                            view.scroll.scroll_to_bottom();
+                        }
+                        cx.notify();
+                    })),
             )
-            .child(button("CLEAR").id("clear").on_click(cx.listener(|view, _, _, cx| view.clear(cx))))
-            .child(button("FOLDER").id("folder").on_click(|_, _, cx| {
+            .child(
+                flash_button(copy, &t(cx, key::LOG_COPIED), self.copied.is_some(), cx)
+                    .id("copy")
+                    .on_click(cx.listener(|view, _, _, cx| view.copy(cx))),
+            )
+            .child(button(&t(cx, key::LOG_CLEAR)).id("clear").on_click(cx.listener(|view, _, _, cx| view.clear(cx))))
+            .child(button(&t(cx, key::LOG_FOLDER)).id("folder").on_click(|_, _, cx| {
                 if let Some(dir) = journal::dir() {
                     cx.open_with_system(dir);
                 }
@@ -295,6 +323,7 @@ impl LogView {
     fn row(&self, record: &Record, cx: &mut Context<Self>) -> impl IntoElement {
         let seq = record.seq;
         let (label, color) = look(record.level);
+        let label = t(cx, label);
         let (text, tint) = match record.level {
             Level::Error => (TEXT_BRIGHT, Some(alpha(DANGER, 0.07))),
             Level::Warn => (TEXT, Some(alpha(WARN, 0.05))),
@@ -329,7 +358,7 @@ impl LogView {
             .child(mono(record.message.clone(), 12.).flex_1().min_w_0().truncate().text_color(rgb(text)))
     }
 
-    fn detail(&self) -> impl IntoElement {
+    fn detail(&self, cx: &App) -> impl IntoElement {
         let record = self.anchor.and_then(|seq| self.all.iter().find(|record| record.seq == seq));
         div()
             .id("log-detail")
@@ -348,7 +377,7 @@ impl LogView {
                 Some(record) => {
                     strip.text_color(rgb(TEXT)).child(SelectableText::new(("log-detail-text", record.seq as usize), record.line()))
                 }
-                None => strip.text_color(rgb(FAINT)).child("CLICK A ROW TO READ AND SELECT THE FULL RECORD"),
+                None => strip.text_color(rgb(FAINT)).child(t(cx, key::LOG_DETAIL_EMPTY)),
             })
     }
 }
@@ -357,6 +386,7 @@ const ROW_HEIGHT: f32 = 26.;
 
 impl Render for LogView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let copy = self.copy_text(cx);
         v_flex()
             .size_full()
             .bg(rgb(BG))
@@ -368,7 +398,7 @@ impl Render for LogView {
                 cx.notify();
             }))
             .on_action(cx.listener(|view, _: &CloseLog, _, cx| view.close(cx)))
-            .child(self.toolbar(cx))
+            .child(self.toolbar(&copy, cx))
             .child(
                 div()
                     .relative()
@@ -388,6 +418,6 @@ impl Render for LogView {
                     )
                     .vertical_scrollbar(&self.scroll),
             )
-            .child(self.detail())
+            .child(self.detail(cx))
     }
 }

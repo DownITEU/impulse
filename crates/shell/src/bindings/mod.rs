@@ -29,8 +29,6 @@ pub use caps::{cap, caps};
 pub use scope::hotkeys_scope;
 pub use settings::HotkeySettings;
 
-pub const PRESS_KEYS: &str = "PRESS KEYS";
-
 /// What a capture binds.
 #[derive(Clone, PartialEq)]
 pub enum Target {

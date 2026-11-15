@@ -4,8 +4,8 @@ use client::{library::GameId, trainer::Sheet};
 use gpui_kit::{App, Entity, IntoElement, SharedString, Window, component::h_flex, prelude::*, px, rgb};
 use model::Kind;
 
-use super::{Hotkeys, PRESS_KEYS, Target};
-use crate::ui::{theme::*, widgets::keycap};
+use super::{Hotkeys, Target};
+use crate::ui::{key, text::t, theme::*, widgets::keycap};
 
 /// A slot's cap: a pair's arrow (`Kind::slots` order), then `body`.
 pub fn cap(kind: Kind, slot: usize, body: &str) -> SharedString {
@@ -27,7 +27,9 @@ pub fn caps(hotkeys: &Entity<Hotkeys>, game: &GameId, sheet: &Sheet, index: usiz
     h_flex().flex_initial().min_w_0().justify_end().gap(px(4.)).children(keys.iter().enumerate().map(|(slot, label)| {
         let held = bound.held_slot(game, &cheat.id, slot);
         let text = match held {
-            Some(held) => cap(cheat.kind, slot, &held.map_or_else(|| PRESS_KEYS.to_owned(), |chord| chord.to_string())),
+            Some(held) => {
+                cap(cheat.kind, slot, &held.map_or_else(|| t(cx, key::HOTKEYS_PRESS_KEYS).to_string(), |chord| chord.to_string()))
+            }
             None => label.clone(),
         };
         let unbound = held.is_none() && sheet.hotkeys[index][slot].is_none();

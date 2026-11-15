@@ -16,10 +16,13 @@ use gpui_kit::{
     prelude::*,
     px, rgb,
 };
+use i18n::Arg;
 
 use super::{Found, Library};
 use crate::ui::{
     dialog::dialog,
+    key,
+    text::{t, tf},
     theme::*,
     widgets::{filter_input, mono},
 };
@@ -73,7 +76,7 @@ impl GamePicker {
             false => (0..found.games.len()).filter(|&at| found.games[at].trainer.is_some()).collect(),
         };
         choices.sort_by(|&a, &b| found.names[a].cmp(&found.names[b]));
-        let (filter, typed) = filter_input("game name", window, cx);
+        let (filter, typed) = filter_input(key::PICKER_FILTER, window, cx);
         filter.update(cx, |filter, cx| filter.focus(window, cx));
         self.picker = Some(Picker { found, choices, owned, filter, _typed: typed });
         cx.notify();
@@ -107,11 +110,12 @@ impl Render for GamePicker {
         let found = &picker.found;
         let rows = picker.choices.iter().filter(|&&at| found.names[at].contains(&query)).take(shown).map(|&at| {
             let game = &found.games[at];
-            let mut store = game.store_ids.first().map_or(String::new(), |id| id.store().to_uppercase());
+            let store = game.store_ids.first().map_or(String::new(), |id| id.store().to_uppercase());
             // Picking it adds a source to the listed game.
-            if library.game(&GameId::of(&game.id)).is_some() {
-                store.push_str("  IN LIBRARY");
-            }
+            let store = match library.game(&GameId::of(&game.id)).is_some() {
+                true => tf(cx, key::PICKER_IN_LIBRARY, &[("store", Arg::Str(&store))]),
+                false => store.into(),
+            };
             h_flex()
                 .id(("choice", at))
                 .h(px(32.))
@@ -126,8 +130,8 @@ impl Render for GamePicker {
                 .child(mono(store, 10.5).text_color(rgb(FAINT)))
         });
         let caption = match picker.owned {
-            true => "MORE THAN ONE GAME MATCHES: WHICH ONE IS IT?",
-            false => "NO CATALOG GAME MATCHES: FIND IT BY NAME",
+            true => t(cx, key::PICKER_OWNED),
+            false => t(cx, key::PICKER_UNOWNED),
         };
         let field = h_flex()
             .h(px(36.))
@@ -143,17 +147,12 @@ impl Render for GamePicker {
             .child(mono(caption, 10.5).text_color(rgb(DIM)))
             .child(field)
             .child(div().id("choices").max_h(px(320.)).overflow_y_scroll().flex().flex_col().children(rows));
-        dialog("picker", "ADD A GAME", 520., &self.focus, Self::close, body, cx).into_any_element()
+        dialog("picker", t(cx, key::PICKER_TITLE), 520., &self.focus, Self::close, body, cx).into_any_element()
     }
 }
 
 pub(super) fn prompt(cx: &mut App) -> oneshot::Receiver<Result<Option<Vec<PathBuf>>>> {
-    cx.prompt_for_paths(PathPromptOptions {
-        files: true,
-        directories: false,
-        multiple: false,
-        prompt: Some("Select the game's .exe".into()),
-    })
+    cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple: false, prompt: Some(t(cx, key::PICKER_PROMPT)) })
 }
 
 /// The file picked, if it is an executable; a shortcut comes as its target.

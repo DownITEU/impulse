@@ -7,10 +7,12 @@ use overlay::Key;
 
 use super::Layer;
 use crate::{
-    bindings::{Hotkeys, PRESS_KEYS, Target},
+    bindings::{Hotkeys, Target},
     settings::row,
     trainer::Trainers,
     ui::{
+        key,
+        text::t,
         theme::*,
         widgets::{choice, keycap, segmented},
     },
@@ -35,7 +37,7 @@ impl OverlaySettings {
     fn hotkey_cap(&self, id: &'static str, target: Target, key: Option<Key>, cx: &mut Context<Self>) -> impl IntoElement {
         let held = self.hotkeys.read(cx).held(&target);
         let text: SharedString = match held {
-            Some(held) => held.map_or_else(|| PRESS_KEYS.into(), |chord| chord.to_string().into()),
+            Some(held) => held.map_or_else(|| t(cx, key::HOTKEYS_PRESS_KEYS), |chord| chord.to_string().into()),
             None => key_text(key),
         };
         let accent = rgb(accent(cx));
@@ -114,23 +116,26 @@ impl Render for OverlaySettings {
             .px(px(18.))
             .py(px(6.))
             .child(
-                row("MODE", "in-game, drawn inside the game: later", 64.).child(
+                row(t(cx, key::OVERLAY_MODE), t(cx, key::OVERLAY_MODE_HINT), 64.).child(
                     segmented()
                         .h(px(26.))
-                        .child(choice("overlay-over", "OVER THE GAME", true, cx))
-                        .child(choice("overlay-in-game", "IN-GAME", false, cx).cursor_default().opacity(0.4)),
+                        .child(choice("overlay-over", t(cx, key::OVERLAY_MODE_OVER), true, cx))
+                        .child(choice("overlay-in-game", t(cx, key::OVERLAY_MODE_IN_GAME), false, cx).cursor_default().opacity(0.4)),
                 ),
             )
-            .child(row("HOTKEY", "modifiers and one key, free in other apps and mods", 64.).child(self.hotkey_cap(
+            .child(row(t(cx, key::OVERLAY_HOTKEY), t(cx, key::OVERLAY_HOTKEY_HINT), 64.).child(self.hotkey_cap(
                 "overlay-hotkey",
                 OVERLAY,
                 overlay,
                 cx,
             )))
             .child(
-                row("MINIMAP HOTKEY", "shows or hides the minimap; held only while the game is in front", 64.)
-                    .border_b_0()
-                    .child(self.hotkey_cap("minimap-hotkey", MINIMAP, minimap, cx)),
+                row(t(cx, key::OVERLAY_MINIMAP_HOTKEY), t(cx, key::OVERLAY_MINIMAP_HOTKEY_HINT), 64.).border_b_0().child(self.hotkey_cap(
+                    "minimap-hotkey",
+                    MINIMAP,
+                    minimap,
+                    cx,
+                )),
             )
     }
 }

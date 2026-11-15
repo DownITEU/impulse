@@ -7,6 +7,7 @@ use gpui_kit::{
     prelude::*,
     px, rgb,
 };
+use i18n::Arg;
 use model::{Map, PIN_LINK};
 
 use super::{Card, PICTURE};
@@ -21,6 +22,8 @@ use crate::{
     },
     ui::{
         assets::Icon,
+        key,
+        text::{t, tf},
         theme::*,
         widgets::{button, flash, icon, icon_button, mono},
     },
@@ -92,7 +95,7 @@ impl Card {
             None => head.pt(px(14.)).pr(px(36.)),
         };
         let coordinates = pin.position.map(|[x, y, z]| {
-            let text = format!("X {x:.0}  Y {y:.0}  Z {z:.0}");
+            let text = format!("{} {x:.0}  {} {y:.0}  {} {z:.0}", t(cx, key::MAP_AXIS_X), t(cx, key::MAP_AXIS_Y), t(cx, key::MAP_AXIS_Z));
             let copy = text.clone();
             h_flex()
                 .id("pin-coordinates")
@@ -106,7 +109,11 @@ impl Card {
                 .bg(rgb(SUNKEN))
                 .hover(|style| style.border_color(line(0.3)))
                 .child(mono(text, 10.5).flex_1().text_color(rgb(MUTED)))
-                .child(mono(if self.copied { "COPIED" } else { "COPY" }, 9.5).text_color(if self.copied { accent } else { rgb(DIM) }))
+                .child(mono(t(cx, if self.copied { key::MAP_COPIED } else { key::MAP_COPY }), 9.5).text_color(if self.copied {
+                    accent
+                } else {
+                    rgb(DIM)
+                }))
                 .on_click(cx.listener(move |card, _, _, cx| {
                     cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
                     card.copied = true;
@@ -114,13 +121,13 @@ impl Card {
                     cx.notify();
                 }))
         });
-        let mark = button(if found { "FOUND" } else { "MARK FOUND" })
+        let mark = button(&t(cx, if found { key::MAP_FOUND } else { key::MAP_MARK_FOUND }))
             .id("pin-found")
             .flex_1()
             .when(found, |button| button.border_color(accent).text_color(accent).child(icon(Icon::Check, 11., accent)))
             .on_click(cx.listener(move |card, _, _, cx| card.board.update(cx, |board, cx| board.toggle_found(index, cx))));
         let go = teleport.map(|to| {
-            button(if self.confirm { "CONFIRM" } else { "TELEPORT" })
+            button(&t(cx, if self.confirm { key::MAP_CONFIRM } else { key::MAP_TELEPORT }))
                 .id("pin-teleport")
                 .flex_1()
                 .when(self.confirm, |button| button.border_color(accent).text_color(accent))
@@ -135,6 +142,15 @@ impl Card {
                 }))
         });
         let hide_id = group(map, pin).id.clone();
+        let hide_text = match &self.hide {
+            Some((at, text)) if *at == index => text.clone(),
+            _ => {
+                let name = group(map, pin).name.to_uppercase();
+                let text = tf(cx, key::MAP_HIDE_GROUP, &[("group", Arg::Str(&name))]);
+                self.hide = Some((index, text.clone()));
+                text
+            }
+        };
         let hide = h_flex()
             .id("pin-hide-group")
             .px(px(14.))
@@ -143,7 +159,7 @@ impl Card {
             .cursor_pointer()
             .text_color(rgb(FAINT))
             .hover(|style| style.text_color(rgb(MUTED)))
-            .child(mono(format!("HIDE {} ON THE MAP", group(map, pin).name.to_uppercase()), 9.5))
+            .child(mono(hide_text, 9.5))
             .on_click(cx.listener(move |card, _, _, cx| {
                 card.board.update(cx, |board, cx| {
                     board.filter(
@@ -205,7 +221,9 @@ impl Card {
                     .on_click(cx.listener(move |card, _, _, cx| card.board.update(cx, |board, cx| board.select(other, true, cx))))
             })
             .collect();
-        Some(v_flex().child(mono("NEARBY", 10.).text_color(rgb(DIM)).px(px(14.)).pb(px(4.))).children(rows).into_any_element())
+        Some(
+            v_flex().child(mono(t(cx, key::MAP_NEARBY), 10.).text_color(rgb(DIM)).px(px(14.)).pb(px(4.))).children(rows).into_any_element(),
+        )
     }
 }
 

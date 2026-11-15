@@ -4,6 +4,8 @@ use gpui_kit::{AnyElement, App, Entity, FontWeight, IntoElement, component::h_fl
 
 use super::Hotkeys;
 use crate::ui::{
+    key,
+    text::t,
     theme::*,
     widgets::{square, tracked},
 };
@@ -12,9 +14,9 @@ use crate::ui::{
 pub fn hotkeys_scope(hotkeys: &Entity<Hotkeys>, cx: &App) -> AnyElement {
     let (enabled, game_only) = (hotkeys.read(cx).enabled(), hotkeys.read(cx).game_only());
     let scope = match (enabled, game_only) {
-        (false, _) => "OFF",
-        (true, true) => "IN GAME",
-        (true, false) => "GLOBAL",
+        (false, _) => t(cx, key::HOTKEYS_OFF),
+        (true, true) => t(cx, key::HOTKEYS_IN_GAME),
+        (true, false) => t(cx, key::HOTKEYS_GLOBAL),
     };
     let hotkeys = hotkeys.clone();
     h_flex()
@@ -24,6 +26,6 @@ pub fn hotkeys_scope(hotkeys: &Entity<Hotkeys>, cx: &App) -> AnyElement {
             stat.cursor_pointer().on_click(move |_, _, cx| hotkeys.update(cx, |hotkeys, cx| hotkeys.set_game_only(!game_only, cx)))
         })
         .child(square(7., rgb(if enabled { accent(cx) } else { GHOST })))
-        .child(tracked(scope, 12., 0.12).font_weight(FontWeight::BOLD).when(!enabled, |text| text.text_color(rgb(GHOST))))
+        .child(tracked(&scope, 12., 0.12).font_weight(FontWeight::BOLD).when(!enabled, |text| text.text_color(rgb(GHOST))))
         .into_any_element()
 }

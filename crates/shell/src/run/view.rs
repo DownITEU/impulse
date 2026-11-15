@@ -1,6 +1,5 @@
 //! What the page shows of a run: its button and stage, the session panel and the note over the cheat list.
 
-use crate::ui::text::why;
 use std::time::Duration;
 
 use client::{
@@ -8,7 +7,7 @@ use client::{
     run::Stage,
 };
 use gpui_kit::{
-    AnyElement, App, Div, Entity, FontWeight, IntoElement,
+    AnyElement, App, Div, Entity, FontWeight, IntoElement, SharedString,
     component::{h_flex, v_flex},
     div,
     prelude::*,
@@ -20,20 +19,23 @@ use crate::{
     trainer::Trainers,
     ui::{
         assets::Icon,
+        key,
+        text::{t, why},
         theme::*,
         widgets::{action, icon, mono, square, tracked},
     },
 };
 
-const STOPPING: &str = "STOPPING THE TRAINER";
-
-fn label(stage: Stage) -> &'static str {
-    match stage {
-        Stage::Preparing => "PREPARING THE TRAINER",
-        Stage::Launching => "STARTING THE GAME",
-        Stage::WaitingForGame => "WAITING FOR THE GAME",
-        Stage::Attaching => "LOADING THE TRAINER",
-    }
+fn label(stage: Stage, cx: &App) -> SharedString {
+    t(
+        cx,
+        match stage {
+            Stage::Preparing => key::RUN_PREPARING,
+            Stage::Launching => key::RUN_LAUNCHING,
+            Stage::WaitingForGame => key::RUN_WAITING,
+            Stage::Attaching => key::RUN_ATTACHING,
+        },
+    )
 }
 
 /// LAUNCH + ATTACH, the run's stage, or STOP.
@@ -48,11 +50,15 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
     let stoppable = starting.is_some() || matches!(state, State::Live);
     let stopping = matches!(state, State::Stopping);
     let launchable = run.can_start(&game.id, cx);
+    let stopping_text = t(cx, key::RUN_STOPPING);
+    let stop_text = t(cx, key::RUN_STOP);
+    let launch_text = t(cx, key::RUN_LAUNCH);
+    let enter_text = t(cx, key::RUN_ENTER);
     let (stop, start, id) = (runs.clone(), runs.clone(), game.id.clone());
     h_flex()
         .gap(px(8.))
-        .when_some(starting, |bar, stage| bar.child(tracked(label(stage), 12.5, 0.14).text_color(accent)))
-        .when(stopping, |bar| bar.child(tracked(STOPPING, 12.5, 0.14).text_color(accent)))
+        .when_some(starting, |bar, stage| bar.child(tracked(&label(stage, cx), 12.5, 0.14).text_color(accent)))
+        .when(stopping, |bar| bar.child(tracked(&stopping_text, 12.5, 0.14).text_color(accent)))
         .when(stoppable, |bar| {
             bar.child(
                 action("stop")
@@ -61,7 +67,7 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
                     .text_color(accent)
                     .on_click(move |_, _, cx| stop.update(cx, |runs, cx| runs.stop(cx)))
                     .child(square(9., accent))
-                    .child(tracked("STOP", 12.5, 0.14)),
+                    .child(tracked(&stop_text, 12.5, 0.14)),
             )
         })
         .when(launchable, |bar| {
@@ -79,8 +85,10 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
                     .cursor_pointer()
                     .on_click(move |_, _, cx| start.update(cx, |runs, cx| runs.start(id.clone(), cx)))
                     .child(icon(Icon::Play, 13., rgb(BG)))
-                    .child(tracked("LAUNCH + ATTACH", 12.5, 0.14))
-                    .child(mono("ENTER", 10.).font_weight(FontWeight::BOLD).px(px(6.)).py(px(2.)).border_1().border_color(alpha(BG, 0.45))),
+                    .child(tracked(&launch_text, 12.5, 0.14))
+                    .child(
+                        mono(enter_text, 10.).font_weight(FontWeight::BOLD).px(px(6.)).py(px(2.)).border_1().border_color(alpha(BG, 0.45)),
+                    ),
             )
         })
 }
@@ -92,9 +100,9 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
     let running = matches!(runs.state(&game.id), State::Live);
     let last = trainers.game_profile(&game.id).last;
     let (title, time) = match runs.since().filter(|_| running) {
-        Some(since) => ("SESSION", since.elapsed()),
-        None if last > 0 => ("LAST SESSION", Duration::from_secs(last)),
-        None => ("SESSION", Duration::ZERO),
+        Some(since) => (t(cx, key::RUN_SESSION), since.elapsed()),
+        None if last > 0 => (t(cx, key::RUN_LAST_SESSION), Duration::from_secs(last)),
+        None => (t(cx, key::RUN_SESSION), Duration::ZERO),
     };
     let sheet = trainers.sheet(&game.id);
     let total = sheet.map_or(game.mods as usize, |sheet| sheet.cheats.len());
@@ -115,7 +123,7 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
     };
     let panel = div().flex().border_1().border_color(line(0.1)).bg(rgb(PANEL)).px(px(16.));
     if strip {
-        let pair = |name: &'static str| h_flex().gap(px(12.)).child(caption(name));
+        let pair = |name: SharedString| h_flex().gap(px(12.)).child(caption(name));
         return panel
             .flex_wrap()
             .items_center()
@@ -124,8 +132,8 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
             .py(px(10.))
             .child(pair(title).child(clock(24.)))
             .child(div().flex_1())
-            .child(pair("ACTIVE").child(active))
-            .child(pair("HOTKEYS").child(scope));
+            .child(pair(t(cx, key::RUN_ACTIVE)).child(active))
+            .child(pair(t(cx, key::RUN_HOTKEYS)).child(scope));
     }
     // In a taller box the stats keep to its bottom.
     panel
@@ -134,16 +142,16 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
         .pt(px(14.))
         .pb(px(6.))
         .child(v_flex().child(caption(title)).child(clock(42.).mt(px(6.)).mb(px(10.))))
-        .child(v_flex().child(stat("ACTIVE").child(active)).child(stat("HOTKEYS").child(scope)))
+        .child(v_flex().child(stat(t(cx, key::RUN_ACTIVE)).child(active)).child(stat(t(cx, key::RUN_HOTKEYS)).child(scope)))
 }
 
 /// The line above the cheat list while the trainer is not live.
 pub fn run_note(runs: &Runs, game: &GameId, cx: &App) -> Div {
     match runs.state(game) {
         State::Failed(error) => mono(why(cx, error), 11.).text_color(rgb(WARN)),
-        State::Starting(stage) => mono(label(stage), 11.).text_color(rgb(accent(cx))),
-        State::Stopping => mono(STOPPING, 11.).text_color(rgb(accent(cx))),
-        State::Idle | State::Live => mono("TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH", 11.).text_color(rgb(DIM)),
+        State::Starting(stage) => mono(label(stage, cx), 11.).text_color(rgb(accent(cx))),
+        State::Stopping => mono(t(cx, key::RUN_STOPPING), 11.).text_color(rgb(accent(cx))),
+        State::Idle | State::Live => mono(t(cx, key::RUN_IDLE), 11.).text_color(rgb(DIM)),
     }
 }
 
@@ -153,10 +161,10 @@ fn clock(time: Duration) -> String {
     format!("{:02}:{:02}:{:02}", secs / 3600, secs / 60 % 60, secs % 60)
 }
 
-fn caption(text: &'static str) -> Div {
+fn caption(text: SharedString) -> Div {
     mono(text, 10.5).text_color(rgb(DIM))
 }
 
-fn stat(name: &'static str) -> Div {
+fn stat(name: SharedString) -> Div {
     h_flex().h(px(40.)).justify_between().border_t_1().border_color(line(0.07)).child(caption(name))
 }

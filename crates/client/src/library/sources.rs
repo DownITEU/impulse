@@ -15,9 +15,21 @@ pub enum Entry {
     Forget,
 }
 
+/// What an entry of the menu says; the shell words it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Label {
+    /// A launcher's install, by its store.
+    Store(String),
+    /// A picked executable, by its file name.
+    Exe(String),
+    Add,
+    Change,
+    Remove,
+}
+
 /// The menu: the launcher's install first, then the picked executable, then what to do with one; and the
 /// entry in use.
-pub fn entries(game: &Game) -> (Vec<(Entry, String)>, usize) {
+pub fn entries(game: &Game) -> (Vec<(Entry, Label)>, usize) {
     let mut sources: Vec<(bool, &Installation)> = [(false, Some(&game.install)), (true, game.other.as_ref())]
         .into_iter()
         .filter_map(|(other, install)| Some((other, install?)))
@@ -25,19 +37,19 @@ pub fn entries(game: &Game) -> (Vec<(Entry, String)>, usize) {
     sources.sort_by_key(|(_, install)| exe(install).is_some());
     let current = sources.iter().position(|(other, _)| !other).unwrap_or_default();
     let picked = sources.iter().any(|(_, install)| exe(install).is_some());
-    let mut entries: Vec<(Entry, String)> = sources
+    let mut entries: Vec<(Entry, Label)> = sources
         .into_iter()
         .map(|(other, install)| {
-            let label = match exe(install) {
-                Some(exe) => format!("EXE  {}", exe.file_name().unwrap_or_default().to_string_lossy()),
-                None => super::store(&install.origin),
+            let label = match &install.origin {
+                Origin::Picked(exe) => Label::Exe(exe.file_name().unwrap_or_default().to_string_lossy().into_owned()),
+                Origin::Launcher(id) => Label::Store(id.store().to_uppercase()),
             };
             (Entry::Use(other), label)
         })
         .collect();
-    entries.push((Entry::Pick, if picked { "CHANGE .EXE" } else { "+ ADD .EXE" }.into()));
+    entries.push((Entry::Pick, if picked { Label::Change } else { Label::Add }));
     if picked {
-        entries.push((Entry::Forget, "REMOVE .EXE".into()));
+        entries.push((Entry::Forget, Label::Remove));
     }
     (entries, current)
 }
@@ -67,7 +79,7 @@ mod tests {
 
     use model::{Installation, Origin, Ref, StoreId};
 
-    use super::{super::Game, Entry, entries};
+    use super::{super::Game, Entry, Label, entries};
     use crate::library::{GameId, Support};
 
     fn id() -> Ref {
@@ -95,7 +107,7 @@ mod tests {
             id: GameId::of(&id()),
             name: "G".into(),
             search: "g".into(),
-            store: String::new(),
+            store: None,
             support: Support::NoTrainer,
             mods: 0,
             stamp: (None, None),
@@ -113,16 +125,16 @@ mod tests {
         let steam = install(Origin::Launcher(StoreId::parse("steam:1").unwrap()));
         let exe = install(Origin::Picked(r"C:\g\game.exe".into()));
         let (only, current) = entries(&game(steam.clone(), None));
-        assert_eq!((only, current), (vec![(Entry::Use(false), "STEAM".into()), (Entry::Pick, "+ ADD .EXE".into())], 0));
+        assert_eq!((only, current), (vec![(Entry::Use(false), Label::Store("STEAM".into())), (Entry::Pick, Label::Add)], 0));
         let (both, current) = entries(&game(exe, Some(steam)));
         assert_eq!(current, 1);
         assert_eq!(
             both,
             [
-                (Entry::Use(true), "STEAM".into()),
-                (Entry::Use(false), "EXE  game.exe".into()),
-                (Entry::Pick, "CHANGE .EXE".into()),
-                (Entry::Forget, "REMOVE .EXE".into())
+                (Entry::Use(true), Label::Store("STEAM".into())),
+                (Entry::Use(false), Label::Exe("game.exe".into())),
+                (Entry::Pick, Label::Change),
+                (Entry::Forget, Label::Remove)
             ]
         );
     }

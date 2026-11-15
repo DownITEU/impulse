@@ -26,6 +26,8 @@ use crate::{
     library::{Library, LibraryEvent},
     ui::{
         assets::Icon,
+        key,
+        text::t,
         theme::*,
         widgets::{icon_button, mono},
     },
@@ -149,7 +151,7 @@ impl MapView {
                 }
                 cx.notify();
             })))
-            .child(mono("MAP", 10.5).text_color(rgb(DIM)))
+            .child(mono(t(cx, key::MAP_TITLE), 10.5).text_color(rgb(DIM)))
             .child(
                 h_flex()
                     .id("map-tabs")

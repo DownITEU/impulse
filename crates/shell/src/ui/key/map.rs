@@ -1,0 +1,48 @@
+//! The map.
+
+use i18n::Key;
+
+pub const TELEPORT_FAILED: Key = Key("teleport-failed");
+pub const MAP_FAILED_TAG: Key = Key("map-failed-tag");
+pub const MAP_FAILED: Key = Key("map-failed");
+pub const MAP_FAILED_BODY: Key = Key("map-failed-body");
+pub const MAP_TITLE: Key = Key("map-title");
+pub const MAP_NONE: Key = Key("map-none");
+pub const MAP_LOADING_TAG: Key = Key("map-loading-tag");
+pub const MAP_LOADING: Key = Key("map-loading");
+pub const MAP_LOADING_BODY: Key = Key("map-loading-body");
+pub const MAP_SEARCH: Key = Key("map-search");
+pub const MAP_UNFINISHED: Key = Key("map-unfinished");
+pub const MAP_FOUND: Key = Key("map-found");
+pub const MAP_FOUND_COUNT: Key = Key("map-found-count");
+pub const MAP_MARK_FOUND: Key = Key("map-mark-found");
+pub const MAP_UNFOUND: Key = Key("map-unfound");
+pub const MAP_SHOW_ALL: Key = Key("map-show-all");
+pub const MAP_HIDE_ALL: Key = Key("map-hide-all");
+pub const MAP_TELEPORT: Key = Key("map-teleport");
+pub const MAP_FILTER_TELEPORT: Key = Key("map-filter-teleport");
+pub const MAP_TELEPORT_HERE: Key = Key("map-teleport-here");
+pub const MAP_CONFIRM: Key = Key("map-confirm");
+pub const MAP_DELETE: Key = Key("map-delete");
+pub const MAP_ADD_PIN: Key = Key("map-add-pin");
+pub const MAP_MY_PIN: Key = Key("map-my-pin");
+pub const MAP_MY_PINS: Key = Key("map-my-pins");
+pub const MAP_PIN_NAME: Key = Key("map-pin-name");
+pub const MAP_NAME_FIELD: Key = Key("map-name-field");
+pub const MAP_NOTE_FIELD: Key = Key("map-note-field");
+pub const MAP_NO_PINS: Key = Key("map-no-pins");
+pub const MAP_REGIONS: Key = Key("map-regions");
+pub const MAP_LAYER_REGIONS: Key = Key("map-layer-regions");
+pub const MAP_PLACES: Key = Key("map-places");
+pub const MAP_NO_MATCHES: Key = Key("map-no-matches");
+pub const MAP_NEARBY: Key = Key("map-nearby");
+pub const MAP_COPY: Key = Key("map-copy");
+pub const MAP_COPIED: Key = Key("map-copied");
+pub const MAP_HIDE_GROUP: Key = Key("map-hide-group");
+pub const MAP_VIDEO: Key = Key("map-video");
+pub const MAP_PHOTO: Key = Key("map-photo");
+pub const MAP_LAYER_LABELS: Key = Key("map-layer-labels");
+pub const MAP_LAYER_CLUSTERS: Key = Key("map-layer-clusters");
+pub const MAP_AXIS_X: Key = Key("map-axis-x");
+pub const MAP_AXIS_Y: Key = Key("map-axis-y");
+pub const MAP_AXIS_Z: Key = Key("map-axis-z");

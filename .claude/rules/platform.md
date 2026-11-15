@@ -19,7 +19,7 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 ## tray
 - `Tray` lives on GPUI's main thread (its hidden window needs that loop); dropping it removes the icon. `set_menu` feeds the next right click.
 - `claim()` is the single-instance mutex; a second start wakes the first and gets `false`. `hide` and `show` take the app window's HWND.
-- Menu labels are literals in `pick`.
+- The menu's words come from `shell` in `Menu`.
 
 ## video
 - `Playback::start(file, device)`: MP4 (H.264) decoded on its own thread to NV12 textures on the window's D3D11 device, which must be multithread protected. `frame(elapsed)` never blocks.

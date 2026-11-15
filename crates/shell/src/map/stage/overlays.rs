@@ -1,7 +1,6 @@
 //! What floats over the map and moves with it: the hovered pin's chip, the right click menu,
 //! the buttons and layers, the player's readout.
 
-use crate::ui::{key, text::failed};
 use client::map::state::Saved;
 use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, IntoElement, SharedString, Stateful,
@@ -23,6 +22,8 @@ use crate::{
     },
     ui::{
         assets::Icon,
+        key,
+        text::{failed, t},
         theme::*,
         widgets::{button, icon, mono, square},
     },
@@ -57,7 +58,11 @@ impl Stage {
             .when(board.saved.found.contains(&pin.id), |text| {
                 let accent = rgb(accent(cx));
                 text.child(
-                    h_flex().pt(px(3.)).gap(px(5.)).child(icon(Icon::Check, 10., accent)).child(mono("FOUND", 9.5).text_color(accent)),
+                    h_flex()
+                        .pt(px(3.))
+                        .gap(px(5.))
+                        .child(icon(Icon::Check, 10., accent))
+                        .child(mono(t(cx, key::MAP_FOUND), 9.5).text_color(accent)),
                 )
             });
         let chip = v_flex()
@@ -82,12 +87,14 @@ impl Stage {
         // Inside the view near its right and bottom edges.
         let (x, y) = (x.min(width - MENU.0).max(0.), y.min(height - MENU.1).max(0.));
         let teleport = board.can_teleport_to_plane(map).then(|| {
-            button("TELEPORT HERE").id("map-teleport").border_color(rgb(accent(cx))).on_click(cx.listener(move |stage, _, _, cx| {
-                stage.shown.target = None;
-                stage.board.update(cx, |board, cx| board.teleport_to_plane(target, cx));
-            }))
+            button(&t(cx, key::MAP_TELEPORT_HERE)).id("map-teleport").border_color(rgb(accent(cx))).on_click(cx.listener(
+                move |stage, _, _, cx| {
+                    stage.shown.target = None;
+                    stage.board.update(cx, |board, cx| board.teleport_to_plane(target, cx));
+                },
+            ))
         });
-        let add = button("ADD MY PIN")
+        let add = button(&t(cx, key::MAP_ADD_PIN))
             .id("map-add-mark")
             .on_click(cx.listener(move |stage, _, _, cx| stage.board.update(cx, |board, cx| board.add_mark(target, cx))));
         let menu = v_flex().occlude().absolute().left(px(x as f32)).top(px(y as f32)).gap(px(4.)).child(add).children(teleport);
@@ -131,16 +138,21 @@ impl Stage {
             .left(px(MARGIN))
             .bottom(px(MARGIN))
             .gap(px(8.))
-            .when_some(board.player, |strip, [x, y, z]| strip.child(chip(format!("X {x:.0} · Y {y:.0} · Z {z:.0}").into(), accent(cx))))
+            .when_some(board.player, |strip, [x, y, z]| {
+                strip.child({
+                    let (ax, ay, az) = (t(cx, key::MAP_AXIS_X), t(cx, key::MAP_AXIS_Y), t(cx, key::MAP_AXIS_Z));
+                    chip(format!("{ax} {x:.0} · {ay} {y:.0} · {az} {z:.0}").into(), accent(cx))
+                })
+            })
             .when_some(board.note.as_ref(), |strip, failure| strip.child(chip(failed(cx, key::TELEPORT_FAILED, failure), WARN)))
     }
 }
 
 fn layers_menu(map: &Map, saved: &Saved, cx: &Context<Stage>) -> impl IntoElement {
     let accent = accent(cx);
-    let row = |id: &'static str, label: &'static str, on: bool, flip: fn(&mut Saved)| {
+    let row = |slot: usize, label: SharedString, on: bool, flip: fn(&mut Saved)| {
         h_flex()
-            .id(id)
+            .id(("map-layer", slot))
             .h(px(28.))
             .px(px(10.))
             .gap(px(10.))
@@ -156,9 +168,11 @@ fn layers_menu(map: &Map, saved: &Saved, cx: &Context<Stage>) -> impl IntoElemen
         .border_1()
         .border_color(line(0.16))
         .bg(rgb(PANEL))
-        .when(!map.labels.is_empty(), |menu| menu.child(row("layer-labels", "PLACE NAMES", saved.labels, |saved| saved.labels ^= true)))
-        .when(!map.regions.is_empty(), |menu| menu.child(row("layer-regions", "REGIONS", saved.regions, |saved| saved.regions ^= true)))
-        .child(row("layer-clusters", "GROUP CLOSE PINS", saved.clusters, |saved| saved.clusters ^= true))
+        .when(!map.labels.is_empty(), |menu| menu.child(row(0, t(cx, key::MAP_LAYER_LABELS), saved.labels, |saved| saved.labels ^= true)))
+        .when(!map.regions.is_empty(), |menu| {
+            menu.child(row(1, t(cx, key::MAP_LAYER_REGIONS), saved.regions, |saved| saved.regions ^= true))
+        })
+        .child(row(2, t(cx, key::MAP_LAYER_CLUSTERS), saved.clusters, |saved| saved.clusters ^= true))
 }
 
 /// A square map button; `on` lights it in the accent.

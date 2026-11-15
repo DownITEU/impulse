@@ -9,6 +9,7 @@ use gpui_kit::{
 use super::{Docks, Spec};
 use crate::ui::{
     assets::Icon,
+    text::t,
     theme::*,
     widgets::{icon, icon_button, square, tip, tracked},
 };
@@ -58,7 +59,7 @@ pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, wi
                         .border_color(line(0.09))
                         .on_mouse_down(MouseButton::Left, grab(spec, false))
                         .child(square(7., rgb(accent(cx))))
-                        .child(tracked(spec.title, 11., 0.2).font_weight(FontWeight::BOLD))
+                        .child(tracked(&t(cx, spec.title), 11., 0.2).font_weight(FontWeight::BOLD))
                         .child(div().flex_1())
                         // Occluding, it keeps its press from the header's drag.
                         .child(
@@ -108,6 +109,7 @@ pub fn toolbar(docks: &Entity<Docks>, cx: &App, usable: impl Fn(&Spec) -> bool) 
     h_flex().gap(px(4.)).children(state.specs.iter().map(|spec| {
         let (usable, shown) = (usable(spec), state.is_shown(spec));
         let docks = docks.clone();
+        let title = t(cx, spec.title);
         let color = match (usable, shown) {
             (false, _) => rgb(GHOST),
             (true, true) => rgb(accent),
@@ -122,7 +124,7 @@ pub fn toolbar(docks: &Entity<Docks>, cx: &App, usable: impl Fn(&Spec) -> bool) 
             .border_1()
             .border_color(if usable && shown { alpha(accent, 0.6) } else { line(0.12) })
             .bg(alpha(BG, 0.85))
-            .tooltip(move |window, cx| tip(spec.title.into(), window, cx))
+            .tooltip(move |window, cx| tip(title.clone(), window, cx))
             .child(icon(spec.icon, 17., color))
             .when(usable, |toggle| {
                 toggle

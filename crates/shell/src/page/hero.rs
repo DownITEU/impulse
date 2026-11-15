@@ -5,6 +5,7 @@ use gpui_kit::{
     Context, Div, Entity, IntoElement, ObjectFit, Render, SharedString, Stateful, Window, component::h_flex, div, img, linear_color_stop,
     linear_gradient, prelude::*, px, rgb,
 };
+use i18n::Arg;
 
 use crate::{
     layer::{Layer, overlay_hotkey},
@@ -14,6 +15,8 @@ use crate::{
     ui::{
         assets::Icon,
         dropdown::dropdown,
+        key,
+        text::{t, tf},
         theme::*,
         widgets::{action, icon, tip, tracked},
     },
@@ -66,12 +69,12 @@ impl Hero {
                         .px(px(16.))
                         .on_click(move |_, _, cx| layer.read(cx).toggle())
                         .child(icon(Icon::Layers, 14., rgb(TEXT)))
-                        .child(tracked("OVERLAY", 12.5, 0.14))
+                        .child(tracked(&t(cx, key::PAGE_OVERLAY), 12.5, 0.14))
                         .child(tracked(&overlay_hotkey(self.layer.read(cx)), 12.5, 0.14).text_color(rgb(FAINT))),
                 )
             })
             .child(
-                icon_button("favorite", "Star".into())
+                icon_button("favorite", t(cx, key::PAGE_STAR))
                     .on_click(cx.listener(move |hero, _, _, cx| {
                         hero.trainers.update(cx, |trainers, cx| trainers.toggle_favorite(&id, cx));
                     }))
@@ -80,24 +83,22 @@ impl Hero {
                         false => icon(Icon::Star, 16., rgb(MUTED)),
                     }),
             )
-            .child(
-                icon_button("folder", "Open the game's folder".into())
-                    .on_click(move |_, _, cx| cx.open_with_system(&location))
-                    .child(icon(Icon::Folder, 15., rgb(MUTED))),
-            )
+            .child(icon_button("folder", t(cx, key::PAGE_FOLDER)).on_click(move |_, _, cx| cx.open_with_system(&location)).child(icon(
+                Icon::Folder,
+                15.,
+                rgb(MUTED),
+            )))
             .when_some(game.page.clone(), |bar, (launcher, uri)| {
                 bar.child(
-                    icon_button("launcher", format!("Open in {launcher}").into()).on_click(move |_, _, cx| cx.open_url(&uri)).child(icon(
-                        Icon::External,
-                        15.,
-                        rgb(MUTED),
-                    )),
+                    icon_button("launcher", tf(cx, key::PAGE_LAUNCHER, &[("launcher", Arg::Str(launcher))]))
+                        .on_click(move |_, _, cx| cx.open_url(&uri))
+                        .child(icon(Icon::External, 15., rgb(MUTED))),
                 )
             })
             // A run holds its install.
             .when(!self.runs.read(cx).holds(&game.id), |bar| {
-                let (options, current) = source_options(game);
-                let more = icon_button("source", "Game source".into()).child(icon(Icon::More, 15., rgb(MUTED)));
+                let (options, current) = source_options(game, cx);
+                let more = icon_button("source", t(cx, key::PAGE_SOURCE)).child(icon(Icon::More, 15., rgb(MUTED)));
                 let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
                 bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, place, cx, |hero, at, _, cx| {
                     if let Some(game) = hero.library.read(cx).opened().cloned() {
