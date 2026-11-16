@@ -15,7 +15,10 @@ use gpui_kit::{
     px, rgb,
 };
 
-use super::{Folders, SettingsView, label};
+use super::{
+    Folders, SettingsView, label,
+    view::{Menu, open_menu},
+};
 use crate::ui::{
     assets::Icon,
     dropdown::{dropdown, span},
@@ -102,7 +105,8 @@ impl SettingsView {
                 view.browse_folder(at, window, cx);
             })));
 
-        let field = dropdown(field, at, open_menu, self.menu == Some(at), choices, current, span, cx, move |view, pick, window, cx| {
+        let menu = Menu::Folder(at);
+        let field = dropdown(field, menu, open_menu, self.menu == Some(menu), choices, current, span, cx, move |view, pick, window, cx| {
             let path = view.folders.read(cx).get(at).choices.get(pick).map(|(_, path)| path.clone());
             if let Some(path) = path {
                 view.pick_folder(at, path, window, cx);
@@ -114,8 +118,4 @@ impl SettingsView {
         };
         v_flex().gap(px(8.)).py(px(12.)).child(label(text(cx, &folder.label), text(cx, &folder.hint))).child(field).child(status)
     }
-}
-
-fn open_menu(view: &mut SettingsView) -> &mut Option<usize> {
-    &mut view.menu
 }

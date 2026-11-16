@@ -15,7 +15,7 @@ use crate::{
     settings::{label, row},
     ui::{
         key,
-        text::{t, text, tf},
+        text::{digits, t, text, tf},
         theme::*,
         widgets::{button, choice, mono, segmented, square, tracked},
     },
@@ -149,10 +149,10 @@ fn entry(color: Option<u32>, name: SharedString, hint: SharedString, size: Share
         .child(mono(size, 12.).text_color(rgb(TEXT)))
 }
 
-/// A size worded: the number as Rust prints it, the unit from the catalog.
+/// A size worded: the number with the language's marks, the unit from the catalog.
 fn sized(cx: &App, bytes: u64) -> SharedString {
     let (number, unit) = size(bytes);
-    tf(cx, UNITS[unit], &[("size", Arg::Str(&number))])
+    tf(cx, UNITS[unit], &[("size", Arg::Str(&digits(cx, &number)))])
 }
 
 /// The number and the index of its unit.

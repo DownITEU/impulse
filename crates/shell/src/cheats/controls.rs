@@ -16,12 +16,11 @@ use model::Kind;
 
 use super::{CheatList, Menu, Printed, number, open_menu};
 use crate::ui::{
-    assets::Icon,
-    dropdown::{dropdown, span},
+    dropdown::{dropdown, span, trigger},
     key,
     text::{t, tf},
     theme::*,
-    widgets::{button, flash_button, icon, mono, tip, toggle},
+    widgets::{button, flash_button, mono, tip, toggle},
 };
 
 impl CheatList {
@@ -102,16 +101,7 @@ impl CheatList {
             Kind::Selection => {
                 let options = printed.rows[index].options.clone();
                 let current = value as usize;
-                let trigger = value_box(options.get(current).cloned().unwrap_or_default())
-                    .id(("select", index))
-                    .w(px(112.))
-                    .pl(px(10.))
-                    .pr(px(8.))
-                    .justify_between()
-                    .border_color(line(0.2))
-                    .text_size(px(12.))
-                    .cursor_pointer()
-                    .child(icon(Icon::ChevronDown, 11., rgb(DIM)));
+                let trigger = trigger(("select", index), options.get(current).cloned().unwrap_or_default()).w(px(112.));
                 if !running {
                     return trigger.into_any_element();
                 }

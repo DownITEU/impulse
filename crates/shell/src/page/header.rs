@@ -13,7 +13,7 @@ use crate::{
     ui::{
         assets::Icon,
         key,
-        text::{t, tf},
+        text::{digits, t, tf},
         theme::*,
         widgets::{icon, icon_button, mono, square, tracked},
     },
@@ -25,7 +25,7 @@ pub fn header(library: &Library, account: &Account, settings: &Entity<SettingsVi
     let search = match library.list() {
         Load::Ready(library) => {
             let count = library.trainers;
-            let trainers = format!("{},{:03}", count / 1000, count % 1000);
+            let trainers = digits(cx, &format!("{},{:03}", count / 1000, count % 1000));
             tf(cx, key::PAGE_SEARCH, &[("trainers", Arg::Str(&trainers)), ("count", Arg::Num(count as f64))])
         }
         _ => t(cx, key::PAGE_SEARCH_NONE),

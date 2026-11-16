@@ -15,9 +15,10 @@ pub struct Language {
 }
 
 pub const ENGLISH: Language = Language { tag: "en", name: "ENGLISH" };
+pub const FRENCH: Language = Language { tag: "fr", name: "FRANÇAIS" };
 
 /// What a language menu lists.
-pub const LANGUAGES: &[Language] = &[ENGLISH];
+pub const LANGUAGES: &[Language] = &[ENGLISH, FRENCH];
 
 impl Language {
     pub fn find(tag: &str) -> Option<Self> {

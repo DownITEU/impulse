@@ -1,14 +1,18 @@
 //! A trigger that opens a list of options under itself. Its view keeps which of its menus is open, one at a time.
 
 use gpui_kit::{
-    Context, Div, MouseButton, SharedString, Stateful, Window,
+    Context, Div, ElementId, MouseButton, SharedString, Stateful, Window,
     component::{h_flex, v_flex},
     deferred,
     prelude::*,
     px, relative, rgb,
 };
 
-use super::{theme::*, widgets::mono};
+use super::{
+    assets::Icon,
+    theme::*,
+    widgets::{icon, mono},
+};
 
 /// Where a view keeps its open menu.
 pub type Slot<V, M> = fn(&mut V) -> &mut Option<M>;
@@ -35,6 +39,23 @@ pub fn dropdown<V: 'static, M: Copy + PartialEq + 'static>(
         }))
         .on_mouse_down_out(cx.listener(move |view, _, _, cx| close(view, slot, menu, cx)))
         .when(open && !options.is_empty(), |trigger| trigger.child(deferred(place(picks(options, current, slot, cx, pick)))))
+}
+
+/// A closed list: its current option and a chevron.
+pub fn trigger(id: impl Into<ElementId>, current: impl Into<SharedString>) -> Stateful<Div> {
+    mono(current, 12.)
+        .id(id)
+        .h(px(26.))
+        .flex()
+        .items_center()
+        .justify_between()
+        .pl(px(10.))
+        .pr(px(8.))
+        .border_1()
+        .border_color(line(0.2))
+        .bg(rgb(SUNKEN))
+        .cursor_pointer()
+        .child(icon(Icon::ChevronDown, 11., rgb(DIM)))
 }
 
 /// Closes `menu` when it is the open one.

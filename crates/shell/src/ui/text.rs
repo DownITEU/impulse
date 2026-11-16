@@ -15,7 +15,7 @@ use rustc_hash::{FxHashMap, FxHasher};
 use super::key;
 
 const APP: &str = SourceId::APP;
-const FILES: Files = &[("en", include_str!("../../locales/en.ftl"))];
+const FILES: Files = &[("en", include_str!("../../locales/en.ftl")), ("fr", include_str!("../../locales/fr.ftl"))];
 
 pub struct Texts {
     catalog: Catalog,
@@ -108,6 +108,19 @@ impl Texts {
         formatted.insert(hash, (made, text.clone()));
         text
     }
+
+    fn digits(&self, printed: &str) -> String {
+        let (group, decimal) = (self.made(APP, key::NUMBER_GROUP.0), self.made(APP, key::NUMBER_DECIMAL.0));
+        let mut out = String::with_capacity(printed.len() + 2);
+        for mark in printed.chars() {
+            match mark {
+                ',' => out.push_str(&group),
+                '.' => out.push_str(&decimal),
+                digit => out.push(digit),
+            }
+        }
+        out
+    }
 }
 
 /// The language content is asked in.
@@ -123,6 +136,11 @@ pub fn t(cx: &App, key: Key) -> SharedString {
 /// A message with arguments, formatted once per distinct arguments.
 pub fn tf(cx: &App, key: Key, args: &[(&str, Arg)]) -> SharedString {
     cx.global::<Texts>().formatted(key, args)
+}
+
+/// A number as Rust prints it (`,` between thousands, `.` before decimals) with the language's marks.
+pub fn digits(cx: &App, printed: &str) -> String {
+    cx.global::<Texts>().digits(printed)
 }
 
 /// The app's own message as a `Text`, for what a source would say.
@@ -180,9 +198,15 @@ fn kind(kind: FailureKind) -> Key {
 
 #[cfg(test)]
 mod tests {
-    use i18n::{Arg, ENGLISH};
+    use i18n::{Arg, ENGLISH, FRENCH};
 
     use super::{Texts, key};
+
+    #[test]
+    fn a_number_takes_the_language_marks() {
+        assert_eq!(Texts::new(ENGLISH, &[]).digits("3,645 1.5"), "3,645 1.5");
+        assert_eq!(Texts::new(FRENCH, &[]).digits("3,645 1.5"), "3\u{a0}645 1,5");
+    }
 
     #[test]
     fn a_message_is_made_again_only_for_other_arguments() {

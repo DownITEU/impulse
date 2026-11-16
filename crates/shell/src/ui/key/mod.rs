@@ -14,6 +14,8 @@ pub use {cheats::*, log_view::*, map::*, overlay::*, page::*, run::*, settings::
 
 pub const OFF: Key = Key("off");
 pub const ON: Key = Key("on");
+pub const NUMBER_GROUP: Key = Key("number-group");
+pub const NUMBER_DECIMAL: Key = Key("number-decimal");
 pub const TRAY_OPEN: Key = Key("tray-open");
 pub const TRAY_STOP: Key = Key("tray-stop");
 pub const TRAY_OVERLAY: Key = Key("tray-overlay");

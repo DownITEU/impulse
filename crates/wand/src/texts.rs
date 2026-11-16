@@ -2,7 +2,7 @@
 
 use model::Text;
 
-pub const FILES: model::Files = &[("en", include_str!("../locales/en.ftl"))];
+pub const FILES: model::Files = &[("en", include_str!("../locales/en.ftl")), ("fr", include_str!("../locales/fr.ftl"))];
 
 pub struct Key(&'static str);
 

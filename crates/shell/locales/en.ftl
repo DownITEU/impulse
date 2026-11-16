@@ -2,6 +2,9 @@
 
 off = OFF
 on = ON
+# A number's marks: between thousands, before decimals.
+number-group = ,
+number-decimal = .
 
 ## Tray: Windows menu words
 

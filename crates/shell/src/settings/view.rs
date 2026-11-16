@@ -1,5 +1,7 @@
 //! The SETTINGS dialog: its tabs, APPEARANCE and APP here; the others are views of their own slices.
 
+use std::iter;
+
 use gpui_kit::{
     AnyView, App, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight, IntoElement, Render, SharedString, Window,
     component::{h_flex, input::InputState, scroll::ScrollableElement, v_flex},
@@ -8,11 +10,12 @@ use gpui_kit::{
     px, rgb,
 };
 
-use i18n::{Key, LANGUAGES};
+use i18n::{Key, LANGUAGES, Language};
 
 use super::{Folders, Lead, Panels, Prefs, Settings, Shown};
 use crate::ui::{
     dialog::dialog,
+    dropdown::{dropdown, span, trigger},
     key,
     text::t,
     theme::*,
@@ -38,6 +41,13 @@ const TABS: [(Key, Option<Tab>); 6] = [
     (key::SETTINGS_ABOUT, None),
 ];
 
+/// The dialog's open list: a folder row's picks or the languages.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Menu {
+    Folder(usize),
+    Language,
+}
+
 /// The tabs other slices draw.
 pub struct Tabs {
     pub overlay: AnyView,
@@ -53,8 +63,7 @@ pub struct SettingsView {
     pub(super) folders: Entity<Folders>,
     // The folder rows' path fields, one per row of `folders`.
     pub(super) fields: Vec<Entity<InputState>>,
-    // The folder row whose picks are open.
-    pub(super) menu: Option<usize>,
+    pub(super) menu: Option<Menu>,
     tabs: Tabs,
     tab: Tab,
     open: bool,
@@ -123,24 +132,23 @@ impl SettingsView {
     fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let folders = self.folder_rows(cx);
         let prefs = self.settings.read(cx).prefs();
-        let (close_to_tray, hidden, chosen) = (!prefs.quit_on_close, prefs.hide_from_capture, prefs.chosen().map(|language| language.tag));
-        let language = |id: &'static str, tag: Option<&'static str>, name: SharedString| {
-            choice(id, name, chosen == tag, cx)
-                .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.language = tag.map(str::to_owned), cx)))
-        };
-        let languages = LANGUAGES.iter().map(|ours| language(ours.tag, Some(ours.tag), ours.name.into()));
+        let (close_to_tray, hidden) = (!prefs.quit_on_close, prefs.hide_from_capture);
+        let names: Vec<SharedString> =
+            languages().map(|ours| ours.map_or_else(|| t(cx, key::LANGUAGE_SYSTEM), |ours| ours.name.into())).collect();
+        let current = languages().position(|ours| ours == prefs.chosen()).unwrap_or_default();
+        let shown = trigger("language", names[current].clone()).w(px(160.));
+        let open = self.menu == Some(Menu::Language);
+        let language = dropdown(shown, Menu::Language, open_menu, open, names, current, span, cx, |view, at, _, cx| {
+            let tag = languages().nth(at).flatten().map(|ours| ours.tag.to_owned());
+            view.edit_prefs(|prefs| prefs.language = tag, cx);
+        });
         v_flex()
             .flex_1()
             .min_w_0()
             .px(px(18.))
             .py(px(6.))
             .children(folders)
-            .child(
-                row(t(cx, key::LANGUAGE), t(cx, key::LANGUAGE_HINT), 64.)
-                    .mt(px(12.))
-                    .border_t_1()
-                    .child(segmented().h(px(26.)).child(language("system", None, t(cx, key::LANGUAGE_SYSTEM))).children(languages)),
-            )
+            .child(row(t(cx, key::LANGUAGE), t(cx, key::LANGUAGE_HINT), 64.).mt(px(12.)).border_t_1().child(language))
             .child(
                 row(t(cx, key::CLOSE_TO_TRAY), t(cx, key::CLOSE_TO_TRAY_HINT), 64.).child(
                     div()
@@ -234,6 +242,15 @@ impl Render for SettingsView {
         );
         dialog("settings", t(cx, key::SETTINGS), 640., &self.focus, |view: &mut Self, _, cx| view.close(cx), body, cx)
     }
+}
+
+/// The language menu: the system's (`None`), then each language we ship.
+fn languages() -> impl Iterator<Item = Option<Language>> {
+    iter::once(None).chain(LANGUAGES.iter().copied().map(Some))
+}
+
+pub(super) fn open_menu(view: &mut SettingsView) -> &mut Option<Menu> {
+    &mut view.menu
 }
 
 /// A setting's name with what it does under it.

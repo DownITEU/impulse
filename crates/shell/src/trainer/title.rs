@@ -8,7 +8,7 @@ use super::Trainers;
 use crate::ui::{
     assets::Icon,
     key,
-    text::{t, tf},
+    text::{digits, t, tf},
     theme::*,
     widgets::{icon, mono, tracked},
 };
@@ -72,7 +72,7 @@ fn played(secs: u64, cx: &App) -> SharedString {
         0..3600 => tf(cx, key::TRAINER_PLAYED_MIN, &[("count", Arg::Num((secs / 60) as f64))]),
         _ => {
             let hours = secs as f64 / 3600.;
-            tf(cx, key::TRAINER_PLAYED_HOURS, &[("hours", Arg::Str(&format!("{hours:.1}"))), ("count", Arg::Num(hours))])
+            tf(cx, key::TRAINER_PLAYED_HOURS, &[("hours", Arg::Str(&digits(cx, &format!("{hours:.1}")))), ("count", Arg::Num(hours))])
         }
     }
 }
