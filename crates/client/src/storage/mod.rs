@@ -44,6 +44,7 @@ entries! {
     overlay: "overlay.json",
     minimap: "minimap.json",
     resources: "resources.json",
+    remote_devices: "remote.json",
     map_state: "map-state",
     pictures: "art",
     tiles: "tiles",

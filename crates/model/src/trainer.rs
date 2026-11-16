@@ -81,4 +81,9 @@ impl Args {
     pub fn clamp(&self, value: f64) -> f64 {
         value.max(self.min.unwrap_or(f64::MIN)).min(self.max.unwrap_or(f64::MAX))
     }
+
+    /// What a number or a slider moves by: trainers may send none, zero or less.
+    pub fn stride(&self) -> f64 {
+        self.step.filter(|step| *step > 0.).unwrap_or(1.)
+    }
 }

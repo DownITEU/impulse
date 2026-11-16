@@ -153,7 +153,7 @@ fn step(cheat: &Cheat, value: f64, slot: usize) -> Option<Step> {
         Kind::Toggle => 1. - value.min(1.),
         Kind::Button => return Some(Step::Press(cheat.args.pressed)),
         Kind::Number | Kind::Slider => {
-            let step = cheat.args.step.filter(|step| *step > 0.).unwrap_or(1.);
+            let step = cheat.args.stride();
             cheat.args.clamp(round_to(if up { value + step } else { value - step }, &cheat.args, step))
         }
         Kind::Selection => {
@@ -192,15 +192,15 @@ pub const TOP_TICK: u8 = 9;
 /// A slider's bounds; trainers may leave any of them out.
 #[derive(Clone, Copy)]
 pub struct Span {
-    min: f64,
-    max: f64,
-    step: f64,
+    pub(crate) min: f64,
+    pub(crate) max: f64,
+    pub(crate) step: f64,
 }
 
 impl Span {
     pub fn of(args: &Args) -> Self {
         let min = args.min.unwrap_or(0.);
-        Self { min, max: args.max.filter(|max| *max > min).unwrap_or(min + 100.), step: args.step.filter(|step| *step > 0.).unwrap_or(1.) }
+        Self { min, max: args.max.filter(|max| *max > min).unwrap_or(min + 100.), step: args.stride() }
     }
 
     /// Which of the ten ticks `value` lights up to.
@@ -236,4 +236,4 @@ fn round_to(value: f64, args: &Args, step: f64) -> f64 {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

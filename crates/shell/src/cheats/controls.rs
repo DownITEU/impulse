@@ -77,7 +77,7 @@ impl CheatList {
                 .child(self.press(index, key::CHEATS_SET, key::CHEATS_SET_DONE, running, cx))
                 .into_any_element(),
             Kind::Number => {
-                let step = cheat.args.step.unwrap_or(1.);
+                let step = cheat.args.stride();
                 let nudge = |id: &'static str, label: &'static str, by: f64| {
                     button(label).id((id, index)).w(px(26.)).px_0().font_family(MONO).text_size(px(14.)).on_click(cx.listener(
                         move |list, _, _, cx| {

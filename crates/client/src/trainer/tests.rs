@@ -11,7 +11,7 @@ use crate::{
     storage::Paths,
 };
 
-fn cheat(id: &str, kind: Kind, args: Args) -> Cheat {
+pub(crate) fn cheat(id: &str, kind: Kind, args: Args) -> Cheat {
     Cheat {
         id: id.into(),
         key: None,
