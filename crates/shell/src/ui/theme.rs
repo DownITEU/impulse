@@ -39,6 +39,9 @@ pub const SEGMENT_IDLE: u32 = 0x6E7569;
 pub const TICK: u32 = 0x1E221D;
 pub const TICK_IDLE: u32 = 0x5A6155;
 const SCROLL_THUMB: u32 = 0x2A2F28;
+/// Dark on light: some phone cameras read no inverted QR code.
+pub const QR_LIGHT: u32 = 0xFFFFFF;
+pub const QR_DARK: u32 = 0x000000;
 
 /// The id kept in the prefs, the color and its name.
 pub const ACCENTS: [(&str, u32, Key); 4] = [

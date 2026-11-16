@@ -14,8 +14,6 @@ const INPUT_DIGITS: usize = 6;
 pub struct Row {
     pub name: SharedString,
     pub search: String,
-    /// Its section's id: the category.
-    pub section: SharedString,
     pub category: SharedString,
     /// One cap per hotkey slot.
     pub keys: Vec<SharedString>,
@@ -92,12 +90,16 @@ fn caps(kind: Kind, slots: &[Option<Chord>]) -> Vec<SharedString> {
     slots.iter().enumerate().map(|(slot, chord)| cap(kind, slot, &body(chord))).collect()
 }
 
+/// A cheat's section as printed: the source's worded name, else its id.
+pub fn category(cheat: &Cheat, cx: &App) -> SharedString {
+    cheat.category_name.as_ref().map_or_else(|| cheat.category.to_uppercase().into(), |name| text(cx, name))
+}
+
 fn row(cheat: &Cheat, slots: &[Option<Chord>], cx: &App) -> Row {
     Row {
         name: cheat.name.to_uppercase().into(),
         search: cheat.name.to_lowercase(),
-        section: cheat.category.clone().into(),
-        category: cheat.category_name.as_ref().map_or_else(|| cheat.category.to_uppercase().into(), |name| text(cx, name)),
+        category: category(cheat, cx),
         keys: caps(cheat.kind, slots),
         tip: cheat.instructions.clone().or_else(|| cheat.description.clone()).filter(|text| !text.is_empty()).map(SharedString::from),
         options: cheat.args.options.iter().map(|option| option.to_uppercase().into()).collect(),

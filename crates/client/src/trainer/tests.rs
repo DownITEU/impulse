@@ -192,3 +192,12 @@ fn a_v1_fold_label_becomes_an_id_and_an_unknown_one_stays() {
     assert_eq!(profile.folded, [PINNED.to_owned()].into());
     assert_eq!(profile.folded_labels, ["GONE".to_owned()].into());
 }
+
+#[test]
+fn sections_put_the_pins_first_then_categories_in_order() {
+    let mut sheet = sheet(1);
+    let of = |id, category: &str| Cheat { category: category.into(), ..cheat(id, Kind::Toggle, Args::default()) };
+    sheet.cheats = vec![of("a", "world"), of("b", "player"), of("c", "world")];
+    sheet.pinned = [1].into();
+    assert_eq!(sheet.sections(), [(PINNED, vec![1]), ("world", vec![0, 2])]);
+}

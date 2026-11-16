@@ -29,6 +29,7 @@ use crate::{
     library::{GamePicker, Library, Marks, SIDEBAR_WIDTH, Sidebar, vacant},
     log_view::{LogEvent, LogView},
     map::{MapEvent, MapView, Maps, map_panel},
+    remote::{Remote, RemoteTab, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
     run::{Runs, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
@@ -68,7 +69,7 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new(registry: Arc<Registry>, paths: Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, paths: Paths, serve: Option<Serve>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let settings = cx.new(|cx| Settings::new(&paths, registry.texts().to_vec(), cx));
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
         let folders = cx.new(|cx| Folders::new(registry.clone(), cx));
@@ -126,6 +127,11 @@ impl Page {
             overlay: cx.new(|cx| OverlaySettings::new(layer.clone(), hotkeys.clone(), trainers.clone(), cx)).into(),
             hotkeys: cx.new(|cx| HotkeySettings::new(hotkeys.clone(), cx)).into(),
             resources: cx.new(|cx| ResourcesView::new(resources.clone(), cx)).into(),
+            remote: serve.map(|serve| {
+                let owners = (library.clone(), trainers.clone(), runs.clone());
+                let remote = cx.new(|cx| Remote::new(serve, settings.clone(), owners, &paths, cx));
+                cx.new(|cx| RemoteTab::new(remote, settings.clone(), cx)).into()
+            }),
         };
         let settings_view = cx.new(|cx| SettingsView::new(settings.clone(), folders, tabs, window, cx));
         cx.observe(&settings_view, |_, _, cx| cx.notify()).detach();

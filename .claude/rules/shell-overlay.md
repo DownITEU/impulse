@@ -16,7 +16,7 @@ The overlay slice, `layer/` (an `overlay` module would shadow the crate): `Layer
 ## Rules
 - Hotkey, foreground events, activation loss and UI asks are `Ask`s, run one at a time by the one `switch` task. Win32 calls that move, show, raise, lower or cloak Impulse's own window run there (or in `Glance`'s call task), never inside a GPUI update: they run GPUI's callbacks at once.
 - The window stays cloaked until a frame of the new layout shows (`reveal`: two next-frame callbacks, 500 ms at most).
-- `Playing` is emitted on change only. `Front` needs the foreground hook and is never set while over. It reads the live pid from `Runs` and rechecks on `Live`, `Stopping` and `Ended`.
+- `Playing` is emitted on change only. `Front` needs the foreground hook and is never set while over. It reads the live pid from `Runs` and rechecks on every `RunEvent` but `Pressed`.
 - The minimap hotkey is registered only while the live game is in front or under the overlay (`hold_minimap_key`). `set_hotkey` registers the new key before the old watch drops, so a refused key keeps the old one; the old watch takes the minimap key with it, so hold it again.
 - The overlay's and the minimap's keys are bound by asking `Hotkeys` for a capture (`Target::Key`) and applying its outcome here: refused when the other key or a cheat's chord holds it. `Layer::takes` keeps trainer chords off them.
 - `Glance` is a `PopUp` that never takes input: `focus: false`, `show: false`, `pass_through` before the first show. It is placed over the MINIMAP dock's minimap on the game's monitor, hidden (tiles dropped) when the live map is not placed, closed on `Playing::Idle` and on release. It honours `hide_from_capture`.

@@ -59,6 +59,8 @@ pub struct Prefs {
     pub hide_from_capture: bool,
     /// A shipped language's tag; `None` or an unknown one means the system's.
     pub language: Option<String>,
+    /// The remote panel's server listens; off by default.
+    pub remote: bool,
 }
 
 impl Prefs {

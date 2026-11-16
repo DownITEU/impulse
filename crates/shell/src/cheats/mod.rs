@@ -18,7 +18,8 @@ use crate::{
     trainer::{TrainerEvent, Trainers},
     ui::{key, text::Texts, widgets},
 };
-pub use collections::CollectionEditor;
+pub use collections::{CollectionEditor, DEFAULT_ICON};
+pub use printed::category;
 use printed::{Printed, number};
 
 /// The open dropdown; both hold a cheat's or a collection's index in the shown trainer.
@@ -150,6 +151,9 @@ impl CheatList {
                     printed.put(*index, *value, window, cx);
                 }
             }
+            // A device may have deleted a collection: an open menu's index would mean another.
+            TrainerEvent::Changed(_) if matches!(self.menu, Some(Menu::Collection(_))) => self.menu = None,
+            TrainerEvent::Changed(_) => {}
         }
     }
 

@@ -86,6 +86,22 @@ impl Sheet {
         self.cheats.iter().find(|cheat| cheat.category.to_uppercase() == label).map(|cheat| cheat.category.clone())
     }
 
+    /// The cheats by section id as the list shows them: `PINNED` first, then each category in the trainer's order.
+    pub fn sections(&self) -> Vec<(&str, Vec<usize>)> {
+        let mut sections = vec![(PINNED, Vec::new())];
+        for (index, cheat) in self.cheats.iter().enumerate() {
+            let at = match self.pinned.contains(&index) {
+                true => 0,
+                false => sections.iter().position(|(id, _)| *id == cheat.category).unwrap_or_else(|| {
+                    sections.push((&cheat.category, Vec::new()));
+                    sections.len() - 1
+                }),
+            };
+            sections[at].1.push(index);
+        }
+        sections
+    }
+
     /// Pins or unpins a cheat, and keeps the pins in `profile`.
     pub fn toggle_pin(&mut self, index: usize, profile: &mut TrainerProfile) {
         if !self.pinned.remove(&index) {
@@ -220,7 +236,7 @@ impl Span {
     }
 
     /// Steps count from `min`, not from zero.
-    fn snap(self, value: f64) -> f64 {
+    pub(crate) fn snap(self, value: f64) -> f64 {
         (self.min + ((value - self.min) / self.step).round() * self.step).clamp(self.min, self.max)
     }
 }

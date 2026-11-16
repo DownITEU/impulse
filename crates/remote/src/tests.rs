@@ -80,7 +80,7 @@ fn pairing_needs_the_host_the_origin_and_the_code() {
 #[test]
 fn a_paired_socket_gets_the_views_sends_commands_and_ends_on_revoke() {
     with_server(async |address, views, commands| {
-        views.publish(&View::Run { state: RunState::Live, game: Some(3), since: None });
+        views.publish(&View::Run { state: RunState::Live, game: Some(3), since: None, why: None });
         let socket = async |cookie: &str| {
             let mut request = format!("ws://{address}/ws").into_client_request().unwrap();
             request.headers_mut().insert("Origin", format!("http://{address}").parse().unwrap());

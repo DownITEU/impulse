@@ -30,6 +30,8 @@ pub enum TrainerEvent {
     Rebound(GameId),
     /// A cheat's value changed.
     Set { game: GameId, index: usize, value: f64 },
+    /// Anything else of the game's trainer that shows: its load, pins, collections, star, values at rest.
+    Changed(GameId),
 }
 
 /// While it lives the game's shown copy stays; dropping it shows the newer one that waited.
@@ -89,6 +91,7 @@ impl Trainers {
     fn edit_trainer(&mut self, game: &GameId, change: impl FnOnce(&mut TrainerProfile), cx: &mut Context<Self>) {
         let Some(trainer) = self.shelf.sheet(game).map(|sheet| sheet.trainer.clone()) else { return };
         self.profiles.edit_trainer(&trainer, change);
+        cx.emit(TrainerEvent::Changed(game.clone()));
         cx.notify();
     }
 
@@ -136,6 +139,7 @@ impl Trainers {
     pub fn reset(&mut self, game: &GameId, cx: &mut Context<Self>) {
         if let Some(sheet) = self.shelf.sheet_mut(game) {
             sheet.reset();
+            cx.emit(TrainerEvent::Changed(game.clone()));
             cx.notify();
         }
     }
@@ -144,6 +148,7 @@ impl Trainers {
         let Some(sheet) = self.shelf.sheet_mut(game) else { return };
         let trainer = sheet.trainer.clone();
         self.profiles.edit_trainer(&trainer, |profile| sheet.toggle_pin(index, profile));
+        cx.emit(TrainerEvent::Changed(game.clone()));
         cx.notify();
     }
 
@@ -156,6 +161,7 @@ impl Trainers {
 
     pub fn toggle_favorite(&mut self, game: &GameId, cx: &mut Context<Self>) {
         self.profiles.edit_game(game, |profile| profile.favorite = !profile.favorite);
+        cx.emit(TrainerEvent::Changed(game.clone()));
         cx.notify();
     }
 
@@ -175,10 +181,14 @@ impl Trainers {
         self.edit_trainer(game, |profile| profile.values.clear(), cx);
     }
 
-    /// Renames the collection at `at` and changes its icon, or adds `collection`.
-    pub fn keep_collection(&mut self, game: &GameId, at: Option<usize>, collection: Collection, cx: &mut Context<Self>) {
-        let change = |profile: &mut TrainerProfile| match at.and_then(|at| profile.collections.get_mut(at)) {
-            Some(kept) => (kept.name, kept.icon) = (collection.name, collection.icon),
+    /// Renames `was` and changes its icon, or adds `collection`. Found by value: a device may have deleted one meanwhile.
+    pub fn keep_collection(&mut self, game: &GameId, was: Option<&Collection>, collection: Collection, cx: &mut Context<Self>) {
+        let change = |profile: &mut TrainerProfile| match was {
+            Some(was) => {
+                if let Some(kept) = profile.collections.iter_mut().find(|kept| *kept == was) {
+                    (kept.name, kept.icon) = (collection.name, collection.icon);
+                }
+            }
             None => profile.collections.push(collection),
         };
         self.edit_trainer(game, change, cx);
@@ -235,8 +245,14 @@ impl Trainers {
                                 }
                             }
                             // The network is next.
-                            Snapshot::Cached(None) => trainers.shelf.pending(id.clone()),
-                            Snapshot::Fresh(Err(e)) => trainers.shelf.failed(id.clone(), e),
+                            Snapshot::Cached(None) => {
+                                trainers.shelf.pending(id.clone());
+                                cx.emit(TrainerEvent::Changed(id.clone()));
+                            }
+                            Snapshot::Fresh(Err(e)) => {
+                                trainers.shelf.failed(id.clone(), e);
+                                cx.emit(TrainerEvent::Changed(id.clone()));
+                            }
                         }
                         cx.notify();
                     })
@@ -245,6 +261,7 @@ impl Trainers {
             trainers
                 .update(cx, |trainers, cx| {
                     trainers.loading.remove(&id);
+                    cx.emit(TrainerEvent::Changed(id.clone()));
                     // The language changed while it loaded: this copy is in the old one.
                     let relocalized = content_locale(cx) != locale;
                     if relocalized {

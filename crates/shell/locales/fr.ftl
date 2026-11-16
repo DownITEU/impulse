@@ -248,6 +248,7 @@ settings-appearance = APPARENCE
 settings-overlay = OVERLAY
 settings-hotkeys = RACCOURCIS
 settings-app = APP
+settings-remote = À DISTANCE
 settings-resources = RESSOURCES
 settings-about = À PROPOS
 accent = ACCENT
@@ -275,6 +276,26 @@ hide-from-capture = MASQUER À LA CAPTURE
 hide-from-capture-hint = captures d'écran, enregistrements et streams n'affichent pas Impulse
 folder-path = chemin du dossier
 folder-select = Choisir le dossier
+
+## Remote
+
+remote = PANNEAU À DISTANCE
+remote-hint = piloter Impulse depuis un téléphone sur ce réseau
+remote-address = ADRESSE
+remote-address-hint = à scanner avec l'appareil photo : le code associe une fois et change toutes les cinq minutes
+remote-failed = aucune adresse réseau où écouter
+remote-devices = APPAREILS
+remote-devices-hint = téléphones et navigateurs associés ; un appareil révoqué est déconnecté aussitôt
+remote-no-devices = aucun appareil pour l'instant
+remote-device = appareil { $number }
+remote-unknown-device = NAVIGATEUR
+remote-revoke = RÉVOQUER
+remote-trust = HTTP simple : tout ce réseau peut le voir. Réseaux de confiance seulement.
+remote-note-changed = La liste a changé : réessayez.
+remote-note-not-live = Lancez d'abord le jeu.
+remote-note-busy = Une autre partie tourne, ou le trainer n'est pas encore là.
+remote-note-nothing-on = Activez d'abord des mods.
+remote-note-name = Nommez d'abord la collection.
 
 ## Resources
 

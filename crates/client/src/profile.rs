@@ -13,13 +13,23 @@ use crate::{
 
 /// Cheat values by cheat id.
 pub type Values = BTreeMap<String, f64>;
+/// A collection name's most characters.
+pub const NAME_LENGTH: usize = 24;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Collection {
     pub name: String,
     /// A key of `collections::ICONS`.
     pub icon: String,
     pub mods: Values,
+}
+
+impl Collection {
+    /// `mods` named `name`, trimmed and cut at `NAME_LENGTH`; `None` without a name or a mod.
+    pub fn new(name: &str, icon: &str, mods: Values) -> Option<Self> {
+        let name: String = name.trim().chars().take(NAME_LENGTH).collect();
+        (!name.is_empty() && !mods.is_empty()).then(|| Self { name, icon: icon.to_owned(), mods })
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]

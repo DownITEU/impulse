@@ -52,9 +52,13 @@ fn views_and_commands_are_tagged_by_type() {
 }
 
 #[test]
-fn a_slider_gets_the_window_bounds() {
+fn a_device_gets_the_window_s_controls_and_bounds() {
     let slider = Control::of(&cheat("a", Kind::Slider, Args { min: Some(5.), max: Some(1.), ..Args::default() }));
     assert_eq!(slider, Control::Slider { min: 5., max: 105., step: 1. });
+    let selection = cheat("c", Kind::Selection, Args { options: vec!["A".into(), "B".into()], ..Args::default() });
+    assert_eq!([0.6, 2., -1.].map(|value| settle(&selection, value)), [Some(1.), None, None]);
+    assert_eq!(settle(&cheat("d", Kind::Slider, Args::default()), 250.), Some(100.));
+    assert_eq!(settle(&cheat("e", Kind::Toggle, Args::default()), f64::NAN), None);
     let number = Control::of(&cheat("b", Kind::Number, Args { button: true, ..Args::default() }));
     assert_eq!(number, Control::Number { min: None, max: None, step: 1., apply: true });
 }

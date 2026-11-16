@@ -228,6 +228,7 @@ settings-appearance = APPEARANCE
 settings-overlay = OVERLAY
 settings-hotkeys = HOTKEYS
 settings-app = APP
+settings-remote = REMOTE
 settings-resources = RESOURCES
 settings-about = ABOUT
 accent = ACCENT
@@ -255,6 +256,26 @@ hide-from-capture = HIDE FROM CAPTURE
 hide-from-capture-hint = screenshots, recordings and streams show no Impulse window
 folder-path = path to the folder
 folder-select = Select the folder
+
+## Remote
+
+remote = REMOTE PANEL
+remote-hint = control Impulse from a phone on this network
+remote-address = ADDRESS
+remote-address-hint = scan it with the phone's camera: the code pairs once and renews every five minutes
+remote-failed = no network address to listen on
+remote-devices = DEVICES
+remote-devices-hint = paired phones and browsers; a revoked one is signed out at once
+remote-no-devices = no device yet
+remote-device = device { $number }
+remote-unknown-device = BROWSER
+remote-revoke = REVOKE
+remote-trust = plain HTTP: anyone on this network can watch it. Trusted networks only.
+remote-note-changed = The list changed: try again.
+remote-note-not-live = Start the game first.
+remote-note-busy = Another run is on, or the trainer is not there yet.
+remote-note-nothing-on = Turn some mods on first.
+remote-note-name = Name the collection first.
 
 ## Resources
 

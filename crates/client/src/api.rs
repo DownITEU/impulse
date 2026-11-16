@@ -8,7 +8,7 @@ use crate::trainer::Span;
 
 mod link;
 
-pub use link::{Ask, Feed, Seen, ServerSide, Views, link};
+pub use link::{Ask, Feed, Seen, ServerSide, Views, coalesce, link};
 
 /// Bumped with any change of a view's or a command's shape.
 pub const VERSION: u32 = 1;
@@ -38,11 +38,12 @@ pub enum View {
         sheet: u32,
         values: Vec<f64>,
     },
-    /// `since`: when the run went live, in Unix seconds.
+    /// `since`: when the run went live, in Unix seconds; `why`: a failed start's reason, worded.
     Run {
         state: RunState,
         game: Option<u32>,
         since: Option<u64>,
+        why: Option<String>,
     },
     /// A failure or a refusal, worded; to the device that asked.
     Note {
@@ -61,7 +62,7 @@ pub struct Game {
     pub live: bool,
     /// A run can start: installed, with a trainer, and no other run.
     pub startable: bool,
-    /// `/art/<game>` has a cover.
+    /// The game has a cover: `/art/<game>` serves it once the window has shown it, else answers 404.
     pub art: bool,
 }
 
@@ -143,6 +144,19 @@ impl Control {
     }
 }
 
+/// A device's `value` for `cheat`, as the window's control could set it; `None` when it cannot be one.
+pub fn settle(cheat: &Cheat, value: f64) -> Option<f64> {
+    let args = &cheat.args;
+    match cheat.kind {
+        _ if !value.is_finite() => None,
+        Kind::Toggle => Some(if value == 0. { 0. } else { 1. }),
+        Kind::Number => Some(args.clamp(value)),
+        Kind::Slider => Some(Span::of(args).snap(value)),
+        Kind::Selection => Some(value.round()).filter(|at| (0. ..args.options.len() as f64).contains(at)),
+        Kind::Button | Kind::Unknown => None,
+    }
+}
+
 #[derive(Serialize, Clone, PartialEq, Debug)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 pub struct Collection {
@@ -158,6 +172,8 @@ pub enum RunState {
     Starting,
     Live,
     Stopping,
+    /// The last start failed; `Run::why` says why, until the next run.
+    Failed,
 }
 
 /// What a device asks. Cheat commands name the `sheet` they were made on; another sheet refuses them.

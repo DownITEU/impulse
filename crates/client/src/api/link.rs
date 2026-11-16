@@ -2,7 +2,7 @@
 //! newest only, so a slow device skips to the latest. The app writes it (`Views`), the server reads it (`Feed`).
 
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     sync::{Arc, Mutex, MutexGuard},
 };
 
@@ -160,6 +160,22 @@ impl Feed {
     }
 }
 
+/// A burst of asks, less each set that a later set of the same cheat replaces with no other command between.
+pub fn coalesce(mut burst: Vec<Ask>) -> Vec<Ask> {
+    let mut later = HashSet::new();
+    burst.reverse();
+    burst.retain(|ask| match ask {
+        Ask::Command { command: Command::Set { sheet, cheat, .. }, .. } => later.insert((*sheet, *cheat)),
+        Ask::Command { .. } => {
+            later.clear();
+            true
+        }
+        _ => true,
+    });
+    burst.reverse();
+    burst
+}
+
 fn lock(board: &Mutex<Board>) -> MutexGuard<'_, Board> {
     // A panic while holding it left plain data: still usable.
     board.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -180,7 +196,7 @@ mod tests {
     #[test]
     fn a_device_gets_the_newest_of_each_view_and_its_own_new_notes() {
         let (server, views, _) = link();
-        let run = |game| View::Run { state: RunState::Idle, game: Some(game), since: None };
+        let run = |game| View::Run { state: RunState::Idle, game: Some(game), since: None, why: None };
         views.note(7, "before");
         let (_wake, mut seen) = server.feed().watch();
         views.publish(&run(1));
@@ -194,6 +210,20 @@ mod tests {
         assert!(server.feed().since(7, &mut seen).unwrap().is_empty());
         views.close(7);
         assert!(server.feed().since(7, &mut seen).is_none());
+    }
+
+    #[test]
+    fn a_set_gives_way_to_a_later_set_of_its_cheat_unless_a_command_comes_between() {
+        let set = |cheat, value| Ask::Command { device: 1, command: Command::Set { sheet: 1, cheat, value } };
+        let burst = vec![set(0, 1.), set(1, 1.), set(0, 2.), Ask::Command { device: 1, command: Command::Reset { sheet: 1 } }, set(0, 3.)];
+        let kept: Vec<_> = coalesce(burst)
+            .into_iter()
+            .map(|ask| match ask {
+                Ask::Command { command: Command::Set { cheat, value, .. }, .. } => (cheat, value),
+                _ => (9, 0.),
+            })
+            .collect();
+        assert_eq!(kept, [(1, 1.), (0, 2.), (9, 0.), (0, 3.)]);
     }
 
     #[test]

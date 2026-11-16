@@ -3,7 +3,7 @@
 
 use client::{
     library::GameId,
-    profile::{Collection, Values},
+    profile::{Collection, NAME_LENGTH, Values},
     trainer::Sheet,
 };
 use gpui_kit::{
@@ -50,7 +50,8 @@ const ICONS: [(&str, Icon); 12] = [
     ("ghost", Icon::Ghost),
     ("crown", Icon::Crown),
 ];
-const NAME_LENGTH: usize = 24;
+/// What a new collection shows until the user picks.
+pub const DEFAULT_ICON: &str = ICONS[0].0;
 const TILE: f32 = 44.;
 const TILE_GAP: f32 = 8.;
 
@@ -141,11 +142,7 @@ impl CheatList {
 
     fn toggle_collection(&mut self, at: usize, cx: &mut Context<Self>) {
         let Some(game) = self.selected(cx) else { return };
-        let trainers = self.trainers.read(cx);
-        let Some(mods) = trainers.trainer_profile(&game).collections.get(at).map(|collection| collection.mods.clone()) else { return };
-        let Some(sheet) = trainers.sheet(&game) else { return };
-        let values = if sheet.holds(&mods) { sheet.rest(&mods) } else { mods };
-        self.runs.update(cx, |runs, cx| runs.apply(&values, cx));
+        self.runs.update(cx, |runs, cx| runs.toggle_collection(&game, at, cx));
     }
 
     fn delete_collection(&mut self, at: usize, cx: &mut Context<Self>) {
@@ -158,16 +155,17 @@ impl CheatList {
         let Some(game) = self.selected(cx) else { return };
         let trainers = self.trainers.read(cx);
         let changed = at.and_then(|at| trainers.trainer_profile(&game).collections.get(at));
+        let was = changed.cloned();
         let (title, key, mods) = match (changed, at) {
             (Some(collection), _) => (collection.name.clone(), listed(&collection.icon).0, collection.mods.clone()),
-            (None, None) => (String::new(), ICONS[0].0, trainers.sheet(&game).map(Sheet::live_values).unwrap_or_default()),
+            (None, None) => (String::new(), DEFAULT_ICON, trainers.sheet(&game).map(Sheet::live_values).unwrap_or_default()),
             (None, Some(_)) => return,
         };
         if mods.is_empty() {
             return;
         }
         let trainers = self.trainers.clone();
-        let editor = cx.new(|cx| CollectionEditor::new(trainers, game, at, mods, key, title, window, cx));
+        let editor = cx.new(|cx| CollectionEditor::new(trainers, game, was, mods, key, title, window, cx));
         cx.subscribe(&editor, |list, _, _: &EditorClosed, cx| {
             list.editor = None;
             cx.emit(EditorClosed);
@@ -184,7 +182,7 @@ pub struct CollectionEditor {
     trainers: Entity<Trainers>,
     game: GameId,
     /// The collection being changed; `None` makes one of `mods`.
-    at: Option<usize>,
+    was: Option<Collection>,
     mods: Values,
     icon: &'static str,
     name: Entity<InputState>,
@@ -196,11 +194,11 @@ pub struct CollectionEditor {
 impl EventEmitter<EditorClosed> for CollectionEditor {}
 
 impl CollectionEditor {
-    #[expect(clippy::too_many_arguments, reason = "the collection's game, place, mods, icon and name")]
+    #[expect(clippy::too_many_arguments, reason = "the collection's game, old self, mods, icon and name")]
     fn new(
         trainers: Entity<Trainers>,
         game: GameId,
-        at: Option<usize>,
+        was: Option<Collection>,
         mods: Values,
         icon: &'static str,
         title: String,
@@ -222,17 +220,13 @@ impl CollectionEditor {
             name.focus(window, cx);
             name.select_all(window, cx);
         });
-        Self { trainers, game, at, mods, icon, name, focus: cx.focus_handle(), _typed: typed }
+        Self { trainers, game, was, mods, icon, name, focus: cx.focus_handle(), _typed: typed }
     }
 
     fn keep(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let name = self.name.read(cx).value().trim().to_owned();
-        if name.is_empty() {
-            return;
-        }
-        let collection = Collection { name, icon: self.icon.to_owned(), mods: self.mods.clone() };
-        let (game, at) = (self.game.clone(), self.at);
-        self.trainers.update(cx, |trainers, cx| trainers.keep_collection(&game, at, collection, cx));
+        let Some(collection) = Collection::new(&self.name.read(cx).value(), self.icon, self.mods.clone()) else { return };
+        let (game, was) = (self.game.clone(), self.was.clone());
+        self.trainers.update(cx, |trainers, cx| trainers.keep_collection(&game, was.as_ref(), collection, cx));
         self.close(window, cx);
     }
 
@@ -297,7 +291,7 @@ impl Render for CollectionEditor {
             .child(part(t(cx, key::CHEATS_NAME)).child(field))
             .child(part(t(cx, key::CHEATS_ICON)).child(h_flex().flex_wrap().gap(px(TILE_GAP)).children(tiles)))
             .child(h_flex().justify_between().child(mono(mods, 10.5).text_color(rgb(FAINT))).child(buttons));
-        let title = t(cx, if self.at.is_some() { key::CHEATS_EDIT_COLLECTION } else { key::CHEATS_NEW_COLLECTION });
+        let title = t(cx, if self.was.is_some() { key::CHEATS_EDIT_COLLECTION } else { key::CHEATS_NEW_COLLECTION });
         // Six tiles across, inside the padding and the borders.
         let width = 6. * TILE + 5. * TILE_GAP + 34.;
         dialog("collection", title, width, &self.focus, Self::close, body, cx)

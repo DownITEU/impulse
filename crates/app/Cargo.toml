@@ -11,10 +11,16 @@ workspace = true
 name = "Impulse"
 path = "src/main.rs"
 
+[features]
+default = ["remote"]
+# The remote panel's server.
+remote = ["dep:remote"]
+
 [dependencies]
 client.workspace = true
 journal.workspace = true
 model.workspace = true
+remote = { workspace = true, optional = true }
 shell.workspace = true
 tray.workspace = true
 wand.workspace = true

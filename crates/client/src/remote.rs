@@ -1,12 +1,12 @@
 //! The remote panel's devices: a one-time code the window shows, which a device trades for a token it keeps as a
-//! cookie. Only the token's hash is kept. Pairing runs on the monotonic clock, devices keep Unix seconds.
+//! cookie. Only the token's hash is kept. Pairing runs on the monotonic clock.
 
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-const CODE_LIFE: Duration = Duration::from_secs(5 * 60);
+pub const CODE_LIFE: Duration = Duration::from_secs(5 * 60);
 /// Wrong codes in a row that lock pairing for `LOCK`.
 const TRIES: u32 = 5;
 const LOCK: Duration = Duration::from_secs(60);
@@ -50,8 +50,6 @@ impl Pairing {
 pub struct Device {
     pub id: u32,
     pub name: String,
-    pub paired: u64,
-    pub seen: u64,
     // SHA-256 of its token, hex.
     hash: String,
 }
@@ -60,18 +58,26 @@ pub struct Device {
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Devices {
-    pub list: Vec<Device>,
+    list: Vec<Device>,
     next: u32,
 }
 
 impl Devices {
+    pub fn list(&self) -> &[Device] {
+        &self.list
+    }
+
+    pub fn has(&self, id: u32) -> bool {
+        self.list.iter().any(|device| device.id == id)
+    }
+
     /// A new device named from its User-Agent; its token, to give it once.
-    pub fn add(&mut self, user_agent: &str, now: u64) -> String {
+    pub fn add(&mut self, user_agent: &str) -> String {
         let token = random_hex::<32>();
         // A file without `next` still never gives a kept id twice.
         let id = self.next.max(self.list.iter().map(|device| device.id + 1).max().unwrap_or(0));
         self.next = id + 1;
-        self.list.push(Device { id, name: name(user_agent), paired: now, seen: now, hash: hash(&token) });
+        self.list.push(Device { id, name: name(user_agent), hash: hash(&token) });
         token
     }
 
@@ -85,10 +91,10 @@ impl Devices {
     }
 }
 
-/// What a person would call the device; a User-Agent is remote data.
+/// What a person would call the device, empty when unknown; a User-Agent is remote data.
 fn name(user_agent: &str) -> String {
     const KNOWN: [&str; 6] = ["iPhone", "iPad", "Android", "Windows", "Mac OS", "Linux"];
-    KNOWN.into_iter().find(|known| user_agent.contains(known)).unwrap_or("Browser").to_owned()
+    KNOWN.into_iter().find(|known| user_agent.contains(known)).unwrap_or_default().to_owned()
 }
 
 fn hash(token: &str) -> String {
@@ -141,16 +147,15 @@ mod tests {
     #[test]
     fn a_token_finds_its_device_until_revoked() {
         let mut devices = Devices::default();
-        let token = devices.add("Mozilla/5.0 (Linux; Android 14)", 7);
-        let other = devices.add("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)", 8);
+        let token = devices.add("Mozilla/5.0 (Linux; Android 14)");
+        let other = devices.add("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)");
         assert_eq!(devices.find(&token), Some(0));
         assert_eq!((devices.list[0].name.as_str(), devices.list[1].name.as_str()), ("Android", "iPhone"));
         assert!(!serde_json::to_string(&devices).unwrap().contains(&token));
         devices.revoke(0);
         assert_eq!((devices.find(&token), devices.find(&other)), (None, Some(1)));
-        let mut kept: Devices =
-            serde_json::from_str(r#"{ "list": [{ "id": 4, "name": "", "paired": 0, "seen": 0, "hash": "" }] }"#).unwrap();
-        kept.add("", 9);
+        let mut kept: Devices = serde_json::from_str(r#"{ "list": [{ "id": 4, "name": "", "hash": "" }] }"#).unwrap();
+        kept.add("");
         assert_eq!(kept.list[1].id, 5);
     }
 }

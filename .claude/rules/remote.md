@@ -8,7 +8,7 @@ paths:
 The remote panel's server: the built panel, `POST /pair`, covers and the WebSocket at `/ws`, on this machine's LAN address. Transport only: pairing, tokens, commands and covers are asked of the app through `client::api::ServerSide`; the views it sends are the app's, already serialized.
 
 ## Surface
-- `Server::bind(port)` (the LAN address, the port or one of the next free), `address`, `serve(side)`: one future owns the listener and every connection; dropping it stops them all. Run on GPUI's background executor, no runtime of its own.
+- `Server::bind()` (the LAN address, its port or one of the next free), `address`, `serve(side)`: one future owns the listener and every connection; dropping it stops them all. Run on GPUI's background executor, no runtime of its own.
 
 ## Rules
 - Private-range peers only; `Host` must be the address served, `Origin` too for `/pair` and `/ws`. A cover and `/ws` need the device cookie; the app says whose it is.

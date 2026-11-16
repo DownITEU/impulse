@@ -10,6 +10,7 @@ mod library;
 mod log_view;
 mod map;
 mod page;
+mod remote;
 mod resources;
 mod root;
 mod run;
@@ -24,6 +25,7 @@ use client::{Load, media::Media, storage::Paths};
 use gpui_kit::{App, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
+pub use remote::Serve;
 pub use root::Root;
 pub use ui::assets::Assets;
 

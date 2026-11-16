@@ -28,11 +28,15 @@ use crate::{
 };
 
 pub enum RunEvent {
+    /// A start began.
+    Starting,
+    /// A start failed; `state` says why until the next one.
+    Failed,
     /// A trainer went live.
     Live,
     /// STOP: the trainer is being taken down.
     Stopping,
-    /// No run any more: it ended by itself, its stop returned, or its start was abandoned.
+    /// No run any more: it ended by itself, its stop returned, its start was abandoned or its failure cleared.
     Ended,
     /// A hotkey pressed a button cheat.
     Pressed(usize),
@@ -201,6 +205,7 @@ impl Runs {
             runs.update(cx, |runs, cx| runs.attached(id, outcome, cx)).ok();
         });
         self.play = Play::Busy { game, stage: Stage::Preparing, hold, _run: task };
+        cx.emit(RunEvent::Starting);
         cx.notify();
     }
 
@@ -226,7 +231,8 @@ impl Runs {
                 self.trainers.update(cx, |trainers, cx| trainers.reset(&game, cx));
                 cx.emit(RunEvent::Ended);
             }
-            Play::Failed { .. } | Play::Idle => {}
+            Play::Failed { .. } => cx.emit(RunEvent::Ended),
+            Play::Idle => {}
         }
         cx.notify();
     }
@@ -268,8 +274,29 @@ impl Runs {
         }
     }
 
+    /// RESET: every live mod at rest; with no run, the kept ones are forgotten.
+    pub fn reset(&mut self, game: &GameId, cx: &mut Context<Self>) {
+        if !self.is_live(game) {
+            return self.trainers.update(cx, |trainers, cx| trainers.forget_kept(game, cx));
+        }
+        if let Some(rest) = self.trainers.read(cx).sheet(game).map(|sheet| sheet.rest(&sheet.live_values())) {
+            self.apply(&rest, cx);
+        }
+    }
+
+    /// The live game's collection `at`: its mods on, or at rest when all of them are.
+    pub fn toggle_collection(&mut self, game: &GameId, at: usize, cx: &mut Context<Self>) {
+        if !self.is_live(game) {
+            return;
+        }
+        let trainers = self.trainers.read(cx);
+        let (Some(collection), Some(sheet)) = (trainers.trainer_profile(game).collections.get(at), trainers.sheet(game)) else { return };
+        let values = if sheet.holds(&collection.mods) { sheet.rest(&collection.mods) } else { collection.mods.clone() };
+        self.apply(&values, cx);
+    }
+
     /// The run's game, whatever its state.
-    fn game(&self) -> Option<&GameId> {
+    pub fn game(&self) -> Option<&GameId> {
         match &self.play {
             Play::Idle => None,
             Play::Busy { game, .. } | Play::Live { game, .. } | Play::Stopping { game, .. } | Play::Failed { game, .. } => Some(game),
@@ -345,6 +372,7 @@ impl Runs {
     fn fail(&mut self, game: GameId, error: Failure, cx: &mut Context<Self>) {
         log::warn!("run failed: {error}");
         self.play = Play::Failed { game, error };
+        cx.emit(RunEvent::Failed);
         cx.notify();
     }
 

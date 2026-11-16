@@ -8,18 +8,19 @@ paths:
 The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, crash stop. Map and overlay have their own rules.
 
 ## Surface
-- `init`, `Assets`, `Root::new`: all `app` calls. Everything else is private.
+- `init`, `Assets`, `Root::new`, `Serve`: all `app` calls (`Root::new` takes the remote panel's `Serve`, `None` in a build without it). Everything else is private.
 - `Root`: the window root; draws `Page` with `cached`, the open map as a modal over it.
 - `Page` (`page/`): the combined page, layout only: one `impl Page` in `page/mod.rs` makes the entities and lays out their views; `header` and `status_bar` are components.
 - `Hero` (`page/hero.rs`): the open game's art, title, run button and actions; owns the sources menu (`close`).
 - `Sidebar`, `GamePicker` (`library/`): the game list with its filter and the add-game dialog. The page gives the sidebar its `Marks` (favorite, live) as a function and makes the sidebar observe what it reads.
 - `Library` (`library/`): the game list, the picked executables and the open game; emits `LibraryEvent` (`Listed`, `Opened`, `Switched`).
-- `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`). `title` draws a game's name and meta.
+- `Trainers` (`trainer/`): the sheets by game, the `Hold`, `games.json`; emits `TrainerEvent` (`Installed`, `Rebound`, `Set`, and `Changed` for the rest that shows). `title` draws a game's name and meta.
 - `CheatList` (`cheats/`): the open game's cheat list, drawn by the page and the HUD; its `Printed` projection, filter, menus, flash and `CollectionEditor` (emits `EditorClosed`; whoever draws `editor()` takes the focus back).
-- `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`, `can_start`, `is_live`; emits `RunEvent` (`Live`, `Stopping`, `Ended`, `Pressed`). Views: `run_button`, `session_panel` (the hotkeys' scope comes in as a slot: `run` cannot name `bindings`), `run_note`.
+- `Runs` (`run/`): the run state, the session, the `Tracker`; `start`, `stop`, `set`, `step`, `press`, `apply`, `reset` (RESET), `toggle_collection`, `can_start`, `is_live`; emits `RunEvent` (`Starting`, `Failed`, `Live`, `Stopping`, `Ended`, `Pressed`). Views: `run_button`, `session_panel` (the hotkeys' scope comes in as a slot: `run` cannot name `bindings`), `run_note`.
 - `Hotkeys` (`bindings/`: a `hotkeys` module would shadow the crate): `hotkeys.json`, the live run's hook, the capture; `capture`, `cancel`, `rebind`, `set_enabled`, `set_game_only`. Views: `caps`, `hotkeys_scope`, `HotkeySettings`.
 - `Account` (`account.rs`): the first source's session, read by the header; `reload` asks again.
 - `Folders` (`settings/`): every source's folders and the user's edits checked by their source (`scan`, `set`); emits `Shown(at)` when a row's field must show the source's path. `SettingsView` holds the fields.
+- `Remote` (`remote/`): the remote panel's bridge: the server's life (the `remote` pref), `remote.json`, the pairing code and its QR, the game handles. It publishes the views on the owners' events (not their notifies: the run clock ticks), once per burst and only what changed, and applies a device's commands through the owners, refusing with a note; a burst's sets of one cheat go as the last. Covers come from the cache only. `RemoteTab` draws the REMOTE tab.
 - `Resources` (`resources/`): sizes, clear, the media limit; clears the media (`app:` stores) itself and the rest through the registry; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.
 
 ## Rules
@@ -34,7 +35,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Trainers` loads the open game's trainer only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
 - Sources are asked in `content_locale(cx)`, the language's tag. A switch reloads the open game's trainer (the maps: `shell-map.md`); every other copy asks again at its next open (`Shelf::outdate`), which reads the disk unless that copy is in another locale. A load that ends after a switch outdates its own game only.
 - A starting or live run carries its game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
-- `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, `TrayIcon`). It stops a run whose game left the list.
+- `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, `TrayIcon`, `Remote`). It stops a run whose game left the list.
 - `Printed` is made on `Opened` and `Installed` of the open game and on a language change, re-capped on `Rebound`; a number field follows `Set`. The cheat list reads the sheet in place through `Trainers`.
 - One run at a time: `Runs::start` refuses while `is_active`. `Stopping` lasts until `Session::stop` returns.
 - A cheat value goes one way: `Runs::set`, `step` or `apply` change the live sheet through `Trainers` and send it; they do nothing without a live run. A run's time and mods are kept once (`closed` flag), on end, STOP, quit and release.

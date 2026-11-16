@@ -176,15 +176,9 @@ impl CheatList {
             }))
     }
 
-    /// Turns every live mod off; with no run, forgets the kept ones.
     fn reset_mods(&mut self, cx: &mut Context<Self>) {
         let Some(game) = self.selected(cx) else { return };
-        if !self.is_running(cx) {
-            return self.trainers.update(cx, |trainers, cx| trainers.forget_kept(&game, cx));
-        }
-        if let Some(rest) = self.trainers.read(cx).sheet(&game).map(|sheet| sheet.rest(&sheet.live_values())) {
-            self.runs.update(cx, |runs, cx| runs.apply(&rest, cx));
-        }
+        self.runs.update(cx, |runs, cx| runs.reset(&game, cx));
     }
 
     /// The right of the filter row: the game's save switch and the reset.

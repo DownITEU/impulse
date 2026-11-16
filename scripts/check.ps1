@@ -9,6 +9,8 @@ Get-Command cargo -ErrorAction Stop | Out-Null
 $steps = @(
     @('fmt', '--all', '--', '--check'),
     @('clippy', '--all-targets', '--', '-D', 'warnings'),
+    # The build without the remote panel's server.
+    @('clippy', '-p', 'impulse', '--no-default-features', '--', '-D', 'warnings'),
     @('test', '--quiet')
 )
 foreach ($step in $steps) {

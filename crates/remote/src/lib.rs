@@ -19,7 +19,8 @@ use futures::{FutureExt, StreamExt, future, select, stream::FuturesUnordered};
 
 /// Connections open at once.
 const CONNECTIONS: usize = 16;
-/// Ports tried from the asked one up.
+/// The panel's port, or one of the next free ones.
+const PORT: u16 = 8742;
 const PORTS: u16 = 20;
 /// Reading a request, writing an answer, waiting for the app.
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -30,10 +31,10 @@ pub struct Server {
 }
 
 impl Server {
-    /// Listens on this machine's LAN address, on `port` or the next free one.
-    pub fn bind(port: u16) -> io::Result<Self> {
+    /// Listens on this machine's LAN address, on `PORT` or one of the next free ones.
+    pub fn bind() -> io::Result<Self> {
         let ip = address::lan()?;
-        let free = (port..port.saturating_add(PORTS)).find_map(|port| StdListener::bind((ip, port)).ok());
+        let free = (PORT..PORT + PORTS).find_map(|port| StdListener::bind((ip, port)).ok());
         Self::over(free.ok_or_else(|| io::Error::new(io::ErrorKind::AddrInUse, "no free port"))?)
     }
 

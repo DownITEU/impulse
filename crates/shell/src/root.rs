@@ -9,6 +9,7 @@ use gpui_kit::{Context, Entity, IntoElement, Render, StyleRefinement, Window, di
 use crate::{
     map::{MapEvent, MapView},
     page::Page,
+    remote::Serve,
     ui::theme::*,
 };
 
@@ -21,8 +22,9 @@ pub struct Root {
 }
 
 impl Root {
-    pub fn new(registry: Arc<Registry>, data_dir: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let page = cx.new(|cx| Page::new(registry, Paths::new(data_dir), window, cx));
+    /// `serve`: the remote panel's server, in a build with it.
+    pub fn new(registry: Arc<Registry>, data_dir: PathBuf, serve: Option<Serve>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let page = cx.new(|cx| Page::new(registry, Paths::new(data_dir), serve, window, cx));
         let map = page.read(cx).map().clone();
         cx.observe(&map, |_, _, cx| cx.notify()).detach();
         Self { page, map }

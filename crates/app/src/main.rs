@@ -40,7 +40,15 @@ fn main() {
             window_min_size: Some(size(px(1024.), px(640.))),
             ..Default::default()
         };
-        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(registry, data_dir, window, cx)))
+        // The remote panel's server on the LAN address.
+        #[cfg(feature = "remote")]
+        let serve: Option<shell::Serve> = Some(|side| {
+            let server = remote::Server::bind()?;
+            Ok((server.address(), Box::pin(server.serve(side))))
+        });
+        #[cfg(not(feature = "remote"))]
+        let serve = None;
+        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(registry, data_dir, serve, window, cx)))
             .expect("failed to open window");
         // gpui-pre-windows keeps running after the last window closes.
         cx.on_window_closed(|cx, _| {

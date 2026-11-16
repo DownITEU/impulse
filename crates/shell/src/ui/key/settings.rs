@@ -7,6 +7,7 @@ pub const SETTINGS_APPEARANCE: Key = Key("settings-appearance");
 pub const SETTINGS_OVERLAY: Key = Key("settings-overlay");
 pub const SETTINGS_HOTKEYS: Key = Key("settings-hotkeys");
 pub const SETTINGS_APP: Key = Key("settings-app");
+pub const SETTINGS_REMOTE: Key = Key("settings-remote");
 pub const SETTINGS_RESOURCES: Key = Key("settings-resources");
 pub const SETTINGS_ABOUT: Key = Key("settings-about");
 pub const ACCENT: Key = Key("accent");

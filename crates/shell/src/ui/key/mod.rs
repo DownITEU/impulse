@@ -6,11 +6,12 @@ mod log_view;
 mod map;
 mod overlay;
 mod page;
+mod remote;
 mod run;
 mod settings;
 
 use i18n::Key;
-pub use {cheats::*, log_view::*, map::*, overlay::*, page::*, run::*, settings::*};
+pub use {cheats::*, log_view::*, map::*, overlay::*, page::*, remote::*, run::*, settings::*};
 
 pub const OFF: Key = Key("off");
 pub const ON: Key = Key("on");
