@@ -44,3 +44,14 @@ fn a_system_tag_matches_ours_by_language() {
     assert_eq!(closest("fr-CA"), Some(FRENCH));
     assert_eq!(closest("xx-YY"), None);
 }
+
+#[test]
+fn the_panel_ships_every_language() {
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/panel/locales");
+    let tag = |entry: std::fs::DirEntry| entry.file_name().to_str()?.strip_suffix(".ftl").map(str::to_owned);
+    let mut shipped: Vec<_> = std::fs::read_dir(folder).expect("web/panel/locales").flatten().filter_map(tag).collect();
+    shipped.sort();
+    let mut ours: Vec<_> = LANGUAGES.iter().map(|language| language.tag.to_owned()).collect();
+    ours.sort();
+    assert_eq!(shipped, ours);
+}

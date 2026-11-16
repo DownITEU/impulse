@@ -175,3 +175,65 @@ fn captions_are_told_from_names() {
     let expected = expected.into_iter().chain([(10, "on"), (10, "off"), (11, "REAL"), (12, "MORE")]);
     assert_eq!(shown, expected.map(|(line, text)| (line, text.to_owned())).collect::<Vec<_>>());
 }
+
+/// Attributes the user reads or hears.
+const SPOKEN: [&str; 5] = [" aria-label=\"", " title=\"", " placeholder=\"", " alt=\"", " label=\""];
+
+/// The panel's literal captions: JSX text, and spoken attributes written as strings. Text between a `>` and a
+/// `<` or `{` with code marks in it, or that goes on from code (`: null}`), is code, not JSX; a lone `&` and an
+/// apostrophe inside a word are prose.
+fn panel_captions(source: &str) -> Vec<(usize, String)> {
+    let line = |at: usize| source[..at].matches('\n').count() + 1;
+    let worded = |text: &str| text.chars().any(char::is_alphabetic) && !NAMES.contains(&text);
+    let mut found = Vec::new();
+    for (at, _) in source.match_indices('>').filter(|(at, _)| !source[..*at].ends_with(['=', '-'])) {
+        let rest = &source[at + 1..];
+        let text = rest[..rest.find(['<', '{']).unwrap_or(rest.len())].trim_end();
+        let start = at + 1 + text.len() - text.trim_start().len();
+        let text = text.trim_start();
+        let quoted = text
+            .char_indices()
+            .any(|(i, c)| c == '\'' && !(text[..i].ends_with(char::is_alphabetic) && text[i + 1..].starts_with(char::is_alphabetic)));
+        let code = text.contains(['(', ')', ';', '=', '|', '[', ']', '}', '"', '`'])
+            || text.contains("&&")
+            || quoted
+            || text.starts_with([',', ':', '?', '.']);
+        if worded(text) && !code {
+            found.push((line(start), text.to_owned()));
+        }
+    }
+    for spoken in SPOKEN {
+        for (at, _) in source.match_indices(spoken) {
+            let value = source[at + spoken.len()..].split('"').next().unwrap_or_default();
+            if worded(value) {
+                found.push((line(at), value.to_owned()));
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn the_panel_has_no_literal_caption() {
+    let mut complaints = Vec::new();
+    let ours = |path: &&String| path.starts_with("web/panel/src/") && path.ends_with(".tsx") && !path.ends_with(".test.tsx");
+    for path in files().iter().filter(ours) {
+        let source = fs::read_to_string(root().join(path)).unwrap();
+        complaints.extend(panel_captions(&source).into_iter().map(|(line, text)| format!("{path}:{line}: {text:?}")));
+    }
+    verdict(complaints);
+}
+
+#[test]
+fn panel_captions_are_told_from_code() {
+    let source = r#"const a = useState<string | null>(null);
+const f = (x: number) => x < 2 && y > 1;
+<p className="[&>svg]:size-4">{t('ok')}</p>
+<button aria-label="Close" title={t('close')}>
+    Save mods
+</button>
+<span>IMPULSE</span><i alt="" />
+<p>Save & close</p><p>Don't close</p>{open ? 'a' : 'b'}"#;
+    let expected = [(5, "Save mods"), (8, "Save & close"), (8, "Don't close"), (4, "Close")];
+    assert_eq!(panel_captions(source), expected.map(|(line, text)| (line, text.to_owned())));
+}

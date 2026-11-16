@@ -8,7 +8,10 @@ const MOST_LINES: usize = 500;
 fn no_source_file_is_over_500_lines() {
     let complaints = files()
         .into_iter()
-        .filter(|path| path.starts_with("crates/") && path.ends_with(".rs"))
+        .filter(|path| {
+            (path.starts_with("crates/") && path.ends_with(".rs"))
+                || (path.starts_with("web/panel/src/") && (path.ends_with(".ts") || path.ends_with(".tsx")))
+        })
         .filter_map(|path| {
             let lines = fs::read_to_string(root().join(&path)).unwrap().lines().count();
             (lines > MOST_LINES).then(|| format!("{path}: {lines} lines, split it by what it does"))

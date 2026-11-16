@@ -14,7 +14,7 @@ The remote panel's server: the built panel, `POST /pair`, covers and the WebSock
 - Private-range peers only; `Host` must be the address served, `Origin` too for `/pair` and `/ws`. A cover and `/ws` need the device cookie; the app says whose it is.
 - Every read, write and ask of the app is bounded in size and time (`DEADLINE`); a socket that stops reading, stays silent for two pings or waits on a stalled app is dropped. Connections are capped. A duplicate `Host` or `Origin`, or any `Transfer-Encoding`, drops the request.
 - Every answer closes its connection and is `no-store`. The cookie is `HttpOnly; SameSite=Strict`. A token or a code is never logged.
-- The panel is `web/panel/dist`, embedded by `rust-embed` (`allow_missing`, `debug-embed`: no file is read while serving): a build without it answers 503.
+- The panel is `web/panel/dist`, embedded by `rust-embed` (`allow_missing`, `debug-embed`: no file is read while serving): a build without it answers 503. The build script makes the folder when missing and watches it, so a new panel build embeds at the next cargo build.
 - The WebSocket handshake is `async-tungstenite`'s, over the bytes the head read already took (`Replay`).
 
 ## Traps

@@ -4,9 +4,10 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 
 ## Commands
 
-- `scripts\check.ps1` - the gate before work is done: `cargo fmt` check, clippy with warnings denied, every test.
+- `scripts\check.ps1` - the gate before work is done: `cargo fmt` check, clippy with warnings denied, every test; the panel's `pnpm verify` once it is installed.
 - `cargo build` - debug build (shaders compile at runtime; release needs `fxc.exe` and `rc.exe` from the Windows SDK). `cargo test -p <crate>` tests one crate; crates other than `shell` and `app` build without GPUI.
 - `scripts\ui.ps1 -Steps 'click:1016,25;wait:800;shot:out.png'` - starts the debug exe, drives it with posted window messages (`wait`, `move`, `click`, `rclick`, `wheel`, `text`, `key`, `shot`, `mem`, `threads`; client pixels) and captures it with `PrintWindow`, then kills it. No real cursor, focus or screen capture; refuses to run while Impulse is open. Build first with `cargo build`.
+- `scripts\panel.ps1` - builds the remote panel (`web/panel`, pnpm) into `web/panel/dist`, which the next cargo build embeds; `-Dev` runs its dev server (`/?demo`).
 - `scripts\smoke.ps1 <label>` - screenshots of the main states into `target\smoke\<label>\`, to compare before and after a change. Set `IMPULSE_LOCALE=pseudo` first for the pseudo-locale (debug builds).
 
 ## Invariants
@@ -30,7 +31,7 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 - `i18n` - the languages we ship and the catalogs: Fluent messages by domain, over English.
 - `hotkeys`, `overlay`, `tray`, `video` - Win32 and media leaves: key hooks, the overlay's window calls, the tray icon, clips on the GPU.
 - `journal`, `disk`, `fetch`, `pe` - the log, atomic file writes, public CDN GETs, PE headers.
-- `checks` - tests holding the crate graph, file sizes and the rule files' globs.
+- `checks` - tests holding the crate graph, file sizes, the texts (no literal caption, every id in every language) and the rule files' globs; they cover `web/panel` too.
 
 ## Rules
 

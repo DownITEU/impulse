@@ -1,0 +1,33 @@
+{
+    "name": "impulse-panel",
+    "private": true,
+    "version": "0.1.0",
+    "packageManager": "pnpm@10.17.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc --noEmit && vite build",
+        "lint": "biome check .",
+        "check": "biome check --write .",
+        "test": "vitest run",
+        "verify": "tsc --noEmit && biome check . && vitest run"
+    },
+    "dependencies": {
+        "@fluent/bundle": "^0.19.1",
+        "preact": "^11.2.0"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "2.6.8",
+        "@tailwindcss/vite": "^4.3.5",
+        "@testing-library/preact": "^3.2.6",
+        "@types/node": "^26.6.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+        "@vitejs/plugin-react": "^6.3.0",
+        "jsdom": "^31.0.1",
+        "tailwindcss": "^4.3.5",
+        "typescript": "^7.0.2",
+        "vite": "^8.3.8",
+        "vitest": "^5.1.1"
+    }
+}

@@ -16,6 +16,9 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// Not ours: history, builds, vendored code and the panel's tools.
+const SKIPPED: [&str; 5] = [".git", "target", "vendor", "web/panel/node_modules", "web/panel/dist"];
+
 /// Every file of ours, relative to the root with `/`.
 fn files() -> Vec<String> {
     fn walk(dir: &Path, prefix: &str, out: &mut Vec<String>) {
@@ -23,7 +26,7 @@ fn files() -> Vec<String> {
             let name = entry.file_name().to_string_lossy().into_owned();
             let path = format!("{prefix}{name}");
             match entry.file_type().unwrap().is_dir() {
-                true if prefix.is_empty() && [".git", "target", "vendor"].contains(&name.as_str()) => {}
+                true if SKIPPED.contains(&path.as_str()) => {}
                 true => walk(&entry.path(), &format!("{path}/"), out),
                 false => out.push(path),
             }
