@@ -3,6 +3,7 @@
 
 mod board;
 mod card;
+mod icons;
 mod keys;
 mod live;
 mod maps;

@@ -62,7 +62,7 @@ impl Card {
             .bg(rgb(category.color))
             .border_2()
             .border_color(rgb(PANEL))
-            .child(self.images.glyph(map, pin.group, ink(category.color), 20., window, cx));
+            .child(self.images.glyph(board.icon(pin.group, cx), pin.group, ink(category.color), 20., window, cx));
         // Under the lightbox the card's clip does not play.
         let clip = self.clip.as_ref().filter(|_| !self.lightbox).map(|clip| clip.view.clone().into_any_element());
         let preview = pin.image.as_ref().map(|image| fill(img(image.preview.clone()), ("pin-media", index)));
@@ -191,14 +191,14 @@ impl Card {
                 card.child(div().px(px(14.)).text_size(px(13.)).text_color(rgb(TEXT_2)).child(text))
             })
             .child(h_flex().gap(px(8.)).px(px(14.)).child(mark).children(go))
-            .children(self.nearby(map, window, cx))
+            .children(self.nearby(map, board, window, cx))
             .child(hide)
             .child(div().absolute().top(px(6.)).right(px(6.)).child(close));
         Some(card.into_any_element())
     }
 
     /// The pins closest to the selected one, a click away.
-    fn nearby(&mut self, map: &Map, window: &Window, cx: &Context<Self>) -> Option<AnyElement> {
+    fn nearby(&mut self, map: &Map, board: &Board, window: &Window, cx: &Context<Self>) -> Option<AnyElement> {
         if self.near.is_empty() {
             return None;
         }
@@ -215,7 +215,7 @@ impl Card {
                     .gap(px(10.))
                     .cursor_pointer()
                     .hover(|style| style.bg(rgb(ROW_HOVER)))
-                    .child(self.images.glyph(map, pin.group, color, 14., window, cx))
+                    .child(self.images.glyph(board.icon(pin.group, cx), pin.group, color, 14., window, cx))
                     .child(div().flex_1().min_w_0().truncate().text_size(px(12.)).text_color(rgb(TEXT_2)).child(pin.name.clone()))
                     .child(mono(group(map, pin).name.to_uppercase(), 9.).text_color(rgb(FAINT)))
                     .on_click(cx.listener(move |card, _, _, cx| card.board.update(cx, |board, cx| board.select(other, true, cx))))
@@ -231,7 +231,7 @@ impl Card {
 mod tests {
     use std::{path::PathBuf, rc::Rc};
 
-    use model::{Map, Pin, Point, Tiles};
+    use model::{Map, Pin, Point, Text, TileSet, Tiles};
 
     use super::*;
 
@@ -248,10 +248,10 @@ mod tests {
             position: None,
             level: None,
         };
-        let tiles = Tiles { template: String::new(), flipped: false, size: 256, min_zoom: 0, max_zoom: 0 };
+        let tiles = Tiles { template: String::new(), flipped: false, size: 256, min_zoom: 0, max_zoom: 0, bounds: None };
         let pins = [0.5, 0.9, 0.52, 0.3, 0.45, 0.6, 0.51].map(pin).into();
         let map = Map {
-            tiles,
+            tile_sets: vec![TileSet { id: String::new(), name: Text::Plain(String::new()), tiles }],
             background: 0,
             categories: Vec::new(),
             pins,
@@ -261,7 +261,7 @@ mod tests {
             teleport: false,
             unfinished: false,
         };
-        let mut board = Board::new(PathBuf::new());
+        let mut board = Board::new(PathBuf::new(), PathBuf::new());
         board.map = Load::Ready(Rc::new(map));
         assert!(nearest(&board).is_empty());
         board.selected = Some(0);

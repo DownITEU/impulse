@@ -47,9 +47,9 @@ struct Drag {
 struct Shown {
     // By the zoom step they were grouped for.
     markers: Option<(i32, Rc<Vec<Marker>>)>,
-    // Made once, not per frame: each label's line, each region's extent (a frame skips those off the view), group counts.
+    // Made once, not per frame: each label's line, each region ring's extent (a frame skips those off the view), group counts.
     labels: Vec<SharedString>,
-    regions: Vec<Option<(Point, Point)>>,
+    regions: Vec<Vec<Option<(Point, Point)>>>,
     counts: HashMap<usize, SharedString>,
     hovered: Option<usize>,
     // The hovered pin once the cursor has rested on it.
@@ -64,7 +64,7 @@ impl Shown {
     fn of(map: &Map) -> Self {
         Self {
             labels: map.labels.iter().map(|label| label.text.replace('\n', " ").into()).collect(),
-            regions: map.regions.iter().map(|region| extent(region.outline.iter().copied())).collect(),
+            regions: map.regions.iter().map(|region| region.outlines.iter().map(|ring| extent(ring.iter().copied())).collect()).collect(),
             ..Self::default()
         }
     }
@@ -75,6 +75,8 @@ pub struct Stage {
     tile_dir: PathBuf,
     // Counts the tile sets shown: a tile loaded for an earlier one is dropped.
     epoch: usize,
+    // The index of the map's tile set drawn last.
+    set: usize,
     tiles: Tiles,
     images: Images,
     // Images to drop from the atlas when the map is next drawn.
@@ -88,6 +90,8 @@ pub struct Stage {
     bounds: Bounds<Pixels>,
     tile: f64,
     shown: Shown,
+    // A region ring's corners on the view, kept so a frame allocates none.
+    corners: Vec<gpui_kit::Point<Pixels>>,
     drag: Option<Drag>,
     layers_open: bool,
     // The view moves with the player.
@@ -130,8 +134,9 @@ impl Stage {
             BoardEvent::Selected => (stage.shown.target, stage.shown.hovered_mark) = (None, None),
             BoardEvent::MarkAdded => {}
             BoardEvent::Bring { to, close } => {
-                if let Load::Ready(map) = &board.read(cx).map {
-                    stage.bring(*to, *close, map);
+                let board = board.read(cx);
+                if let Load::Ready(map) = &board.map {
+                    stage.bring(*to, *close, &board.saved.tile_set_of(map).1.tiles);
                 }
             }
         })
@@ -147,6 +152,7 @@ impl Stage {
             board,
             tile_dir,
             epoch: 0,
+            set: 0,
             tiles: Tiles::default(),
             images: Images::default(),
             stale: Vec::new(),
@@ -156,6 +162,7 @@ impl Stage {
             bounds: Bounds::default(),
             tile: 256.,
             shown,
+            corners: Vec::new(),
             drag: None,
             layers_open: false,
             follow: false,
@@ -218,12 +225,12 @@ impl Stage {
     }
 
     /// Centers on `to`; `close` also zooms in near enough to tell pins apart.
-    fn bring(&mut self, to: Point, close: bool, map: &Map) {
+    fn bring(&mut self, to: Point, close: bool, tiles: &model::Tiles) {
         let Some(camera) = &mut self.camera else { return };
         camera.center = to;
         if close {
             // Not deeper: many maps declare levels their CDN does not have, which shows as blur.
-            let level = self.tile * 2f64.powi(i32::from(map.tiles.max_zoom.saturating_sub(3).max(map.tiles.min_zoom)));
+            let level = self.tile * 2f64.powi(i32::from(tiles.max_zoom.saturating_sub(3).max(tiles.min_zoom)));
             camera.span = camera.span.max(level);
         }
         (self.glide, self.follow) = (None, false);
@@ -256,10 +263,14 @@ impl Stage {
         ((position.x - self.bounds.origin.x).into(), (position.y - self.bounds.origin.y).into())
     }
 
-    /// From half the smallest level to twice the largest.
-    fn spans(&self, map: &Map) -> RangeInclusive<f64> {
+    /// From half the smallest level, or as far out as the bounds need to fit the view (smallest level's tiles drawn
+    /// at an eighth at least, so a deep set still draws few), to twice the largest.
+    fn spans(&self, tiles: &model::Tiles) -> RangeInclusive<f64> {
         let level = |zoom: u8| self.tile * 2f64.powi(zoom.into());
-        level(map.tiles.min_zoom) / 2.0..=level(map.tiles.max_zoom) * 2.
+        let (width, height) = self.size();
+        let whole = tiles.bounds.map_or(f64::MAX, |[low, high]| (width / (high.x - low.x)).min(height / (high.y - low.y)) * 0.9);
+        let lowest = level(tiles.min_zoom);
+        (lowest / 2.).min(whole.max(lowest / 8.))..=level(tiles.max_zoom) * 2.
     }
 }
 

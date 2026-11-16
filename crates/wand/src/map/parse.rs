@@ -246,7 +246,7 @@ pub fn map(raw: &str) -> Result<(model::Map, Vec<Vec<String>>)> {
         .filter_map(|Feature { geometry, properties: style }| {
             let Geometry::Polygon(rings) = geometry else { return None };
             Some(model::Region {
-                outline: rings.first()?.iter().filter_map(|at| point(at)).collect(),
+                outlines: vec![rings.first()?.iter().filter_map(|at| point(at)).collect()],
                 color: color(style.color.as_deref(), GRAY),
                 thickness: style.line_thickness.unwrap_or(1.),
                 zoom: style.zoom(),
@@ -269,7 +269,8 @@ pub fn map(raw: &str) -> Result<(model::Map, Vec<Vec<String>>)> {
         .collect();
 
     let map = model::Map {
-        tiles,
+        // Wand has one; a lone set's name never shows.
+        tile_sets: vec![model::TileSet { id: "base".into(), name: model::Text::Plain(String::new()), tiles }],
         background: color(metadata.background_color.as_deref(), 0),
         categories,
         pins,
@@ -293,12 +294,14 @@ fn tiles(source: Option<TileSource>) -> Result<model::Tiles> {
     };
     match source {
         Some(TileSource { kind: Some(kind), url_template: Some(template), scheme, tile_size, min_zoom, max_zoom, .. }) if kind == "xyz" => {
+            let max_zoom = max_zoom.unwrap_or_default().min(model::Tiles::MAX_ZOOM);
             Ok(model::Tiles {
                 template,
                 flipped: scheme.as_deref() == Some("tms"),
                 size: tile_size.unwrap_or(256),
-                min_zoom: min_zoom.unwrap_or_default(),
-                max_zoom: max_zoom.unwrap_or_default(),
+                min_zoom: min_zoom.unwrap_or_default().min(max_zoom),
+                max_zoom,
+                bounds: None,
             })
         }
         _ => bail!("unsupported tile source"),

@@ -94,14 +94,17 @@ fn swapped_axes_reach_the_frame_and_the_pin_position() {
 
 #[test]
 fn reads_tms_and_the_pmtiles_fallback() {
+    let tiles = |source| parse(&response(source, Value::Null)).unwrap().0.tile_sets.remove(0).tiles;
     let tms = json!({"type": "xyz", "urlTemplate": "u/{z}/{x}/{y}.webp", "scheme": "tms", "tileSize": 512, "minZoom": 1, "maxZoom": 6});
-    let tiles = parse(&response(tms, Value::Null)).unwrap().0.tiles;
-    let want = model::Tiles { template: "u/{z}/{x}/{y}.webp".into(), flipped: true, size: 512, min_zoom: 1, max_zoom: 6 };
-    assert_eq!(tiles, want);
+    let want = model::Tiles { template: "u/{z}/{x}/{y}.webp".into(), flipped: true, size: 512, min_zoom: 1, max_zoom: 6, bounds: None };
+    assert_eq!(tiles(tms), want);
     let pmtiles = json!({"type": "pmtiles", "url": "https://cdn/map.pmtiles", "minZoom": 0, "maxZoom": 9, "fallback": xyz()});
-    let tiles = parse(&response(pmtiles, Value::Null)).unwrap().0.tiles;
-    let want = model::Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 1, max_zoom: 8 };
-    assert_eq!(tiles, want);
+    let want =
+        model::Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 1, max_zoom: 8, bounds: None };
+    assert_eq!(tiles(pmtiles), want);
+    let deep = json!({"type": "xyz", "urlTemplate": "u", "minZoom": 40, "maxZoom": 60});
+    let deep = tiles(deep);
+    assert_eq!((deep.min_zoom, deep.max_zoom), (model::Tiles::MAX_ZOOM, model::Tiles::MAX_ZOOM));
 }
 
 #[test]
@@ -140,7 +143,7 @@ fn regions_and_labels_take_their_defaults() {
     let map = parse(&response(xyz(), Value::Null)).unwrap().0;
     let [region] = &map.regions[..] else { panic!("one region") };
     assert_eq!((region.name.as_str(), region.color, region.thickness, region.zoom), ("Tower", 0x01579B, 2., (3., 24.)));
-    assert_eq!(region.outline.len(), 3);
+    assert_eq!(region.outlines.iter().map(Vec::len).collect::<Vec<_>>(), [3]);
     let [label] = &map.labels[..] else { panic!("one label") };
     assert_eq!((label.text.as_str(), label.color, label.size, label.zoom), ("Passage", GRAY, 14., (0., 15.)));
 }

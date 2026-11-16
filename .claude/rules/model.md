@@ -17,7 +17,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - `Process`, `Rule`: the game's process and how a trainer says which one to look for.
 - `Trainer`, `Cheat`, `Kind`, `Args`, `Plan`: the cheat list and what running exactly this list takes.
 - `Runner`, `Attach`, `Live`, `Session`, `Event`: a run. `prepare`, then `attach(Process)`, then set values and stop.
-- `Map`, `MapOffer`, `Tiles`, `Frame`, `Pin`, `Category`, `Group`, `Glyph`, `Region`, `Label`, `Picture`, `Level`, `PIN_LINK`: a game's map.
+- `Map`, `MapOffer`, `TileSet`, `Tiles`, `Frame`, `Pin`, `Category`, `Group`, `Icon`, `Glyph`, `Region`, `Label`, `Picture`, `Level`, `PIN_LINK`: a game's map.
 
 ## Rules
 - A snapshot stream yields `Cached(Option)` first, then `Fresh(Result)` only when the copy was missing or stale. An `Err` keeps the cached value: a consumer never clears on it.
@@ -33,6 +33,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - `Group::id`, `Pin::id` and `Region::id` are stable across revisions: the user's state refers to them. A `revision` changes whenever its content does: staleness rests on it.
 - A pin description links to another pin with `PIN_LINK`. A source rewrites or drops its own link forms.
 - A `Frame` is valid: `axes` a permutation of 0, 1, 2, `scale` never zero.
+- `Map.tile_sets` is never empty; `Map::tile_set` falls back to the first. `Tiles`: `min_zoom <= max_zoom <= Tiles::MAX_ZOOM`; `bounds` excludes its right and bottom edges. `Region.outlines` holds outer rings only.
 - `set_folder` calls are ordered: an older one never saves over a newer.
 - A crate marks an error at its origin with `.context(Failure::new(kind))`; `From<anyhow::Error>` finds the mark at the contract, else `Internal`. `detail` goes to the log only. A source names no UI place: the kind's text does.
 - No I/O here, and no source name or UI text except the chord names.

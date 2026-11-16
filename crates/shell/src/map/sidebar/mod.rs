@@ -193,7 +193,8 @@ impl Sidebar {
         let category = &map.categories[at.0];
         let group = &category.groups[at.1];
         let shown = !board.saved.hidden.contains(&group.id);
-        let glyph = self.images.glyph(map, at, if shown { legible(category.color) } else { GHOST }, ICON, window, cx);
+        let color = if shown { legible(category.color) } else { GHOST };
+        let glyph = self.images.glyph(board.icon(at, cx), at, color, ICON, window, cx);
         let (toggle_id, only_id) = (group.id.clone(), group.id.clone());
         let counted = tally(board.found_counts[at.0][at.1], board.counts[at.0][at.1]);
         h_flex()
@@ -248,7 +249,7 @@ impl Sidebar {
             let pin = &map.pins[index];
             let category = &map.categories[pin.group.0];
             let badge = h_flex().size(px(28.)).flex_none().justify_center().bg(rgb(category.color));
-            let glyph = self.images.glyph(map, pin.group, ink(category.color), ICON, window, cx);
+            let glyph = self.images.glyph(board.icon(pin.group, cx), pin.group, ink(category.color), ICON, window, cx);
             let row = h_flex()
                 .id(("map-found", index))
                 .px(px(14.))

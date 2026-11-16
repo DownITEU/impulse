@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use model::{Map, Ref, Region};
+use model::{Map, Ref, Region, TileSet};
 // Looked up per drawn pin each frame.
 use rustc_hash::FxHashSet as HashSet;
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,8 @@ pub struct Saved {
     pub view: Option<(f64, f64, f64)>,
     pub marks: Vec<Mark>,
     pub marks_shown: bool,
+    /// The chosen tile set's id; `None` or one the map no longer has: its first.
+    pub tile_set: Option<String>,
 }
 
 /// A pin of the user's own.
@@ -62,6 +64,7 @@ impl Default for Saved {
             view: None,
             marks: Vec::new(),
             marks_shown: true,
+            tile_set: None,
         }
     }
 }
@@ -71,6 +74,11 @@ impl Saved {
     pub fn first(map: &Map) -> Self {
         let hidden = map.categories.iter().filter(|category| !category.shown);
         Self { hidden: hidden.flat_map(|category| category.groups.iter().map(|group| group.id.clone())).collect(), ..Self::default() }
+    }
+
+    /// The tile set of `map` shown, with its index: the chosen one, else the first.
+    pub fn tile_set_of<'a>(&self, map: &'a Map) -> (usize, &'a TileSet) {
+        map.tile_set(self.tile_set.as_deref())
     }
 
     /// A title an older build saved hides the regions of that name; one no region has yet waits for another copy.
@@ -118,7 +126,7 @@ mod tests {
         let region = |id: &str, name: &str| Region {
             id: id.to_owned(),
             name: name.to_owned(),
-            outline: Vec::new(),
+            outlines: Vec::new(),
             color: 0,
             thickness: 1.,
             zoom: (0., 20.),
@@ -141,6 +149,7 @@ mod tests {
             clusters: false,
             view: Some((0.5, 0.25, 4096.)),
             marks: vec![mark],
+            tile_set: Some("drawn".to_owned()),
             ..Saved::default()
         };
         let map = |id: &str| Ref::parse(&format!("s:{id}")).unwrap();
@@ -149,10 +158,11 @@ mod tests {
         let back = load(&dir, &map("../aB")).unwrap();
         assert_eq!((back.found, back.clusters, back.view, back.labels), (saved.found, false, saved.view, true));
         assert_eq!((back.marks[0].name.as_str(), back.marks[0].color), ("Camp", 0xFF0000));
+        assert_eq!(back.tile_set.as_deref(), Some("drawn"));
         fs::create_dir_all(dir.join("s").join("v1")).unwrap();
         fs::write(dir.join("s").join("v1").join("OldMap.json"), br#"{"found":["x"]}"#).unwrap();
         let old = load(&dir, &map("OldMap")).unwrap();
-        assert!(old.found.contains("x") && old.clusters && old.regions && old.marks_shown);
+        assert!(old.found.contains("x") && old.clusters && old.regions && old.marks_shown && old.tile_set.is_none());
         // v1 kept letters and digits only: the file may be another map's.
         assert!(load(&dir, &map("Old-Map")).is_none());
         store(&dir, &map("OldMap"), &Saved::default());

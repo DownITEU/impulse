@@ -34,7 +34,7 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 - `replace(path, data)`: how every app file is written (temp file, rename). `size(path)`: a file's or folder's bytes, blocking.
 
 ## fetch
-- `get(url, etag)`: blocking GET for public CDNs only (they send no CORS headers). The WeMod API goes through `wand`'s bridge. Body capped at 64 MiB, 120 s timeout. Run it off the UI thread.
+- `get(url, etag)`: blocking GET for public CDNs only (they send no CORS headers). The WeMod API goes through `wand`'s bridge. Body capped at 64 MiB and left unread on a 4xx or 5xx, 120 s timeout. Run it off the UI thread.
 
 ## pe
 - `header` (machine, timestamp) and `export` (RVA, forwarders skipped). `header` reads headers only: executables can be gigabytes.

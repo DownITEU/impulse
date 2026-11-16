@@ -16,7 +16,7 @@ pub use chord::{Chord, Held, mouse};
 pub use failure::{Failure, FailureKind};
 pub use game::{Game, Installation, Locator, Offer, Standalone};
 pub use ids::{Ref, SourceId};
-pub use map::{Category, Frame, Glyph, Group, Label, Level, Map, MapOffer, PIN_LINK, Picture, Pin, Point, Region, Tiles};
+pub use map::{Category, Frame, Glyph, Group, Icon, Label, Level, Map, MapOffer, PIN_LINK, Picture, Pin, Point, Region, TileSet, Tiles};
 pub use process::{Process, Rule};
 pub use run::{Attach, Event, Live, Runner, Session};
 pub use source::{Account, Accounts, Caches, Clear, Files, Folder, Folders, Games, Maps, SignIn, Snapshot, Source, Store, Trainers};

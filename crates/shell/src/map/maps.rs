@@ -51,8 +51,9 @@ impl Maps {
         })
         .detach();
         cx.observe_global::<Texts>(Self::relocalize).detach();
-        let board = cx.new(|_| Board::new(paths.map_state()));
-        let live_board = cx.new(|_| Board::live(paths.map_state()));
+        let art = Media::Pictures.dir(paths);
+        let board = cx.new(|_| Board::new(paths.map_state(), art.clone()));
+        let live_board = cx.new(|_| Board::live(paths.map_state(), art));
         let live_map = cx.new(|cx| LiveMap::new(registry.clone(), live_board, board.clone(), Media::Tiles.dir(paths), paths, cx));
         Self {
             registry,
@@ -131,12 +132,9 @@ impl Maps {
         let shared = self.live_map.read(cx).board.read(cx).loaded(&offer.id, &locale);
         self.board.update(cx, |board, cx| board.pending(offer.id.clone(), locale, cx));
         // The minimap's copy, when it shows this map; a load of its own unless the minimap's is done.
-        if let Some((map, settled)) = shared {
-            self.board.update(cx, |board, cx| board.take((map, settled), cx));
-            if settled {
-                self._load = Task::ready(());
-                return;
-            }
+        if self.board.update(cx, |board, cx| board.take(shared, cx)) {
+            self._load = Task::ready(());
+            return;
         }
         self.load(&offer, cx);
     }

@@ -9,7 +9,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use model::{Failure, FailureKind, Glyph};
+use model::{Failure, FailureKind, Glyph, Icon};
 use ttf_parser::{Face, OutlineBuilder, Rect};
 
 use super::DIR;
@@ -79,7 +79,8 @@ pub fn attach(map: &mut model::Map, names: &[Vec<String>], data_dir: &Path, onli
             group.icon = outlines
                 .entry(&source.file)
                 .or_insert_with(|| load(&dir, source).inspect_err(|e| log::debug!("icon {} has no outline: {e:#}", source.file)).ok())
-                .clone();
+                .clone()
+                .map(Icon::Glyph);
         }
     }
     missing.iter().any(|source| !dir.join(&source.file).exists())

@@ -36,6 +36,11 @@ pub fn get(url: &str, etag: Option<&str>) -> Result<Response> {
     let mut response = request.call().with_context(|| format!("GET {url}"))?;
     let etag =
         response.headers().get("etag").and_then(|v| v.to_str().ok()).map(|v| v.trim_start_matches("W/").trim_matches('"').to_owned());
-    let body = response.body_mut().with_config().limit(MAX_BODY).read_to_vec().with_context(|| format!("read {url}"))?;
-    Ok(Response { status: response.status().as_u16(), etag, body })
+    let status = response.status().as_u16();
+    // An error's body is never used: one past the limit must not hide its status.
+    let body = match status {
+        400.. => Vec::new(),
+        _ => response.body_mut().with_config().limit(MAX_BODY).read_to_vec().with_context(|| format!("read {url}"))?,
+    };
+    Ok(Response { status, etag, body })
 }

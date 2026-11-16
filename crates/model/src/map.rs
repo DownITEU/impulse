@@ -1,6 +1,6 @@
 //! A game's interactive map: tiles, pins and how the game's coordinates lie on it.
 
-use crate::Ref;
+use crate::{Ref, Text};
 
 /// A map a source has for a game, before it is opened.
 #[derive(Clone, Debug, PartialEq)]
@@ -20,7 +20,8 @@ pub struct Point {
 }
 
 pub struct Map {
-    pub tiles: Tiles,
+    /// Never empty: the first shows until the user chooses another.
+    pub tile_sets: Vec<TileSet>,
     /// RGB behind the tiles.
     pub background: u32,
     pub categories: Vec<Category>,
@@ -34,6 +35,23 @@ pub struct Map {
     pub unfinished: bool,
 }
 
+impl Map {
+    /// The tile set `chosen`, else the first, with its index.
+    pub fn tile_set(&self, chosen: Option<&str>) -> (usize, &TileSet) {
+        let index = chosen.and_then(|id| self.tile_sets.iter().position(|set| set.id == id)).unwrap_or(0);
+        (index, &self.tile_sets[index])
+    }
+}
+
+/// One look of the map's ground: satellite, drawn, a season.
+#[derive(Debug, PartialEq)]
+pub struct TileSet {
+    /// Stable across revisions: the user's choice refers to it.
+    pub id: String,
+    pub name: Text,
+    pub tiles: Tiles,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Tiles {
     /// A URL with `{z}`, `{x}` and `{y}`.
@@ -42,15 +60,32 @@ pub struct Tiles {
     pub flipped: bool,
     /// Pixels along a tile's side.
     pub size: u32,
+    /// `min_zoom <= max_zoom <= MAX_ZOOM`.
     pub min_zoom: u8,
     pub max_zoom: u8,
+    /// The part of the plane the tiles cover, top left and bottom right, the bottom right edges excluded;
+    /// `None`: all of it.
+    pub bounds: Option<[Point; 2]>,
 }
 
 impl Tiles {
+    /// The deepest level a map may have: a level's columns, and two levels under it, count in a `u32`.
+    pub const MAX_ZOOM: u8 = 24;
+
     /// `column` and `row` count from the top left, below `2^zoom`.
     pub fn url(&self, zoom: u8, column: u32, row: u32) -> String {
         let row = if self.flipped { (1u32 << zoom) - 1 - row } else { row };
         self.template.replace("{z}", &zoom.to_string()).replace("{x}", &column.to_string()).replace("{y}", &row.to_string())
+    }
+
+    /// Whether the tile is one to ask for: its level is served and it meets the bounds.
+    pub fn covers(&self, zoom: u8, column: u32, row: u32) -> bool {
+        let count = f64::from(1u32 << zoom);
+        let meets = |[low, high]: [Point; 2]| {
+            let (left, top) = (f64::from(column) / count, f64::from(row) / count);
+            left < high.x && left + 1. / count > low.x && top < high.y && top + 1. / count > low.y
+        };
+        (self.min_zoom..=self.max_zoom).contains(&zoom) && self.bounds.is_none_or(meets)
     }
 }
 
@@ -66,7 +101,15 @@ pub struct Group {
     /// Stable across revisions of the map.
     pub id: String,
     pub name: String,
-    pub icon: Option<Glyph>,
+    pub icon: Option<Icon>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Icon {
+    /// Tinted to read on its marker.
+    Glyph(Glyph),
+    /// Drawn as it is: the whole picture, or a cell of a sheet of icons (left, top, width, height in its pixels).
+    Image { url: String, cell: Option<[u32; 4]> },
 }
 
 /// An icon's outline: SVG path data fitted and centered in the unit square, y down.
@@ -114,7 +157,8 @@ pub struct Region {
     pub name: String,
     pub color: u32,
     pub thickness: f32,
-    pub outline: Vec<Point>,
+    /// One outer ring per polygon.
+    pub outlines: Vec<Vec<Point>>,
     /// The zoom levels it shows at, inclusive.
     pub zoom: (f32, f32),
 }
@@ -163,11 +207,46 @@ mod tests {
 
     #[test]
     fn tile_urls_follow_the_template_and_the_row_order() {
-        let mut tiles = Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 0, max_zoom: 8 };
+        let mut tiles =
+            Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 0, max_zoom: 8, bounds: None };
         assert_eq!(tiles.url(3, 5, 1), "https://cdn/3/1/5.webp");
         tiles.flipped = true;
         assert_eq!(tiles.url(3, 5, 1), "https://cdn/3/6/5.webp");
         assert_eq!(tiles.url(0, 0, 0), "https://cdn/0/0/0.webp");
+    }
+
+    #[test]
+    fn tiles_are_asked_within_the_levels_and_the_bounds() {
+        let at = |x, y| Point { x, y };
+        let bounds = Some([at(0.25, 0.5), at(0.5, 0.75)]);
+        let tiles = Tiles { template: String::new(), flipped: false, size: 256, min_zoom: 1, max_zoom: 3, bounds };
+        assert!(!tiles.covers(0, 0, 0) && !tiles.covers(4, 5, 9), "levels the provider does not serve");
+        assert!(tiles.covers(1, 0, 1) && tiles.covers(2, 1, 2));
+        // The right and bottom edges are outside.
+        assert!(!tiles.covers(2, 2, 2) && !tiles.covers(2, 1, 3) && !tiles.covers(2, 0, 2));
+        assert!(Tiles { bounds: None, ..tiles }.covers(3, 7, 0));
+    }
+
+    #[test]
+    fn an_unknown_tile_set_falls_back_to_the_first() {
+        let set = |id: &str| TileSet {
+            id: id.into(),
+            name: Text::Plain(id.into()),
+            tiles: Tiles { template: String::new(), flipped: false, size: 256, min_zoom: 0, max_zoom: 0, bounds: None },
+        };
+        let map = Map {
+            tile_sets: vec![set("sat"), set("drawn")],
+            background: 0,
+            categories: Vec::new(),
+            pins: Vec::new(),
+            regions: Vec::new(),
+            labels: Vec::new(),
+            frame: None,
+            teleport: false,
+            unfinished: false,
+        };
+        assert_eq!(map.tile_set(Some("drawn")).0, 1);
+        assert_eq!((map.tile_set(Some("gone")).0, map.tile_set(None).0), (0, 0));
     }
 
     #[test]

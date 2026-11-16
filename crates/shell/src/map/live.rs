@@ -7,7 +7,7 @@ use anyhow::Result;
 use client::Registry;
 use client::storage::{Paths, Stored};
 use gpui_kit::{App, AsyncApp, Context, Entity, EntityId, Subscription, Task, WeakEntity};
-use model::{Locale, Map, MapOffer};
+use model::{Locale, MapOffer};
 use serde::{Deserialize, Serialize};
 
 use super::board::{Board, BoardEvent, show};
@@ -189,9 +189,9 @@ impl LiveMap {
         self.board.update(cx, |board, cx| board.adopt(saved, cx));
     }
 
-    /// The camera's span for `map` at the kept zoom; `tile` is a tile's side in view pixels.
-    pub(super) fn span(&self, map: &Map, tile: f64) -> f64 {
-        tile * 2f64.powf(f64::from(map.tiles.max_zoom) - self.zoom)
+    /// The camera's span for tiles at most `max_zoom` deep at the kept zoom; `tile` is a tile's side in view pixels.
+    pub(super) fn span(&self, max_zoom: u8, tile: f64) -> f64 {
+        tile * 2f64.powf(f64::from(max_zoom) - self.zoom)
     }
 
     /// Closer for more `levels`, further for fewer.
@@ -208,15 +208,15 @@ impl LiveMap {
 
 /// `to` shows the map `from` just installed: it takes the same copy.
 fn share(from: &Entity<Board>, to: &Entity<Board>, cx: &mut App) {
-    let (map, wanted) = {
+    let (shared, wanted) = {
         let (from, to) = (from.read(cx), to.read(cx));
         let Some((id, locale)) = from.asked() else { return };
-        let Some((map, _)) = from.loaded(id, locale) else { return };
-        let held = to.loaded(id, locale).is_some_and(|(held, _)| Rc::ptr_eq(&held, &map));
-        (map, to.asked() == from.asked() && !held)
+        let Some(shared) = from.loaded(id, locale) else { return };
+        let held = to.loaded(id, locale).is_some_and(|held| Rc::ptr_eq(&held.map, &shared.map));
+        (shared, to.asked() == from.asked() && !held)
     };
     if wanted {
-        to.update(cx, |board, cx| board.install(map, cx));
+        to.update(cx, |board, cx| board.share(shared, cx));
     }
 }
 
@@ -234,11 +234,7 @@ async fn load(
         let shared = big.read_with(cx, |big, _| big.loaded(&offer.id, locale))?;
         board.update(cx, |board, cx| board.pending(offer.id.clone(), locale.clone(), cx))?;
         // The big board's copy; a load of its own unless the big board's is done.
-        let settled = shared.as_ref().is_some_and(|(_, settled)| *settled);
-        if let Some(shared) = shared {
-            board.update(cx, |board, cx| board.take(shared, cx))?;
-        }
-        if !settled {
+        if !board.update(cx, |board, cx| board.take(shared, cx))? {
             show(&board, registry.map(&offer, locale), cx).await?;
         }
         if live.read_with(cx, |live, cx| live.ready(cx))? {

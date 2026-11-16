@@ -31,6 +31,16 @@ impl Camera {
         self.center = Point { x: (self.center.x - by.0 / self.span).clamp(0., 1.), y: (self.center.y - by.1 / self.span).clamp(0., 1.) };
     }
 
+    /// Keeps the view inside the box from `low` to `high`; a box smaller than the view sits in its middle.
+    pub fn keep_in(&mut self, [low, high]: [Point; 2], size: Pixel) {
+        // Not `clamp`: it panics on a box turned inside out.
+        let keep = |at: f64, low: f64, high: f64, side: f64| {
+            let half = side / 2. / self.span;
+            if high - low <= half * 2. { (low + high) / 2. } else { at.max(low + half).min(high - half) }
+        };
+        self.center = Point { x: keep(self.center.x, low.x, high.x, size.0), y: keep(self.center.y, low.y, high.y, size.1) };
+    }
+
     /// Scales by `factor` within `spans`; the plane point under `pixel` stays under it.
     pub fn zoom(&mut self, factor: f64, pixel: Pixel, size: Pixel, spans: &RangeInclusive<f64>) {
         let held = self.to_plane(pixel, size);
@@ -148,6 +158,19 @@ mod tests {
         let points = [Point { x: 0.75, y: 0.5 }, Point { x: 0.25, y: 0.75 }, Point { x: 0.5, y: 0.6 }];
         assert_eq!(extent(points), Some((Point { x: 0.25, y: 0.5 }, Point { x: 0.75, y: 0.75 })));
         assert_eq!(extent([]), None);
+    }
+
+    #[test]
+    fn the_view_stays_inside_the_bounds() {
+        let bounds = [Point { x: 0.25, y: 0.25 }, Point { x: 0.75, y: 0.75 }];
+        // Wider than the view: an edge stops at the view's edge.
+        let mut camera = Camera { center: Point { x: 0., y: 0.5 }, span: 4096. };
+        camera.keep_in(bounds, SIZE);
+        assert_eq!(camera.center, Point { x: 0.25 + 400. / 4096., y: 0.5 });
+        // Smaller than the view: in its middle.
+        let mut camera = Camera { center: Point { x: 0., y: 1. }, span: 1000. };
+        camera.keep_in(bounds, SIZE);
+        assert_eq!(camera.center, Point { x: 0.5, y: 0.5 });
     }
 
     #[test]

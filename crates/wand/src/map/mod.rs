@@ -136,7 +136,7 @@ mod tests {
         assert_eq!(name("a/b?c=d"), "abcd");
         disk::replace(&path, &serde_json::to_vec(&stored).unwrap()).unwrap();
         let Cached { map, stamp, locale, .. } = cached(&dir, "wNYf6cFhpk").unwrap();
-        assert_eq!((stamp.as_deref(), map.tiles.template.as_str()), (Some("2026-01-01T00:00:00Z"), "u/{z}/{x}/{y}"));
+        assert_eq!((stamp.as_deref(), map.tile_sets[0].tiles.template.as_str()), (Some("2026-01-01T00:00:00Z"), "u/{z}/{x}/{y}"));
         assert_eq!(locale, "fr-FR");
         assert!(fs::read_to_string(&path).unwrap().contains("objects3d"));
         fs::write(&path, b"{").unwrap();

@@ -1,7 +1,9 @@
-//! Pictures, map tiles and pin videos from public CDNs. Each is kept on disk, so it loads at once and offline.
+//! Pictures, map tiles and pin videos from public CDNs. Each is kept on disk, so it loads at once and offline;
+//! an empty file marks one the server lacks.
 
 use std::{
     fs,
+    io::Cursor,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
@@ -9,6 +11,7 @@ use std::{
 use anyhow::{Result, bail};
 use futures::future::BoxFuture;
 use gpui_kit::http_client::{AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
+use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 
 use client::media::file;
 
@@ -36,27 +39,86 @@ impl HttpClient for CdnClient {
     }
 }
 
-// Disk first and never revalidated: files under one URL do not change.
+/// What a map tile's URL gave.
+pub enum Fetched<T = Vec<u8>> {
+    Ready(T),
+    /// Not on the server: remembered, never asked again.
+    Absent,
+    /// Failed this time.
+    Retry,
+}
+
+impl<T> Fetched<T> {
+    pub fn and_then<U>(self, next: impl FnOnce(T) -> Fetched<U>) -> Fetched<U> {
+        match self {
+            Self::Ready(value) => next(value),
+            Self::Absent => Fetched::Absent,
+            Self::Retry => Fetched::Retry,
+        }
+    }
+}
+
+/// A WebP, PNG or JPEG, told by its first bytes, at most `side` texels across: a few compressed bytes can
+/// claim a picture too large to hold.
+pub fn picture(bytes: &[u8], side: u32) -> Result<DynamicImage> {
+    let format = image::guess_format(bytes)?;
+    if !matches!(format, ImageFormat::WebP | ImageFormat::Png | ImageFormat::Jpeg) {
+        bail!("not a picture: {format:?}");
+    }
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    let mut limits = Limits::default();
+    (limits.max_image_width, limits.max_image_height) = (Some(side), Some(side));
+    reader.limits(limits);
+    Ok(reader.decode()?)
+}
+
+const ABSENT: [u16; 1] = [404];
+// A provider serving a window of a larger pyramid answers 403 or 410 outside it.
+const ABSENT_TILE: [u16; 3] = [403, 404, 410];
+
 pub fn load(cache: &Path, url: &str) -> Result<Vec<u8>> {
+    match get(cache, url, &ABSENT)? {
+        Some(bytes) => Ok(bytes),
+        None => bail!("{url} does not exist"),
+    }
+}
+
+/// A tile's bytes (blocking).
+pub fn tile(cache: &Path, url: &str) -> Fetched {
+    match get(cache, url, &ABSENT_TILE) {
+        Ok(Some(bytes)) => Fetched::Ready(bytes),
+        Ok(None) => Fetched::Absent,
+        Err(e) => {
+            log::debug!("tile: {e:#}");
+            Fetched::Retry
+        }
+    }
+}
+
+// Disk first and never revalidated: files under one URL do not change. `None`: the server lacks it.
+fn get(cache: &Path, url: &str, absent: &[u16]) -> Result<Option<Vec<u8>>> {
     let file = file(cache, url);
     match fs::read(&file) {
-        Ok(bytes) if bytes.is_empty() => bail!("{url} does not exist"),
+        Ok(bytes) if bytes.is_empty() => Ok(None),
         Ok(bytes) => {
             touch(&file);
-            Ok(bytes)
+            Ok(Some(bytes))
         }
-        Err(_) => download(&file, url),
+        Err(_) => download(&file, url, absent),
     }
 }
 
 /// `url`'s file on disk, downloaded first when it is not there (blocking).
 pub fn path(cache: &Path, url: &str) -> Result<PathBuf> {
     let file = file(cache, url);
-    match fs::metadata(&file) {
-        Ok(meta) if meta.len() == 0 => bail!("{url} does not exist"),
-        Ok(_) => touch(&file),
-        Err(_) => drop(download(&file, url)?),
+    let kept = match fs::metadata(&file) {
+        Ok(meta) => meta.len() > 0,
+        Err(_) => download(&file, url, &ABSENT)?.is_some(),
+    };
+    if !kept {
+        bail!("{url} does not exist");
     }
+    touch(&file);
     Ok(file)
 }
 
@@ -69,19 +131,15 @@ fn touch(file: &Path) {
     let _ = fs::File::options().write(true).open(file).and_then(|file| file.set_modified(SystemTime::now()));
 }
 
-fn download(file: &Path, url: &str) -> Result<Vec<u8>> {
+fn download(file: &Path, url: &str, absent: &[u16]) -> Result<Option<Vec<u8>>> {
     let response = fetch::get(url, None)?;
-    // An empty file marks art the CDN does not have.
-    let keep: &[u8] = match response.status {
-        200 => &response.body,
-        404 => &[],
-        status => bail!("GET {url}: HTTP {status}"),
-    };
-    if let Err(e) = disk::replace(file, keep) {
+    let gone = absent.contains(&response.status);
+    if !gone && response.status != 200 {
+        bail!("GET {url}: HTTP {}", response.status);
+    }
+    // An empty file marks what the server does not have.
+    if let Err(e) = disk::replace(file, if gone { &[] } else { &response.body }) {
         log::warn!("art not cached: {e:#}");
     }
-    if response.status == 404 {
-        bail!("{url} does not exist");
-    }
-    Ok(response.body)
+    Ok((!gone).then_some(response.body))
 }

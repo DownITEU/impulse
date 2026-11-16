@@ -1,9 +1,14 @@
 //! The map's tiles as images: a bounded number kept, the least recently drawn dropped.
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use gpui_kit::RenderImage;
 use rustc_hash::FxHashMap as HashMap;
+
+use crate::ui::art::Fetched;
 
 /// Level, column, row.
 pub type Key = (u8, u32, u32);
@@ -18,13 +23,30 @@ const AT_ONCE: usize = 6;
 // How many levels up a missing tile looks for a stand-in, and down (a zoom out just left those).
 const STAND_INS: u8 = 4;
 const BELOW: u8 = 2;
+// A failed tile waits a second, doubling per failure up to about a minute; only a draw asks again.
+const BACKOFF: u32 = 6;
 
 enum Slot {
-    Loading,
+    /// With the failures before it.
+    Loading(u32),
     /// With the frame it was last drawn in.
     Ready(Arc<RenderImage>, u64),
-    /// Not on the server, or it failed: not asked for again while this map shows.
-    Missing,
+    /// Not on the server, or not a picture: not asked for again while this map shows.
+    Absent,
+    Failed {
+        due: Instant,
+        tries: u32,
+    },
+}
+
+/// What a missing tile asks for.
+enum Ask {
+    /// Itself, with the failures before: not known yet, or its wait after a failure is over.
+    Load(u32),
+    /// Its parent: the server lacks it, or it waits.
+    Parent,
+    /// Nothing: it is on its way or loaded.
+    Stop,
 }
 
 pub struct Tiles {
@@ -109,28 +131,48 @@ impl Tiles {
         Some(image.clone())
     }
 
-    /// What to load for a tile not drawn as itself: the tile, or for one the server lacks, its nearest ancestor.
-    pub fn wanted(&self, (level, column, row): Key) -> Option<Key> {
-        (0..=level.min(STAND_INS))
+    /// What to load for a tile not drawn as itself: the tile, or for one the server lacks or that waits after a
+    /// failure, its nearest ancestor down to level `lowest`.
+    pub fn wanted(&self, (level, column, row): Key, lowest: u8, now: Instant) -> Option<Key> {
+        (0..=level.saturating_sub(lowest).min(STAND_INS))
             .map(|up| (level - up, column >> up, row >> up))
-            .find(|key| !matches!(self.slots.get(key), Some(Slot::Missing)))
-            .filter(|key| !self.slots.contains_key(key))
+            .map(|key| (key, self.ask(&key, now)))
+            .find(|(_, ask)| !matches!(ask, Ask::Parent))
+            .and_then(|(key, ask)| matches!(ask, Ask::Load(_)).then_some(key))
     }
 
-    /// Whether the caller loads it now: it is not known yet and a load is free.
-    pub fn claim(&mut self, key: Key) -> bool {
-        let free = self.loading < AT_ONCE && !self.slots.contains_key(&key);
-        if free {
-            self.slots.insert(key, Slot::Loading);
-            self.loading += 1;
+    /// Whether the caller loads it now: it is not known yet, or its wait is over, and a load is free.
+    pub fn claim(&mut self, key: Key, now: Instant) -> bool {
+        let Ask::Load(tries) = self.ask(&key, now) else { return false };
+        if self.loading >= AT_ONCE {
+            return false;
         }
-        free
+        self.slots.insert(key, Slot::Loading(tries));
+        self.loading += 1;
+        true
     }
 
-    pub fn loaded(&mut self, key: Key, image: Option<Arc<RenderImage>>) {
+    pub fn loaded(&mut self, key: Key, fetched: Fetched<Arc<RenderImage>>, now: Instant) {
         self.loading -= 1;
-        let slot = image.map_or(Slot::Missing, |image| Slot::Ready(image, self.frame));
+        let tries = match self.slots.get(&key) {
+            Some(Slot::Loading(tries)) => *tries,
+            _ => 0,
+        };
+        let slot = match fetched {
+            Fetched::Ready(image) => Slot::Ready(image, self.frame),
+            Fetched::Absent => Slot::Absent,
+            Fetched::Retry => Slot::Failed { due: now + Duration::from_secs(1 << tries.min(BACKOFF)), tries: tries + 1 },
+        };
         self.slots.insert(key, slot);
+    }
+
+    fn ask(&self, key: &Key, now: Instant) -> Ask {
+        match self.slots.get(key) {
+            None => Ask::Load(0),
+            Some(Slot::Failed { due, tries }) if *due <= now => Ask::Load(*tries),
+            Some(Slot::Absent | Slot::Failed { .. }) => Ask::Parent,
+            Some(Slot::Loading(_) | Slot::Ready(..)) => Ask::Stop,
+        }
     }
 
     /// Forgets every tile; the caller drops the returned images from the atlas.
@@ -154,13 +196,14 @@ impl Slot {
 mod tests {
     use super::*;
 
-    fn image() -> Option<Arc<RenderImage>> {
-        Some(Arc::new(RenderImage::new(Vec::new())))
+    fn image() -> Fetched<Arc<RenderImage>> {
+        Fetched::Ready(Arc::new(RenderImage::new(Vec::new())))
     }
 
     fn load(tiles: &mut Tiles, key: Key) {
-        assert!(tiles.claim(key));
-        tiles.loaded(key, image());
+        let now = Instant::now();
+        assert!(tiles.claim(key, now));
+        tiles.loaded(key, image(), now);
     }
 
     fn painted(tiles: &mut Tiles, key: Key) -> (bool, Vec<Key>) {
@@ -171,17 +214,18 @@ mod tests {
 
     #[test]
     fn stand_ins_come_from_above_and_below() {
-        let mut tiles = Tiles::default();
-        assert!(tiles.claim((2, 1, 0)) && !tiles.claim((2, 1, 0)));
-        tiles.loaded((2, 1, 0), image());
+        let (mut tiles, now) = (Tiles::default(), Instant::now());
+        assert!(tiles.claim((2, 1, 0), now) && !tiles.claim((2, 1, 0), now));
+        tiles.loaded((2, 1, 0), image(), now);
         assert_eq!(painted(&mut tiles, (4, 6, 3)), (false, vec![(2, 1, 0)]));
         assert_eq!(painted(&mut tiles, (4, 9, 3)), (false, vec![]));
-        assert_eq!(tiles.wanted((4, 6, 3)), Some((4, 6, 3)));
-        assert!(tiles.claim((4, 6, 3)));
-        assert_eq!(tiles.wanted((4, 6, 3)), None, "on its way");
-        tiles.loaded((4, 6, 3), None);
-        assert!(!tiles.claim((4, 6, 3)), "a missing tile is not asked for again");
-        assert_eq!(tiles.wanted((4, 6, 3)), Some((3, 3, 1)), "its parent is asked for instead");
+        assert_eq!(tiles.wanted((4, 6, 3), 0, now), Some((4, 6, 3)));
+        assert!(tiles.claim((4, 6, 3), now));
+        assert_eq!(tiles.wanted((4, 6, 3), 0, now), None, "on its way");
+        tiles.loaded((4, 6, 3), Fetched::Absent, now);
+        assert!(!tiles.claim((4, 6, 3), now), "an absent tile is not asked for again");
+        assert_eq!(tiles.wanted((4, 6, 3), 0, now), Some((3, 3, 1)), "its parent is asked for instead");
+        assert_eq!(tiles.wanted((4, 6, 3), 4, now), None, "but not below the lowest level");
         // A zoom out: the tiles just left lie over the ancestor, two levels down at most.
         load(&mut tiles, (4, 7, 2));
         load(&mut tiles, (5, 12, 4));
@@ -191,9 +235,26 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_tile_is_asked_again_after_a_growing_wait() {
+        let (mut tiles, now) = (Tiles::default(), Instant::now());
+        let key = (3, 2, 2);
+        assert!(tiles.claim(key, now));
+        tiles.loaded(key, Fetched::Retry, now);
+        assert_eq!(tiles.wanted(key, 0, now), Some((2, 1, 1)), "its parent stands in meanwhile");
+        let later = now + Duration::from_secs(1);
+        assert_eq!(tiles.wanted(key, 0, later), Some(key));
+        assert!(tiles.claim(key, later));
+        tiles.loaded(key, Fetched::Retry, later);
+        assert!(!tiles.claim(key, later + Duration::from_secs(1)), "the second wait is longer");
+        assert!(tiles.claim(key, later + Duration::from_secs(2)));
+        tiles.loaded(key, image(), later);
+        assert!(painted(&mut tiles, key).0);
+    }
+
+    #[test]
     fn loads_are_bounded_and_old_tiles_leave() {
-        let mut tiles = Tiles::default();
-        let claimed = (0..20).filter(|column| tiles.claim((5, *column, 0))).count();
+        let (mut tiles, now) = (Tiles::default(), Instant::now());
+        let claimed = (0..20).filter(|column| tiles.claim((5, *column, 0), now)).count();
         assert_eq!(claimed, AT_ONCE);
         assert_eq!(tiles.clear().len(), 0);
         (0..FLOOR as u32 + 10).for_each(|column| load(&mut tiles, (9, column, 0)));

@@ -1,10 +1,10 @@
 //! What moves between frames: a zoom gliding to its end, the player walking.
 
-use std::time::Instant;
+use std::{ops::RangeInclusive, time::Instant};
 
 use client::map::heading::{Bearing, JUMP, arc};
 use gpui_kit::{Context, Window};
-use model::{Map, Point};
+use model::Point;
 
 use super::{
     Stage,
@@ -29,20 +29,20 @@ impl Stage {
     /// Zooms by `factor` about `pixel`; a zoom on its way goes on from where it would end.
     pub(super) fn zoom(&mut self, factor: f64, pixel: Pixel, cx: &mut Context<Self>) {
         let (Some(map), Some(camera)) = (self.map(cx), self.camera) else { return };
-        let spans = self.spans(&map);
+        let spans = self.spans(&self.board.read(cx).saved.tile_set_of(&map).1.tiles);
         let from = self.glide.map_or(camera.span, |glide| glide.span);
         self.glide = Some(Glide { span: (from * factor).clamp(*spans.start(), *spans.end()), pixel });
         self.hover(None, cx);
     }
 
     /// Advances what moves by the time since the last frame; asks for the next frame while anything does.
-    pub(super) fn animate(&mut self, map: &Map, player: Option<Walk>, window: &mut Window) {
+    pub(super) fn animate(&mut self, spans: &RangeInclusive<f64>, player: Option<Walk>, window: &mut Window) {
         let now = Instant::now();
         // Long gaps (the first frame, a stall) do not jump.
         let seconds = self.clock.map_or(0., |last| (now - last).as_secs_f64().min(0.1));
-        let (size, spans) = (self.size(), self.spans(map));
+        let size = self.size();
         if let (Some(glide), Some(camera)) = (self.glide, &mut self.camera)
-            && glide.step(camera, seconds, size, &spans)
+            && glide.step(camera, seconds, size, spans)
         {
             self.glide = None;
         }

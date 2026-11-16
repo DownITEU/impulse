@@ -23,7 +23,7 @@ use crate::{
     ui::{
         assets::Icon,
         key,
-        text::{failed, t},
+        text::{failed, t, text},
         theme::*,
         widgets::{button, icon, mono, square},
     },
@@ -148,11 +148,12 @@ impl Stage {
     }
 }
 
+/// The map's tile sets, when it has more than one, then its layers.
 fn layers_menu(map: &Map, saved: &Saved, cx: &Context<Stage>) -> impl IntoElement {
     let accent = accent(cx);
-    let row = |slot: usize, label: SharedString, on: bool, flip: fn(&mut Saved)| {
+    let option = |id: (&'static str, usize), label: SharedString, on: bool| {
         h_flex()
-            .id(("map-layer", slot))
+            .id(id)
             .h(px(28.))
             .px(px(10.))
             .gap(px(10.))
@@ -160,19 +161,35 @@ fn layers_menu(map: &Map, saved: &Saved, cx: &Context<Stage>) -> impl IntoElemen
             .hover(|style| style.bg(rgb(ROW_HOVER)))
             .child(square(11., alpha(accent, if on { 1. } else { 0. })).border_1().border_color(if on { rgb(accent) } else { line(0.3) }))
             .child(mono(label, 10.5).font_weight(FontWeight::BOLD).text_color(rgb(if on { TEXT } else { DIM })))
+    };
+    let layer = |slot: usize, label: SharedString, on: bool, flip: fn(&mut Saved)| {
+        option(("map-layer", slot), label, on)
             .on_click(cx.listener(move |stage, _, _, cx| stage.board.update(cx, |board, cx| board.filter(flip, cx))))
     };
+    let chosen = saved.tile_set_of(map).0;
+    let sets = map.tile_sets.iter().enumerate().map(|(index, set)| {
+        let id = set.id.clone();
+        option(("map-tiles", index), text(cx, &set.name).to_uppercase().into(), index == chosen).on_click(cx.listener(
+            move |stage, _, _, cx| {
+                let id = id.clone();
+                stage.board.update(cx, |board, cx| board.filter(|saved| saved.tile_set = Some(id), cx));
+            },
+        ))
+    });
     v_flex()
         .w(px(170.))
         .py(px(4.))
         .border_1()
         .border_color(line(0.16))
         .bg(rgb(PANEL))
-        .when(!map.labels.is_empty(), |menu| menu.child(row(0, t(cx, key::MAP_LAYER_LABELS), saved.labels, |saved| saved.labels ^= true)))
-        .when(!map.regions.is_empty(), |menu| {
-            menu.child(row(1, t(cx, key::MAP_LAYER_REGIONS), saved.regions, |saved| saved.regions ^= true))
+        .when(map.tile_sets.len() > 1, |menu| {
+            menu.child(v_flex().pb(px(4.)).mb(px(4.)).border_b_1().border_color(line(0.16)).children(sets))
         })
-        .child(row(2, t(cx, key::MAP_LAYER_CLUSTERS), saved.clusters, |saved| saved.clusters ^= true))
+        .when(!map.labels.is_empty(), |menu| menu.child(layer(0, t(cx, key::MAP_LAYER_LABELS), saved.labels, |saved| saved.labels ^= true)))
+        .when(!map.regions.is_empty(), |menu| {
+            menu.child(layer(1, t(cx, key::MAP_LAYER_REGIONS), saved.regions, |saved| saved.regions ^= true))
+        })
+        .child(layer(2, t(cx, key::MAP_LAYER_CLUSTERS), saved.clusters, |saved| saved.clusters ^= true))
 }
 
 /// A square map button; `on` lights it in the accent.

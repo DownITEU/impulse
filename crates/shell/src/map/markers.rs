@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use gpui_kit::{AnyElement, App, DevicePixels, RenderImage, SvgSize, Window, component::h_flex, img, prelude::*, px, rgb, size};
-use model::{Glyph, Level, Map};
+use image::{Frame, RgbaImage, imageops};
+use model::{Glyph, Level};
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::ui::{theme::*, widgets::square};
@@ -15,6 +16,8 @@ pub const TIP: (f64, f64) = (13., 36.5);
 /// The round head, from the tip.
 pub const HEAD_ABOVE: f64 = 19.5;
 pub const HEAD_RADIUS: f64 = 11.;
+/// A picture icon over the head: its left and top in the box, and its side.
+pub const PICTURE: (f64, f64, f64) = (5.5, 9.5, 15.);
 
 // Drawn in a 24 x 32 box with the tip at (12, 31.5); the view box leaves room for the stroke and the level mark.
 const VIEW_BOX: &str = "-1 -5 26 38";
@@ -45,12 +48,23 @@ pub struct Marker {
     pub look: Look,
     pub found: bool,
     pub level: Option<Level>,
+    /// A picture icon is drawn over its head, which then shows no mark.
+    pub picture: bool,
+}
+
+/// What a group's icon is drawn with, as far as it is in.
+#[derive(Clone, Copy)]
+pub enum GroupIcon<'a> {
+    Glyph(&'a Glyph),
+    Picture(&'a RgbaImage),
+    Default,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Key {
     Marker(Marker, u32),
     Icon((usize, usize), u32, u32),
+    Picture((usize, usize), u32),
 }
 
 #[derive(Default)]
@@ -77,10 +91,19 @@ impl Images {
         self.made.entry(key).or_insert_with(|| render(&svg(), pixels, pixels, cx)).clone()
     }
 
-    /// A group's icon in `color`; a small square where the source has none.
-    pub fn glyph(&mut self, map: &Map, at: (usize, usize), color: u32, side: f32, window: &Window, cx: &App) -> AnyElement {
-        let image =
-            map.categories[at.0].groups[at.1].icon.as_ref().and_then(|glyph| self.icon(at, glyph, color, side, window.scale_factor(), cx));
+    /// A group's picture icon, fitted and centered in a square `pixels` across.
+    pub fn picture(&mut self, group: (usize, usize), picture: &RgbaImage, pixels: u32) -> Arc<RenderImage> {
+        self.made.entry(Key::Picture(group, pixels)).or_default().get_or_insert_with(|| fitted(picture, pixels)).clone()
+    }
+
+    /// Group `at`'s icon, a glyph in `color`; a small square for the default mark.
+    pub fn glyph(&mut self, mark: GroupIcon, at: (usize, usize), color: u32, side: f32, window: &Window, cx: &App) -> AnyElement {
+        let scale = window.scale_factor();
+        let image = match mark {
+            GroupIcon::Glyph(glyph) => self.icon(at, glyph, color, side, scale, cx),
+            GroupIcon::Picture(picture) => Some(self.picture(at, picture, (side * scale).round() as u32)),
+            GroupIcon::Default => None,
+        };
         match image {
             Some(image) => img(image).size(px(side)).flex_none().into_any_element(),
             None => h_flex().size(px(side)).flex_none().justify_center().child(square(side * 0.45, rgb(color))).into_any_element(),
@@ -98,6 +121,7 @@ fn marker_svg(marker: Marker, glyph: Option<&Glyph>, accent: u32) -> String {
     let (body, stroke) = if selected { (TEXT_BRIGHT, accent) } else { (fill, TEXT_BRIGHT) };
     let ink = if selected { if ink(fill) == BG { fill } else { BG } } else { ink(fill) };
     let mark = match glyph {
+        _ if marker.picture => String::new(),
         Some(glyph) => format!(r#"<g transform="translate(5.5 5.5) scale(13)"><path d="{}" fill="{}"/></g>"#, glyph.path, hex(ink)),
         None => format!(r#"<circle cx="12" cy="12" r="3.5" fill="{}"/>"#, hex(ink)),
     };
@@ -123,6 +147,21 @@ fn marker_svg(marker: Marker, glyph: Option<&Glyph>, accent: u32) -> String {
         hex(body),
         hex(stroke),
     )
+}
+
+/// `picture` scaled to fit a clear square `side` across, in the atlas's BGRA.
+fn fitted(picture: &RgbaImage, side: u32) -> Arc<RenderImage> {
+    let (width, height) = picture.dimensions();
+    let scale = f64::from(side) / f64::from(width.max(height));
+    let fit = |length: u32| ((f64::from(length) * scale).round() as u32).clamp(1, side.max(1));
+    let scaled = imageops::resize(picture, fit(width), fit(height), imageops::FilterType::Triangle);
+    let mut square = RgbaImage::new(side.max(1), side.max(1));
+    let offset = |length: u32| i64::from((side.max(1) - length) / 2);
+    imageops::overlay(&mut square, &scaled, offset(scaled.width()), offset(scaled.height()));
+    for texel in square.pixels_mut() {
+        texel.0.swap(0, 2);
+    }
+    Arc::new(RenderImage::new([Frame::new(square)]))
 }
 
 fn render(svg: &str, width: u32, height: u32, cx: &App) -> Option<Arc<RenderImage>> {

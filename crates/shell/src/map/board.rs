@@ -9,10 +9,10 @@ use client::map::{
     state::{self, Mark, PALETTE, Saved},
 };
 use futures::{StreamExt, stream::BoxStream};
-use gpui_kit::{AsyncApp, Context, EventEmitter, Subscription, WeakEntity};
-use model::{Failure, Locale, Map, Point, Ref, Snapshot};
+use gpui_kit::{App, AppContext as _, AsyncApp, Context, Entity, EventEmitter, Subscription, WeakEntity};
+use model::{Failure, Icon, Locale, Map, Point, Ref, Snapshot};
 
-use super::group;
+use super::{group, icons::Icons, markers::GroupIcon};
 use crate::{
     Load,
     run::{Fix, Lease, Run, Tracked},
@@ -46,6 +46,9 @@ pub struct Board {
     id: Option<Ref>,
     locale: Option<Locale>,
     pub map: Load<Rc<Map>>,
+    // The copy's picture icons, shared with a board that takes the copy; it notifies this board when they are in.
+    icons: Option<(Entity<Icons>, Subscription)>,
+    art: PathBuf,
     // The copy is its load's last word: a board taking it needs no load of its own.
     settled: bool,
     // Shared so a frame can hold it while it paints.
@@ -72,22 +75,32 @@ pub struct Board {
     _fixes: Option<(Lease, Subscription)>,
 }
 
+/// A board's copy of a map, as another board takes it.
+pub struct Shared {
+    pub map: Rc<Map>,
+    icons: Entity<Icons>,
+    settled: bool,
+}
+
 impl Board {
-    pub fn new(state_dir: PathBuf) -> Self {
-        Self::with(state_dir, EVERY, true)
+    /// `art`: the pictures' cache, which icon sheets come from.
+    pub fn new(state_dir: PathBuf, art: PathBuf) -> Self {
+        Self::with(state_dir, art, EVERY, true)
     }
 
     /// The minimap's: it follows the player closely and never writes the user's state.
-    pub fn live(state_dir: PathBuf) -> Self {
-        Self::with(state_dir, LIVE_EVERY, false)
+    pub fn live(state_dir: PathBuf, art: PathBuf) -> Self {
+        Self::with(state_dir, art, LIVE_EVERY, false)
     }
 
-    fn with(state_dir: PathBuf, every: Duration, saves: bool) -> Self {
+    fn with(state_dir: PathBuf, art: PathBuf, every: Duration, saves: bool) -> Self {
         Self {
             state_dir,
             id: None,
             locale: None,
             map: Load::Pending,
+            icons: None,
+            art,
             settled: false,
             saved: Rc::default(),
             counts: Vec::new(),
@@ -116,34 +129,54 @@ impl Board {
         self.id.as_ref().zip(self.locale.as_ref())
     }
 
-    /// The map `id` in `locale`, when this board holds it, and whether its load is done.
-    pub fn loaded(&self, id: &Ref, locale: &Locale) -> Option<(Rc<Map>, bool)> {
-        match &self.map {
-            Load::Ready(map) if self.asked() == Some((id, locale)) => Some((map.clone(), self.settled)),
-            _ => None,
-        }
+    /// The map `id` in `locale`, when this board holds it.
+    pub fn loaded(&self, id: &Ref, locale: &Locale) -> Option<Shared> {
+        let (Load::Ready(map), Some((icons, _))) = (&self.map, &self.icons) else { return None };
+        (self.asked() == Some((id, locale))).then(|| Shared { map: map.clone(), icons: icons.clone(), settled: self.settled })
     }
 
-    /// Shows another board's copy; settled, it needs no load of its own.
-    pub fn take(&mut self, (map, settled): (Rc<Map>, bool), cx: &mut Context<Self>) {
-        self.install(map, cx);
+    /// Shows another board's copy, if any; true when it is settled and needs no load of its own.
+    pub fn take(&mut self, shared: Option<Shared>, cx: &mut Context<Self>) -> bool {
+        let Some(shared) = shared else { return false };
+        let settled = shared.settled;
+        self.share(shared, cx);
         self.settled = settled;
+        settled
+    }
+
+    /// Shows another board's copy while this board's own load may still be on its way.
+    pub fn share(&mut self, shared: Shared, cx: &mut Context<Self>) {
+        self.install(shared.map, Some(shared.icons), cx);
+    }
+
+    /// What group `at` of the shown map is drawn with.
+    pub fn icon<'a>(&'a self, at: (usize, usize), cx: &'a App) -> GroupIcon<'a> {
+        let Load::Ready(map) = &self.map else { return GroupIcon::Default };
+        let picture = || self.icons.as_ref().and_then(|(icons, _)| icons.read(cx).get(at));
+        match &map.categories[at.0].groups[at.1].icon {
+            Some(Icon::Glyph(glyph)) => GroupIcon::Glyph(glyph),
+            Some(Icon::Image { .. }) => picture().map_or(GroupIcon::Default, GroupIcon::Picture),
+            None => GroupIcon::Default,
+        }
     }
 
     /// Waits for the map `id` in `locale`; the one shown keeps its state on disk first.
     pub fn pending(&mut self, id: Ref, locale: Locale, cx: &mut Context<Self>) {
         self.save();
-        (self.id, self.locale, self.map, self.selected, self.mark) = (Some(id), Some(locale), Load::Pending, None, None);
-        self.settled = false;
+        (self.id, self.locale, self.map, self.icons) = (Some(id), Some(locale), Load::Pending, None);
+        (self.selected, self.mark, self.settled) = (None, None, false);
         self.watch(cx);
         cx.notify();
     }
 
     /// A fresh copy of the map on screen keeps the user's state, not what refers to its pins.
-    pub fn install(&mut self, map: Rc<Map>, cx: &mut Context<Self>) {
+    /// `icons`: those of another board's copy; `None` cuts this copy's own.
+    fn install(&mut self, map: Rc<Map>, icons: Option<Entity<Icons>>, cx: &mut Context<Self>) {
+        let icons = icons.unwrap_or_else(|| cx.new(|cx| Icons::new(&map, self.art.clone(), cx)));
+        self.icons = Some((icons.clone(), cx.observe(&icons, |_, _, cx| cx.notify())));
         // A copy shared after this board's own load failed is a first one too.
         let first = !matches!(self.map, Load::Ready(_));
-        let retiled = !matches!(&self.map, Load::Ready(shown) if shown.tiles == map.tiles);
+        let retiled = !matches!(&self.map, Load::Ready(shown) if shown.tile_sets == map.tile_sets);
         if first {
             let saved = self.id.as_ref().and_then(|id| state::load(&self.state_dir, id));
             self.saved = Rc::new(saved.unwrap_or_else(|| Saved::first(&map)));
@@ -351,8 +384,9 @@ impl Board {
 
     /// Lets go of the map, closed for a while; the user's state of it was saved when it closed.
     pub fn forget(&mut self) {
-        (self.id, self.locale, self.map, self.selected, self.mark, self.settled) = (None, None, Load::Pending, None, None, false);
-        (self.saved, self.counts, self.found_counts, self.haystacks) = (Rc::default(), Vec::new(), Vec::new(), Vec::new());
+        (self.id, self.locale, self.map, self.icons, self.selected, self.mark) = (None, None, Load::Pending, None, None, None);
+        (self.settled, self.saved, self.counts, self.found_counts, self.haystacks) =
+            (false, Rc::default(), Vec::new(), Vec::new(), Vec::new());
     }
 
     pub fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
@@ -456,7 +490,7 @@ pub async fn show(board: &WeakEntity<Board>, mut snapshots: BoxStream<'static, S
     while let Some(snapshot) = snapshots.next().await {
         board.update(cx, |board, cx| match snapshot {
             Snapshot::Cached(Some(_)) if matches!(board.map, Load::Ready(_)) => {}
-            Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
+            Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), None, cx),
             // The network is next.
             Snapshot::Cached(None) => {}
             Snapshot::Fresh(Err(e)) => board.fail(e, cx),

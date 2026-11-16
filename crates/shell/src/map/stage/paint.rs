@@ -1,6 +1,6 @@
 //! Painting the map: tiles, regions, labels, pins, the user's own, the player.
 
-use std::{ops::RangeInclusive, rc::Rc, sync::Arc};
+use std::{ops::RangeInclusive, rc::Rc, sync::Arc, time::Instant};
 
 use anyhow::Context as _;
 use blocking::unblock;
@@ -11,7 +11,7 @@ use gpui_kit::{
     rgb, size,
 };
 use image::{DynamicImage, Frame, RgbaImage};
-use model::{Glyph, Map, Point};
+use model::{Glyph, Map, Point, Tiles};
 
 use super::{
     Stage, Walk,
@@ -23,9 +23,13 @@ use crate::{
     Load,
     map::{
         board::plane,
-        markers::{Look, Marker, SIZE, TIP, ink},
+        markers::{GroupIcon, Look, Marker, PICTURE, SIZE, TIP, ink},
     },
-    ui::{art, assets::Icon, theme::*},
+    ui::{
+        art::{self, Fetched},
+        assets::Icon,
+        theme::*,
+    },
 };
 
 const PLAYER: f32 = 34.;
@@ -40,6 +44,8 @@ const COUNT_TEXT: f32 = 10.;
 const RING: (f32, f32) = (1.5, 0.7);
 // Place names stay readable at every map's own sizes.
 const LABEL_SIZES: (f32, f32) = (11., 18.);
+// A tile, or a map that is one picture, is held whole in memory and in the atlas: at most this many texels across.
+const TILE_SIDE: u32 = 4096;
 
 /// What a frame paints from the board, copied out of it: painting text needs the app, not a borrow of the board.
 struct Shot {
@@ -61,22 +67,33 @@ impl Stage {
             (player, Shot { map: map.clone(), saved: board.saved.clone(), selected: board.selected, mark: board.mark, accent: accent(cx) })
         };
         let (map, saved, selected, accent) = (shot.map.clone(), &shot.saved, shot.selected, shot.accent);
+        let (set, pyramid) = saved.tile_set_of(&map);
+        let pyramid = &pyramid.tiles;
+        // Another tile set: its own tiles and levels.
+        if set != self.set {
+            (self.set, self.shown.markers) = (set, None);
+            self.drop_tiles();
+        }
         // The overlays were laid out for the old size: one more frame places them.
         if self.bounds != bounds {
             window.request_animation_frame();
         }
         self.bounds = bounds;
-        self.tile = f64::from(map.tiles.size) / f64::from(window.scale_factor());
+        self.tile = f64::from(pyramid.size) / f64::from(window.scale_factor());
         let area = self.size();
-        let spans = self.spans(&map);
+        let spans = self.spans(pyramid);
         if self.camera.is_none() {
-            self.camera = Some(home(&map, area, &spans));
+            self.camera = Some(home(&map, pyramid, area, &spans));
         }
-        let mini = self.live.as_ref().map(|live| live.read(cx).span(&map, self.tile).clamp(*spans.start(), *spans.end()));
-        if let (Some(span), Some(camera)) = (mini, &mut self.camera) {
-            camera.span = span;
+        let mini = self.live.as_ref().map(|live| live.read(cx).span(pyramid.max_zoom, self.tile));
+        // Within this set's levels: a view kept from another set may lie outside them.
+        if let Some(camera) = &mut self.camera {
+            camera.span = mini.unwrap_or(camera.span).clamp(*spans.start(), *spans.end());
         }
-        self.animate(&map, player, window);
+        self.animate(&spans, player, window);
+        if let (Some(within), Some(camera)) = (pyramid.bounds, &mut self.camera) {
+            camera.keep_in(within, area);
+        }
         let Some(camera) = self.camera else { return };
 
         // On the window, not the element: a drag goes on outside the map. The minimap only zooms.
@@ -103,7 +120,7 @@ impl Stage {
             Bounds::new(center - point(px(side / 2.), px(side / 2.)), size(px(side), px(side)))
         };
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            self.paint_tiles(&map, &camera, window, cx);
+            self.paint_tiles(pyramid, &camera, window, cx);
 
             let zoom = (camera.span / self.tile).log2() as f32;
             let shows = |(low, high): (f32, f32)| (low..=high).contains(&zoom);
@@ -113,21 +130,24 @@ impl Stage {
                 .zip(&self.shown.regions)
                 .enumerate()
                 .filter(|(_, (region, _))| saved.regions && shows(region.zoom) && !saved.hidden_regions.contains(&region.id));
-            for (index, (region, extent)) in regions {
-                // An outline is tessellated anew each frame: none for a region off the view.
-                let Some((low, high)) = *extent else { continue };
-                let (((left, top), (right, bottom)), pad) =
-                    ((camera.to_view(low, area), camera.to_view(high, area)), f64::from(region.thickness));
-                if right < -pad || bottom < -pad || left > area.0 + pad || top > area.1 + pad {
-                    continue;
-                }
-                let hovered = self.shown.hovered_region == Some(index);
-                let corners: Vec<_> = region.outline.iter().map(|at| place(camera.to_view(*at, area))).collect();
-                if hovered && let Some(fill) = path(&corners, PathBuilder::fill()) {
-                    window.paint_path(fill, alpha(region.color, REGION_FILL));
-                }
-                if let Some(outline) = path(&corners, PathBuilder::stroke(px(region.thickness))) {
-                    window.paint_path(outline, alpha(region.color, if hovered { 1. } else { REGION_LINE }));
+            for (index, (region, extents)) in regions {
+                // A miter (lyon's limit is 4) reaches up to twice the stroke's width past a corner.
+                let (hovered, pad) = (self.shown.hovered_region == Some(index), f64::from(region.thickness) * 2.);
+                // An outline is tessellated anew each frame: none for a ring off the view.
+                for (ring, extent) in region.outlines.iter().zip(extents) {
+                    let Some((low, high)) = *extent else { continue };
+                    let ((left, top), (right, bottom)) = (camera.to_view(low, area), camera.to_view(high, area));
+                    if right < -pad || bottom < -pad || left > area.0 + pad || top > area.1 + pad {
+                        continue;
+                    }
+                    self.corners.clear();
+                    self.corners.extend(ring.iter().map(|at| place(camera.to_view(*at, area))));
+                    if hovered && let Some(fill) = path(&self.corners, PathBuilder::fill()) {
+                        window.paint_path(fill, alpha(region.color, REGION_FILL));
+                    }
+                    if let Some(outline) = path(&self.corners, PathBuilder::stroke(px(region.thickness))) {
+                        window.paint_path(outline, alpha(region.color, if hovered { 1. } else { REGION_LINE }));
+                    }
                 }
             }
 
@@ -162,7 +182,7 @@ impl Stage {
             }
             for index in mark_order(saved, shot.mark).collect::<Vec<_>>() {
                 let look = self.mark_look(index, shot.mark);
-                let marker = Marker { group: None, fill: saved.marks[index].color, look, found: false, level: None };
+                let marker = Marker { group: None, fill: saved.marks[index].color, look, found: false, level: None, picture: false };
                 self.paint_look(marker, None, camera.to_view(plane(saved.marks[index].at), area), window, cx);
             }
 
@@ -198,7 +218,8 @@ impl Stage {
         }
         let board = self.board.read(cx);
         let span = 2f64.powf(step as f64 / 2.);
-        let close = span >= self.tile * 2f64.powi(map.tiles.max_zoom.into()) * 0.9;
+        let deepest = board.saved.tile_set_of(map).1.tiles.max_zoom;
+        let close = span >= self.tile * 2f64.powi(deepest.into()) * 0.9;
         let markers = Rc::new(pins::markers(&map.pins, |index| board.shows(map, index), span, close || !board.saved.clusters));
         self.shown.markers = Some((step, markers.clone()));
         markers
@@ -207,21 +228,38 @@ impl Stage {
     fn paint_marker(&mut self, shot: &Shot, index: usize, tip: Pixel, window: &mut Window, cx: &App) {
         let pin = &shot.map.pins[index];
         let category = &shot.map.categories[pin.group.0];
-        let look = self.look(index, shot.selected);
-        let marker =
-            Marker { group: Some(pin.group), fill: category.color, look, found: shot.saved.found.contains(&pin.id), level: pin.level };
-        self.paint_look(marker, category.groups[pin.group.1].icon.as_ref(), tip, window, cx);
+        let (glyph, picture) = match self.board.read(cx).icon(pin.group, cx) {
+            GroupIcon::Glyph(glyph) => (Some(glyph), None),
+            GroupIcon::Picture(picture) => (None, Some(picture)),
+            GroupIcon::Default => (None, None),
+        };
+        let (look, found) = (self.look(index, shot.selected), shot.saved.found.contains(&pin.id));
+        let marker = Marker { group: Some(pin.group), fill: category.color, look, found, level: pin.level, picture: picture.is_some() };
+        self.paint_look(marker, glyph, tip, window, cx);
+        let Some(picture) = picture else { return };
+        let (left, top, side) = PICTURE;
+        let (scale, device) = (look.scale(), window.scale_factor());
+        let image = self.images.picture(pin.group, picture, (side * scale * f64::from(device)).round() as u32);
+        let corner = (tip.0 - (TIP.0 - left) * scale, tip.1 - (TIP.1 - top) * scale);
+        // Gray as the faded shape under it, once found.
+        self.paint_snapped(image, corner, found && look != Look::Selected, window);
     }
 
-    /// A marker at its look's size with its tip on `tip`, on whole device pixels so the image stays sharp.
+    /// A marker at its look's size with its tip on `tip`.
     fn paint_look(&mut self, marker: Marker, glyph: Option<&Glyph>, tip: Pixel, window: &mut Window, cx: &App) {
-        let (scale, device) = (marker.look.scale(), window.scale_factor());
-        let Some(image) = self.images.marker(marker, glyph, device, cx) else { return };
+        let scale = marker.look.scale();
+        let Some(image) = self.images.marker(marker, glyph, window.scale_factor(), cx) else { return };
+        self.paint_snapped(image, (tip.0 - TIP.0 * scale, tip.1 - TIP.1 * scale), false, window);
+    }
+
+    /// An image made at device pixels, its top left at `corner` on a whole device pixel so it stays sharp.
+    fn paint_snapped(&self, image: Arc<RenderImage>, corner: Pixel, gray: bool, window: &mut Window) {
+        let device = window.scale_factor();
         let snap = |at: f64| ((at * f64::from(device)).round() / f64::from(device)) as f32;
-        let corner = self.bounds.origin + point(px(snap(tip.0 - TIP.0 * scale)), px(snap(tip.1 - TIP.1 * scale)));
+        let corner = self.bounds.origin + point(px(snap(corner.0)), px(snap(corner.1)));
         let (pixels, shrink) = (image.size(0), 1. / device);
         let rect = Bounds::new(corner, size(px(pixels.width.0 as f32 * shrink), px(pixels.height.0 as f32 * shrink)));
-        let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+        let _ = window.paint_image(rect, rect, Corners::default(), image, 0, gray);
     }
 
     pub(super) fn mark_look(&self, index: usize, mark: Option<usize>) -> Look {
@@ -232,9 +270,9 @@ impl Stage {
         }
     }
 
-    fn paint_tiles(&mut self, map: &Rc<Map>, camera: &Camera, window: &mut Window, cx: &mut Context<Self>) {
-        let (area, origin) = (self.size(), self.bounds.origin);
-        let level = camera.level(self.tile, &(map.tiles.min_zoom..=map.tiles.max_zoom));
+    fn paint_tiles(&mut self, pyramid: &Tiles, camera: &Camera, window: &mut Window, cx: &mut Context<Self>) {
+        let (area, origin, now) = (self.size(), self.bounds.origin, Instant::now());
+        let level = camera.level(self.tile, &(pyramid.min_zoom..=pyramid.max_zoom));
         let (columns, rows) = camera.tiles(level, area);
         let rect = |[left, top, right, bottom]: [f64; 4]| {
             let corner = |x: f64, y: f64| origin + point(px(x as f32), px(y as f32));
@@ -243,17 +281,18 @@ impl Stage {
         let middle = ((columns.start() + columns.end()) / 2, (rows.start() + rows.end()) / 2);
         let mut wanted = Vec::new();
         for row in rows {
-            for column in columns.clone() {
+            for column in columns.clone().filter(|column| pyramid.covers(level, *column, row)) {
                 let place = rect(camera.tile(level, column, row, area));
                 // A stand-in paints only its share of the tile: an ancestor's part scaled up, a descendant whole.
                 let exact = self.tiles.draw((level, column, row), |(from, column, row), image| {
                     let whole = rect(camera.tile(from, column, row, area));
                     let part = place.intersect(&whole);
                     // Out to the padded image's edge, so `part` maps onto the real texels.
-                    let whole = whole.dilate(whole.size.width / map.tiles.size as f32);
+                    let texels = image.size(0).width.0.saturating_sub(2).max(1);
+                    let whole = whole.dilate(whole.size.width / texels as f32);
                     let _ = window.paint_image(part, whole, Corners::default(), image, 0, false);
                 });
-                if !exact && let Some(load) = self.tiles.wanted((level, column, row)) {
+                if !exact && let Some(load) = self.tiles.wanted((level, column, row), pyramid.min_zoom, now) {
                     // The middle of the view loads first.
                     wanted.push((column.abs_diff(middle.0).pow(2) + row.abs_diff(middle.1).pow(2), load));
                 }
@@ -265,20 +304,30 @@ impl Stage {
         }
         wanted.sort_by_key(|(distance, _)| *distance);
         for (_, key) in wanted {
-            if self.tiles.claim(key) {
-                self.load_tile(map, key, cx);
+            if self.tiles.claim(key, now) {
+                self.load_tile(pyramid, key, cx);
             }
         }
     }
 
-    fn load_tile(&self, map: &Map, key: Key, cx: &mut Context<Self>) {
-        let (url, cache, epoch) = (map.tiles.url(key.0, key.1, key.2), self.tile_dir.clone(), self.epoch);
+    fn load_tile(&self, pyramid: &Tiles, key: Key, cx: &mut Context<Self>) {
+        let (url, cache, epoch) = (pyramid.url(key.0, key.1, key.2), self.tile_dir.clone(), self.epoch);
         cx.spawn(async move |stage, cx| {
-            let image = unblock(move || decode(&art::load(&cache, &url)?)).await;
+            // Bytes that are no tile count as one the server lacks.
+            let fetched = unblock(move || {
+                art::tile(&cache, &url).and_then(|bytes| match decode(&bytes) {
+                    Ok(image) => Fetched::Ready(image),
+                    Err(e) => {
+                        log::debug!("tile {url}: {e:#}");
+                        Fetched::Absent
+                    }
+                })
+            })
+            .await;
             stage
                 .update(cx, |stage, cx| {
                     if stage.epoch == epoch {
-                        stage.tiles.loaded(key, image.ok());
+                        stage.tiles.loaded(key, fetched, Instant::now());
                         cx.notify();
                     }
                 })
@@ -293,11 +342,12 @@ pub(super) fn mark_order(saved: &Saved, mark: Option<usize>) -> impl DoubleEnded
     (0..saved.marks.len()).filter(move |&index| saved.marks_shown && mark != Some(index)).chain(mark)
 }
 
-/// A tile in the atlas's BGRA with its edge texels repeated around it:
-/// the atlas has no gaps and filters across an image's border, which shows as seams.
+/// A tile in the atlas's BGRA with its edge texels repeated around it: the atlas has no gaps and filters across an
+/// image's border, which shows as seams. One not square, as a map that is one picture may be, is made square with
+/// clear texels right and below.
 fn decode(bytes: &[u8]) -> anyhow::Result<Arc<RenderImage>> {
     // Most tiles are lossy RGB: read as decoded, without an RGBA copy first.
-    let ((width, height), texels, depth) = match image::load_from_memory_with_format(bytes, image::ImageFormat::WebP)? {
+    let ((width, height), texels, depth) = match art::picture(bytes, TILE_SIDE)? {
         DynamicImage::ImageRgb8(tile) => (tile.dimensions(), tile.into_raw(), 3),
         tile => {
             let tile = tile.into_rgba8();
@@ -305,21 +355,25 @@ fn decode(bytes: &[u8]) -> anyhow::Result<Arc<RenderImage>> {
         }
     };
     let (columns, rows) = (width as usize, height as usize);
-    let mut padded = Vec::with_capacity((columns + 2) * (rows + 2) * 4);
-    for y in 0..rows + 2 {
-        let row = &texels[y.saturating_sub(1).min(rows - 1) * columns * depth..][..columns * depth];
-        for x in 0..columns + 2 {
-            let texel = &row[x.saturating_sub(1).min(columns - 1) * depth..][..depth];
+    let side = columns.max(rows);
+    let mut padded = Vec::with_capacity((side + 2) * (side + 2) * 4);
+    for y in (0..side + 2).map(|y| y.saturating_sub(1).min(side - 1)) {
+        for x in (0..side + 2).map(|x| x.saturating_sub(1).min(side - 1)) {
+            if x >= columns || y >= rows {
+                padded.extend_from_slice(&[0; 4]);
+                continue;
+            }
+            let texel = &texels[(y * columns + x) * depth..][..depth];
             padded.extend_from_slice(&[texel[2], texel[1], texel[0], texel.get(3).copied().unwrap_or(u8::MAX)]);
         }
     }
-    let padded = RgbaImage::from_raw(width + 2, height + 2, padded).context("tile size")?;
+    let padded = RgbaImage::from_raw(side as u32 + 2, side as u32 + 2, padded).context("tile size")?;
     Ok(Arc::new(RenderImage::new([Frame::new(padded)])))
 }
 
-/// The pins whole, with room around them; the middle of the plane for a map without any.
-fn home(map: &Map, area: Pixel, spans: &RangeInclusive<f64>) -> Camera {
-    match extent(map.pins.iter().map(|pin| pin.at)) {
+/// What the tiles cover, else the pins, whole with room around them; the middle of the plane for a map without either.
+fn home(map: &Map, pyramid: &Tiles, area: Pixel, spans: &RangeInclusive<f64>) -> Camera {
+    match pyramid.bounds.map(|[low, high]| (low, high)).or_else(|| extent(map.pins.iter().map(|pin| pin.at))) {
         Some((low, high)) => Camera::fit(low, high, (area.0 * 0.9, area.1 * 0.9), spans),
         None => Camera { center: Point { x: 0.5, y: 0.5 }, span: spans.start() * 2. },
     }
@@ -356,10 +410,13 @@ fn text(text: SharedString, height: f32, color: u32, shadow: bool, at: gpui_kit:
 
 #[cfg(test)]
 mod tests {
-    use image::{ExtendedColorType, codecs::webp::WebPEncoder};
+    use image::{
+        ExtendedColorType, ImageEncoder,
+        codecs::{jpeg::JpegEncoder, png::PngEncoder, webp::WebPEncoder},
+    };
 
     #[test]
-    fn a_tile_is_padded_with_its_edges_in_bgra() {
+    fn a_tile_is_padded_with_its_edges_in_bgra_and_made_square() {
         // Red, then green: without alpha, and with the green half transparent.
         for (texels, color, alpha) in [
             (vec![255, 0, 0, 0, 255, 0], ExtendedColorType::Rgb8, 255),
@@ -368,9 +425,22 @@ mod tests {
             let mut webp = Vec::new();
             WebPEncoder::new_lossless(&mut webp).encode(&texels, 2, 1, color).unwrap();
             let tile = super::decode(&webp).unwrap();
-            assert_eq!((tile.size(0).width.0, tile.size(0).height.0), (4, 3));
+            assert_eq!((tile.size(0).width.0, tile.size(0).height.0), (4, 4));
             let row = [0, 0, 255, 255, 0, 0, 255, 255, 0, 255, 0, alpha, 0, 255, 0, alpha];
-            assert_eq!(tile.as_bytes(0).unwrap(), row.repeat(3));
+            assert_eq!(tile.as_bytes(0).unwrap(), [row.repeat(2), [0; 32].to_vec()].concat());
         }
+    }
+
+    #[test]
+    fn tiles_are_webp_png_or_jpeg_by_their_first_bytes() {
+        let gray = [128u8; 4 * 4 * 3];
+        let (mut png, mut jpeg) = (Vec::new(), Vec::new());
+        PngEncoder::new(&mut png).write_image(&gray, 4, 4, ExtendedColorType::Rgb8).unwrap();
+        JpegEncoder::new(&mut jpeg).write_image(&gray, 4, 4, ExtendedColorType::Rgb8).unwrap();
+        for bytes in [png, jpeg] {
+            assert_eq!(super::decode(&bytes).unwrap().size(0).width.0, 6);
+        }
+        assert!(super::decode(b"GIF89a\x01\x00\x01\x00").is_err());
+        assert!(super::decode(b"<html>403</html>").is_err());
     }
 }
