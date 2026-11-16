@@ -29,7 +29,7 @@ use crate::{
     library::{GamePicker, Library, Marks, SIDEBAR_WIDTH, Sidebar, vacant},
     log_view::{LogEvent, LogView},
     map::{MapEvent, MapView, Maps, map_panel},
-    remote::{Remote, RemoteTab, Serve},
+    remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
     run::{Runs, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
@@ -56,6 +56,8 @@ pub struct Page {
     picker: Entity<GamePicker>,
     settings: Entity<Settings>,
     settings_view: Entity<SettingsView>,
+    /// None in a build without the remote panel's server.
+    remote_view: Option<Entity<RemoteView>>,
     _tray: Entity<TrayIcon>,
     layer: Entity<Layer>,
     // Drawn in place of the page while over a game.
@@ -127,14 +129,16 @@ impl Page {
             overlay: cx.new(|cx| OverlaySettings::new(layer.clone(), hotkeys.clone(), trainers.clone(), cx)).into(),
             hotkeys: cx.new(|cx| HotkeySettings::new(hotkeys.clone(), cx)).into(),
             resources: cx.new(|cx| ResourcesView::new(resources.clone(), cx)).into(),
-            remote: serve.map(|serve| {
-                let owners = (library.clone(), trainers.clone(), runs.clone());
-                let remote = cx.new(|cx| Remote::new(serve, settings.clone(), owners, &paths, cx));
-                cx.new(|cx| RemoteTab::new(remote, settings.clone(), cx)).into()
-            }),
         };
         let settings_view = cx.new(|cx| SettingsView::new(settings.clone(), folders, tabs, window, cx));
         cx.observe(&settings_view, |_, _, cx| cx.notify()).detach();
+        let remote_view = serve.map(|serve| {
+            let owners = (library.clone(), trainers.clone(), runs.clone());
+            let remote = cx.new(|cx| Remote::new(serve, settings.clone(), owners, &paths, cx));
+            let view = cx.new(|cx| RemoteView::new(remote, settings.clone(), cx));
+            cx.observe(&view, |_, _, cx| cx.notify()).detach();
+            view
+        });
         cx.subscribe(&settings_view, |page, _, _: &Looked, cx| page.resources.update(cx, |resources, cx| resources.measure(cx))).detach();
         let hud = cx.new(|cx| {
             let (library, trainers, runs, hotkeys) = (library.clone(), trainers.clone(), runs.clone(), hotkeys.clone());
@@ -157,6 +161,9 @@ impl Page {
         cx.subscribe(&hud, |page, _, _: &Entered, cx| {
             page.hero.update(cx, |hero, cx| hero.close(cx));
             page.settings_view.update(cx, |view, cx| view.close(cx));
+            if let Some(remote) = &page.remote_view {
+                remote.update(cx, |view, cx| view.close(cx));
+            }
             page.log.update(cx, |log, cx| log.close(cx));
             cx.notify();
         })
@@ -172,6 +179,7 @@ impl Page {
             runs,
             settings,
             settings_view,
+            remote_view,
             _tray: tray,
             layer,
             hud,
@@ -257,7 +265,7 @@ impl Render for Page {
             .size_full()
             .bg(rgb(BG))
             .child(grid(32., line(0.025)))
-            .child(header(self.library.read(cx), self.account.read(cx), &self.settings_view, window, cx))
+            .child(header(self.library.read(cx), self.account.read(cx), &self.settings_view, self.remote_view.as_ref(), window, cx))
             .child(
                 h_flex()
                     .flex_1()
@@ -271,6 +279,7 @@ impl Render for Page {
             )
             .child(status_bar(&self.log, self.runs.read(cx), self.library.read(cx), self.trainers.read(cx), self.hotkeys.read(cx), cx))
             .when(self.settings_view.read(cx).is_open(), |page| page.child(self.settings_view.clone()))
+            .children(self.remote_view.clone().filter(|view| view.read(cx).is_open()))
             .children(self.cheat_list.read(cx).editor().cloned())
             .when(self.picker.read(cx).is_open(), |page| page.child(self.picker.clone()))
             .into_any_element()

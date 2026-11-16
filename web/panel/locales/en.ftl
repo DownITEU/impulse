@@ -13,7 +13,7 @@ link-lost = OFFLINE
 
 connection-title = Connection
 connection-close = Close the connection panel
-connection-pairing = To pair another device, open Settings > REMOTE in Impulse and scan the QR code with it.
+connection-pairing = To pair another device, click the phone button in Impulse's title bar and scan the QR code with it.
 connection-follows = The language and the accent follow Impulse.
 
 ## Placeholders
@@ -24,7 +24,7 @@ placeholder-outdated = Reload needed
 placeholder-outdated-body = Impulse was updated: this page is older than it.
 placeholder-reload = Reload
 placeholder-offline = Not connected
-placeholder-offline-body = Open Impulse on your PC, turn the remote panel on in Settings > REMOTE and scan its QR code. This device must be on the same network.
+placeholder-offline-body = Open Impulse on your PC, click the phone button in its title bar, turn phone access on and scan the QR code. This device must be on the same network.
 placeholder-connecting = Connecting to Impulse
 placeholder-pick = Pick a game
 placeholder-pick-body = No game is open. Open the library and choose one.

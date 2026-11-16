@@ -28,17 +28,15 @@ enum Tab {
     Overlay,
     Hotkeys,
     App,
-    Remote,
     Resources,
 }
 
 // The tabs without a page yet are shown but not clickable.
-const TABS: [(Key, Option<Tab>); 7] = [
+const TABS: [(Key, Option<Tab>); 6] = [
     (key::SETTINGS_APPEARANCE, Some(Tab::Appearance)),
     (key::SETTINGS_OVERLAY, Some(Tab::Overlay)),
     (key::SETTINGS_HOTKEYS, Some(Tab::Hotkeys)),
     (key::SETTINGS_APP, Some(Tab::App)),
-    (key::SETTINGS_REMOTE, Some(Tab::Remote)),
     (key::SETTINGS_RESOURCES, Some(Tab::Resources)),
     (key::SETTINGS_ABOUT, None),
 ];
@@ -55,8 +53,6 @@ pub struct Tabs {
     pub overlay: AnyView,
     pub hotkeys: AnyView,
     pub resources: AnyView,
-    /// A build without the remote panel's server has no tab for it.
-    pub remote: Option<AnyView>,
 }
 
 /// The dialog opened or showed another tab: what it shows may be read again.
@@ -109,8 +105,8 @@ impl SettingsView {
     }
 
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().w(px(168.)).flex_none().py(px(8.)).border_r_1().border_color(line(0.07)).bg(rgb(SUNKEN)).children(
-            TABS.into_iter().filter(|(_, tab)| *tab != Some(Tab::Remote) || self.tabs.remote.is_some()).map(|(name, tab)| {
+        v_flex().w(px(168.)).flex_none().py(px(8.)).border_r_1().border_color(line(0.07)).bg(rgb(SUNKEN)).children(TABS.into_iter().map(
+            |(name, tab)| {
                 let current = tab == Some(self.tab);
                 h_flex()
                     .id(name.0)
@@ -129,8 +125,8 @@ impl SettingsView {
                     })
                     .child(div().w(px(6.)).when(current, |cell| cell.child(square(6., rgb(accent(cx))))))
                     .child(tracked(&t(cx, name), 12., 0.12))
-            }),
-        )
+            },
+        ))
     }
 
     fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -241,7 +237,6 @@ impl Render for SettingsView {
                 Tab::Overlay => self.tabs.overlay.clone().into_any_element(),
                 Tab::Hotkeys => self.tabs.hotkeys.clone().into_any_element(),
                 Tab::App => self.app(cx).into_any_element(),
-                Tab::Remote => self.tabs.remote.clone().map_or_else(|| div().into_any_element(), AnyView::into_any_element),
                 Tab::Resources => self.tabs.resources.clone().into_any_element(),
             }),
         );

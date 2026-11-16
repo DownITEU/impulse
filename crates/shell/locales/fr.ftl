@@ -248,7 +248,6 @@ settings-appearance = APPARENCE
 settings-overlay = OVERLAY
 settings-hotkeys = RACCOURCIS
 settings-app = APP
-settings-remote = À DISTANCE
 settings-resources = RESSOURCES
 settings-about = À PROPOS
 accent = ACCENT
@@ -280,6 +279,8 @@ folder-select = Choisir le dossier
 ## Remote
 
 remote = PANNEAU À DISTANCE
+remote-open = Panneau à distance : piloter Impulse depuis un téléphone
+remote-switch = ACCÈS TÉLÉPHONE
 remote-hint = piloter Impulse depuis un téléphone sur ce réseau
 remote-address = ADRESSE
 remote-address-hint = à scanner avec l'appareil photo : le code associe une fois et change toutes les cinq minutes
@@ -291,6 +292,10 @@ remote-device = appareil { $number }
 remote-unknown-device = NAVIGATEUR
 remote-revoke = RÉVOQUER
 remote-trust = HTTP simple : tout ce réseau peut le voir. Réseaux de confiance seulement.
+remote-tips = SI LE TÉLÉPHONE NE SE CONNECTE PAS
+remote-tip-network = Le téléphone doit être sur le réseau de ce PC : pas en données mobiles, sur un Wi-Fi invité ou un VPN.
+remote-tip-firewall = Le pare-feu Windows peut bloquer Impulse sans rien demander, surtout sur un réseau public : rendez ce réseau privé, ou autorisez Impulse dans Sécurité Windows > Pare-feu et protection du réseau > Autoriser une application via le pare-feu.
+remote-tip-isolation = Certains routeurs isolent les appareils Wi-Fi entre eux (isolation AP ou client) : désactivez-la, ou essayez un autre réseau.
 remote-note-changed = La liste a changé : réessayez.
 remote-note-not-live = Lancez d'abord le jeu.
 remote-note-busy = Une autre partie tourne, ou le trainer n'est pas encore là.

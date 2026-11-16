@@ -2,7 +2,7 @@
 //! the owners' state and the commands it applies through them.
 
 mod command;
-mod tab;
+mod view;
 mod views;
 
 use std::{collections::HashMap, fs, io, iter, net::SocketAddr, path::PathBuf, sync::Arc, time::Instant};
@@ -15,7 +15,7 @@ use client::{
     storage::{Paths, Stored},
 };
 use futures::{FutureExt, StreamExt, future::BoxFuture};
-use gpui_kit::{App, AppContext as _, Context, Entity, Task};
+use gpui_kit::{App, AppContext as _, Context, Entity, SharedString, Task};
 use qrcodegen::{QrCode, QrCodeEcc};
 
 use crate::{
@@ -24,7 +24,7 @@ use crate::{
     settings::Settings,
     trainer::{TrainerEvent, Trainers},
 };
-pub use tab::RemoteTab;
+pub use view::RemoteView;
 use views::{Dirty, Shown};
 
 /// What `app` hands over to serve the panel: where it listens and the serving future, for the server's side of a
@@ -50,7 +50,8 @@ enum State {
 }
 
 struct On {
-    address: SocketAddr,
+    /// `http://<address>`: shown as it is, and with the pairing code in the QR code.
+    link: SharedString,
     views: Views,
     pairing: Pairing,
     /// The pairing URL, renewed with its code.
@@ -120,10 +121,10 @@ impl Remote {
         matches!(self.state, State::Failed)
     }
 
-    /// Where the server listens and the pairing URL's QR code.
-    pub fn address(&self) -> Option<(SocketAddr, Option<Arc<QrCode>>)> {
+    /// The server's link and the pairing URL's QR code, while it listens.
+    pub fn link(&self) -> Option<(SharedString, Option<Arc<QrCode>>)> {
         let State::On(on) = &self.state else { return None };
-        Some((on.address, on.qr.clone()))
+        Some((on.link.clone(), on.qr.clone()))
     }
 
     pub fn devices(&self) -> &[Device] {
@@ -155,8 +156,9 @@ impl Remote {
                         }
                     }
                 });
+                log::info!("remote: serving on {address}");
                 self.state = State::On(Box::new(On {
-                    address,
+                    link: format!("http://{address}").into(),
                     views,
                     pairing: Pairing::default(),
                     qr: None,
@@ -187,7 +189,7 @@ impl Remote {
     fn renew(&mut self, cx: &mut Context<Self>) {
         let State::On(on) = &mut self.state else { return };
         // In the fragment, the code never reaches a request line: the page reads it and clears it.
-        let url = format!("http://{}/", on.address) + "#" + on.pairing.code(Instant::now());
+        let url = format!("{}/#{}", on.link, on.pairing.code(Instant::now()));
         on.qr = QrCode::encode_text(&url, QrCodeEcc::Medium).ok().map(Arc::new);
         on._renew = cx.spawn(async move |remote, cx| {
             cx.background_executor().timer(CODE_LIFE).await;
@@ -201,6 +203,7 @@ impl Remote {
             Ask::Pair { code, user_agent, reply } => {
                 let State::On(on) = &mut self.state else { return };
                 let token = on.pairing.redeem(&code, Instant::now()).then(|| self.devices.edit(|devices| devices.add(&user_agent)));
+                log::info!("remote: pairing {}", if token.is_some() { "accepted" } else { "refused" });
                 if token.is_some() {
                     self.renew(cx);
                 }

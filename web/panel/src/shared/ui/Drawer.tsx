@@ -97,7 +97,8 @@ export const Drawer = ({ open, side, label, children, onClose }: DrawerProps) =>
 };
 
 function focusFirst(panel: HTMLElement | null): void {
-    panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
+    // The panel is still sliding in: scrolling to it would shift the page.
+    panel?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus({ preventScroll: true });
 }
 
 function trapTab(event: KeyboardEvent, panel: HTMLElement | null): void {

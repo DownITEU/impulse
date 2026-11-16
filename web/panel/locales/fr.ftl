@@ -13,7 +13,7 @@ link-lost = HORS LIGNE
 
 connection-title = Connexion
 connection-close = Fermer le panneau de connexion
-connection-pairing = Pour associer un autre appareil, ouvrez Paramètres > À DISTANCE dans Impulse et scannez le code QR avec lui.
+connection-pairing = Pour associer un autre appareil, cliquez sur le bouton téléphone dans la barre de titre d'Impulse et scannez le code QR avec lui.
 connection-follows = La langue et la couleur d'accent suivent Impulse.
 
 ## Placeholders
@@ -24,7 +24,7 @@ placeholder-outdated = Rechargement nécessaire
 placeholder-outdated-body = Impulse a été mis à jour : cette page est plus ancienne que lui.
 placeholder-reload = Recharger
 placeholder-offline = Non connecté
-placeholder-offline-body = Ouvrez Impulse sur votre PC, activez le panneau à distance dans Paramètres > À DISTANCE et scannez son code QR. Cet appareil doit être sur le même réseau.
+placeholder-offline-body = Ouvrez Impulse sur votre PC, cliquez sur le bouton téléphone dans sa barre de titre, activez l'accès téléphone et scannez le code QR. Cet appareil doit être sur le même réseau.
 placeholder-connecting = Connexion à Impulse
 placeholder-pick = Choisissez un jeu
 placeholder-pick-body = Aucun jeu n'est ouvert. Ouvrez la bibliothèque et choisissez-en un.

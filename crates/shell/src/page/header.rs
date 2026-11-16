@@ -1,7 +1,8 @@
 //! The custom title bar: gaps drag the window, controls occlude the drag area.
 
 use gpui_kit::{
-    App, Entity, FontWeight, IntoElement, SharedString, Window, WindowControlArea, component::h_flex, div, prelude::*, px, rgb,
+    App, Div, Entity, FontWeight, IntoElement, SharedString, Stateful, Window, WindowControlArea, component::h_flex, div, prelude::*, px,
+    rgb,
 };
 use i18n::Arg;
 
@@ -9,17 +10,25 @@ use crate::{
     Load,
     account::Account,
     library::Library,
+    remote::RemoteView,
     settings::SettingsView,
     ui::{
         assets::Icon,
         key,
         text::{digits, t, tf},
         theme::*,
-        widgets::{icon, icon_button, mono, square, tracked},
+        widgets::{icon, icon_button, mono, square, tip, tracked},
     },
 };
 
-pub fn header(library: &Library, account: &Account, settings: &Entity<SettingsView>, window: &Window, cx: &App) -> impl IntoElement {
+pub fn header(
+    library: &Library,
+    account: &Account,
+    settings: &Entity<SettingsView>,
+    remote: Option<&Entity<RemoteView>>,
+    window: &Window,
+    cx: &App,
+) -> impl IntoElement {
     let accent = rgb(accent(cx));
     let maximize = if window.is_maximized() { Icon::WinRestore } else { Icon::WinMax };
     let search = match library.list() {
@@ -79,18 +88,11 @@ pub fn header(library: &Library, account: &Account, settings: &Entity<SettingsVi
             h_flex()
                 .h_full()
                 .gap(px(14.))
+                .children(remote.map(|remote| remote_button(remote, cx)))
                 .child(
-                    h_flex()
-                        .id("settings")
-                        .group("settings")
-                        .occlude()
-                        .h(px(34.))
-                        .px(px(9.))
+                    control("settings", Icon::Settings)
                         .gap(px(10.))
-                        .cursor_pointer()
-                        .hover(|style| style.bg(rgb(RAISED_HOVER)))
                         .on_click(move |_, window, cx| settings.update(cx, |view, cx| view.open(window, cx)))
-                        .child(icon(Icon::Settings, 16., rgb(DIM)).group_hover("settings", |style| style.text_color(rgb(TEXT))))
                         .when(!name.is_empty(), |button| {
                             button.child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).child(name))
                         }),
@@ -103,6 +105,29 @@ pub fn header(library: &Library, account: &Account, settings: &Entity<SettingsVi
                         .child(caption("close", Icon::Close, WindowControlArea::Close)),
                 ),
         )
+}
+
+/// The phone opens the REMOTE PANEL dialog; the mark shows the server is on.
+fn remote_button(remote: &Entity<RemoteView>, cx: &App) -> impl IntoElement {
+    let (remote, text) = (remote.clone(), t(cx, key::REMOTE_OPEN));
+    control("remote", Icon::Phone)
+        .gap(px(7.))
+        .tooltip(move |window, cx| tip(text.clone(), window, cx))
+        .when(remote.read(cx).serving(cx), |button| button.child(square(6., rgb(accent(cx)))))
+        .on_click(move |_, window, cx| remote.update(cx, |view, cx| view.open(window, cx)))
+}
+
+/// A title bar button: its glyph lights on hover; the caller adds the rest.
+fn control(id: &'static str, glyph: Icon) -> Stateful<Div> {
+    h_flex()
+        .id(id)
+        .group(id)
+        .occlude()
+        .h(px(34.))
+        .px(px(9.))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(RAISED_HOVER)))
+        .child(icon(glyph, 16., rgb(DIM)).group_hover(id, |style| style.text_color(rgb(TEXT))))
 }
 
 fn caption(id: &'static str, glyph: Icon, area: WindowControlArea) -> impl IntoElement {

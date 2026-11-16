@@ -1,8 +1,8 @@
-//! A titled box over the dimmed page: Settings and the collection editor.
+//! A titled box over the dimmed page: SETTINGS, REMOTE PANEL and the collection editor.
 
 use gpui_kit::{
     App, Context, FocusHandle, FontWeight, IntoElement, KeyBinding, SharedString, Window, actions,
-    component::{h_flex, v_flex},
+    component::{FocusTrapElement, h_flex, v_flex},
     div,
     prelude::*,
     px, rgb,
@@ -22,7 +22,7 @@ pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", CloseDialog, Some(CONTEXT))]);
 }
 
-/// `close` runs on a press beside the box, on its × and on Escape while `focus` is in it.
+/// `close` runs on a press beside the box, on its × and on Escape while `focus` is in it; Tab stays in the box.
 pub fn dialog<V: 'static>(
     id: &'static str,
     title: impl Into<SharedString>,
@@ -74,6 +74,7 @@ pub fn dialog<V: 'static>(
                                 .on_click(cx.listener(move |view, _, window, cx| close(view, window, cx))),
                         ),
                 )
-                .child(body),
+                .child(body)
+                .focus_trap((id, 2usize), focus),
         )
 }

@@ -24,6 +24,7 @@ macro_rules! icons {
 
 icons! {
     Settings = "settings",
+    Phone = "phone",
     Sort = "sort",
     Warn = "warn",
     Pin = "pin",

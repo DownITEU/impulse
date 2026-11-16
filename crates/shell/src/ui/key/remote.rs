@@ -1,8 +1,10 @@
-//! The REMOTE tab and the notes a device gets.
+//! The REMOTE PANEL dialog, its title bar button and the notes a device gets.
 
 use i18n::Key;
 
 pub const REMOTE: Key = Key("remote");
+pub const REMOTE_OPEN: Key = Key("remote-open");
+pub const REMOTE_SWITCH: Key = Key("remote-switch");
 pub const REMOTE_HINT: Key = Key("remote-hint");
 pub const REMOTE_ADDRESS: Key = Key("remote-address");
 pub const REMOTE_ADDRESS_HINT: Key = Key("remote-address-hint");
@@ -14,6 +16,10 @@ pub const REMOTE_DEVICE: Key = Key("remote-device");
 pub const REMOTE_UNKNOWN_DEVICE: Key = Key("remote-unknown-device");
 pub const REMOTE_REVOKE: Key = Key("remote-revoke");
 pub const REMOTE_TRUST: Key = Key("remote-trust");
+pub const REMOTE_TIPS: Key = Key("remote-tips");
+pub const REMOTE_TIP_NETWORK: Key = Key("remote-tip-network");
+pub const REMOTE_TIP_FIREWALL: Key = Key("remote-tip-firewall");
+pub const REMOTE_TIP_ISOLATION: Key = Key("remote-tip-isolation");
 pub const REMOTE_NOTE_CHANGED: Key = Key("remote-note-changed");
 pub const REMOTE_NOTE_NOT_LIVE: Key = Key("remote-note-not-live");
 pub const REMOTE_NOTE_BUSY: Key = Key("remote-note-busy");

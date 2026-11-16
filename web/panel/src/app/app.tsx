@@ -45,7 +45,8 @@ export const App = () => {
     return (
         <Texts.Provider value={words}>
             <main className="min-h-svh bg-[#050608] text-(--deck-fg)">
-                <section className="relative h-svh w-full overflow-hidden bg-(--deck-bg)">
+                {/* Clip, not hidden: a hidden overflow scrolls to a focused drawer still off screen. */}
+                <section className="relative h-svh w-full overflow-clip bg-(--deck-bg)">
                     <div className="pointer-events-none absolute -inset-12 z-0 bg-[radial-gradient(circle_at_30%_15%,color-mix(in_oklab,var(--deck-accent)_22%,transparent),transparent_45%),radial-gradient(circle_at_80%_85%,color-mix(in_oklab,var(--deck-accent)_16%,transparent),transparent_45%),radial-gradient(circle_at_20%_80%,color-mix(in_oklab,var(--deck-accent)_8%,transparent),transparent_50%)]" />
                     <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_100%_60%_at_50%_0%,rgba(255,255,255,0.025),transparent)]" />
                     <div className="relative z-10 flex h-full flex-col">

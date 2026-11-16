@@ -228,7 +228,6 @@ settings-appearance = APPEARANCE
 settings-overlay = OVERLAY
 settings-hotkeys = HOTKEYS
 settings-app = APP
-settings-remote = REMOTE
 settings-resources = RESOURCES
 settings-about = ABOUT
 accent = ACCENT
@@ -260,6 +259,8 @@ folder-select = Select the folder
 ## Remote
 
 remote = REMOTE PANEL
+remote-open = Remote panel: control Impulse from a phone
+remote-switch = PHONE ACCESS
 remote-hint = control Impulse from a phone on this network
 remote-address = ADDRESS
 remote-address-hint = scan it with the phone's camera: the code pairs once and renews every five minutes
@@ -271,6 +272,10 @@ remote-device = device { $number }
 remote-unknown-device = BROWSER
 remote-revoke = REVOKE
 remote-trust = plain HTTP: anyone on this network can watch it. Trusted networks only.
+remote-tips = IF THE PHONE DOES NOT CONNECT
+remote-tip-network = The phone must be on this PC's network: not on mobile data, a guest Wi-Fi or a VPN.
+remote-tip-firewall = Windows Firewall can block Impulse without asking, mostly on a Public network: make this network Private, or allow Impulse in Windows Security > Firewall & network protection > Allow an app through firewall.
+remote-tip-isolation = Some routers keep Wi-Fi devices apart (AP or client isolation): turn it off, or try another network.
 remote-note-changed = The list changed: try again.
 remote-note-not-live = Start the game first.
 remote-note-busy = Another run is on, or the trainer is not there yet.
