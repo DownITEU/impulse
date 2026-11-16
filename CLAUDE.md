@@ -26,6 +26,7 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 - `play` - one run: prepare, find or start the game, attach.
 - `agent` - every operation on a game's process.
 - `launchers` - installed games from the launchers' own records.
+- `remote` - the remote panel's server: the embedded panel, pairing, the WebSocket; transport only.
 - `i18n` - the languages we ship and the catalogs: Fluent messages by domain, over English.
 - `hotkeys`, `overlay`, `tray`, `video` - Win32 and media leaves: key hooks, the overlay's window calls, the tray icon, clips on the GPU.
 - `journal`, `disk`, `fetch`, `pe` - the log, atomic file writes, public CDN GETs, PE headers.

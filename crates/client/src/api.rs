@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::trainer::Span;
 
+mod link;
+
+pub use link::{Ask, Feed, Seen, ServerSide, Views, link};
+
 /// Bumped with any change of a view's or a command's shape.
 pub const VERSION: u32 = 1;
 

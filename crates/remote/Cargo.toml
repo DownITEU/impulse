@@ -1,0 +1,22 @@
+[package]
+name = "remote"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+client.workspace = true
+
+async-io.workspace = true
+async-net.workspace = true
+async-tungstenite = { workspace = true, features = ["handshake"] }
+futures.workspace = true
+http.workspace = true
+httparse.workspace = true
+log.workspace = true
+# Debug builds too: no file read inside the server future.
+rust-embed = { workspace = true, features = ["debug-embed"] }
+serde_json.workspace = true
