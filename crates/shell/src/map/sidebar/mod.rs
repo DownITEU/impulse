@@ -5,6 +5,7 @@ mod marks;
 
 use std::{collections::HashSet, rc::Rc, sync::Arc};
 
+use client::map::state::Saved;
 use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, Entity, Focusable, FontWeight, IntoElement, MouseButton, Render, RenderImage, SharedString,
     Stateful, Subscription, Window,
@@ -19,6 +20,7 @@ use gpui_kit::{
 };
 use i18n::Arg;
 use model::Map;
+use rustc_hash::FxHashSet;
 
 use super::{
     board::{Board, BoardEvent},
@@ -125,13 +127,13 @@ impl Sidebar {
     }
 
     fn regions(&self, map: &Map, board: &Board, cx: &Context<Self>) -> Vec<AnyElement> {
-        // Several outlines can share an id: a region in parts.
+        // Regions of one name are a region in parts: one row.
         let mut seen = HashSet::new();
-        let names: Vec<(&str, &str, u32)> = map
+        let names: Vec<(&str, u32)> = map
             .regions
             .iter()
-            .filter(|region| !region.name.is_empty() && seen.insert(region.id.as_str()))
-            .map(|region| (region.id.as_str(), region.name.as_str(), region.color))
+            .filter(|region| !region.name.is_empty() && seen.insert(region.name.as_str()))
+            .map(|region| (region.name.as_str(), region.color))
             .collect();
         if names.is_empty() {
             return Vec::new();
@@ -145,22 +147,12 @@ impl Sidebar {
         ));
         let mut rows = vec![header.into_any_element()];
         if open {
-            for (index, (id, name, color)) in names.into_iter().enumerate() {
-                let shown = !board.saved.hidden_regions.contains(id);
+            for (index, (name, color)) in names.into_iter().enumerate() {
+                let parts: Vec<String> = map.regions.iter().filter(|region| region.name == name).map(|region| region.id.clone()).collect();
+                let shown = parts.iter().any(|part| !board.saved.hidden_regions.contains(part));
                 let row = item(("map-region", index), check(color, shown), name, shown).pl(px(32.));
-                let id = id.to_owned();
-                let toggle = cx.listener(move |sidebar, _, _, cx| {
-                    sidebar.board.update(cx, |board, cx| {
-                        board.filter(
-                            |saved| {
-                                if !saved.hidden_regions.remove(&id) {
-                                    saved.hidden_regions.insert(id.clone());
-                                }
-                            },
-                            cx,
-                        )
-                    })
-                });
+                let toggle =
+                    cx.listener(move |sidebar, _, _, cx| flip(&sidebar.board, |saved| &mut saved.hidden_regions, &parts, shown, cx));
                 rows.push(row.on_click(toggle).into_any_element());
             }
         }
@@ -173,22 +165,7 @@ impl Sidebar {
         let shown = ids.iter().any(|id| !board.saved.hidden.contains(id));
         let (found, total): (usize, usize) = (board.found_counts[index].iter().sum(), board.counts[index].iter().sum());
         let open = !self.folded.contains(&index);
-        let toggle = cx.listener(move |sidebar, _, _, cx| {
-            sidebar.board.update(cx, |board, cx| {
-                board.filter(
-                    |saved| {
-                        for id in &ids {
-                            if shown {
-                                saved.hidden.insert(id.clone());
-                            } else {
-                                saved.hidden.remove(id);
-                            }
-                        }
-                    },
-                    cx,
-                )
-            })
-        });
+        let toggle = cx.listener(move |sidebar, _, _, cx| flip(&sidebar.board, |saved| &mut saved.hidden, &ids, shown, cx));
         let mark = div().id(("map-category-check", index)).child(check(category.color, shown)).on_click(move |event, window, cx| {
             cx.stop_propagation();
             toggle(event, window, cx);
@@ -437,4 +414,23 @@ fn item(id: impl Into<ElementId>, mark: Div, name: &str, shown: bool) -> Statefu
         .text_color(rgb(if shown { TEXT_2 } else { FAINT }))
         .child(mark)
         .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).child(name.to_owned()))
+}
+
+/// A check's click: `ids` hide while any shows, else they all show.
+fn flip(board: &Entity<Board>, set: fn(&mut Saved) -> &mut FxHashSet<String>, ids: &[String], shown: bool, cx: &mut App) {
+    board.update(cx, |board, cx| {
+        board.filter(
+            |saved| {
+                let set = set(saved);
+                for id in ids {
+                    if shown {
+                        set.insert(id.clone());
+                    } else {
+                        set.remove(id);
+                    }
+                }
+            },
+            cx,
+        )
+    });
 }

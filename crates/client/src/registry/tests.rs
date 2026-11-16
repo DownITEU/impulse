@@ -29,7 +29,7 @@ impl Source for Fake {
 
 impl Maps for Fake {
     // The error names who answered.
-    fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<Map>> {
+    fn map(&self, offer: &MapOffer, _: &Locale) -> BoxStream<'static, Snapshot<Map>> {
         stream::iter([Snapshot::Fresh(Err(anyhow::anyhow!("{} has {}", self.id.as_str(), offer.id).into()))]).boxed()
     }
 }
@@ -71,7 +71,7 @@ fn registry() -> (Registry, Arc<Fake>, Arc<Fake>) {
 
 fn answer(registry: &Registry, id: &str) -> String {
     let offer = MapOffer { id: Ref::parse(id).unwrap(), name: String::new(), thumbnail: None, revision: None };
-    match block_on(registry.map(&offer).next()) {
+    match block_on(registry.map(&offer, &Locale::new("en")).next()) {
         Some(Snapshot::Fresh(Err(e))) => e.detail,
         _ => panic!("one fresh error"),
     }

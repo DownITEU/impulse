@@ -13,12 +13,12 @@ use futures::{
     future::{self, BoxFuture, Shared},
     stream::{self, BoxStream},
 };
-use model::{Account, Clear, Failure, Folder, Game, Installation, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
+use model::{Account, Clear, Failure, Folder, Game, Installation, Locale, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
 
 use crate::{
     binary, catalog,
     folder::Setting,
-    map,
+    locale, map,
     run::Host,
     session::{self, Session, Source, account},
     store,
@@ -49,7 +49,7 @@ pub struct Wand {
 
 impl Wand {
     /// The source id of everything it mints.
-    pub const SOURCE: &str = "wand";
+    pub const SOURCE: &str = crate::SOURCE;
 
     /// Starts the browser bridge at once: it takes a moment to come up.
     pub fn new(data_dir: PathBuf) -> Self {
@@ -150,9 +150,9 @@ impl model::Games for Wand {
 }
 
 impl model::Trainers for Wand {
-    /// The API is asked only when the disk copy is missing or was fetched for another trainer or build.
-    fn trainer(&self, offer: &Offer, install: &Installation) -> BoxStream<'static, Snapshot<model::Trainer>> {
-        let stamp = Stamp { updated_at: offer.revision.clone(), version: install.build };
+    /// The API is asked only when the disk copy is missing or was fetched for another trainer, build or locale.
+    fn trainer(&self, offer: &Offer, install: &Installation, locale: &Locale) -> BoxStream<'static, Snapshot<model::Trainer>> {
+        let stamp = Stamp { updated_at: offer.revision.clone(), version: install.build, locale: locale::served(locale).to_owned() };
         // A trainer's id is its game's.
         let (dir, id, session, host) = (self.data_dir.clone(), offer.id.id().to_owned(), self.session(), self.host.clone());
         let hotkeys = self.hotkeys.clone();
@@ -183,21 +183,22 @@ impl model::Trainers for Wand {
 }
 
 impl model::Maps for Wand {
-    /// The API is asked only when the disk copy is missing or was fetched for another revision.
-    fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<model::Map>> {
+    /// The API is asked only when the disk copy is missing or was fetched for another revision or locale.
+    fn map(&self, offer: &MapOffer, locale: &Locale) -> BoxStream<'static, Snapshot<model::Map>> {
         let (dir, offer, session) = (self.data_dir.clone(), offer.clone(), self.session());
+        let served = locale::served(locale);
         channel(|tx| async move {
             let mut copy = {
                 let (dir, id) = (dir.clone(), offer.id.id().to_owned());
                 unblock(move || map::cached(&dir, &id)).await
             };
-            let fresh = copy.as_ref().is_some_and(|copy| copy.stamp == offer.revision);
+            let fresh = copy.as_ref().is_some_and(|copy| copy.stamp == offer.revision && copy.locale == served);
             let mut icons = copy.as_mut().and_then(|copy| copy.icons.take());
             send(&tx, Snapshot::Cached(copy.map(|copy| copy.map)));
             if !fresh {
                 let mut fetched = async {
                     let (session, transport) = session.await?;
-                    map::fetch(&session, &transport, &dir, offer.id.id(), offer.revision.clone()).await
+                    map::fetch(&session, &transport, &dir, offer.id.id(), offer.revision.clone(), served).await
                 }
                 .await;
                 if let Err(e) = &fetched {

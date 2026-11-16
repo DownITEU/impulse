@@ -8,8 +8,8 @@ use futures::{
     stream::{self, BoxStream},
 };
 use model::{
-    Accounts, Caches, Failure, FailureKind, Files, Folder, Folders, Game, Games, Installation, Map, MapOffer, Maps, Offer, Ref, SignIn,
-    Snapshot, SourceId, Store, Text, Trainer, Trainers,
+    Accounts, Caches, Failure, FailureKind, Files, Folder, Folders, Game, Games, Installation, Locale, Map, MapOffer, Maps, Offer, Ref,
+    SignIn, Snapshot, SourceId, Store, Text, Trainer, Trainers,
 };
 
 /// Each capability's sources, with their ids.
@@ -66,12 +66,12 @@ impl Registry {
         self.games.first().map_or_else(|| missing("games"), |(_, source)| source.games())
     }
 
-    pub fn trainer(&self, offer: &Offer, install: &Installation) -> BoxStream<'static, Snapshot<Trainer>> {
-        route(&self.trainers, &offer.id).map_or_else(|| missing(&offer.id), |source| source.trainer(offer, install))
+    pub fn trainer(&self, offer: &Offer, install: &Installation, locale: &Locale) -> BoxStream<'static, Snapshot<Trainer>> {
+        route(&self.trainers, &offer.id).map_or_else(|| missing(&offer.id), |source| source.trainer(offer, install, locale))
     }
 
-    pub fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<Map>> {
-        route(&self.maps, &offer.id).map_or_else(|| missing(&offer.id), |source| source.map(offer))
+    pub fn map(&self, offer: &MapOffer, locale: &Locale) -> BoxStream<'static, Snapshot<Map>> {
+        route(&self.maps, &offer.id).map_or_else(|| missing(&offer.id), |source| source.map(offer, locale))
     }
 
     /// Every source's.

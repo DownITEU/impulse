@@ -39,9 +39,9 @@ impl Shelf {
         self.shown.values().filter_map(ready)
     }
 
-    /// A shown copy of `stamp` that needs no refresh.
+    /// The newest copy, waiting or shown, is of `stamp` and needs no refresh.
     pub fn is_current(&self, game: &GameId, stamp: &Stamp) -> bool {
-        self.sheet(game).is_some_and(|sheet| !sheet.stale && sheet.stamp == *stamp)
+        self.waiting.get(game).or_else(|| self.sheet(game)).is_some_and(|sheet| !sheet.stale && sheet.stamp == *stamp)
     }
 
     /// Shows `sheet` unless a run holds the game: it then waits. `true` when shown.
@@ -69,6 +69,17 @@ impl Shelf {
             None => {
                 self.shown.insert(game, Load::Failed(error));
             }
+        }
+    }
+
+    /// The copies of `game`, or of every game, ask their source again at their next open: the content language changed.
+    pub fn outdate(&mut self, game: Option<&GameId>) {
+        let shown = self.shown.iter_mut().filter_map(|(id, load)| match load {
+            Load::Ready(sheet) => Some((id, sheet)),
+            _ => None,
+        });
+        for (_, sheet) in shown.chain(self.waiting.iter_mut()).filter(|(id, _)| game.is_none_or(|game| game == *id)) {
+            sheet.stale = true;
         }
     }
 

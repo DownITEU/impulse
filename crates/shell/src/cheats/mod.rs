@@ -16,7 +16,7 @@ use crate::{
     library::{Library, LibraryEvent},
     run::{RunEvent, Runs},
     trainer::{TrainerEvent, Trainers},
-    ui::{key, widgets},
+    ui::{key, text::Texts, widgets},
 };
 pub use collections::CollectionEditor;
 use printed::{Printed, number};
@@ -70,6 +70,8 @@ impl CheatList {
         })
         .detach();
         cx.subscribe_in(&trainers, window, Self::trainer_changed).detach();
+        // Categories are worded in the user's language.
+        cx.observe_global_in::<Texts>(window, |list, window, cx| list.print(window, cx)).detach();
         cx.subscribe(&runs, |list, _, event: &RunEvent, cx| {
             if let RunEvent::Pressed(index) = event
                 && list.is_running(cx)

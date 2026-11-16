@@ -137,6 +137,7 @@ mod tests {
             key: None,
             name: String::new(),
             category: String::new(),
+            category_name: None,
             kind: Kind::Number,
             args: Args::default(),
             hotkeys: vec![Chord::from_vks(&[112])],

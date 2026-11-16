@@ -18,6 +18,20 @@ pub enum Arg {
     Num(f64),
 }
 
+/// The language content is asked in: a BCP 47 tag (`fr`, `zh-CN`). A source answers in the closest it has.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Locale(Arc<str>);
+
+impl Locale {
+    pub fn new(tag: &str) -> Self {
+        Self(tag.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 impl Text {
     pub fn key(domain: &SourceId, key: &str) -> Self {
         Self::Key { domain: domain.clone(), key: key.into(), args: Vec::new() }

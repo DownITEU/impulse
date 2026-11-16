@@ -21,5 +21,5 @@ pub use process::{Process, Rule};
 pub use run::{Attach, Event, Live, Runner, Session};
 pub use source::{Account, Accounts, Caches, Clear, Files, Folder, Folders, Games, Maps, SignIn, Snapshot, Source, Store, Trainers};
 pub use store::{Origin, StoreId};
-pub use text::{Arg, Text};
+pub use text::{Arg, Locale, Text};
 pub use trainer::{Args, Cheat, Kind, Plan, Trainer};

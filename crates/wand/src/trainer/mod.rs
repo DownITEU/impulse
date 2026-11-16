@@ -2,6 +2,7 @@
 //! seen once works offline and costs no request until its trainer changes.
 
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -12,7 +13,7 @@ use model::Chord;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{session::Session, transport::Transport};
+use crate::{session::Session, texts, transport::Transport};
 
 mod plan;
 
@@ -33,6 +34,9 @@ pub struct Trainer {
     loader_args: LoaderArgs,
     #[serde(default)]
     game_events: Vec<Value>,
+    /// The answer's `i18n.strings`: the English text of a name, description or instruction to its translation.
+    #[serde(skip)]
+    strings: HashMap<String, String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -107,8 +111,9 @@ impl Trainer {
     /// `plan` is what running it takes; see `plan()`.
     pub fn into_model(self, plan: model::Plan) -> model::Trainer {
         let flags = self.blueprint.flags;
+        let strings = self.strings;
         model::Trainer {
-            cheats: self.blueprint.cheats.into_iter().map(cheat).collect(),
+            cheats: self.blueprint.cheats.into_iter().map(|c| cheat(c, &strings)).collect(),
             pinned: self.pinned_mods,
             location: flags & LOCATES != 0,
             teleport: flags & TELEPORTS != 0,
@@ -117,7 +122,19 @@ impl Trainer {
     }
 }
 
-fn cheat(cheat: Cheat) -> model::Cheat {
+/// The trainer of an answer, with its translations; a bad `i18n` gives none.
+fn read(Answer { trainer, i18n }: &Answer) -> Result<Trainer, serde_json::Error> {
+    let mut trainer = Trainer::deserialize(trainer)?;
+    if let Some(strings) = i18n.get("strings").and_then(Value::as_object) {
+        let text = |(english, text): (&String, &Value)| Some((english.clone(), text.as_str()?.to_owned()));
+        trainer.strings = strings.iter().filter_map(text).collect();
+    }
+    Ok(trainer)
+}
+
+fn cheat(cheat: Cheat, strings: &HashMap<String, String>) -> model::Cheat {
+    // A miss keeps the English.
+    let translate = |text: String| strings.get(&text).cloned().unwrap_or(text);
     // A scalar is shown as a slider, an incremental as a number without a text field.
     let typed = matches!(cheat.kind, Kind::Number);
     let kind = match cheat.kind {
@@ -140,7 +157,8 @@ fn cheat(cheat: Cheat) -> model::Cheat {
     model::Cheat {
         id: cheat.uuid,
         key: Some(cheat.target).filter(|target| !target.is_empty()),
-        name: cheat.name,
+        name: translate(cheat.name),
+        category_name: texts::category(&cheat.category),
         category: cheat.category,
         kind,
         args: model::Args {
@@ -152,8 +170,8 @@ fn cheat(cheat: Cheat) -> model::Cheat {
             pressed: args.value.as_ref().and_then(Value::as_f64).unwrap_or(1.),
         },
         hotkeys: cheat.hotkeys.iter().map(|vks| Chord::from_vks(vks)).collect(),
-        instructions: cheat.instructions,
-        description: cheat.description,
+        instructions: cheat.instructions.map(translate),
+        description: cheat.description.map(translate),
     }
 }
 
@@ -164,19 +182,30 @@ pub struct Stamp {
     pub updated_at: Option<String>,
     /// The installed game version the server picked the trainer for.
     pub version: Option<u32>,
+    /// The content locale Wand was asked for (one it serves).
+    #[serde(default = "crate::locale::english")]
+    pub locale: String,
 }
 
-// The response is stored as received: the trainer host needs fields this struct skips.
+/// The API's answer, stored as received: the trainer host needs fields `Trainer` skips.
+#[derive(Serialize, Deserialize)]
+struct Answer {
+    trainer: Value,
+    #[serde(default)]
+    i18n: Value,
+}
+
 #[derive(Serialize, Deserialize)]
 struct Stored {
     stamp: Stamp,
-    trainer: Value,
+    #[serde(flatten)]
+    answer: Answer,
 }
 
 /// The disk copy and the stamp it was fetched for (blocking).
 pub fn cached(data_dir: &Path, game_id: &str) -> Option<(Trainer, Stamp)> {
     let stored: Stored = serde_json::from_slice(&fs::read(file(data_dir, game_id)).ok()?).ok()?;
-    Some((Trainer::deserialize(&stored.trainer).ok()?, stored.stamp))
+    Some((read(&stored.answer).ok()?, stored.stamp))
 }
 
 pub fn size(data_dir: &Path) -> u64 {
@@ -189,16 +218,12 @@ pub fn forget(data_dir: &Path) {
 
 /// Asks the API for the trainer that fits the installed version and stores it.
 pub async fn fetch(session: &Session, t: &Transport, data_dir: &Path, game_id: &str, stamp: Stamp) -> Result<Trainer> {
-    #[derive(Deserialize)]
-    struct Envelope {
-        trainer: Value,
-    }
     let versions = stamp.version.map(|v| v.to_string()).unwrap_or_default();
-    let path = format!("/v3/games/{game_id}/trainer?gameVersions={versions}&locale=en-US&supportedLoaders=artifacts&v=3");
-    let Envelope { trainer: raw } = session.get(t, &path).await?;
-    let trainer = Trainer::deserialize(&raw).context("unexpected trainer format")?;
+    let path = format!("/v3/games/{game_id}/trainer?gameVersions={versions}&locale={}&supportedLoaders=artifacts&v=3", stamp.locale);
+    let answer: Answer = session.get(t, &path).await?;
+    let trainer = read(&answer).context("unexpected trainer format")?;
     let file = file(data_dir, game_id);
-    let stored = Stored { stamp, trainer: raw };
+    let stored = Stored { stamp, answer };
     let saved = unblock(move || disk::replace(&file, &serde_json::to_vec(&stored)?)).await;
     if let Err(e) = saved {
         log::warn!("trainer {game_id} not cached: {e:#}");
@@ -235,7 +260,7 @@ mod tests {
     fn parses_every_control_shape() {
         let trainer: Trainer = serde_json::from_str(JSON).unwrap();
         let pinned = trainer.pinned_mods;
-        let cheats: Vec<model::Cheat> = trainer.blueprint.cheats.into_iter().map(cheat).collect();
+        let cheats: Vec<model::Cheat> = trainer.blueprint.cheats.into_iter().map(|c| cheat(c, &HashMap::new())).collect();
         assert!(cheats[0].kind == model::Kind::Toggle && !cheats[0].args.button && cheats[0].key.is_none());
         assert_eq!(cheats[1].hotkeys, [Chord::from_vks(&[18, 117]), Chord::from_vks(&[16, 117])]);
         assert!(cheats[1].args.button && cheats[1].args.step == Some(10.));
@@ -250,8 +275,8 @@ mod tests {
     #[test]
     fn disk_copy_keeps_the_whole_response() {
         let dir = std::env::temp_dir().join(format!("impulse-trainer-{}", std::process::id()));
-        let stamp = Stamp { updated_at: Some("2026-01-01T00:00:00Z".to_owned()), version: Some(7) };
-        let stored = Stored { stamp: stamp.clone(), trainer: serde_json::from_str(JSON).unwrap() };
+        let stamp = Stamp { updated_at: Some("2026-01-01T00:00:00Z".to_owned()), version: Some(7), locale: "fr-FR".to_owned() };
+        let stored = Stored { stamp: stamp.clone(), answer: Answer { trainer: serde_json::from_str(JSON).unwrap(), i18n: Value::Null } };
         let path = file(&dir, "../82102");
         assert!(path.ends_with("trainers/82102.json"));
         disk::replace(&path, &serde_json::to_vec(&stored).unwrap()).unwrap();
@@ -260,5 +285,64 @@ mod tests {
         assert!(fs::read_to_string(&path).unwrap().contains("binaryHash"));
         fs::remove_dir_all(&dir).unwrap();
         assert!(cached(&dir, "82102").is_none());
+    }
+
+    fn stored_copy(name: &str, stored: &Value) -> (Trainer, Stamp) {
+        let dir = std::env::temp_dir().join(format!("impulse-trainer-{name}-{}", std::process::id()));
+        disk::replace(&file(&dir, "1"), &serde_json::to_vec(stored).unwrap()).unwrap();
+        let copy = cached(&dir, "1").unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        copy
+    }
+
+    fn translated(i18n: Value) -> Value {
+        serde_json::json!({
+            "stamp": {"updated_at": null, "version": null, "locale": "fr-FR"},
+            "trainer": {"blueprint": {"cheats": [
+                {"uuid": "a", "name": "Health", "category": "player", "target": "hp", "type": "toggle",
+                 "description": "Never die", "instructions": "Press once"},
+                {"uuid": "b", "name": "Gold", "category": "odd", "type": "toggle", "description": "Kept"}]}},
+            "i18n": i18n
+        })
+    }
+
+    fn model_cheats(trainer: Trainer) -> Vec<model::Cheat> {
+        let strings = trainer.strings;
+        trainer.blueprint.cheats.into_iter().map(|c| cheat(c, &strings)).collect()
+    }
+
+    #[test]
+    fn a_stored_translation_reaches_name_description_and_instructions() {
+        let i18n = serde_json::json!({"locale": "fr-FR", "strings": {
+            "Health": "Santé", "Never die": "Ne jamais mourir", "Press once": "Appuyez une fois", "bad": 3}});
+        let (trainer, stamp) = stored_copy("i18n", &translated(i18n));
+        assert_eq!(stamp.locale, "fr-FR");
+        let [health, gold] = &model_cheats(trainer)[..] else { panic!("two cheats") };
+        assert_eq!(
+            (health.name.as_str(), health.description.as_deref(), health.instructions.as_deref()),
+            ("Santé", Some("Ne jamais mourir"), Some("Appuyez une fois"))
+        );
+        assert_eq!((health.id.as_str(), health.category.as_str(), health.key.as_deref()), ("a", "player", Some("hp")));
+        assert_eq!((gold.name.as_str(), gold.description.as_deref()), ("Gold", Some("Kept")));
+        assert!(health.category_name == Some(texts::text(texts::CATEGORY_PLAYER)));
+        assert!(gold.category_name.is_none());
+    }
+
+    #[test]
+    fn a_missing_or_bad_i18n_keeps_the_english() {
+        for i18n in [Value::Null, serde_json::json!("x"), serde_json::json!({"strings": [1]})] {
+            let (trainer, _) = stored_copy("plain", &translated(i18n));
+            assert!(trainer.strings.is_empty());
+            assert_eq!(model_cheats(trainer)[0].name, "Health");
+        }
+    }
+
+    #[test]
+    fn a_stamp_stored_before_locales_reads_as_english() {
+        let mut stored = translated(Value::Null);
+        stored.as_object_mut().unwrap().remove("i18n");
+        stored["stamp"].as_object_mut().unwrap().remove("locale");
+        let (_, stamp) = stored_copy("old", &stored);
+        assert_eq!(stamp.locale, "en-US");
     }
 }

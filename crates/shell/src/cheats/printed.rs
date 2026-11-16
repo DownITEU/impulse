@@ -6,7 +6,7 @@ use client::{library::GameId, trainer::Sheet};
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use model::{Cheat, Chord, Kind};
 
-use crate::bindings::cap;
+use crate::{bindings::cap, ui::text::text};
 
 const INPUT_DIGITS: usize = 6;
 
@@ -51,7 +51,7 @@ impl Printed {
             .collect();
         Self {
             game,
-            rows: sheet.cheats.iter().zip(&sheet.hotkeys).map(|(cheat, slots)| row(cheat, slots)).collect(),
+            rows: sheet.cheats.iter().zip(&sheet.hotkeys).map(|(cheat, slots)| row(cheat, slots, cx)).collect(),
             control_width: sheet.cheats.iter().map(control_width).fold(0., f32::max),
             inputs,
         }
@@ -92,12 +92,12 @@ fn caps(kind: Kind, slots: &[Option<Chord>]) -> Vec<SharedString> {
     slots.iter().enumerate().map(|(slot, chord)| cap(kind, slot, &body(chord))).collect()
 }
 
-fn row(cheat: &Cheat, slots: &[Option<Chord>]) -> Row {
+fn row(cheat: &Cheat, slots: &[Option<Chord>], cx: &App) -> Row {
     Row {
         name: cheat.name.to_uppercase().into(),
         search: cheat.name.to_lowercase(),
         section: cheat.category.clone().into(),
-        category: cheat.category.to_uppercase().into(),
+        category: cheat.category_name.as_ref().map_or_else(|| cheat.category.to_uppercase().into(), |name| text(cx, name)),
         keys: caps(cheat.kind, slots),
         tip: cheat.instructions.clone().or_else(|| cheat.description.clone()).filter(|text| !text.is_empty()).map(SharedString::from),
         options: cheat.args.options.iter().map(|option| option.to_uppercase().into()).collect(),

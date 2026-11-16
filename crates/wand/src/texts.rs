@@ -20,8 +20,36 @@ pub const FOLDER: Key = Key("folder");
 pub const FOLDER_HINT: Key = Key("folder-hint");
 pub const FOLDER_EMPTY: Key = Key("folder-empty");
 pub const FOLDER_UNSET: Key = Key("folder-unset");
+pub const CATEGORY_CHALLENGE: Key = Key("category-challenge");
+pub const CATEGORY_ENEMIES: Key = Key("category-enemies");
+pub const CATEGORY_GAME: Key = Key("category-game");
+pub const CATEGORY_INVENTORY: Key = Key("category-inventory");
+pub const CATEGORY_PHYSICS: Key = Key("category-physics");
+pub const CATEGORY_PLAYER: Key = Key("category-player");
+pub const CATEGORY_STATS: Key = Key("category-stats");
+pub const CATEGORY_TELEPORT: Key = Key("category-teleport");
+pub const CATEGORY_VEHICLES: Key = Key("category-vehicles");
+pub const CATEGORY_WEAPONS: Key = Key("category-weapons");
 pub const SIGNED_OUT: Key = Key("signed-out");
 
 pub fn text(key: Key) -> Text {
     Text::key(&crate::source(), key.0)
+}
+
+/// A trainer category's name; `None` for an id Wand's catalog does not have.
+pub fn category(id: &str) -> Option<Text> {
+    let key = match id {
+        "challenge" => CATEGORY_CHALLENGE,
+        "enemies" => CATEGORY_ENEMIES,
+        "game" => CATEGORY_GAME,
+        "inventory" => CATEGORY_INVENTORY,
+        "physics" => CATEGORY_PHYSICS,
+        "player" => CATEGORY_PLAYER,
+        "stats" => CATEGORY_STATS,
+        "teleport" => CATEGORY_TELEPORT,
+        "vehicles" => CATEGORY_VEHICLES,
+        "weapons" => CATEGORY_WEAPONS,
+        _ => return None,
+    };
+    Some(text(key))
 }

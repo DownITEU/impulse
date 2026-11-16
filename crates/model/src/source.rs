@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use futures::{future::BoxFuture, stream::BoxStream};
 
-use crate::{Failure, Game, Installation, Map, MapOffer, Offer, Ref, SourceId, Text, Trainer};
+use crate::{Failure, Game, Installation, Locale, Map, MapOffer, Offer, Ref, SourceId, Text, Trainer};
 
 pub trait Source: Send + Sync {
     /// The source of every `Ref` it mints, and the domain of its texts.
@@ -27,11 +27,11 @@ pub trait Games: Source {
 }
 
 pub trait Trainers: Source {
-    fn trainer(&self, offer: &Offer, install: &Installation) -> BoxStream<'static, Snapshot<Trainer>>;
+    fn trainer(&self, offer: &Offer, install: &Installation, locale: &Locale) -> BoxStream<'static, Snapshot<Trainer>>;
 }
 
 pub trait Maps: Source {
-    fn map(&self, offer: &MapOffer) -> BoxStream<'static, Snapshot<Map>>;
+    fn map(&self, offer: &MapOffer, locale: &Locale) -> BoxStream<'static, Snapshot<Map>>;
 }
 
 pub trait Folders: Source {
@@ -65,7 +65,8 @@ pub enum Clear {
     },
 }
 
-/// A snapshot stream yields `Cached` first, then `Fresh` only when the copy was missing or stale.
+/// A snapshot stream yields `Cached` first, then `Fresh` only when the copy was missing or stale (a copy in another
+/// locale is stale).
 pub enum Snapshot<T> {
     /// The disk copy, if any.
     Cached(Option<T>),

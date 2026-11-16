@@ -171,3 +171,17 @@ fn links_to_pins_stay_inside_and_other_wand_links_lose_their_target() {
     assert_eq!(relink("[broken](wemod://x", &pins), "[broken](wemod://x");
     assert_eq!(relink("See [Gate [North]](wemod://maps/1/2?location=gone).", &pins), "See Gate [North].");
 }
+
+#[test]
+fn a_region_goes_by_its_external_id_else_its_title() {
+    let outline = json!({"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1]]]});
+    let raw = json!({
+        "metadata": {"tileSource": xyz()},
+        "regions": {"features": [
+            {"geometry": outline, "properties": {"externalId": "r1", "title": "Tour"}},
+            {"geometry": outline, "properties": {"title": "Tower"}}]}
+    });
+    let (map, _) = parse(&raw).unwrap();
+    let ids: Vec<(&str, &str)> = map.regions.iter().map(|region| (region.id.as_str(), region.name.as_str())).collect();
+    assert_eq!(ids, [("r1", "Tour"), ("Tower", "Tower")]);
+}

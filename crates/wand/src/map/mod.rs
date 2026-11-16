@@ -23,6 +23,9 @@ const DIR: &str = "maps";
 struct Stored<'a> {
     /// The catalog's `updatedAt` of the map the copy was fetched for.
     stamp: Option<String>,
+    /// The content locale the copy was fetched in.
+    #[serde(default = "crate::locale::english")]
+    locale: String,
     #[serde(borrow)]
     map: &'a RawValue,
 }
@@ -32,17 +35,25 @@ pub struct Cached {
     pub map: model::Map,
     /// The catalog's `updatedAt` the copy was fetched for.
     pub stamp: Option<String>,
+    /// The content locale the copy was fetched in.
+    pub locale: String,
     /// Set while some group icon is not on disk yet.
     pub icons: Option<Icons>,
 }
 
-/// The id of a map whose disk copy is read again once its missing icons are downloaded.
-pub struct Icons(String);
+/// A map whose disk copy is read again once its missing icons are downloaded.
+pub struct Icons {
+    id: String,
+    // What the copy was fetched for: another request may have replaced it meanwhile.
+    stamp: Option<String>,
+    locale: String,
+}
 
 impl Icons {
-    /// The map with its missing icons downloaded (blocking).
+    /// The map with its missing icons downloaded, while the disk copy is still the one this came with (blocking).
     pub fn download(self, data_dir: &Path) -> Option<model::Map> {
-        load(data_dir, &self.0, true).map(|cached| cached.map)
+        let same = |cached: &Cached| cached.stamp == self.stamp && cached.locale == self.locale;
+        load(data_dir, &self.id, true).filter(same).map(|cached| cached.map)
     }
 }
 
@@ -55,7 +66,8 @@ fn load(data_dir: &Path, id: &str, online: bool) -> Option<Cached> {
     let bytes = fs::read(file(data_dir, id)).ok()?;
     let stored: Stored = serde_json::from_slice(&bytes).ok()?;
     let (map, missing) = read(stored.map.get(), data_dir, online).ok()?;
-    Some(Cached { map, stamp: stored.stamp, icons: missing.then(|| Icons(id.to_owned())) })
+    let icons = missing.then(|| Icons { id: id.to_owned(), stamp: stored.stamp.clone(), locale: stored.locale.clone() });
+    Some(Cached { map, stamp: stored.stamp, locale: stored.locale, icons })
 }
 
 fn read(raw: &str, data_dir: &Path, online: bool) -> Result<(model::Map, bool)> {
@@ -73,18 +85,26 @@ pub fn forget(data_dir: &Path) {
 }
 
 /// Fetches the map and keeps it on disk; icons not on disk yet are left to `Icons::download`.
-pub async fn fetch(session: &Session, t: &Transport, data_dir: &Path, id: &str, stamp: Option<String>) -> Result<Cached> {
-    let raw: Box<RawValue> = session.get(t, &format!("/v3/game_maps/{}?locale=en-US", name(id))).await?;
+pub async fn fetch(
+    session: &Session,
+    t: &Transport,
+    data_dir: &Path,
+    id: &str,
+    stamp: Option<String>,
+    locale: &'static str,
+) -> Result<Cached> {
+    let raw: Box<RawValue> = session.get(t, &format!("/v3/game_maps/{}?locale={locale}", name(id))).await?;
     let (dir, id) = (data_dir.to_owned(), id.to_owned());
     unblock(move || {
         let (map, missing) = read(raw.get(), &dir, false)?;
-        let stored = Stored { stamp, map: &raw };
+        let stored = Stored { stamp, locale: locale.to_owned(), map: &raw };
         let saved = serde_json::to_vec(&stored).map_err(Into::into).and_then(|bytes| disk::replace(&file(&dir, &id), &bytes));
         if let Err(e) = &saved {
             log::warn!("map {id} not cached: {e:#}");
         }
         // Icons complete the disk copy, which an older revision may still be.
-        Ok(Cached { map, stamp: stored.stamp, icons: (missing && saved.is_ok()).then_some(Icons(id)) })
+        let icons = (missing && saved.is_ok()).then(|| Icons { id, stamp: stored.stamp.clone(), locale: stored.locale.clone() });
+        Ok(Cached { map, stamp: stored.stamp, locale: stored.locale, icons })
     })
     .await
 }
@@ -110,18 +130,29 @@ mod tests {
             "objects3d": {"kept": true}
         });
         let raw = RawValue::from_string(raw.to_string()).unwrap();
-        let stored = Stored { stamp: Some("2026-01-01T00:00:00Z".to_owned()), map: &raw };
+        let stored = Stored { stamp: Some("2026-01-01T00:00:00Z".to_owned()), locale: "fr-FR".to_owned(), map: &raw };
         let path = file(&dir, "../wNYf6cFhpk");
         assert!(path.ends_with("maps/wNYf6cFhpk.json"));
         assert_eq!(name("a/b?c=d"), "abcd");
         disk::replace(&path, &serde_json::to_vec(&stored).unwrap()).unwrap();
-        let Cached { map, stamp, .. } = cached(&dir, "wNYf6cFhpk").unwrap();
+        let Cached { map, stamp, locale, .. } = cached(&dir, "wNYf6cFhpk").unwrap();
         assert_eq!((stamp.as_deref(), map.tiles.template.as_str()), (Some("2026-01-01T00:00:00Z"), "u/{z}/{x}/{y}"));
+        assert_eq!(locale, "fr-FR");
         assert!(fs::read_to_string(&path).unwrap().contains("objects3d"));
         fs::write(&path, b"{").unwrap();
         assert!(cached(&dir, "wNYf6cFhpk").is_none());
         forget(&dir);
         assert!(cached(&dir, "wNYf6cFhpk").is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_copy_stored_before_locales_reads_as_english() {
+        let dir = std::env::temp_dir().join(format!("impulse-map-old-{}", std::process::id()));
+        let raw = r#"{"stamp": "r1", "map": {"metadata": {"tileSource": {"type": "xyz", "urlTemplate": "u"}}}}"#;
+        disk::replace(&file(&dir, "old"), raw.as_bytes()).unwrap();
+        let copy = cached(&dir, "old").unwrap();
+        assert_eq!((copy.stamp.as_deref(), copy.locale.as_str()), (Some("r1"), "en-US"));
         let _ = fs::remove_dir_all(&dir);
     }
 }

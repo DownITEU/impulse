@@ -1,21 +1,20 @@
 //! The map's model: the open game's maps and the one chosen, loading it, and the live run both the map and the
 //! minimap follow.
 
-use std::{rc::Rc, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use client::{Registry, library::GameId, media::Media, storage::Paths};
-use futures::StreamExt;
 use gpui_kit::{App, AppContext, Context, Entity, Task};
-use model::{MapOffer, Snapshot};
+use model::MapOffer;
 
 use super::{
-    board::Board,
+    board::{Board, show},
     live::{LiveMap, LiveRun},
 };
 use crate::{
-    Load,
     library::Library,
     run::{RunEvent, Runs},
+    ui::text::{Texts, content_locale},
 };
 
 // A closed map keeps its pins this long, so opening it again soon is instant; later they are read from disk again.
@@ -51,6 +50,7 @@ impl Maps {
             }
         })
         .detach();
+        cx.observe_global::<Texts>(Self::relocalize).detach();
         let board = cx.new(|_| Board::new(paths.map_state()));
         let live_board = cx.new(|_| Board::live(paths.map_state()));
         let live_map = cx.new(|cx| LiveMap::new(registry.clone(), live_board, board.clone(), Media::Tiles.dir(paths), paths, cx));
@@ -126,31 +126,39 @@ impl Maps {
         self.keep_view(cx);
         self.chosen = index;
         cx.notify();
-        let Some(offer) = self.offers.get(index) else { return };
-        let shared = self.live_map.read(cx).board.read(cx).loaded(Some(&offer.id));
-        self.board.update(cx, |board, cx| board.pending(offer.id.clone(), cx));
-        // The minimap's copy, when it shows this map.
-        if let Some(map) = shared {
-            self._load = Task::ready(());
-            return self.board.update(cx, |board, cx| board.install(map, cx));
+        let Some(offer) = self.offers.get(index).cloned() else { return };
+        let locale = content_locale(cx);
+        let shared = self.live_map.read(cx).board.read(cx).loaded(&offer.id, &locale);
+        self.board.update(cx, |board, cx| board.pending(offer.id.clone(), locale, cx));
+        // The minimap's copy, when it shows this map; a load of its own unless the minimap's is done.
+        if let Some((map, settled)) = shared {
+            self.board.update(cx, |board, cx| board.take((map, settled), cx));
+            if settled {
+                self._load = Task::ready(());
+                return;
+            }
         }
-        let mut snapshots = self.registry.map(offer);
+        self.load(&offer, cx);
+    }
+
+    fn load(&mut self, offer: &MapOffer, cx: &mut Context<Self>) {
+        let snapshots = self.registry.map(offer, &content_locale(cx));
         let board = self.board.downgrade();
         self._load = cx.spawn(async move |_, cx| {
-            while let Some(snapshot) = snapshots.next().await {
-                let shown = board.update(cx, |board, cx| match snapshot {
-                    // The minimap shared its copy meanwhile.
-                    Snapshot::Cached(Some(_)) if matches!(board.map, Load::Ready(_)) => {}
-                    Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
-                    // The network is next.
-                    Snapshot::Cached(None) => {}
-                    Snapshot::Fresh(Err(e)) => board.fail(e, cx),
-                });
-                if shown.is_err() {
-                    break;
-                }
-            }
+            let _ = show(&board, snapshots, cx).await;
         });
+    }
+
+    /// Another content language: the open map loads again in it, a closed one lets go of its copy; the minimap's
+    /// search starts over.
+    fn relocalize(&mut self, cx: &mut Context<Self>) {
+        if self.is_open(cx) {
+            self.choose(self.chosen, cx);
+        } else {
+            self._load = Task::ready(());
+            self.board.update(cx, |board, _| board.forget());
+        }
+        self.live_map.update(cx, |live, cx| live.relocalize(cx));
     }
 
     fn keep_view(&mut self, cx: &mut Context<Self>) {

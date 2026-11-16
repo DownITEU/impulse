@@ -17,6 +17,7 @@ fn cheat(id: &str, kind: Kind, args: Args) -> Cheat {
         key: None,
         name: String::new(),
         category: String::new(),
+        category_name: None,
         kind,
         args,
         hotkeys: Vec::new(),
@@ -163,6 +164,23 @@ fn a_failed_refresh_keeps_a_copy_stale_and_fails_without_one() {
     shelf.pending(h.clone());
     shelf.failed(h.clone(), Failure::new(FailureKind::Offline));
     assert!(matches!(shelf.get(&h), Some(Load::Failed(_))));
+}
+
+#[test]
+fn another_language_outdates_every_copy_shown_or_waiting() {
+    let mut shelf = Shelf::default();
+    let (g, h) = (game("g"), game("h"));
+    shelf.put(g.clone(), sheet(1));
+    shelf.put(h.clone(), sheet(1));
+    shelf.hold(h.clone());
+    shelf.put(h.clone(), sheet(2));
+    shelf.outdate(Some(&g));
+    // The waiting copy is the newest: it decides.
+    assert!(!shelf.is_current(&g, &(None, Some(1))) && shelf.is_current(&h, &(None, Some(2))));
+    shelf.outdate(None);
+    assert!(!shelf.is_current(&h, &(None, Some(2))));
+    shelf.release(&h, &profiles("outdated", false));
+    assert!(shelf.sheet(&h).is_some_and(|sheet| sheet.stale && sheet.stamp == (None, Some(2))));
 }
 
 #[test]

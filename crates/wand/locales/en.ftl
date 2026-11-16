@@ -18,6 +18,19 @@ folder-hint = where the trainer binaries are read from
 folder-empty = no Wand trainer files in this folder
 folder-unset = Wand's folder is not set
 
+## Categories
+
+category-challenge = CHALLENGE MODS
+category-enemies = ENEMIES
+category-game = GAME
+category-inventory = INVENTORY
+category-physics = PHYSICS
+category-player = PLAYER
+category-stats = STATS
+category-teleport = TELEPORT
+category-vehicles = VEHICLES
+category-weapons = WEAPONS
+
 ## Failures
 
 signed-out = Wand is signed out: open Wand and sign in

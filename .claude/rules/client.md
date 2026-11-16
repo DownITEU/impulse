@@ -14,10 +14,10 @@ The app's logic without GPUI: what `shell`'s entities hold and decide, and the f
 - `profile`: `Profiles` (`games.json`): a `GameProfile` by `GameId`, a `TrainerProfile` by the trainer's `Ref`; `Collection`, `Values`.
 - `bindings`: `Store` (`hotkeys.json`, by trainer `Ref`), `Choice`, `rebind` with the "no chord twice" rule.
 - `Load`: something that arrives after the window opens, or the `Failure` why it did not.
-- `trainer`: `Sheet`, a trainer as the app holds it, with its `Ref` and folds by section id (`PINNED` or a category), `step` (a hotkey's `Step`), `Span` (a slider), `initial`; `Shelf`, the sheets by game and the holds (a held game's newer copy waits).
+- `trainer`: `Sheet`, a trainer as the app holds it, with its `Ref` and folds by section id (`PINNED` or a category), `step` (a hotkey's `Step`), `Span` (a slider), `initial`; `Shelf`, the sheets by game and the holds (a held game's newer copy waits), `outdate` (the language changed).
 - `library`: `Game` (`store`: the launcher, `None` for a picked exe), `GameId` (the first source's game `Ref` as text), `Library`, `Support`, `Stamp`, `scan` (launchers joined with the catalog), `Picked` (`picked.json`), `sources` (the source menu: `Entry`, and `Label`, data that shell words).
 - `run`: `request` (a `play::Request` from an install and a plan), `start`, `Stage`, and the bookkeeping `opened`, `closed`.
-- `map`: `state` (the user's state of a map, a file per map) and `heading`.
+- `map`: `state` (the user's state of a map, a file per map; `Saved::resolve` turns region titles older builds saved into ids) and `heading`.
 
 ## Rules
 - No GPUI and no executor: a function here returns data; `scan` and `sweep` block and `start` is awaited, all by `shell`, off the UI thread.

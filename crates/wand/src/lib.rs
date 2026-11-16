@@ -7,6 +7,7 @@ mod catalog;
 mod folder;
 mod inject;
 mod install;
+mod locale;
 mod map;
 mod provider;
 mod run;
@@ -19,6 +20,8 @@ mod transport;
 
 pub use provider::Wand;
 
+const SOURCE: &str = "wand";
+
 fn source() -> model::SourceId {
-    model::SourceId::new(Wand::SOURCE).expect("a valid source id")
+    model::SourceId::new(SOURCE).expect("a valid source id")
 }

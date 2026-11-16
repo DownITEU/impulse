@@ -6,15 +6,15 @@ use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 use anyhow::Result;
 use client::Registry;
 use client::storage::{Paths, Stored};
-use futures::StreamExt;
 use gpui_kit::{App, AsyncApp, Context, Entity, EntityId, Subscription, Task, WeakEntity};
-use model::{Map, MapOffer, Snapshot};
+use model::{Locale, Map, MapOffer};
 use serde::{Deserialize, Serialize};
 
-use super::board::{Board, BoardEvent};
+use super::board::{Board, BoardEvent, show};
 use crate::{
     Load,
     run::{Run, Tracked, Tracker},
+    ui::text::content_locale,
 };
 
 // Tile levels above the map's deepest: where the minimap starts and how far the wheel takes it.
@@ -164,16 +164,24 @@ impl LiveMap {
         if let Some(at) = offers.iter().position(|offer| Some(&offer.id) == self.big.read(cx).id()) {
             offers[..=at].rotate_right(1);
         }
-        let (registry, board, big) = (self.registry.clone(), self.board.downgrade(), self.big.downgrade());
+        let (registry, board, big, locale) = (self.registry.clone(), self.board.downgrade(), self.big.downgrade(), content_locale(cx));
         self._load = cx.spawn(async move |live, cx| {
-            let _ = load(live, board, big, registry, offers, cx).await;
+            let _ = load(live, board, big, registry, offers, &locale, cx).await;
         });
+    }
+
+    /// Another content language: the search for a map that places the player starts over in it.
+    pub(super) fn relocalize(&mut self, cx: &mut Context<Self>) {
+        if !self.offers.is_empty() {
+            self.load(cx);
+        }
     }
 
     /// Takes the big board's state of the same map; only that board writes it.
     fn adopt(&mut self, cx: &mut Context<Self>) {
         let (big, board) = (self.big.read(cx), self.board.read(cx));
-        let same = big.loaded(board.id()).is_some() && matches!(board.map, Load::Ready(_));
+        let ready = |board: &Board| matches!(board.map, Load::Ready(_));
+        let same = board.id().is_some() && big.id() == board.id() && ready(big) && ready(board);
         if !same || Rc::ptr_eq(&big.saved, &board.saved) {
             return;
         }
@@ -202,9 +210,10 @@ impl LiveMap {
 fn share(from: &Entity<Board>, to: &Entity<Board>, cx: &mut App) {
     let (map, wanted) = {
         let (from, to) = (from.read(cx), to.read(cx));
-        let Some(map) = from.loaded(from.id()) else { return };
-        let held = to.loaded(from.id()).is_some_and(|held| Rc::ptr_eq(&held, &map));
-        (map, to.id() == from.id() && !held)
+        let Some((id, locale)) = from.asked() else { return };
+        let Some((map, _)) = from.loaded(id, locale) else { return };
+        let held = to.loaded(id, locale).is_some_and(|(held, _)| Rc::ptr_eq(&held, &map));
+        (map, to.asked() == from.asked() && !held)
     };
     if wanted {
         to.update(cx, |board, cx| board.install(map, cx));
@@ -218,24 +227,19 @@ async fn load(
     big: WeakEntity<Board>,
     registry: Arc<Registry>,
     offers: Vec<MapOffer>,
+    locale: &Locale,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     for offer in offers {
-        let shared = big.read_with(cx, |big, _| big.loaded(Some(&offer.id)))?;
-        board.update(cx, |board, cx| board.pending(offer.id.clone(), cx))?;
-        if let Some(map) = shared {
-            board.update(cx, |board, cx| board.install(map, cx))?;
-        } else {
-            let mut snapshots = registry.map(&offer);
-            while let Some(snapshot) = snapshots.next().await {
-                board.update(cx, |board, cx| match snapshot {
-                    // The big board shared its copy meanwhile.
-                    Snapshot::Cached(Some(_)) if matches!(board.map, Load::Ready(_)) => {}
-                    Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
-                    Snapshot::Cached(None) => {}
-                    Snapshot::Fresh(Err(e)) => board.fail(e, cx),
-                })?;
-            }
+        let shared = big.read_with(cx, |big, _| big.loaded(&offer.id, locale))?;
+        board.update(cx, |board, cx| board.pending(offer.id.clone(), locale.clone(), cx))?;
+        // The big board's copy; a load of its own unless the big board's is done.
+        let settled = shared.as_ref().is_some_and(|(_, settled)| *settled);
+        if let Some(shared) = shared {
+            board.update(cx, |board, cx| board.take(shared, cx))?;
+        }
+        if !settled {
+            show(&board, registry.map(&offer, locale), cx).await?;
         }
         if live.read_with(cx, |live, cx| live.ready(cx))? {
             return Ok(());

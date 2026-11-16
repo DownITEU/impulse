@@ -9,7 +9,7 @@ use std::{
 
 use gpui_kit::{App, Global, SharedString};
 use i18n::{Arg, Catalog, Key, Language};
-use model::{Failure, FailureKind, Files, SourceId, Text};
+use model::{Failure, FailureKind, Files, Locale, SourceId, Text};
 use rustc_hash::{FxHashMap, FxHasher};
 
 use super::key;
@@ -19,6 +19,8 @@ const FILES: Files = &[("en", include_str!("../../locales/en.ftl"))];
 
 pub struct Texts {
     catalog: Catalog,
+    // What sources are asked in: the language's tag.
+    locale: Locale,
     // Messages without arguments by domain, each made once per language.
     made: RefCell<FxHashMap<String, FxHashMap<Arc<str>, SharedString>>>,
     // Messages with arguments by a hash of key and arguments, checked against the copy kept, so a redraw formats nothing.
@@ -49,7 +51,8 @@ impl Texts {
         // `IMPULSE_LOCALE=pseudo` in a debug build shows cuts and English left in the code.
         let pseudo = cfg!(debug_assertions) && env::var_os("IMPULSE_LOCALE").is_some_and(|value| value == "pseudo");
         let domains = [(APP, FILES)].into_iter().chain(sources.iter().map(|(id, files)| (id.as_str(), *files)));
-        Self { catalog: Catalog::new(language, pseudo, domains), made: RefCell::default(), formatted: RefCell::default() }
+        let (locale, made, formatted) = (Locale::new(language.tag), RefCell::default(), RefCell::default());
+        Self { catalog: Catalog::new(language, pseudo, domains), locale, made, formatted }
     }
 
     pub fn language(&self) -> Language {
@@ -105,6 +108,11 @@ impl Texts {
         formatted.insert(hash, (made, text.clone()));
         text
     }
+}
+
+/// The language content is asked in.
+pub fn content_locale(cx: &App) -> Locale {
+    cx.global::<Texts>().locale.clone()
 }
 
 /// A message without arguments.

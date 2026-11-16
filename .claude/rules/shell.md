@@ -32,9 +32,10 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Trainers` owns the sheets and the profiles: read them through it, change them with its commands. It never knows the run: a run holds its game's copy with `hold`.
 - Sources come only through the `Arc<Registry>` the entities hold. Its streams: the catalog in `Library`, trainers in `Trainers`, sign-in in `Account`. `Cached(Some)` shows at once; `Fresh(Err)` never empties a cached copy (it marks it `stale`); a library error shows only with no copy. A failure shows as `why` (the source's words or its kind's, and where to fix a missing setting), never its chain.
 - `Trainers` loads the open game's trainer only: nothing is downloaded for a game the user did not open (the API cuts a client off after about ten trainer requests).
+- Sources are asked in `content_locale(cx)`, the language's tag. A switch reloads the open game's trainer (the maps: `shell-map.md`); every other copy asks again at its next open (`Shelf::outdate`), which reads the disk unless that copy is in another locale. A load that ends after a switch outdates its own game only.
 - A starting or live run carries its game's `Hold`: a newer copy waits until it drops, then shows with the pins, folds and hotkeys set meanwhile. The release lands on the next executor turn.
 - `Runs` owns the run: views read it and send its commands; whoever reacts to a run subscribes to `RunEvent` (`crash::watch`, `Layer`, `Hotkeys`, `Maps`, `TrayIcon`). It stops a run whose game left the list.
-- `Printed` is made on `Opened` and `Installed` of the open game, re-capped on `Rebound`; a number field follows `Set`. The cheat list reads the sheet in place through `Trainers`.
+- `Printed` is made on `Opened` and `Installed` of the open game and on a language change, re-capped on `Rebound`; a number field follows `Set`. The cheat list reads the sheet in place through `Trainers`.
 - One run at a time: `Runs::start` refuses while `is_active`. `Stopping` lasts until `Session::stop` returns.
 - A cheat value goes one way: `Runs::set`, `step` or `apply` change the live sheet through `Trainers` and send it; they do nothing without a live run. A run's time and mods are kept once (`closed` flag), on end, STOP, quit and release.
 - Every live session is followed by `crash::watch`: a UI-thread panic stops it before the process ends.

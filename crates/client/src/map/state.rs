@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use model::{Map, Ref};
+use model::{Map, Ref, Region};
 // Looked up per drawn pin each frame.
 use rustc_hash::FxHashSet as HashSet;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,11 @@ pub struct Saved {
     /// Group ids.
     pub hidden: HashSet<String>,
     /// Region ids.
+    #[serde(rename = "hidden_region_ids")]
     pub hidden_regions: HashSet<String>,
+    /// Region titles older builds saved under this key, until a copy of the map names them (`resolve`).
+    #[serde(rename = "hidden_regions")]
+    pub hidden_labels: HashSet<String>,
     pub unfound_only: bool,
     pub teleport_only: bool,
     pub labels: bool,
@@ -49,6 +53,7 @@ impl Default for Saved {
             found: HashSet::default(),
             hidden: HashSet::default(),
             hidden_regions: HashSet::default(),
+            hidden_labels: HashSet::default(),
             unfound_only: false,
             teleport_only: false,
             labels: true,
@@ -66,6 +71,19 @@ impl Saved {
     pub fn first(map: &Map) -> Self {
         let hidden = map.categories.iter().filter(|category| !category.shown);
         Self { hidden: hidden.flat_map(|category| category.groups.iter().map(|group| group.id.clone())).collect(), ..Self::default() }
+    }
+
+    /// A title an older build saved hides the regions of that name; one no region has yet waits for another copy.
+    pub fn resolve(&mut self, regions: &[Region]) {
+        let hidden = &mut self.hidden_regions;
+        self.hidden_labels.retain(|label| {
+            let mut named = false;
+            for region in regions.iter().filter(|region| region.name == *label) {
+                hidden.insert(region.id.clone());
+                named = true;
+            }
+            !named
+        });
     }
 }
 
@@ -94,6 +112,25 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[test]
+    fn a_saved_region_title_hides_every_region_of_that_name() {
+        let region = |id: &str, name: &str| Region {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            outline: Vec::new(),
+            color: 0,
+            thickness: 1.,
+            zoom: (0., 20.),
+        };
+        let regions = [region("a", "Camp"), region("b", "Camp"), region("c", "Keep")];
+        let hidden = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<HashSet<String>>();
+        // An older build's file: titles under `hidden_regions`.
+        let mut saved: Saved =
+            serde_json::from_str(r#"{"hidden_regions": ["Camp", "Gone", "Keep"], "hidden_region_ids": ["Camp"]}"#).unwrap();
+        saved.resolve(&regions);
+        assert_eq!((saved.hidden_regions, saved.hidden_labels), (hidden(&["a", "b", "c", "Camp"]), hidden(&["Gone"])));
+    }
 
     #[test]
     fn state_survives_a_round_trip_and_older_files() {

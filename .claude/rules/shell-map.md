@@ -22,7 +22,8 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 - `Board::live` (the minimap's) never writes the user's state: `saves` is off and it adopts the big board's `Rc<Saved>`. Only the big board writes.
 - Map state is written blocking, on each change, in order. A board saves before it swaps or closes a map (`pending`, `hide`); `forget` does not save. The state and heading are `client::map`.
 - `Tracker` asks the position only while a `Lease` is held, one question at a time. The board holds its lease (`_fixes`) only while open with a tracker and a map that has a `Frame`; dropping it stops the asking.
-- A `Cached` snapshot is skipped when the board already holds a shared copy (`Maps::choose`, `live::load`).
+- Snapshots reach a board through `board::show`: a `Cached` one is skipped when the board already holds a shared copy.
+- A board keeps the map and locale it asked for (`asked`); a copy is shared or reused only between the same two. A board that takes the other's copy before that board's load is done (`settled`) loads its own too. Another content language: the open map loads again through `choose`, a closed one lets go of its copy, and the minimap's search starts over (`Maps::relocalize`).
 - `Tiles` drops the least recently drawn, never what the last frame drew or a load just brought. Whatever leaves `Tiles` or `Images` goes to `window.drop_image` (`stale`), in the window it was drawn in: `hide(window)` when a window stops showing a part.
 - `Stage::mini` only draws: no input, hover, chip or menu; its tile cache is small.
 - Clips: `ClipView` downloads through `art::path`, decodes with `video` on the window's D3D11 device, paints with `paint_surface` (never the atlas), and starts again when the device changed. A clip no frame asked for stops.
@@ -36,4 +37,4 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 - The tracker keeps the heading for the whole run on the leaseholder's `Frame`; a lease with another frame starts it over.
 - Tiles are decoded with a 1 px border: the atlas filters across an image's edge and shows seams otherwise.
 - Closed, a board shows the tracker's last fix, not a live one; its bearing goes stale.
-- Hidden regions are saved by `Region::id`, hidden groups by id.
+- Hidden regions are saved by `Region::id`, hidden groups by id. Titles an older build saved are `hidden_labels` until an install names them (`Saved::resolve`). The sidebar has one row per region name, shown while any part shows.

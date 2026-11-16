@@ -1,8 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::Chord;
-
-use crate::Runner;
+use crate::{Chord, Runner, Text};
 
 /// A trainer's cheat list, as the user sees it, and what running exactly this list takes.
 pub struct Trainer {
@@ -32,7 +30,10 @@ pub struct Cheat {
     /// The variable the trainer sets; cheats may share one, and `None` sets nothing.
     pub key: Option<String>,
     pub name: String,
+    /// Its section's id.
     pub category: String,
+    /// The category in words; without them the category itself shows.
+    pub category_name: Option<Text>,
     pub kind: Kind,
     pub args: Args,
     /// By slot (see `Kind::slots`), so a pair stays "decrease, increase" when one side is unset or unusable (`None`).

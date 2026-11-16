@@ -17,7 +17,10 @@ use futures::{StreamExt, channel::oneshot};
 use gpui_kit::{Context, Entity, EventEmitter};
 use model::{Chord, Snapshot};
 
-use crate::library::{Library, LibraryEvent};
+use crate::{
+    library::{Library, LibraryEvent},
+    ui::text::{Texts, content_locale},
+};
 pub use title::title;
 
 pub enum TrainerEvent {
@@ -48,6 +51,12 @@ impl EventEmitter<TrainerEvent> for Trainers {}
 impl Trainers {
     pub fn new(registry: Arc<Registry>, paths: &Paths, library: Entity<Library>, cx: &mut Context<Self>) -> Self {
         cx.subscribe(&library, |trainers, _, _: &LibraryEvent, cx| trainers.open(cx)).detach();
+        // Copies in the old language show until their next open asks again; the open game's asks now.
+        cx.observe_global::<Texts>(|trainers, cx| {
+            trainers.shelf.outdate(None);
+            trainers.open(cx);
+        })
+        .detach();
         Self { registry, library, profiles: Profiles::load(paths), shelf: Shelf::default(), loading: HashSet::new() }
     }
 
@@ -212,8 +221,8 @@ impl Trainers {
         if !self.loading.insert(game.id.clone()) {
             return;
         }
-        let (id, stamp, trainer_id) = (game.id.clone(), game.stamp.clone(), offer.id.clone());
-        let mut snapshots = self.registry.trainer(offer, &game.install);
+        let (id, stamp, trainer_id, locale) = (game.id.clone(), game.stamp.clone(), offer.id.clone(), content_locale(cx));
+        let mut snapshots = self.registry.trainer(offer, &game.install, &locale);
         cx.spawn(async move |trainers, cx| {
             while let Some(snapshot) = snapshots.next().await {
                 trainers
@@ -236,8 +245,13 @@ impl Trainers {
             trainers
                 .update(cx, |trainers, cx| {
                     trainers.loading.remove(&id);
-                    // The source changed while it loaded: this trainer is for the old build.
-                    if trainers.library.read(cx).opened().is_some_and(|game| game.id == id && game.stamp != stamp) {
+                    // The language changed while it loaded: this copy is in the old one.
+                    let relocalized = content_locale(cx) != locale;
+                    if relocalized {
+                        trainers.shelf.outdate(Some(&id));
+                    }
+                    // Or the source changed: this trainer is for the old build.
+                    if trainers.library.read(cx).opened().is_some_and(|game| game.id == id && (game.stamp != stamp || relocalized)) {
                         trainers.open(cx);
                     }
                     cx.notify();

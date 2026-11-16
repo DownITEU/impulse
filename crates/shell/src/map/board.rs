@@ -1,15 +1,16 @@
 //! The shown map and what the user did with it, shared by the stage, the sidebar and the card.
 //! They observe it; it notifies on what a person does (clicks, typing, the player's position), never per frame.
 
-use model::Failure;
 use std::{path::PathBuf, rc::Rc, time::Duration};
 
+use anyhow::Result;
 use client::map::{
     heading::Bearing,
     state::{self, Mark, PALETTE, Saved},
 };
-use gpui_kit::{Context, EventEmitter, Subscription};
-use model::{Map, Point, Ref};
+use futures::{StreamExt, stream::BoxStream};
+use gpui_kit::{AsyncApp, Context, EventEmitter, Subscription, WeakEntity};
+use model::{Failure, Locale, Map, Point, Ref, Snapshot};
 
 use super::group;
 use crate::{
@@ -40,9 +41,13 @@ impl EventEmitter<BoardEvent> for Board {}
 
 pub struct Board {
     state_dir: PathBuf,
-    // The shown map's, which its saved state is kept under.
+    // The shown map's, which its saved state is kept under, and the locale it was asked in: boards share a copy only
+    // when they asked for the same.
     id: Option<Ref>,
+    locale: Option<Locale>,
     pub map: Load<Rc<Map>>,
+    // The copy is its load's last word: a board taking it needs no load of its own.
+    settled: bool,
     // Shared so a frame can hold it while it paints.
     pub saved: Rc<Saved>,
     // Pins per category and group: all of them and the found ones.
@@ -81,7 +86,9 @@ impl Board {
         Self {
             state_dir,
             id: None,
+            locale: None,
             map: Load::Pending,
+            settled: false,
             saved: Rc::default(),
             counts: Vec::new(),
             found_counts: Vec::new(),
@@ -104,18 +111,30 @@ impl Board {
         self.id.as_ref()
     }
 
-    /// The map `id`, when this board holds it.
-    pub fn loaded(&self, id: Option<&Ref>) -> Option<Rc<Map>> {
+    /// The map and the locale this board asked for.
+    pub fn asked(&self) -> Option<(&Ref, &Locale)> {
+        self.id.as_ref().zip(self.locale.as_ref())
+    }
+
+    /// The map `id` in `locale`, when this board holds it, and whether its load is done.
+    pub fn loaded(&self, id: &Ref, locale: &Locale) -> Option<(Rc<Map>, bool)> {
         match &self.map {
-            Load::Ready(map) if id.is_some() && self.id.as_ref() == id => Some(map.clone()),
+            Load::Ready(map) if self.asked() == Some((id, locale)) => Some((map.clone(), self.settled)),
             _ => None,
         }
     }
 
-    /// Waits for the map `id`; the one shown keeps its state on disk first.
-    pub fn pending(&mut self, id: Ref, cx: &mut Context<Self>) {
+    /// Shows another board's copy; settled, it needs no load of its own.
+    pub fn take(&mut self, (map, settled): (Rc<Map>, bool), cx: &mut Context<Self>) {
+        self.install(map, cx);
+        self.settled = settled;
+    }
+
+    /// Waits for the map `id` in `locale`; the one shown keeps its state on disk first.
+    pub fn pending(&mut self, id: Ref, locale: Locale, cx: &mut Context<Self>) {
         self.save();
-        (self.id, self.map, self.selected, self.mark) = (Some(id), Load::Pending, None, None);
+        (self.id, self.locale, self.map, self.selected, self.mark) = (Some(id), Some(locale), Load::Pending, None, None);
+        self.settled = false;
         self.watch(cx);
         cx.notify();
     }
@@ -128,6 +147,10 @@ impl Board {
         if first {
             let saved = self.id.as_ref().and_then(|id| state::load(&self.state_dir, id));
             self.saved = Rc::new(saved.unwrap_or_else(|| Saved::first(&map)));
+        }
+        // Titles an older build saved turn into ids once a copy names them.
+        if !self.saved.hidden_labels.is_empty() {
+            Rc::make_mut(&mut self.saved).resolve(&map.regions);
         }
         self.counts = map.categories.iter().map(|category| vec![0; category.groups.len()]).collect();
         for pin in &map.pins {
@@ -328,7 +351,7 @@ impl Board {
 
     /// Lets go of the map, closed for a while; the user's state of it was saved when it closed.
     pub fn forget(&mut self) {
-        (self.id, self.map, self.selected, self.mark) = (None, Load::Pending, None, None);
+        (self.id, self.locale, self.map, self.selected, self.mark, self.settled) = (None, None, Load::Pending, None, None, false);
         (self.saved, self.counts, self.found_counts, self.haystacks) = (Rc::default(), Vec::new(), Vec::new(), Vec::new());
     }
 
@@ -425,4 +448,19 @@ impl Board {
 
 pub fn plane((x, y): (f64, f64)) -> Point {
     Point { x, y }
+}
+
+/// Shows each copy on `board`, then marks it settled; a cached one only when the board holds none, as the other board
+/// may have shared its own.
+pub async fn show(board: &WeakEntity<Board>, mut snapshots: BoxStream<'static, Snapshot<Map>>, cx: &mut AsyncApp) -> Result<()> {
+    while let Some(snapshot) = snapshots.next().await {
+        board.update(cx, |board, cx| match snapshot {
+            Snapshot::Cached(Some(_)) if matches!(board.map, Load::Ready(_)) => {}
+            Snapshot::Cached(Some(map)) | Snapshot::Fresh(Ok(map)) => board.install(Rc::new(map), cx),
+            // The network is next.
+            Snapshot::Cached(None) => {}
+            Snapshot::Fresh(Err(e)) => board.fail(e, cx),
+        })?;
+    }
+    board.update(cx, |board, _| board.settled = true)
 }

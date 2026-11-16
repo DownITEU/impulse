@@ -8,9 +8,9 @@ paths:
 What the UI, a run and the sources share, in no source's terms: data and traits, with only the logic every source must share.
 
 ## Surface
-- `Source` (`id`, `texts`: its catalogs as `Files`) and the capabilities over it: `Accounts`, `Games`, `Trainers` (by `Offer`), `Maps` (by `MapOffer`), `Folders`, `Caches`; a source implements only what it has. `Snapshot`, `SignIn`, `Account`, `Folder`, `Store`, `Clear` are their answers.
+- `Source` (`id`, `texts`: its catalogs as `Files`) and the capabilities over it: `Accounts`, `Games`, `Trainers` (by `Offer`, `Installation` and `Locale`), `Maps` (by `MapOffer` and `Locale`), `Folders`, `Caches`; a source implements only what it has. `Snapshot`, `SignIn`, `Account`, `Folder`, `Store`, `Clear` are their answers.
 - `SourceId`, `Ref`: a source's name and an id it minted, printed `source:id`; only `Ref` splits one. `SourceId::APP` is the app's own.
-- `Text`: a message of a source's catalog (its domain is its `SourceId`), or plain content. `Failure`: a `FailureKind`, the source's own `message`, the English `detail`.
+- `Text`: a message of a source's catalog (its domain is its `SourceId`), or plain content. `Locale`: the language content is asked in, a BCP 47 tag. `Failure`: a `FailureKind`, the source's own `message`, the English `detail`.
 - `Game`, `Offer`, `Standalone`, `Locator`: a game a source lists, with its store ids, `exe`, art and offers. `Game.id`, `Offer.id` (the trainer) and `MapOffer.id` are the source's `Ref`s.
 - `StoreId`: a launcher's id for a game, `<store>:<id>`, the one place that splits one (`store`, `id`, `steam_app`). `Installation`: a game on this machine (`Origin`: a launcher's `StoreId` or the picked executable, location, build).
 - `Chord`, `Held`, `mouse`: a hotkey in Wand's key codes, its names (`Display`), the keys being pressed.
@@ -25,7 +25,8 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - `Process` is pid and creation time together. `Attach::attach` refuses a process that is no longer the one given.
 - `Runner::prepare` runs before the game is looked for and refuses what cannot run.
 - `Plan::runner` runs exactly the cheat list of the `Trainer` that holds it. An implementer builds both from one value.
-- `Cheat::id` is unique in its trainer. `key` may be shared, or `None`: it then sets nothing.
+- A source answers in the closest locale it has; its copy in another locale is stale. Ids stay across locales.
+- `Cheat::id` is unique in its trainer. `category` is its section's id; `category_name`, when the source has words for it, is what shows. `key` may be shared, or `None`: it then sets nothing.
 - `Kind::slots` is the hotkey slot count (toggle and button 1, number, slider and selection 2: decrease then increase, `Unknown` 0). `Cheat::hotkeys` is indexed by slot with `None` for unbound, and may be shorter than the slots: read a missing slot as unbound.
 - `Args::clamp` never panics: trainers send `min > max`. Do not replace it with `f64::clamp`.
 - Dropping a `Session` ends the run. `Live::events` ends with the session. `position` and `teleport` use the game's own coordinates and are valid only when the trainer says so.
