@@ -187,14 +187,15 @@ impl Stage {
         }
     }
 
-    /// The topmost marker under `pixel`: as drawn, the selected pin on top, then the hovered one, at their size now.
+    /// The topmost marker under `pixel`: as drawn, the selected pin on top, then the hovered one, at their look's size.
     fn hit(&mut self, map: &Map, camera: &Camera, pixel: Pixel, cx: &App) -> Option<pins::Marker> {
         let markers = self.markers(map, camera, cx);
         let single = |pin: &usize| markers.iter().any(|marker| marker.pin == *pin && marker.count == 1);
-        let lifted: Vec<_> = [self.board.read(cx).selected, self.shown.hovered.filter(single)]
+        let selected = self.board.read(cx).selected;
+        let lifted: Vec<_> = [selected, self.shown.hovered.filter(single)]
             .into_iter()
             .flatten()
-            .map(|pin| (pin, map.pins[pin].at, self.lift(pin).unwrap_or(1.)))
+            .map(|pin| (pin, map.pins[pin].at, self.look(pin, selected).scale()))
             .collect();
         pins::hit(&markers, &lifted, camera, self.size(), pixel)
     }

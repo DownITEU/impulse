@@ -76,7 +76,7 @@ impl Stage {
         if let (Some(span), Some(camera)) = (mini, &mut self.camera) {
             camera.span = span;
         }
-        self.animate(&map, selected, player, window);
+        self.animate(&map, player, window);
         let Some(camera) = self.camera else { return };
 
         // On the window, not the element: a drag goes on outside the map. The minimap only zooms.
@@ -145,25 +145,25 @@ impl Stage {
                     window.paint_quad(quad(disc(center, side), px(side / 2.), rgb(color), px(RING.0), ring, BorderStyle::default()));
                     let count = self.shown.counts.entry(marker.count).or_insert_with(|| marker.count.to_string().into()).clone();
                     text(count, COUNT_TEXT, ink(color), false, center, window, cx);
-                } else if let Some(scale) = self.lift(marker.pin) {
-                    lifted.push((marker.pin, scale));
+                } else if self.look(marker.pin, selected) != Look::Plain {
+                    lifted.push(marker.pin);
                 } else {
-                    self.paint_marker(&shot, marker.pin, 1., (x, y), window, cx);
+                    self.paint_marker(&shot, marker.pin, (x, y), window, cx);
                 }
             }
             // The selected pin shows even when a filter or a group hides it, and over the rest.
-            if let Some(pin) = selected.filter(|pin| lifted.iter().all(|(lifted, _)| lifted != pin)) {
-                lifted.push((pin, self.lift(pin).unwrap_or(1.)));
+            if let Some(pin) = selected.filter(|pin| !lifted.contains(pin)) {
+                lifted.push(pin);
             }
-            lifted.sort_by_key(|(pin, _)| selected == Some(*pin));
-            for (pin, scale) in lifted {
+            lifted.sort_by_key(|pin| selected == Some(*pin));
+            for pin in lifted {
                 let tip = camera.to_view(map.pins[pin].at, area);
-                self.paint_marker(&shot, pin, scale, tip, window, cx);
+                self.paint_marker(&shot, pin, tip, window, cx);
             }
             for index in mark_order(saved, shot.mark).collect::<Vec<_>>() {
                 let look = self.mark_look(index, shot.mark);
                 let marker = Marker { group: None, fill: saved.marks[index].color, look, found: false, level: None };
-                self.paint_look(marker, None, look.scale(), camera.to_view(plane(saved.marks[index].at), area), window, cx);
+                self.paint_look(marker, None, camera.to_view(plane(saved.marks[index].at), area), window, cx);
             }
 
             // Over the pins, as place names are on a map.
@@ -204,23 +204,22 @@ impl Stage {
         markers
     }
 
-    fn paint_marker(&mut self, shot: &Shot, index: usize, scale: f64, tip: Pixel, window: &mut Window, cx: &App) {
+    fn paint_marker(&mut self, shot: &Shot, index: usize, tip: Pixel, window: &mut Window, cx: &App) {
         let pin = &shot.map.pins[index];
         let category = &shot.map.categories[pin.group.0];
         let look = self.look(index, shot.selected);
         let marker =
             Marker { group: Some(pin.group), fill: category.color, look, found: shot.saved.found.contains(&pin.id), level: pin.level };
-        self.paint_look(marker, category.groups[pin.group.1].icon.as_ref(), scale, tip, window, cx);
+        self.paint_look(marker, category.groups[pin.group.1].icon.as_ref(), tip, window, cx);
     }
 
-    /// A marker `scale` times its size with its tip on `tip`, on whole device pixels so the image stays sharp.
-    /// The image is made at the look's own scale; other sizes are passing ones.
-    fn paint_look(&mut self, marker: Marker, glyph: Option<&Glyph>, scale: f64, tip: Pixel, window: &mut Window, cx: &App) {
-        let (look, device) = (marker.look, window.scale_factor());
+    /// A marker at its look's size with its tip on `tip`, on whole device pixels so the image stays sharp.
+    fn paint_look(&mut self, marker: Marker, glyph: Option<&Glyph>, tip: Pixel, window: &mut Window, cx: &App) {
+        let (scale, device) = (marker.look.scale(), window.scale_factor());
         let Some(image) = self.images.marker(marker, glyph, device, cx) else { return };
         let snap = |at: f64| ((at * f64::from(device)).round() / f64::from(device)) as f32;
         let corner = self.bounds.origin + point(px(snap(tip.0 - TIP.0 * scale)), px(snap(tip.1 - TIP.1 * scale)));
-        let (pixels, shrink) = (image.size(0), (scale / look.scale()) as f32 / device);
+        let (pixels, shrink) = (image.size(0), 1. / device);
         let rect = Bounds::new(corner, size(px(pixels.width.0 as f32 * shrink), px(pixels.height.0 as f32 * shrink)));
         let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
     }

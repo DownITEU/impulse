@@ -1,5 +1,5 @@
 //! The map itself: tiles, regions, labels, pins and the player, moved and zoomed, with what floats over it.
-//! A view of its own, so what moves each frame (a glide, a lifted marker, a drag) repaints the map alone.
+//! A view of its own, so what moves each frame (a glide, the player, a drag) repaints the map alone.
 
 mod camera;
 mod input;
@@ -56,8 +56,6 @@ struct Shown {
     chip: Option<usize>,
     hovered_region: Option<usize>,
     hovered_mark: Option<usize>,
-    // Markers drawn larger or on their way back, with their size now.
-    lifts: Vec<(usize, f64)>,
     // Where a right click opened its menu.
     target: Option<Point>,
 }

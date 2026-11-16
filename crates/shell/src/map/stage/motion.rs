@@ -1,4 +1,4 @@
-//! What moves between frames: a zoom gliding to its end, markers growing and shrinking, the player walking.
+//! What moves between frames: a zoom gliding to its end, the player walking.
 
 use std::time::Instant;
 
@@ -12,9 +12,7 @@ use super::{
 };
 use crate::map::markers::Look;
 
-// Seconds a marker takes to cover about two thirds of its change in size.
-const GROW: f64 = 0.05;
-// The same for the player toward a new fix: there in about 300 ms.
+// Seconds the player takes to cover about two thirds of the way to a new fix: there in about 300 ms.
 const WALK: f64 = 0.1;
 // Closer than this (a fraction of a pixel at any zoom) or this turn is there.
 const NEAR: f64 = 1e-7;
@@ -38,7 +36,7 @@ impl Stage {
     }
 
     /// Advances what moves by the time since the last frame; asks for the next frame while anything does.
-    pub(super) fn animate(&mut self, map: &Map, selected: Option<usize>, player: Option<Walk>, window: &mut Window) {
+    pub(super) fn animate(&mut self, map: &Map, player: Option<Walk>, window: &mut Window) {
         let now = Instant::now();
         // Long gaps (the first frame, a stall) do not jump.
         let seconds = self.clock.map_or(0., |last| (now - last).as_secs_f64().min(0.1));
@@ -48,12 +46,11 @@ impl Stage {
         {
             self.glide = None;
         }
-        let grown = self.grow(seconds, selected);
         let walked = self.walk(player, seconds);
         if self.follow {
             self.center_on_player();
         }
-        self.clock = (self.glide.is_some() || !grown || !walked).then_some(now);
+        self.clock = (self.glide.is_some() || !walked).then_some(now);
         if self.clock.is_some() {
             window.request_animation_frame();
         }
@@ -76,31 +73,6 @@ impl Stage {
             (_, to) => to,
         };
         *shown == target
-    }
-
-    /// Eases each lifted marker toward its look's size; true once all are there.
-    fn grow(&mut self, seconds: f64, selected: Option<usize>) -> bool {
-        for pin in [self.shown.hovered, selected].into_iter().flatten() {
-            if self.lift(pin).is_none() {
-                self.shown.lifts.push((pin, 1.));
-            }
-        }
-        let part = 1. - (-seconds / GROW).exp();
-        let mut grown = true;
-        for index in 0..self.shown.lifts.len() {
-            let (pin, scale) = self.shown.lifts[index];
-            let target = self.look(pin, selected).scale();
-            let next = if (target - scale).abs() < 0.005 { target } else { scale + (target - scale) * part };
-            grown &= next == target;
-            self.shown.lifts[index].1 = next;
-        }
-        self.shown.lifts.retain(|&(_, scale)| scale != 1.);
-        grown
-    }
-
-    /// The size a lifted marker is drawn at now.
-    pub(super) fn lift(&self, pin: usize) -> Option<f64> {
-        self.shown.lifts.iter().find(|(lifted, _)| *lifted == pin).map(|&(_, scale)| scale)
     }
 
     pub(super) fn look(&self, pin: usize, selected: Option<usize>) -> Look {
