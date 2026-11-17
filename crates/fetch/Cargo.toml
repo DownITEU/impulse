@@ -10,3 +10,4 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 ureq.workspace = true
+url.workspace = true

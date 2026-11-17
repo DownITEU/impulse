@@ -1,0 +1,22 @@
+[package]
+name = "impulse-test-guest"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Not a member of the repo's workspace: it builds for wasm32 on its own.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+sdk = { path = "../../../sdk" }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

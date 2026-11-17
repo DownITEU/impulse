@@ -1,0 +1,16 @@
+{
+  "id": "test-guest",
+  "name": "Test guest",
+  "version": "1.0.0",
+  "api": 1,
+  "kind": "maps",
+  "module": "impulse_test_guest.wasm",
+  "hosts": ["*.tiles.example.com", "tiles.example.com"],
+  "links": ["wiki.example.com"],
+  "locales": ["en", "fr"],
+  "refresh": 7,
+  "settings": [
+    { "id": "level", "kind": "number", "min": 1, "max": 9, "step": 1, "default": 5, "label": "level-label", "hint": "level-hint" },
+    { "id": "night", "kind": "switch", "default": false, "label": "night-label" }
+  ]
+}

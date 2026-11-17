@@ -35,6 +35,7 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 
 ## fetch
 - `get(url, etag)`: blocking GET for public CDNs only (they send no CORS headers). The WeMod API goes through `wand`'s bridge. Body capped at 64 MiB and left unread on a 4xx or 5xx, 120 s timeout. Run it off the UI thread.
+- `guarded(url, allowed, limit, timeout)` for plugins: https only, every hop (5 redirects at most, followed by hand) must pass `allowed(host)`, public addresses only (the resolver drops the rest; IPv6 is global unicast, mapped and NAT64 follow their IPv4), no proxy, no headers but the user agent. An out-of-scope URL, hop or host, or a body past `limit`, is an error carrying `Refused` (`downcast_ref`).
 
 ## pe
 - `header` (machine, timestamp) and `export` (RVA, forwarders skipped). `header` reads headers only: executables can be gigabytes.

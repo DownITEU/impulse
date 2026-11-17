@@ -23,6 +23,7 @@ model = { path = "crates/model" }
 overlay = { path = "crates/overlay" }
 pe = { path = "crates/pe" }
 play = { path = "crates/play" }
+sdk = { path = "crates/sdk" }
 shell = { path = "crates/shell" }
 tray = { path = "crates/tray" }
 video = { path = "crates/video" }
@@ -49,6 +50,7 @@ httparse = "1"
 http = "1"
 image = { version = "0.25", default-features = false }
 log = "0.4"
+markdown = "1.0.0"
 raw-window-handle = "0.6"
 rustc-hash = "2"
 unicode-segmentation = "1"
@@ -68,6 +70,8 @@ unic-langid = "0.9"
 ureq = "3.5.2"
 url = "2"
 uuid = "1"
+wasmi = { version = "2.0.1", default-features = false }
+wat = "1.263"
 webview2-com = "0.39"
 windows = "0.62"
 windows-registry = "0.6"

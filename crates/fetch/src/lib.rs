@@ -5,6 +5,10 @@ use std::{sync::LazyLock, time::Duration};
 use anyhow::{Context, Result};
 use ureq::Agent;
 
+mod guarded;
+
+pub use guarded::{Refused, guarded};
+
 // Public CDNs send no CORS headers, so the null-origin bridge cannot read them.
 static AGENT: LazyLock<Agent> = LazyLock::new(|| {
     Agent::config_builder()
@@ -27,6 +31,10 @@ pub struct Response {
     pub body: Vec<u8>,
 }
 
+pub(crate) fn etag_of(headers: &ureq::http::HeaderMap) -> Option<String> {
+    headers.get("etag").and_then(|v| v.to_str().ok()).map(|v| v.trim_start_matches("W/").trim_matches('"').to_owned())
+}
+
 /// Blocking GET; `etag` makes it conditional (304 has an empty body).
 pub fn get(url: &str, etag: Option<&str>) -> Result<Response> {
     let mut request = AGENT.get(url);
@@ -34,8 +42,7 @@ pub fn get(url: &str, etag: Option<&str>) -> Result<Response> {
         request = request.header("If-None-Match", format!("\"{tag}\""));
     }
     let mut response = request.call().with_context(|| format!("GET {url}"))?;
-    let etag =
-        response.headers().get("etag").and_then(|v| v.to_str().ok()).map(|v| v.trim_start_matches("W/").trim_matches('"').to_owned());
+    let etag = etag_of(response.headers());
     let status = response.status().as_u16();
     // An error's body is never used: one past the limit must not hide its status.
     let body = match status {

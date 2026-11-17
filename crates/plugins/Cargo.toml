@@ -1,0 +1,30 @@
+[package]
+name = "plugins"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+blocking.workspace = true
+disk.workspace = true
+fetch.workspace = true
+futures.workspace = true
+log.workspace = true
+# Descriptions are read as the card reads them (GFM), to find every link.
+markdown.workspace = true
+model.workspace = true
+sdk.workspace = true
+serde = { workspace = true, features = ["derive"] }
+# The guest's floats come back as it wrote them.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sha2.workspace = true
+url.workspace = true
+# Interpreted, compiled lazily: no `wat` or `memory64` in the app (refactor-plan 7.4).
+wasmi = { workspace = true, features = ["std", "stable", "validate", "auto-dispatch"] }
+
+[dev-dependencies]
+wat.workspace = true
