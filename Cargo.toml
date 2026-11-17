@@ -23,6 +23,7 @@ model = { path = "crates/model" }
 overlay = { path = "crates/overlay" }
 pe = { path = "crates/pe" }
 play = { path = "crates/play" }
+plugins = { path = "crates/plugins" }
 sdk = { path = "crates/sdk" }
 shell = { path = "crates/shell" }
 tray = { path = "crates/tray" }

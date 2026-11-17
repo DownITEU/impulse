@@ -4,39 +4,40 @@
 mod cache;
 mod import;
 mod manifest;
+mod net;
 mod runtime;
 mod scope;
+mod serve;
 mod settings;
 #[cfg(test)]
 mod tests;
+mod texts;
 
 use std::{
+    collections::HashSet,
     fs,
     io::{self, Read},
-    path::{Path, PathBuf},
-    sync::Arc,
+    path::Path,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
 use anyhow::{Context, anyhow};
-use blocking::unblock;
-use futures::{
-    StreamExt, future,
-    stream::{self, BoxStream},
-};
-use model::{Failure, FailureKind, Locale, Map, MapOffer, Maps, Snapshot, Source, SourceId};
-use sdk::{
-    manifest::Manifest,
-    wire::{self, ErrorKind},
-};
+use futures::stream::BoxStream;
+use model::{Downloads, Failure, FailureKind, Files, Locale, Map, MapOffer, Maps, Ref, Snapshot, Source, SourceId, Title, Titles};
+use sdk::{manifest::Manifest, wire};
 
-use cache::{Cache, Stamp};
+use cache::Cache;
+use net::net;
 use runtime::Net;
 use scope::Scope;
 pub use settings::Values;
 
 // Far past a Rust guest's size (the MapGenie one is 170 KB).
 const MODULE: u64 = 16 << 20;
+// What a download may bring back, and how long it may take.
+const DOWNLOAD: u64 = 64 << 20;
+const DOWNLOAD_TIME: Duration = Duration::from_secs(60);
 
 pub struct Plugin(Arc<Inner>);
 
@@ -48,22 +49,27 @@ struct Inner {
     /// The user's, each checked against its field.
     settings: Values,
     net: Net,
+    texts: Files,
+    /// Keys `Maps::refresh` marked: asked again whatever their age, until an answer arrives.
+    stale: Mutex<HashSet<String>>,
 }
 
 impl Plugin {
-    /// The plugin in `dir`, its answers kept in `cache`; `values`: the user's settings for it (blocking).
-    pub fn open(dir: &Path, cache: PathBuf, values: &Values) -> Result<Self, Failure> {
-        Self::with(dir, cache, values, net)
+    /// The plugin in `dir`, its answers kept in `caches/<its id>`; `values`: the user's settings for it (blocking).
+    pub fn open(dir: &Path, caches: &Path, values: &Values) -> Result<Self, Failure> {
+        Self::with(dir, caches, values, net)
     }
 
-    fn with(dir: &Path, cache: PathBuf, values: &Values, net: fn(Arc<Scope>) -> Net) -> Result<Self, Failure> {
+    fn with(dir: &Path, caches: &Path, values: &Values, net: impl FnOnce(Arc<Scope>) -> Net) -> Result<Self, Failure> {
         let (manifest, scope) = manifest::read(dir)?;
         let wasm = read(&dir.join(&manifest.module), MODULE)?;
         let runtime = runtime::Plugin::new(scope.source.clone(), &wasm)?;
         let settings = settings::resolve(&manifest.settings, values);
-        let cache = Cache::new(cache, Duration::from_secs(u64::from(manifest.refresh) * 24 * 60 * 60));
+        let cache = Cache::new(caches.join(&manifest.id), Duration::from_secs(u64::from(manifest.refresh) * 24 * 60 * 60));
         let scope = Arc::new(scope);
-        Ok(Self(Arc::new(Inner { net: net(scope.clone()), manifest, scope, runtime, cache, settings })))
+        let texts = texts::load(dir);
+        let stale = Mutex::default();
+        Ok(Self(Arc::new(Inner { net: net(scope.clone()), manifest, scope, runtime, cache, settings, texts, stale })))
     }
 }
 
@@ -71,59 +77,46 @@ impl Source for Plugin {
     fn id(&self) -> SourceId {
         self.0.scope.source.clone()
     }
+
+    fn texts(&self) -> Files {
+        self.0.texts.clone()
+    }
 }
 
 impl Maps for Plugin {
     fn map(&self, offer: &MapOffer, locale: &Locale) -> BoxStream<'static, Snapshot<Map>> {
-        let (inner, id) = (self.0.clone(), offer.id.id().to_owned());
-        let stamp = inner.stamp(locale, offer.revision.clone());
-        let cached = unblock({
-            let (inner, id, stamp) = (inner.clone(), id.clone(), stamp.clone());
-            move || inner.cached(&id, &stamp)
-        });
-        stream::once(cached)
-            .flat_map(move |(copy, fresh)| {
-                let inner = inner.clone();
-                let (id, stamp) = (id.clone(), stamp.clone());
-                let ask = (!fresh).then(|| unblock(move || Snapshot::Fresh(inner.ask(&id, stamp))));
-                stream::once(future::ready(Snapshot::Cached(copy))).chain(stream::iter(ask).then(|asked| asked))
-            })
-            .boxed()
+        let id = offer.id.id();
+        let call = wire::Call::Map { map: id.to_owned() };
+        self.0.serve(serve::map_key(id), call, offer.revision.clone(), locale, import::map)
+    }
+
+    fn refresh(&self, map: &Ref) {
+        if map.source() == &self.0.scope.source {
+            self.0.stale_keys().insert(serve::map_key(map.id()));
+        }
     }
 }
 
-impl Inner {
-    fn stamp(&self, locale: &Locale, revision: Option<String>) -> Stamp {
-        let locale = manifest::closest(&self.manifest.locales, locale).to_owned();
-        Stamp { api: sdk::API, version: self.manifest.version.clone(), locale, settings: self.settings.clone(), revision }
+impl Titles for Plugin {
+    fn titles(&self, locale: &Locale) -> BoxStream<'static, Snapshot<Vec<Title>>> {
+        self.0.serve(serve::TITLES_KEY.to_owned(), wire::Call::Titles, None, locale, import::titles)
     }
 
-    /// The copy on disk and whether it is fresh (blocking).
-    fn cached(&self, id: &str, stamp: &Stamp) -> (Option<Map>, bool) {
-        let Some((answer, fresh)) = self.cache.read::<wire::Map>(&key(id), stamp) else { return (None, false) };
-        match import::map(&self.scope, answer) {
-            Ok(map) => (Some(map), fresh),
-            Err(e) => {
-                log::warn!("{}: map {id} on disk: {e:#}", self.scope.source.as_str());
-                (None, false)
-            }
-        }
+    fn offers(&self, title: &Ref, locale: &Locale) -> BoxStream<'static, Snapshot<Vec<MapOffer>>> {
+        let id = title.id();
+        self.0.serve(serve::offers_key(id), wire::Call::Maps { title: id.to_owned() }, None, locale, import::offers)
     }
+}
 
-    /// The guest's answer, imported and kept (blocking).
-    fn ask(&self, id: &str, stamp: Stamp) -> Result<Map, Failure> {
-        let request =
-            wire::Request { call: wire::Call::Map { map: id.to_owned() }, locale: stamp.locale.clone(), settings: stamp.settings.clone() };
-        let asked = self.runtime.call::<wire::Map>(&request, self.net.clone()).and_then(|answer| {
-            let kept = Cache::encode(stamp, &answer)?;
-            let map = import::map(&self.scope, answer)?;
-            self.cache.put(&key(id), &kept);
-            Ok(map)
-        });
-        asked.map_err(|e| {
-            log::warn!("{}: map {id}: {e:#}", self.scope.source.as_str());
-            Failure::from(e)
-        })
+impl Downloads for Plugin {
+    fn download(&self, url: &str) -> Result<Vec<u8>, Failure> {
+        let source = &self.0.scope.source;
+        let ours = Ref::parse(url).filter(|url| url.source() == source && url.id().starts_with("//"));
+        let Some(ours) = ours else {
+            return Err(Failure { detail: format!("{}: not a URL of this plugin", source.as_str()), ..Failure::new(FailureKind::Refused) });
+        };
+        let url = format!("https:{}", ours.id());
+        (self.0.net)(&url, DOWNLOAD, DOWNLOAD_TIME).map_err(|e| Failure::from(runtime::guest(&self.0.scope.source, e)))
     }
 }
 
@@ -141,29 +134,4 @@ fn read(path: &Path, most: u64) -> anyhow::Result<Vec<u8>> {
         return Err(anyhow!("{} is past {most} bytes", path.display())).context(Failure::new(FailureKind::Refused));
     }
     Ok(bytes)
-}
-
-fn key(map: &str) -> String {
-    format!("map:{map}")
-}
-
-/// The app's GET for a guest: on the plugin's hosts only, its outcome as the guest's error kinds.
-fn net(scope: Arc<Scope>) -> Net {
-    Arc::new(move |url, left| {
-        let error = |kind, message: String| Err(wire::Error::new(kind, message));
-        match fetch::guarded(url, &|host| scope.hosts.allows(host), runtime::ANSWER as u64, left) {
-            Ok(response) if (200..300).contains(&response.status) => Ok(response.body),
-            Ok(response) => {
-                let kind = match response.status {
-                    404 | 410 => ErrorKind::NotFound,
-                    401 | 403 | 429 => ErrorKind::Refused,
-                    500.. => ErrorKind::Offline,
-                    _ => ErrorKind::Internal,
-                };
-                error(kind, format!("HTTP {}", response.status))
-            }
-            Err(e) if e.downcast_ref::<fetch::Refused>().is_some() => error(ErrorKind::Refused, format!("{e:#}")),
-            Err(e) => error(ErrorKind::Offline, format!("{e:#}")),
-        }
-    })
 }

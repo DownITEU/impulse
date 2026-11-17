@@ -86,7 +86,7 @@ impl model::Source for Wand {
     }
 
     fn texts(&self) -> model::Files {
-        texts::FILES
+        texts::files()
     }
 }
 

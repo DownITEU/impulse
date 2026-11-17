@@ -26,7 +26,7 @@ use crate::{
         markers::{GroupIcon, Look, Marker, PICTURE, SIZE, TIP, ink},
     },
     ui::{
-        art::{self, Fetched},
+        art::{self, Fetched, Router},
         assets::Icon,
         theme::*,
     },
@@ -312,10 +312,11 @@ impl Stage {
 
     fn load_tile(&self, pyramid: &Tiles, key: Key, cx: &mut Context<Self>) {
         let (url, cache, epoch) = (pyramid.url(key.0, key.1, key.2), self.tile_dir.clone(), self.epoch);
+        let registry = Router::registry(cx);
         cx.spawn(async move |stage, cx| {
             // Bytes that are no tile count as one the server lacks.
             let fetched = unblock(move || {
-                art::tile(&cache, &url).and_then(|bytes| match decode(&bytes) {
+                art::tile(&cache, &url, &registry).and_then(|bytes| match decode(&bytes) {
                     Ok(image) => Fetched::Ready(image),
                     Err(e) => {
                         log::debug!("tile {url}: {e:#}");

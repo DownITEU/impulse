@@ -27,7 +27,7 @@ fn guest(api: u32, call: &str, extra: &str) -> Vec<u8> {
 }
 
 fn net() -> Net {
-    Arc::new(|url, _| match url {
+    Arc::new(|url, _, _| match url {
         "https://a.tiles.io/x" => Ok(br#"{"ok":7}"#.to_vec()),
         _ => Err(wire::Error::new(wire::ErrorKind::Refused, "outside")),
     })

@@ -81,20 +81,14 @@ fn a_map_keeps_what_its_scope_reaches_and_finds_its_groups() {
     let map = map(&scope(), sample()).unwrap();
     assert_eq!(map.tile_sets.len(), 1, "the tile set off the plugin's hosts is left out");
     let tiles = &map.tile_sets[0].tiles;
-    assert_eq!((tiles.template.as_str(), tiles.bounds.map(|[low, _]| low.x)), ("plugin-t:https://a.tiles.io/{z}/{x}/{y}.jpg", Some(0.25)));
+    assert_eq!((tiles.template.as_str(), tiles.bounds.map(|[low, _]| low.x)), ("plugin-t://a.tiles.io/{z}/{x}/{y}.jpg", Some(0.25)));
     let groups = &map.categories[0].groups;
-    assert_eq!(
-        groups[0].icon,
-        Some(model::Icon::Image { url: "plugin-t:https://a.tiles.io/sprite.png".into(), cell: Some([32, 0, 32, 32]) })
-    );
+    assert_eq!(groups[0].icon, Some(model::Icon::Image { url: "plugin-t://a.tiles.io/sprite.png".into(), cell: Some([32, 0, 32, 32]) }));
     assert_eq!(groups[1].icon, None);
     let (a, b) = (&map.pins[0], &map.pins[1]);
     assert_eq!((a.group, b.group), ((0, 0), (0, 1)));
     assert_eq!(a.description, "By [the gate](pin:b) and far.");
-    assert_eq!(
-        (a.image.as_ref().map(|image| image.full.as_str()), a.video.as_deref()),
-        (Some("plugin-t:https://a.tiles.io/a-full.jpg"), None)
-    );
+    assert_eq!((a.image.as_ref().map(|image| image.full.as_str()), a.video.as_deref()), (Some("plugin-t://a.tiles.io/a-full.jpg"), None));
     assert_eq!((map.regions[0].outlines.len(), map.regions[0].zoom), (2, (3., 5.)), "a ring of one point is left out");
     assert_eq!((map.labels[0].zoom, map.frame.is_none(), map.unfinished), ((0., 24.), true, true));
 }
@@ -124,4 +118,36 @@ fn a_broken_map_is_refused() {
 #[test]
 fn the_sdk_writes_pin_links_as_the_app_reads_them() {
     assert_eq!(sdk::wire::PIN_LINK, model::PIN_LINK);
+}
+
+#[test]
+fn titles_and_offers_are_bounded_and_made_under_the_plugins_source() {
+    let title =
+        |id: &str, stores: &[&str]| wire::Title { id: id.into(), name: id.into(), stores: stores.iter().map(|s| (*s).into()).collect() };
+    let titles = super::titles(&scope(), vec![title("a", &["steam:1", "nonsense", ":x"])]).unwrap();
+    assert_eq!((titles[0].id.to_string().as_str(), titles[0].stores.len()), ("plugin-t:a", 1));
+    let broken = [
+        vec![title("a", &[]), title("a", &[])],
+        vec![title("", &[])],
+        vec![title(&"x".repeat(257), &[])],
+        vec![title("a", &["steam:1"; 33])],
+        (0..10_001).map(|n| title(&n.to_string(), &[])).collect(),
+    ];
+    for titles in broken {
+        assert_eq!(model::Failure::from(super::titles(&scope(), titles).unwrap_err()).kind, FailureKind::Refused);
+    }
+    let offer = |id: &str, thumbnail: &str| wire::MapOffer {
+        id: id.into(),
+        name: id.into(),
+        thumbnail: Some(thumbnail.into()),
+        revision: Some("r".into()),
+    };
+    let offers = super::offers(&scope(), vec![offer("m", "https://a.tiles.io/t.png"), offer("n", "https://far.io/t.png")]).unwrap();
+    assert_eq!(offers[0].thumbnail.as_deref(), Some("plugin-t://a.tiles.io/t.png"));
+    assert_eq!(offers[1].thumbnail, None, "off its hosts");
+    let long = wire::MapOffer { revision: Some("r".repeat(257)), ..offer("m", "https://a.tiles.io/t.png") };
+    let many = (0..257).map(|n| offer(&n.to_string(), "https://a.tiles.io/t.png")).collect();
+    for offers in [vec![long], many] {
+        assert!(super::offers(&scope(), offers).is_err());
+    }
 }

@@ -3,12 +3,13 @@
 use std::path::{Path, PathBuf};
 
 use blocking::unblock;
+use client::Registry;
 use gpui_kit::{Context, Task};
 use image::{RgbaImage, imageops};
 use model::{Icon, Map};
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::ui::art;
+use crate::ui::art::{self, Router};
 
 // A sheet is decoded whole: a larger one is refused.
 const SHEET: u32 = 4096;
@@ -35,10 +36,11 @@ impl Icons {
                 }
             }
         }
+        let registry = Router::registry(cx);
         let task = cx.spawn(async move |icons, cx| {
             for (url, cells) in sheets {
-                let cache = cache.clone();
-                let cut = unblock(move || cut(&cache, &url, cells)).await;
+                let (cache, registry) = (cache.clone(), registry.clone());
+                let cut = unblock(move || cut(&cache, &url, cells, &registry)).await;
                 let added = icons.update(cx, |icons, cx| {
                     icons.cut.extend(cut);
                     cx.notify();
@@ -57,8 +59,8 @@ impl Icons {
 }
 
 /// `cells` of the sheet at `url` (blocking); a group whose sheet or cell is unusable keeps the default mark.
-fn cut(cache: &Path, url: &str, cells: Cells) -> Vec<((usize, usize), RgbaImage)> {
-    let sheet = match art::load(cache, url).and_then(|bytes| art::picture(&bytes, SHEET)) {
+fn cut(cache: &Path, url: &str, cells: Cells, registry: &Registry) -> Vec<((usize, usize), RgbaImage)> {
+    let sheet = match art::load(cache, url, registry).and_then(|bytes| art::picture(&bytes, SHEET)) {
         Ok(sheet) => sheet.into_rgba8(),
         Err(e) => {
             log::debug!("icon sheet {url}: {e:#}");
@@ -82,6 +84,7 @@ fn cut(cache: &Path, url: &str, cells: Cells) -> Vec<((usize, usize), RgbaImage)
 
 #[cfg(test)]
 mod tests {
+    use client::Registry;
     use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 
     #[test]
@@ -97,10 +100,12 @@ mod tests {
         // Empty: the server lacks it, so nothing is downloaded.
         std::fs::write(client::media::file(&cache, "https://cdn/gone.png"), []).unwrap();
         let cells = vec![((0, 0), Some([100, 0, 100, 100])), ((0, 1), None), ((1, 0), Some([150, 0, 100, 100]))];
-        let cut: Vec<_> =
-            super::cut(&cache, url, cells).into_iter().map(|(group, icon)| (group, icon.dimensions(), icon.get_pixel(10, 10).0)).collect();
+        let cut: Vec<_> = super::cut(&cache, url, cells, &Registry::default())
+            .into_iter()
+            .map(|(group, icon)| (group, icon.dimensions(), icon.get_pixel(10, 10).0))
+            .collect();
         assert_eq!(cut, [((0, 0), (64, 64), [0, 0, 255, 255]), ((0, 1), (64, 32), [255, 0, 0, 255])], "a cell past the edge is left out");
-        assert!(super::cut(&cache, "https://cdn/gone.png", vec![((1, 1), None)]).is_empty(), "a sheet not there");
+        assert!(super::cut(&cache, "https://cdn/gone.png", vec![((1, 1), None)], &Registry::default()).is_empty(), "a sheet not there");
         let _ = std::fs::remove_dir_all(&cache);
     }
 }

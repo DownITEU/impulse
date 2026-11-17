@@ -1,6 +1,6 @@
 use super::*;
 
-const APP: Files = &[
+const APP: &[(&str, &str)] = &[
     ("en", "title = SETTINGS\nplayed = { $hours ->\n    [one] { $hours } HOUR\n   *[other] { $hours } HOURS\n}\n"),
     ("xx", "title = REGLAGES\n"),
 ];
@@ -24,7 +24,7 @@ fn plurals_follow_the_number() {
 
 #[test]
 fn french_plurals_count_zero_as_one() {
-    const MODS: Files = &[("fr", "mods = { $count ->\n    [one] { $count } MOD\n   *[other] { $count } MODS\n}\n")];
+    const MODS: &[(&str, &str)] = &[("fr", "mods = { $count ->\n    [one] { $count } MOD\n   *[other] { $count } MODS\n}\n")];
     let catalog = Catalog::new(FRENCH, false, [("app", MODS)]);
     assert_eq!(catalog.text("app", "mods", &[("count", 0u32.into())]), "0 MOD");
     assert_eq!(catalog.text("app", "mods", &[("count", 2u32.into())]), "2 MODS");
@@ -32,7 +32,7 @@ fn french_plurals_count_zero_as_one() {
 
 #[test]
 fn the_pseudo_locale_stretches_the_message_but_not_its_arguments() {
-    const HELLO: Files = &[("en", "hello = Hi { $name }!\n")];
+    const HELLO: &[(&str, &str)] = &[("en", "hello = Hi { $name }!\n")];
     let catalog = Catalog::new(ENGLISH, true, [("app", HELLO)]);
     assert_eq!(catalog.text("app", "hello", &[("name", "Ann".into())]), "[Hî ~]Ann[!]");
 }

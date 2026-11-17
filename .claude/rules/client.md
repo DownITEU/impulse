@@ -8,7 +8,7 @@ paths:
 The app's logic without GPUI: what `shell`'s entities hold and decide, and the files that keep it. Data in, data out; the async work and the UI stay in `shell`.
 
 ## Surface
-- `Registry`: the sources by capability, built in `app`. A `Ref` goes to the source it names, an unknown one answers `Fresh(Err)` (a folder: an error status); `folders` and `stores` join every source's; `games` and `sign_in` are the first source's; `texts`, each source's catalogs once.
+- `Registry`: the sources, each added with its `Capabilities` (`add`, checked to be one source's) and removed (`remove`) while the app runs; `changes` tells each `Change`. A `Ref` goes to the source it names, an unknown one answers `Fresh(Err)` (a folder: an error status, a download: `Unsupported`); `download(url)` routes `<source>:...` like a `Ref`; `titled` lists the sources with `Titles`; `folders` and `stores` join every source's; `games` and `sign_in` are the first source's; `texts`, each source's catalogs as they are now.
 - `storage`: `Paths` names every app file and folder; `Stored<T>`; `read`, `write` for the per-map files; `migrate` (v1 files to v2, run by `app` before the window); `by_ref` (serde for a map keyed by `Ref`); `name` (an id as a file name).
 - `media`: `Media` (a cache folder per kind), the file per URL, `known_missing`, `steam_hero`; `limit` (`Kept`, `sweep`).
 - `profile`: `Profiles` (`games.json`): a `GameProfile` by `GameId`, a `TrainerProfile` by the trainer's `Ref`; `Collection` (`new`: the name rule, `NAME_LENGTH`), `Values`.
@@ -22,6 +22,7 @@ The app's logic without GPUI: what `shell`'s entities hold and decide, and the f
 - `map`: `state` (the user's state of a map, a file per map; `Saved::resolve` turns region titles older builds saved into ids) and `heading`.
 
 ## Rules
+- A registration's streams end when it is removed or replaced: nothing late of it passes. Futures already given finish. The registry's lock is let go before a source is asked.
 - No GPUI and no executor: a function here returns data; `scan` and `sweep` block and `start` is awaited, all by `shell`, off the UI thread.
 - An app file is a `Stored<T>` opened from its `Paths` entry by its owner; a constructor takes `&Paths`, never the data folder. `edit` saves at once, blocking, in place and in order: tiny files only. Missing or damaged means the defaults, so a new field is `#[serde(default)]`. An object file carries `version: 2`; one without it, or that does not read, is never written (`Stored::load`).
 - Keys are the source's ids: no code here splits a `Ref` or names a source. A change of a file's keys or shape is a new version with its step in `migrate`.

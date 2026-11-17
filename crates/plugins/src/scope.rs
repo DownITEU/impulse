@@ -48,10 +48,12 @@ pub struct Scope {
 }
 
 impl Scope {
-    /// An https URL on one of the plugin's hosts, rewritten so the app fetches it under this plugin's scope:
-    /// `plugin-<id>:<url>`. `None` for any other URL.
+    /// An https URL on one of the plugin's hosts, its scheme replaced by the source id so the app fetches it under
+    /// this plugin's scope: `plugin-<id>://host/path`. Keeping `//host` lets GPUI's `img()` build a URI from it.
+    /// `None` for any other URL.
     pub fn media(&self, url: &str) -> Option<String> {
-        on(url, &["https"], &self.hosts).then(|| format!("{}:{url}", self.source.as_str()))
+        let kept = url.starts_with("https://") && on(url, &["https"], &self.hosts);
+        kept.then(|| format!("{}:{}", self.source.as_str(), &url["https:".len()..]))
     }
 
     /// Whether a description's web link may open: http or https on one of its link hosts.
@@ -85,8 +87,10 @@ mod tests {
     #[test]
     fn media_must_be_https_on_a_host_and_links_on_a_link_host() {
         let scope = Scope { source: SourceId::new("plugin-maps").unwrap(), hosts: hosts(&["*.tiles.io"]), links: hosts(&["wiki.io"]) };
-        assert_eq!(scope.media("https://a.tiles.io/{z}/{x}/{y}.jpg").as_deref(), Some("plugin-maps:https://a.tiles.io/{z}/{x}/{y}.jpg"));
-        for refused in ["http://a.tiles.io/x.png", "https://other.io/x.png", "file:///c:/x.png", "https://a.tiles.io.evil/x"] {
+        assert_eq!(scope.media("https://a.tiles.io/{z}/{x}/{y}.jpg").as_deref(), Some("plugin-maps://a.tiles.io/{z}/{x}/{y}.jpg"));
+        for refused in
+            ["http://a.tiles.io/x.png", "https://other.io/x.png", "file:///c:/x.png", "https://a.tiles.io.evil/x", "https:a.tiles.io/x"]
+        {
             assert_eq!(scope.media(refused), None, "{refused}");
         }
         assert!(scope.opens("http://wiki.io/page") && !scope.opens("https://a.tiles.io/page") && !scope.opens("javascript:alert(1)"));

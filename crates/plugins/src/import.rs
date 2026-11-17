@@ -1,6 +1,7 @@
 //! A guest's map made safe for the app (P5): bounded, consistent and inside its scope. Runs on every fresh answer and
 //! on every copy read from disk. A broken structure refuses the map; media outside the scope is left out.
 
+mod discovery;
 mod links;
 #[cfg(test)]
 mod tests;
@@ -10,6 +11,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Context, Result, ensure};
 use model::{Category, Failure, FailureKind, Glyph, Group, Icon, Label, Map, Picture, Pin, Point, Region, Text, TileSet, Tiles};
 use sdk::wire;
+
+pub use discovery::{offers, titles};
 
 use crate::scope::Scope;
 

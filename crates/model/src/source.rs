@@ -1,22 +1,22 @@
 //! Where games, trainers, maps and the account come from: a source, and what it can do, one trait each.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use futures::{future::BoxFuture, stream::BoxStream};
 
-use crate::{Failure, Game, Installation, Locale, Map, MapOffer, Offer, Ref, SourceId, Text, Trainer};
+use crate::{Failure, Game, Installation, Locale, Map, MapOffer, Offer, Ref, SourceId, StoreId, Text, Trainer};
 
 pub trait Source: Send + Sync {
     /// The source of every `Ref` it mints, and the domain of its texts.
     fn id(&self) -> SourceId;
 
     fn texts(&self) -> Files {
-        &[]
+        Files::default()
     }
 }
 
-/// Catalogs: a language tag and its Fluent source each.
-pub type Files = &'static [(&'static str, &'static str)];
+/// Catalogs: a language tag and its Fluent source each. Owned: a plugin's are read when it opens.
+pub type Files = Arc<[(Arc<str>, Arc<str>)]>;
 
 pub trait Accounts: Source {
     fn sign_in(&self) -> BoxStream<'static, SignIn>;
@@ -32,6 +32,30 @@ pub trait Trainers: Source {
 
 pub trait Maps: Source {
     fn map(&self, offer: &MapOffer, locale: &Locale) -> BoxStream<'static, Snapshot<Map>>;
+
+    /// Marks the copy of `map` stale, so the next `map` asks again. Nothing for a source whose copies follow their
+    /// revision alone.
+    fn refresh(&self, _map: &Ref) {}
+}
+
+/// Discovery: the games a source has maps for, matched to the library by store id.
+pub trait Titles: Source {
+    fn titles(&self, locale: &Locale) -> BoxStream<'static, Snapshot<Vec<Title>>>;
+    fn offers(&self, title: &Ref, locale: &Locale) -> BoxStream<'static, Snapshot<Vec<MapOffer>>>;
+}
+
+/// A game as a discovering source names it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Title {
+    pub id: Ref,
+    pub name: String,
+    pub stores: Vec<StoreId>,
+}
+
+/// The bytes behind URLs a source put in its data, under that source's network scope.
+pub trait Downloads: Source {
+    /// Blocking. `NotFound`: the server lacks it; `Refused`: never to be fetched; any other kind may pass.
+    fn download(&self, url: &str) -> Result<Vec<u8>, Failure>;
 }
 
 pub trait Folders: Source {

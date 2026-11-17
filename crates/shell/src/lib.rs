@@ -21,7 +21,7 @@ mod ui;
 
 use std::{path::Path, sync::Arc};
 
-use client::{Load, media::Media, storage::Paths};
+use client::{Load, Registry, media::Media, storage::Paths};
 use gpui_kit::{App, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -29,10 +29,12 @@ pub use remote::Serve;
 pub use root::Root;
 pub use ui::assets::Assets;
 
-pub fn init(data_dir: &Path, cx: &mut App) {
+pub fn init(data_dir: &Path, registry: Arc<Registry>, cx: &mut App) {
     crash::install();
     ui::theme::init(cx);
-    cx.set_http_client(Arc::new(ui::art::CdnClient { cache: Media::Pictures.dir(&Paths::new(data_dir.to_owned())) }));
+    let cache = Media::Pictures.dir(&Paths::new(data_dir.to_owned()));
+    cx.set_http_client(Arc::new(ui::art::CdnClient { cache, registry: registry.clone() }));
+    ui::art::Router::set(registry, cx);
     log_view::bind_keys(cx);
     map::bind_keys(cx);
     layer::bind_keys(cx);

@@ -19,7 +19,9 @@ remote = ["dep:remote"]
 [dependencies]
 client.workspace = true
 journal.workspace = true
+log.workspace = true
 model.workspace = true
+plugins.workspace = true
 remote = { workspace = true, optional = true }
 shell.workspace = true
 tray.workspace = true

@@ -48,6 +48,10 @@ fn every_key_has_its_message_in_every_language() {
     let mut complaints = Vec::new();
     for english in files.iter().filter(|path| path.ends_with("/locales/en.ftl")) {
         let krate = english.trim_end_matches("locales/en.ftl");
+        // A plugin's messages are named by its manifest, not by `Key`s.
+        if root().join(krate).join("manifest.json").exists() {
+            continue;
+        }
         let read = |path: &str| fs::read_to_string(root().join(path)).unwrap().replace("\r\n", "\n");
         let defined = messages(english, &read(english), &mut complaints);
         let used: BTreeSet<String> =

@@ -63,9 +63,6 @@ macro_rules! numbers {
 
 numbers!(f64, u32, u64, usize, i64);
 
-/// A domain's files: a language tag and its Fluent source.
-pub type Files = &'static [(&'static str, &'static str)];
-
 pub struct Catalog {
     language: Language,
     /// Each domain's bundles, the language's first, then English.
@@ -73,13 +70,20 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// `pseudo` accents and stretches every message's own text, to find cuts and literals left.
-    pub fn new<'a>(language: Language, pseudo: bool, domains: impl IntoIterator<Item = (&'a str, Files)>) -> Self {
+    /// Each domain's files: a language tag and its Fluent source. `pseudo` accents and stretches every message's own
+    /// text, to find cuts and literals left.
+    pub fn new<'a, S: AsRef<str> + 'a>(
+        language: Language,
+        pseudo: bool,
+        domains: impl IntoIterator<Item = (&'a str, &'a [(S, S)])>,
+    ) -> Self {
         let tags = if language == ENGLISH { vec![ENGLISH.tag] } else { vec![language.tag, ENGLISH.tag] };
         let domains = domains
             .into_iter()
             .map(|(name, files)| {
-                let source = |tag: &&str| files.iter().find(|(file, _)| file == tag).map(|(_, source)| bundle(tag, source, pseudo));
+                let source = |tag: &&str| {
+                    files.iter().find(|(file, _)| file.as_ref() == *tag).map(|(_, source)| bundle(tag, source.as_ref(), pseudo))
+                };
                 (name.to_owned(), tags.iter().filter_map(source).collect())
             })
             .collect();

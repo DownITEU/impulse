@@ -72,7 +72,7 @@ pub struct Page {
 
 impl Page {
     pub fn new(registry: Arc<Registry>, paths: Paths, serve: Option<Serve>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let settings = cx.new(|cx| Settings::new(&paths, registry.texts().to_vec(), cx));
+        let settings = cx.new(|cx| Settings::new(&paths, registry.texts(), cx));
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
         let folders = cx.new(|cx| Folders::new(registry.clone(), cx));
         let account = cx.new(|cx| Account::new(registry.clone(), cx));

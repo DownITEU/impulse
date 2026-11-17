@@ -3,7 +3,7 @@
 use std::{env, path::PathBuf, sync::Arc};
 
 use client::{
-    Registry,
+    Capabilities, Registry,
     storage::{self, Paths},
 };
 use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
@@ -18,22 +18,27 @@ fn main() {
     }
     let data_dir = PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("Impulse");
     journal::init(&data_dir);
+    let paths = Paths::new(data_dir.clone());
     // Wand wrote every file before ids named their source.
-    storage::migrate(&Paths::new(data_dir.clone()), &SourceId::new(Wand::SOURCE).expect("a valid source id"));
+    storage::migrate(&paths, &SourceId::new(Wand::SOURCE).expect("a valid source id"));
     // Built before the window: its browser bridge takes a moment to come up.
     let wand = Arc::new(Wand::new(data_dir.clone()));
-    let registry = Arc::new(
-        Registry::default()
-            .with_accounts(wand.clone())
-            .with_games(wand.clone())
-            .with_trainers(wand.clone())
-            .with_maps(wand.clone())
-            .with_folders(wand.clone())
-            .with_caches(wand),
-    );
+    let registry = Arc::new(Registry::default());
+    registry.add(Capabilities {
+        accounts: Some(wand.clone()),
+        games: Some(wand.clone()),
+        trainers: Some(wand.clone()),
+        maps: Some(wand.clone()),
+        folders: Some(wand.clone()),
+        caches: Some(wand),
+        ..Capabilities::default()
+    });
+    // Release builds load none until installing asks the user to approve a plugin's hosts.
+    #[cfg(debug_assertions)]
+    add_plugins(&paths, &registry);
     gpui_kit::application().with_assets(shell::Assets).run(move |cx| {
         gpui_kit::init(cx);
-        shell::init(&data_dir, cx);
+        shell::init(&data_dir, registry.clone(), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1280.), px(800.)), cx))),
             titlebar: Some(TitlebarOptions { title: Some("Impulse".into()), appears_transparent: true, ..Default::default() }),
@@ -60,4 +65,24 @@ fn main() {
         .detach();
         cx.activate(true);
     });
+}
+
+/// Each plugin folder, a source; one that does not open is logged and left out.
+#[cfg(debug_assertions)]
+fn add_plugins(paths: &Paths, registry: &Registry) {
+    let Ok(folders) = std::fs::read_dir(paths.plugins()) else { return };
+    for dir in folders.flatten().map(|entry| entry.path()).filter(|path| path.is_dir()) {
+        match plugins::Plugin::open(&dir, &paths.plugin_cache(), &plugins::Values::new()) {
+            Ok(plugin) => {
+                let plugin = Arc::new(plugin);
+                registry.add(Capabilities {
+                    maps: Some(plugin.clone()),
+                    titles: Some(plugin.clone()),
+                    downloads: Some(plugin),
+                    ..Capabilities::default()
+                });
+            }
+            Err(e) => log::warn!("plugin {}: {}", dir.display(), e.detail),
+        }
+    }
 }

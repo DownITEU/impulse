@@ -14,7 +14,7 @@ pub mod run;
 pub mod storage;
 pub mod trainer;
 
-pub use registry::Registry;
+pub use registry::{Capabilities, Change, Registry};
 
 /// Something that arrives after the window opens.
 pub enum Load<T> {

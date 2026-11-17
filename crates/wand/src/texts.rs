@@ -2,7 +2,11 @@
 
 use model::Text;
 
-pub const FILES: model::Files = &[("en", include_str!("../locales/en.ftl")), ("fr", include_str!("../locales/fr.ftl"))];
+const FILES: [(&str, &str); 2] = [("en", include_str!("../locales/en.ftl")), ("fr", include_str!("../locales/fr.ftl"))];
+
+pub fn files() -> model::Files {
+    FILES.iter().map(|&(tag, source)| (tag.into(), source.into())).collect()
+}
 
 pub struct Key(&'static str);
 

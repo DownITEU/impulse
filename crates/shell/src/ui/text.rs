@@ -4,7 +4,7 @@ use std::{
     cell::RefCell,
     env,
     hash::{Hash, Hasher},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 
 use gpui_kit::{App, Global, SharedString};
@@ -15,7 +15,12 @@ use rustc_hash::{FxHashMap, FxHasher};
 use super::key;
 
 const APP: &str = SourceId::APP;
-const FILES: Files = &[("en", include_str!("../../locales/en.ftl")), ("fr", include_str!("../../locales/fr.ftl"))];
+static FILES: LazyLock<Files> = LazyLock::new(|| {
+    [("en", include_str!("../../locales/en.ftl")), ("fr", include_str!("../../locales/fr.ftl"))]
+        .iter()
+        .map(|&(tag, source)| (tag.into(), source.into()))
+        .collect()
+});
 
 pub struct Texts {
     catalog: Catalog,
@@ -50,7 +55,7 @@ impl Texts {
     pub fn new(language: Language, sources: &[(SourceId, Files)]) -> Self {
         // `IMPULSE_LOCALE=pseudo` in a debug build shows cuts and English left in the code.
         let pseudo = cfg!(debug_assertions) && env::var_os("IMPULSE_LOCALE").is_some_and(|value| value == "pseudo");
-        let domains = [(APP, FILES)].into_iter().chain(sources.iter().map(|(id, files)| (id.as_str(), *files)));
+        let domains = [(APP, &FILES[..])].into_iter().chain(sources.iter().map(|(id, files)| (id.as_str(), &files[..])));
         let (locale, made, formatted) = (Locale::new(language.tag), RefCell::default(), RefCell::default());
         Self { catalog: Catalog::new(language, pseudo, domains), locale, made, formatted }
     }

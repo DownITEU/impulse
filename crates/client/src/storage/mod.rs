@@ -49,6 +49,8 @@ entries! {
     pictures: "art",
     tiles: "tiles",
     videos: "videos",
+    plugins: "plugins",
+    plugin_cache: "plugin-cache",
 }
 
 impl Paths {

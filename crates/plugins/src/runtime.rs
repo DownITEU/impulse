@@ -29,9 +29,9 @@ const LOG_LINE: usize = 1 << 10;
 // Far past a Rust guest's indirect calls; each element is host memory.
 const TABLE: usize = 1 << 16;
 
-/// What `http_get` does for the guest: the body of a 2xx answer (at most `ANSWER` bytes) within the time left, or
-/// the error it sees.
-pub type Net = Arc<dyn Fn(&str, Duration) -> Result<Vec<u8>, wire::Error> + Send + Sync>;
+/// A GET for the guest, or for a download: the body of a 2xx answer (at most the byte limit) within the time left, or
+/// the error it sees. Arguments: the URL, the byte limit, the time left.
+pub type Net = Arc<dyn Fn(&str, u64, Duration) -> Result<Vec<u8>, wire::Error> + Send + Sync>;
 
 /// A plugin's module, compiled once; every call gets its own instance.
 pub struct Plugin {
@@ -111,8 +111,8 @@ impl Plugin {
     }
 }
 
-/// The guest's own error, as the app words it.
-fn guest(source: &SourceId, error: wire::Error) -> anyhow::Error {
+/// A guest's or the network's error as the app words it: the kind is the `Failure`'s.
+pub fn guest(source: &SourceId, error: wire::Error) -> anyhow::Error {
     let kind = match error.kind {
         wire::ErrorKind::NotFound => FailureKind::NotFound,
         wire::ErrorKind::Offline => FailureKind::Offline,
@@ -154,7 +154,7 @@ fn http_get(mut caller: Caller<'_, Host>, at: u32, len: u32) -> Result<i64, wasm
     host.requests += 1;
     let request = bytes.get(at as usize..at as usize + len as usize).ok_or_else(|| wasmi::Error::new("request out of memory"))?;
     let outcome = match serde_json::from_slice::<HttpRequest>(request) {
-        Ok(request) => (host.net)(&request.url, left),
+        Ok(request) => (host.net)(&request.url, ANSWER as u64, left),
         Err(e) => Err(wire::Error::new(wire::ErrorKind::Internal, format!("request: {e}"))),
     };
     let (pending, length) = match outcome {

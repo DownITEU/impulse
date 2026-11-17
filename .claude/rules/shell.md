@@ -8,7 +8,7 @@ paths:
 The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, crash stop. Map and overlay have their own rules.
 
 ## Surface
-- `init`, `Assets`, `Root::new`, `Serve`: all `app` calls (`Root::new` takes the remote panel's `Serve`, `None` in a build without it). Everything else is private.
+- `init` (takes the data dir and the `Arc<Registry>`), `Assets`, `Root::new`, `Serve`: all `app` calls (`Root::new` takes the remote panel's `Serve`, `None` in a build without it). Everything else is private.
 - `Root`: the window root; draws `Page` with `cached`, the open map as a modal over it.
 - `Page` (`page/`): the combined page, layout only: one `impl Page` in `page/mod.rs` makes the entities and lays out their views; `header` and `status_bar` are components.
 - `Hero` (`page/hero.rs`): the open game's art, title, run button and actions; owns the sources menu (`close`).
@@ -24,6 +24,7 @@ The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, c
 - `Resources` (`resources/`): sizes, clear, the media limit; clears the media (`app:` stores) itself and the rest through the registry; emits `Cleared`. `ResourcesView` draws it in the RESOURCES tab.
 
 ## Rules
+- Media loads through `ui::art`, as GPUI's images do: an `http://` or `https://` URL from the CDN, a source's own URL (any other scheme, `<source>:...`) through `Registry::download`, both under the same disk cache. `NotFound` counts as a 404 and `Refused` as a 403 for the absent rules; any other failure is an error, asked again. `init` gives GPUI's http client the registry and sets the `Router` global; work off the UI thread reads it first and moves the `Arc<Registry>` in.
 - Colors and fonts come only from `ui/theme.rs`; a new token goes there. The user's accent is the `Look` global: read it with `accent(cx)`, never pass it along.
 - A caption is a catalog message (`i18n.md`): `t(cx, key::X)`, never a literal (`checks` finds one). A kept text follows a language change: inputs come from `input` or `filter_input` with a `Key`, or keep `relabel`'s subscription; whoever stores a made text observes `Texts`.
 - Use the `ui/widgets.rs` primitives (and `ui/dialog.rs`, `ui/dropdown.rs`: `dropdown` over its `trigger`) (`button`, `icon_button`, `toggle`, `choice`, `notice`, `tip`, `keycap`, `mono`, `tracked`, `input`); never a raw `div` styled as one.
