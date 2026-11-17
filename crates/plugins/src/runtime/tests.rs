@@ -61,6 +61,20 @@ fn requesting(n: usize) -> Vec<u8> {
 }
 
 #[test]
+fn check_validates_every_body_and_wants_the_abi_exports() {
+    super::check(&guest(1, "i64.const 8", "")).unwrap();
+    let malformed = guest(1, "i64.const 8", "(func $bad (result i32) i64.const 1)");
+    let wrong_type = wat::parse_str(r#"(module (memory (export "memory") 1) (func (export "impulse_api")))"#).unwrap();
+    for (why, wasm) in [
+        ("a body that does not validate", malformed),
+        ("an empty module", wat::parse_str("(module)").unwrap()),
+        ("a wrong type", wrong_type),
+    ] {
+        assert_eq!(super::check(&wasm).unwrap_err().downcast_ref::<Failure>().map(|f| f.kind), Some(FailureKind::Refused), "{why}");
+    }
+}
+
+#[test]
 fn a_call_makes_up_to_64_requests() {
     assert_eq!(ask(&requesting(64)).unwrap(), 7);
 }

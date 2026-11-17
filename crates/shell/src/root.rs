@@ -23,10 +23,20 @@ pub struct Root {
 
 impl Root {
     /// `serve`: the remote panel's server, in a build with it.
-    pub fn new(registry: Arc<Registry>, data_dir: PathBuf, serve: Option<Serve>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let page = cx.new(|cx| Page::new(registry, Paths::new(data_dir), serve, window, cx));
+    pub fn new(
+        registry: Arc<Registry>,
+        plugins: Arc<client::plugins::Plugins>,
+        data_dir: PathBuf,
+        serve: Option<Serve>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let page = cx.new(|cx| Page::new(registry, plugins, Paths::new(data_dir), serve, window, cx));
         let map = page.read(cx).map().clone();
         cx.observe(&map, |_, _, cx| cx.notify()).detach();
+        // LINK A MAP opens from the page or the map's toolbar: it is drawn over both.
+        let linker = map.read(cx).linker().clone();
+        cx.observe(&linker, |_, _, cx| cx.notify()).detach();
         Self { page, map }
     }
 
@@ -66,5 +76,6 @@ impl Render for Root {
             .text_color(rgb(TEXT))
             .child(self.page.clone().cached(StyleRefinement::default().size_full()))
             .when(modal, |root| root.child(self.modal()))
+            .children(Some(self.map.read(cx).linker().clone()).filter(|linker| linker.read(cx).is_open()))
     }
 }

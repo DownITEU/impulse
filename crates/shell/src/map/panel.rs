@@ -29,8 +29,10 @@ pub fn paneled(view: &Entity<MapView>, cx: &App) -> bool {
     maps.mapped() || linkable(maps, cx)
 }
 
-fn linkable(maps: &Maps, cx: &App) -> bool {
-    !maps.titles().read(cx).all().is_empty()
+/// A source has titles to link the game to, or one has not been fetched yet (the picker asks it).
+pub(super) fn linkable(maps: &Maps, cx: &App) -> bool {
+    let titles = maps.titles().read(cx);
+    !titles.all().is_empty() || titles.pending()
 }
 
 /// The caller gives it a width.

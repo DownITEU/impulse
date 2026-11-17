@@ -8,7 +8,7 @@ paths:
 What the UI, a run and the sources share, in no source's terms: data and traits, with only the logic every source must share.
 
 ## Surface
-- `Source` (`id`, `texts`: its catalogs as `Files`, owned) and the capabilities over it: `Accounts`, `Games`, `Trainers` (by `Offer`, `Installation` and `Locale`), `Maps` (by `MapOffer` and `Locale`; `refresh` marks a copy stale), `Titles` (discovery: `titles`, a title's `offers`), `Downloads` (the bytes behind a URL the source gave), `Folders`, `Caches`; a source implements only what it has. `Snapshot`, `SignIn`, `Account`, `Title`, `Folder`, `Store`, `Clear` are their answers.
+- `Source` (`id`, `texts`: its catalogs as `Files`, owned; `name`: what the user calls it, its id by default) and the capabilities over it: `Accounts`, `Games`, `Trainers` (by `Offer`, `Installation` and `Locale`), `Maps` (by `MapOffer` and `Locale`; `refresh` marks a copy stale), `Titles` (discovery: `titles`, a title's `offers`), `Downloads` (the bytes behind a URL the source gave), `Folders`, `Caches`; a source implements only what it has. `Snapshot`, `SignIn`, `Account`, `Title`, `Folder`, `Store`, `Clear` are their answers.
 - `SourceId`, `Ref`: a source's name and an id it minted, printed `source:id`; only `Ref` splits one. `SourceId::APP` is the app's own.
 - `Text`: a message of a source's catalog (its domain is its `SourceId`), or plain content. `Locale`: the language content is asked in, a BCP 47 tag. `Failure`: a `FailureKind`, the source's own `message`, the English `detail`.
 - `Game`, `Offer`, `Standalone`, `Locator`: a game a source lists, with its store ids, `exe`, art and offers. `Game.id`, `Offer.id` (the trainer) and `MapOffer.id` are the source's `Ref`s.
@@ -17,6 +17,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - `Process`, `Rule`: the game's process and how a trainer says which one to look for.
 - `Trainer`, `Cheat`, `Kind`, `Args`, `Plan`: the cheat list and what running exactly this list takes.
 - `Runner`, `Attach`, `Live`, `Session`, `Event`: a run. `prepare`, then `attach(Process)`, then set values and stop.
+- `Installed`, `Approval`, `Setting`, `SettingKind`, `Value`: an installed plugin as the UI shows and drives it (`plugins` makes them; a setting's texts are its catalog's messages).
 - `Map`, `MapOffer`, `TileSet`, `Tiles`, `Frame`, `Pin`, `Category`, `Group`, `Icon`, `Glyph`, `Region`, `Label`, `Picture`, `Level`, `PIN_LINK`: a game's map.
 
 ## Rules

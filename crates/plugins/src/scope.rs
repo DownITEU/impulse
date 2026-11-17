@@ -5,10 +5,10 @@ use model::SourceId;
 use url::Url;
 
 /// Host patterns: `api.example.com`, or `*.example.com` for that domain and every host below it.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Hosts(Vec<Pattern>);
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum Pattern {
     Exact(String),
     Below(String),
@@ -41,6 +41,7 @@ impl Hosts {
     }
 }
 
+#[derive(Clone)]
 pub struct Scope {
     pub source: SourceId,
     pub hosts: Hosts,

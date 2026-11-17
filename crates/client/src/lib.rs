@@ -7,6 +7,7 @@ pub mod bindings;
 pub mod library;
 pub mod map;
 pub mod media;
+pub mod plugins;
 pub mod profile;
 mod registry;
 pub mod remote;

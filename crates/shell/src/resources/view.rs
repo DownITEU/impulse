@@ -150,7 +150,7 @@ fn entry(color: Option<u32>, name: SharedString, hint: SharedString, size: Share
 }
 
 /// A size worded: the number with the language's marks, the unit from the catalog.
-fn sized(cx: &App, bytes: u64) -> SharedString {
+pub fn sized(cx: &App, bytes: u64) -> SharedString {
     let (number, unit) = size(bytes);
     tf(cx, UNITS[unit], &[("size", Arg::Str(&digits(cx, &number)))])
 }

@@ -254,6 +254,7 @@ settings-overlay = OVERLAY
 settings-hotkeys = RACCOURCIS
 settings-app = APP
 settings-resources = RESSOURCES
+settings-plugins = PLUGINS
 settings-about = À PROPOS
 accent = ACCENT
 accent-hint = marque seulement le LIVE
@@ -306,6 +307,28 @@ remote-note-not-live = Lancez d'abord le jeu.
 remote-note-busy = Une autre partie tourne, ou le trainer n'est pas encore là.
 remote-note-nothing-on = Activez d'abord des mods.
 remote-note-name = Nommez d'abord la collection.
+
+## Plugins
+
+plugins-install = INSTALLER
+plugins-install-hint = un dossier ou un .zip contenant un manifest.json ; vous approuvez d'abord ce qu'il peut joindre
+plugins-folder = DOSSIER
+plugins-zip = ZIP
+plugins-pick-folder = Choisissez le dossier du plugin
+plugins-pick-zip = Choisissez le .zip du plugin
+plugins-none = aucun plugin installé
+plugins-approve-title = INSTALLER { $name } { $version } ?
+plugins-replaces = remplace la version { $version }
+plugins-hosts = CHARGE DEPUIS
+plugins-links = OUVRE DES LIENS VERS
+plugins-no-hosts = rien
+plugins-new = NOUVEAU
+plugins-sandbox = Il tourne dans un bac à sable et ne joint que ces hôtes. N'installez que des plugins de confiance.
+plugins-approve = APPROUVER
+plugins-cancel = ANNULER
+plugins-version = version { $version }, garde { $size }
+plugins-remove = SUPPRIMER
+plugins-value = valeur
 
 ## Resources
 

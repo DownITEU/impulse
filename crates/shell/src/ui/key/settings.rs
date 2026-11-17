@@ -1,4 +1,4 @@
-//! The settings dialog, its RESOURCES tab and the accents.
+//! The settings dialog, its RESOURCES and PLUGINS tabs and the accents.
 
 use i18n::Key;
 
@@ -8,6 +8,7 @@ pub const SETTINGS_OVERLAY: Key = Key("settings-overlay");
 pub const SETTINGS_HOTKEYS: Key = Key("settings-hotkeys");
 pub const SETTINGS_APP: Key = Key("settings-app");
 pub const SETTINGS_RESOURCES: Key = Key("settings-resources");
+pub const SETTINGS_PLUGINS: Key = Key("settings-plugins");
 pub const SETTINGS_ABOUT: Key = Key("settings-about");
 pub const ACCENT: Key = Key("accent");
 pub const ACCENT_HINT: Key = Key("accent-hint");
@@ -67,3 +68,22 @@ pub const RESOURCES_BYTES: Key = Key("resources-bytes");
 pub const RESOURCES_KILOBYTES: Key = Key("resources-kilobytes");
 pub const RESOURCES_MEGABYTES: Key = Key("resources-megabytes");
 pub const RESOURCES_GIGABYTES: Key = Key("resources-gigabytes");
+pub const PLUGINS_INSTALL: Key = Key("plugins-install");
+pub const PLUGINS_INSTALL_HINT: Key = Key("plugins-install-hint");
+pub const PLUGINS_FOLDER: Key = Key("plugins-folder");
+pub const PLUGINS_ZIP: Key = Key("plugins-zip");
+pub const PLUGINS_PICK_FOLDER: Key = Key("plugins-pick-folder");
+pub const PLUGINS_PICK_ZIP: Key = Key("plugins-pick-zip");
+pub const PLUGINS_NONE: Key = Key("plugins-none");
+pub const PLUGINS_APPROVE_TITLE: Key = Key("plugins-approve-title");
+pub const PLUGINS_REPLACES: Key = Key("plugins-replaces");
+pub const PLUGINS_HOSTS: Key = Key("plugins-hosts");
+pub const PLUGINS_LINKS: Key = Key("plugins-links");
+pub const PLUGINS_NO_HOSTS: Key = Key("plugins-no-hosts");
+pub const PLUGINS_NEW: Key = Key("plugins-new");
+pub const PLUGINS_SANDBOX: Key = Key("plugins-sandbox");
+pub const PLUGINS_APPROVE: Key = Key("plugins-approve");
+pub const PLUGINS_CANCEL: Key = Key("plugins-cancel");
+pub const PLUGINS_VERSION: Key = Key("plugins-version");
+pub const PLUGINS_REMOVE: Key = Key("plugins-remove");
+pub const PLUGINS_VALUE: Key = Key("plugins-value");

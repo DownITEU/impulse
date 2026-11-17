@@ -29,10 +29,12 @@ use crate::{
     library::{GamePicker, Library, Marks, SIDEBAR_WIDTH, Sidebar, vacant},
     log_view::{LogEvent, LogView},
     map::{MapEvent, MapView, Maps, map_panel, paneled},
+    plugins::{Plugins, PluginsView},
     remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
     run::{Runs, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
+    sources::Sources,
     systray::TrayIcon,
     trainer::Trainers,
     ui::{theme::*, widgets::grid},
@@ -68,11 +70,20 @@ pub struct Page {
     resources: Entity<Resources>,
     cheat_list: Entity<CheatList>,
     hero: Entity<Hero>,
+    _sources: Entity<Sources>,
 }
 
 impl Page {
-    pub fn new(registry: Arc<Registry>, paths: Paths, serve: Option<Serve>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let settings = cx.new(|cx| Settings::new(&paths, registry.texts(), cx));
+    pub fn new(
+        registry: Arc<Registry>,
+        plugins: Arc<client::plugins::Plugins>,
+        paths: Paths,
+        serve: Option<Serve>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let sources = cx.new(|cx| Sources::new(&registry, cx));
+        let settings = cx.new(|cx| Settings::new(&paths, registry.clone(), &sources, cx));
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
         let folders = cx.new(|cx| Folders::new(registry.clone(), cx));
         let account = cx.new(|cx| Account::new(registry.clone(), cx));
@@ -86,12 +97,10 @@ impl Page {
         crash::watch(&runs, cx);
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |_, _, _: &LogEvent, cx| cx.notify()).detach();
-        let maps = cx.new(|cx| Maps::new(registry.clone(), &paths, library.clone(), runs.clone(), cx));
+        let maps = cx.new(|cx| Maps::new(registry.clone(), &paths, library.clone(), runs.clone(), &sources, cx));
         // The map panel reads the open game's offers and the titles to link.
         cx.observe(&maps, |_, _, cx| cx.notify()).detach();
         let map = cx.new(|cx| MapView::new(maps.clone(), &library, &paths, window, cx));
-        let linker = map.read(cx).linker().clone();
-        cx.observe(&linker, |_, _, cx| cx.notify()).detach();
         cx.subscribe_in(&map, window, |page, map, _: &MapEvent, window, cx| {
             // Over a game the map is a dock, and Escape's last step leaves the overlay.
             if page.layer.read(cx).is_over() {
@@ -100,9 +109,12 @@ impl Page {
             map.update(cx, |map, cx| map.hide(window, cx));
         })
         .detach();
-        let resources = cx.new(|cx| Resources::new(registry, &paths, cx));
-        cx.subscribe(&resources, |page, _, event: &ResourcesEvent, cx| match event {
-            ResourcesEvent::Cleared => page.reload(cx),
+        let resources = cx.new(|cx| Resources::new(registry.clone(), &paths, &sources, cx));
+        let plugins = cx.new(|cx| Plugins::new(plugins, cx));
+        // Only a source the page reads from reloads it: a plugin's answer cache must not stop a live trainer.
+        cx.subscribe(&resources, move |page, _, event: &ResourcesEvent, cx| match event {
+            ResourcesEvent::Cleared(sources) if sources.iter().any(|source| registry.plays(source)) => page.reload(cx),
+            ResourcesEvent::Cleared(_) => {}
         })
         .detach();
         let picker = cx.new(|cx| GamePicker::new(library.clone(), cx));
@@ -133,6 +145,7 @@ impl Page {
             overlay: cx.new(|cx| OverlaySettings::new(layer.clone(), hotkeys.clone(), trainers.clone(), cx)).into(),
             hotkeys: cx.new(|cx| HotkeySettings::new(hotkeys.clone(), cx)).into(),
             resources: cx.new(|cx| ResourcesView::new(resources.clone(), cx)).into(),
+            plugins: cx.new(|cx| PluginsView::new(plugins.clone(), window, cx)).into(),
         };
         let settings_view = cx.new(|cx| SettingsView::new(settings.clone(), folders, tabs, window, cx));
         cx.observe(&settings_view, |_, _, cx| cx.notify()).detach();
@@ -143,7 +156,11 @@ impl Page {
             cx.observe(&view, |_, _, cx| cx.notify()).detach();
             view
         });
-        cx.subscribe(&settings_view, |page, _, _: &Looked, cx| page.resources.update(cx, |resources, cx| resources.measure(cx))).detach();
+        cx.subscribe(&settings_view, move |page, _, _: &Looked, cx| {
+            page.resources.update(cx, |resources, cx| resources.measure(cx));
+            plugins.update(cx, |plugins, cx| plugins.refresh(cx));
+        })
+        .detach();
         let hud = cx.new(|cx| {
             let (library, trainers, runs, hotkeys) = (library.clone(), trainers.clone(), runs.clone(), hotkeys.clone());
             Hud::new(
@@ -193,6 +210,7 @@ impl Page {
             resources,
             cheat_list,
             hero,
+            _sources: sources,
         }
     }
 
@@ -286,7 +304,6 @@ impl Render for Page {
             .children(self.remote_view.clone().filter(|view| view.read(cx).is_open()))
             .children(self.cheat_list.read(cx).editor().cloned())
             .when(self.picker.read(cx).is_open(), |page| page.child(self.picker.clone()))
-            .children(Some(self.map.read(cx).linker().clone()).filter(|linker| linker.read(cx).is_open()))
             .into_any_element()
     }
 }

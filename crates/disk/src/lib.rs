@@ -1,5 +1,7 @@
 //! Files the app keeps between runs.
 
+mod stored;
+
 use std::{
     fs,
     path::Path,
@@ -8,6 +10,8 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+
+pub use stored::{Stored, VERSION, read, write};
 
 /// Writes through a temporary file, so a crash never leaves a half-written one.
 pub fn replace(path: &Path, data: &[u8]) -> Result<()> {

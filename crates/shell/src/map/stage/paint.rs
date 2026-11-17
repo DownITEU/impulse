@@ -239,7 +239,9 @@ impl Stage {
         let Some(picture) = picture else { return };
         let (left, top, side) = PICTURE;
         let (scale, device) = (look.scale(), window.scale_factor());
-        let image = self.images.picture(pin.group, picture, (side * scale * f64::from(device)).round() as u32);
+        // Selected, the head turns bright: the picture takes the mark's ink, as a glyph does.
+        let tint = (look == Look::Selected).then(|| marker.ink());
+        let image = self.images.picture(pin.group, picture, (side * scale * f64::from(device)).round() as u32, tint);
         let corner = (tip.0 - (TIP.0 - left) * scale, tip.1 - (TIP.1 - top) * scale);
         // Gray as the faded shape under it, once found.
         self.paint_snapped(image, corner, found && look != Look::Selected, window);

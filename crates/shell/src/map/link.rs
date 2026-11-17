@@ -25,7 +25,7 @@ use crate::{
     ui::{
         dialog::dialog,
         key,
-        text::t,
+        text::{t, text},
         theme::*,
         widgets::{filter_input, mono},
     },
@@ -97,7 +97,8 @@ impl Render for TitlePicker {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(open) = self.open.as_ref() else { return div().into_any_element() };
         let query = open.filter.read(cx).value().trim().to_lowercase();
-        let titles = self.titles.read(cx).all();
+        let titles_of = self.titles.read(cx);
+        let titles = titles_of.all();
         let rows: Vec<_> = open
             .order
             .iter()
@@ -106,6 +107,7 @@ impl Render for TitlePicker {
             .take(SHOWN)
             .map(|(at, title)| {
                 let store = title.stores.first().map_or(String::new(), |id| id.store().to_uppercase());
+                let source = titles_of.name(title.id.source()).map(|name| text(cx, name).to_uppercase());
                 let id = title.id.clone();
                 h_flex()
                     .id(("title", at))
@@ -118,7 +120,13 @@ impl Render for TitlePicker {
                     .hover(|style| style.bg(rgb(ROW_HOVER)))
                     .on_click(cx.listener(move |view, _, _, cx| view.choose(&id, cx)))
                     .child(mono(title.name.to_uppercase(), 12.).text_color(rgb(TEXT_2)).overflow_hidden().text_ellipsis())
-                    .child(mono(store, 10.5).text_color(rgb(FAINT)))
+                    .child(
+                        h_flex()
+                            .flex_none()
+                            .gap(px(8.))
+                            .child(mono(store, 10.5).text_color(rgb(FAINT)))
+                            .children(source.map(|source| mono(source, 10.5).text_color(rgb(MUTED)))),
+                    )
             })
             .collect();
         let field = h_flex()

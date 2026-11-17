@@ -2,14 +2,26 @@
 
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, MutexGuard, PoisonError},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use model::SourceId;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 
 use crate::settings::Values;
+
+/// A plugin's answers live under its source id: a bare manifest id such as `con` is a Windows device name.
+pub fn folder(caches: &Path, source: &SourceId) -> PathBuf {
+    caches.join(source.as_str())
+}
+
+/// Bytes kept in a cache folder (blocking).
+pub fn size(dir: &Path) -> u64 {
+    disk::size(dir)
+}
 
 // The disk one plugin's answers may take: the least recently written go first.
 const MOST: u64 = 64 << 20;
@@ -33,15 +45,49 @@ struct Kept<T> {
     answer: T,
 }
 
+/// Whether a source was removed: shared by every cache opened for it, so an instance a call still holds is retired too.
+/// Held across a write and its check, so a removal never races a write that passed.
+#[derive(Default)]
+pub struct Retired(Mutex<bool>);
+
+impl Retired {
+    /// From now on nothing is written; a write that already passed the check is done when this returns.
+    pub fn retire(&self) {
+        *self.held() = true;
+    }
+
+    // A poisoned flag is still a plain bool.
+    fn held(&self) -> MutexGuard<'_, bool> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
 pub struct Cache {
     dir: PathBuf,
     /// How long an answer without a revision stays fresh.
     refresh: Duration,
+    retired: Arc<Retired>,
 }
 
 impl Cache {
-    pub fn new(dir: PathBuf, refresh: Duration) -> Self {
-        Self { dir, refresh }
+    pub fn new(dir: PathBuf, refresh: Duration, retired: Arc<Retired>) -> Self {
+        Self { dir, refresh, retired }
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// Empties the folder (blocking).
+    pub fn clear(&self) {
+        // A clear routed to a removed plugin must not erase a reinstall's answers in the same folder.
+        let retired = self.retired.held();
+        if *retired {
+            return;
+        }
+        if let Err(e) = fs::remove_dir_all(&self.dir) {
+            log::debug!("plugin answers not cleared: {e}");
+        }
     }
 
     /// The answer kept for `key` in `wanted`'s wire, and whether it is fresh for `wanted` (blocking).
@@ -62,6 +108,10 @@ impl Cache {
 
     /// Blocking; a failed write is logged and the answer is asked again next time.
     pub fn put(&self, key: &str, kept: &[u8]) {
+        let retired = self.retired.held();
+        if *retired {
+            return;
+        }
         if let Err(e) = disk::replace(&self.file(key), kept) {
             log::warn!("plugin answer not kept: {e:#}");
         }
@@ -110,7 +160,7 @@ mod tests {
     fn an_answer_is_stale_for_another_stamp_and_once_old_without_a_revision_and_hidden_for_another_wire() {
         let dir = std::env::temp_dir().join(format!("impulse-plugin-cache-{}", std::process::id()));
         let stamp = Stamp { api: 1, version: "1.0".into(), locale: "fr".into(), settings: Values::new(), revision: Some("r1".into()) };
-        let cache = Cache::new(dir.clone(), Duration::from_secs(3600));
+        let cache = Cache::new(dir.clone(), Duration::from_secs(3600), Arc::default());
         cache.put("map:a", &Cache::encode(stamp.clone(), &7).unwrap());
         assert_eq!(cache.read::<u32>("map:a", &stamp), Some((7, true)));
         let stale = [
@@ -127,7 +177,7 @@ mod tests {
         let unrevised = Stamp { revision: None, ..stamp };
         cache.put("map:u", &Cache::encode(unrevised.clone(), &8).unwrap());
         assert_eq!(cache.read::<u32>("map:u", &unrevised), Some((8, true)), "young enough without a revision");
-        assert_eq!(Cache::new(dir.clone(), Duration::ZERO).read::<u32>("map:u", &unrevised), Some((8, false)));
+        assert_eq!(Cache::new(dir.clone(), Duration::ZERO, Arc::default()).read::<u32>("map:u", &unrevised), Some((8, false)));
         assert_eq!(cache.read::<u32>("map:b", &unrevised), None);
         let _ = fs::remove_dir_all(dir);
     }

@@ -53,6 +53,20 @@ pub struct Marker {
 }
 
 /// What a group's icon is drawn with, as far as it is in.
+impl Marker {
+    /// What its mark is drawn in: a selected marker turns bright, its mark dark or its fill.
+    pub fn ink(&self) -> u32 {
+        let fill = self.fill;
+        if self.look != Look::Selected {
+            ink(fill)
+        } else if ink(fill) == BG {
+            fill
+        } else {
+            BG
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum GroupIcon<'a> {
     Glyph(&'a Glyph),
@@ -64,7 +78,7 @@ pub enum GroupIcon<'a> {
 enum Key {
     Marker(Marker, u32),
     Icon((usize, usize), u32, u32),
-    Picture((usize, usize), u32),
+    Picture((usize, usize), u32, Option<u32>),
 }
 
 #[derive(Default)]
@@ -91,9 +105,9 @@ impl Images {
         self.made.entry(key).or_insert_with(|| render(&svg(), pixels, pixels, cx)).clone()
     }
 
-    /// A group's picture icon, fitted and centered in a square `pixels` across.
-    pub fn picture(&mut self, group: (usize, usize), picture: &RgbaImage, pixels: u32) -> Arc<RenderImage> {
-        self.made.entry(Key::Picture(group, pixels)).or_default().get_or_insert_with(|| fitted(picture, pixels)).clone()
+    /// A group's picture icon, fitted and centered in a square `pixels` across; `tint`: its shape in that color.
+    pub fn picture(&mut self, group: (usize, usize), picture: &RgbaImage, pixels: u32, tint: Option<u32>) -> Arc<RenderImage> {
+        self.made.entry(Key::Picture(group, pixels, tint)).or_default().get_or_insert_with(|| fitted(picture, pixels, tint)).clone()
     }
 
     /// Group `at`'s icon, a glyph in `color`; a small square for the default mark.
@@ -101,7 +115,7 @@ impl Images {
         let scale = window.scale_factor();
         let image = match mark {
             GroupIcon::Glyph(glyph) => self.icon(at, glyph, color, side, scale, cx),
-            GroupIcon::Picture(picture) => Some(self.picture(at, picture, (side * scale).round() as u32)),
+            GroupIcon::Picture(picture) => Some(self.picture(at, picture, (side * scale).round() as u32, None)),
             GroupIcon::Default => None,
         };
         match image {
@@ -117,9 +131,8 @@ impl Images {
 }
 
 fn marker_svg(marker: Marker, glyph: Option<&Glyph>, accent: u32) -> String {
-    let (selected, fill) = (marker.look == Look::Selected, marker.fill);
+    let (selected, fill, ink) = (marker.look == Look::Selected, marker.fill, marker.ink());
     let (body, stroke) = if selected { (TEXT_BRIGHT, accent) } else { (fill, TEXT_BRIGHT) };
-    let ink = if selected { if ink(fill) == BG { fill } else { BG } } else { ink(fill) };
     let mark = match glyph {
         _ if marker.picture => String::new(),
         Some(glyph) => format!(r#"<g transform="translate(5.5 5.5) scale(13)"><path d="{}" fill="{}"/></g>"#, glyph.path, hex(ink)),
@@ -149,8 +162,8 @@ fn marker_svg(marker: Marker, glyph: Option<&Glyph>, accent: u32) -> String {
     )
 }
 
-/// `picture` scaled to fit a clear square `side` across, in the atlas's BGRA.
-fn fitted(picture: &RgbaImage, side: u32) -> Arc<RenderImage> {
+/// `picture` scaled to fit a clear square `side` across, in the atlas's BGRA; `tint` keeps only its alpha.
+fn fitted(picture: &RgbaImage, side: u32, tint: Option<u32>) -> Arc<RenderImage> {
     let (width, height) = picture.dimensions();
     let scale = f64::from(side) / f64::from(width.max(height));
     let fit = |length: u32| ((f64::from(length) * scale).round() as u32).clamp(1, side.max(1));
@@ -158,7 +171,11 @@ fn fitted(picture: &RgbaImage, side: u32) -> Arc<RenderImage> {
     let mut square = RgbaImage::new(side.max(1), side.max(1));
     let offset = |length: u32| i64::from((side.max(1) - length) / 2);
     imageops::overlay(&mut square, &scaled, offset(scaled.width()), offset(scaled.height()));
+    let [_, red, green, blue] = tint.unwrap_or_default().to_be_bytes();
     for texel in square.pixels_mut() {
+        if tint.is_some() {
+            texel.0[..3].copy_from_slice(&[red, green, blue]);
+        }
         texel.0.swap(0, 2);
     }
     Arc::new(RenderImage::new([Frame::new(square)]))
@@ -188,4 +205,22 @@ pub fn legible(color: u32) -> u32 {
 fn brightness(color: u32) -> u32 {
     let [_, red, green, blue] = color.to_be_bytes().map(u32::from);
     (red * 299 + green * 587 + blue * 114) / 1000
+}
+
+#[cfg(test)]
+mod tests {
+    use image::{Rgba, RgbaImage};
+
+    #[test]
+    fn a_tinted_picture_keeps_its_shape_in_the_tint() {
+        let mut picture = RgbaImage::from_pixel(4, 4, Rgba([255, 255, 255, 0]));
+        picture.put_pixel(1, 1, Rgba([255, 255, 255, 255]));
+        let tinted = super::fitted(&picture, 4, Some(0x10_20_30));
+        let bytes = tinted.as_bytes(0).unwrap();
+        let at = |x: usize, y: usize| &bytes[(y * 4 + x) * 4..][..4];
+        assert_eq!(at(1, 1), [0x30, 0x20, 0x10, 255], "BGRA in the tint");
+        assert_eq!(at(0, 0)[3], 0, "the clear stays clear");
+        let plain = super::fitted(&picture, 4, None);
+        assert_eq!(&plain.as_bytes(0).unwrap()[(4 + 1) * 4..][..4], [255, 255, 255, 255]);
+    }
 }

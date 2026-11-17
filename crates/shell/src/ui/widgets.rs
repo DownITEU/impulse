@@ -141,7 +141,7 @@ pub fn segmented() -> Div {
 }
 
 /// One option of a `segmented` choice; the caller adds the click.
-pub fn choice(id: &'static str, label: impl Into<SharedString>, current: bool, cx: &App) -> Stateful<Div> {
+pub fn choice(id: impl Into<ElementId>, label: impl Into<SharedString>, current: bool, cx: &App) -> Stateful<Div> {
     let accent = accent(cx);
     div()
         .id(id)
@@ -157,6 +157,11 @@ pub fn toggle(on: bool, cx: &App) -> Div {
         .h(px(24.))
         .child(segment(t(cx, key::OFF), (!on).then_some(SEGMENT_OFF), off_color).w(px(34.)))
         .child(segment(t(cx, key::ON), on.then_some(accent), on_color).w(px(34.)))
+}
+
+/// A `toggle` that is its own click target; the caller adds the click.
+pub fn switch(id: impl Into<ElementId>, on: bool, cx: &App) -> Stateful<Div> {
+    div().id(id).cursor_pointer().child(toggle(on, cx))
 }
 
 pub fn icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size: f32) -> Stateful<Div> {

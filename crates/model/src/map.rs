@@ -108,7 +108,8 @@ pub struct Group {
 pub enum Icon {
     /// Tinted to read on its marker.
     Glyph(Glyph),
-    /// Drawn as it is: the whole picture, or a cell of a sheet of icons (left, top, width, height in its pixels).
+    /// Drawn as it is over the marker's head (selected: its shape in the mark's ink): a symbol, never a whole pin.
+    /// The whole picture, or a cell of a sheet of icons (left, top, width, height in its pixels).
     Image { url: String, cell: Option<[u32; 4]> },
 }
 

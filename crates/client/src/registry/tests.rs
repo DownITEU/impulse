@@ -33,6 +33,12 @@ impl Source for Fake {
     }
 }
 
+impl Games for Fake {
+    fn games(&self) -> BoxStream<'static, Snapshot<Vec<Game>>> {
+        stream::empty().boxed()
+    }
+}
+
 impl Maps for Fake {
     // "open" stays open; any other map answers with an error naming who answered.
     fn map(&self, offer: &MapOffer, _: &Locale) -> BoxStream<'static, Snapshot<Map>> {
@@ -164,6 +170,15 @@ fn a_removed_source_ends_its_streams_lets_nothing_late_through_and_answers_again
     let changes: Vec<_> = block_on(changes.collect());
     let (added, removed) = (Change::Added(a.id.clone()), Change::Removed(a.id.clone()));
     assert_eq!(changes, [removed.clone(), added.clone(), removed, added]);
+}
+
+#[test]
+fn a_source_plays_only_with_games_trainers_or_accounts() {
+    let (registry, a, b) = registry();
+    registry.add(Capabilities { games: Some(a.clone()), ..Capabilities::default() });
+    assert!(registry.plays(&a.id));
+    assert!(!registry.plays(&b.id));
+    assert!(!registry.plays(&SourceId::new("c").unwrap()));
 }
 
 #[test]

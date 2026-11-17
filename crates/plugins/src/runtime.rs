@@ -13,7 +13,10 @@ use anyhow::{Context, Result, ensure};
 use model::{Failure, FailureKind, SourceId};
 use sdk::wire::{self, HttpRequest, Reply};
 use serde::de::DeserializeOwned;
-use wasmi::{Caller, CompilationMode, Config, Engine, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder, TrapCode};
+use wasmi::{
+    Caller, CompilationMode, Config, Engine, ExternType, FuncType, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder,
+    TrapCode, ValType,
+};
 
 const MEMORY: usize = 64 << 20;
 // About 8 times what parsing a 1.4 MB map takes (refactor-plan 7.4).
@@ -53,13 +56,41 @@ struct Host {
     logged: usize,
 }
 
+/// Whether `wasm` validates in full and exports what `run` looks up (nothing of it runs), so an install can refuse a
+/// module that would never answer.
+pub fn check(wasm: &[u8]) -> Result<()> {
+    let module = compile(wasm, CompilationMode::Eager)?;
+    let func = |name: &str, params: &[ValType], results: &[ValType]| {
+        let wanted = FuncType::new(params.iter().copied(), results.iter().copied());
+        match module.get_export(name) {
+            Some(ExternType::Func(found)) if found == wanted => Ok(()),
+            _ => Err(refused(format!("the module does not export the function {name} the host calls"))),
+        }
+    };
+    func("impulse_api", &[], &[ValType::I32])?;
+    func("impulse_alloc", &[ValType::I32], &[ValType::I32])?;
+    func("impulse_call", &[ValType::I32, ValType::I32], &[ValType::I64])?;
+    match module.get_export("memory") {
+        Some(ExternType::Memory(_)) => Ok(()),
+        _ => Err(refused("the module does not export its memory".to_owned())),
+    }
+}
+
+fn refused(detail: String) -> anyhow::Error {
+    anyhow::anyhow!(detail).context(Failure::new(FailureKind::Refused))
+}
+
+fn compile(wasm: &[u8], mode: CompilationMode) -> Result<Module> {
+    let mut config = Config::default();
+    config.compilation_mode(mode).consume_fuel(true);
+    let engine = Engine::new(&config);
+    Module::new(&engine, wasm).context("not a module").context(Failure::new(FailureKind::Refused))
+}
+
 impl Plugin {
     pub fn new(source: SourceId, wasm: &[u8]) -> Result<Self> {
-        let mut config = Config::default();
-        config.compilation_mode(CompilationMode::Lazy).consume_fuel(true);
-        let engine = Engine::new(&config);
-        let module = Module::new(&engine, wasm).context("not a module").context(Failure::new(FailureKind::Refused))?;
-        let mut linker = Linker::new(&engine);
+        let module = compile(wasm, CompilationMode::Lazy)?;
+        let mut linker = Linker::new(module.engine());
         linker.func_wrap("impulse", "http_get", http_get)?;
         linker.func_wrap("impulse", "take", take)?;
         linker.func_wrap("impulse", "log", log)?;

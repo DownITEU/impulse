@@ -59,6 +59,7 @@ pub enum Change {
 /// A registration: its streams end once it is removed, so nothing late of it passes, even after it is added again.
 struct Entry {
     id: SourceId,
+    name: Text,
     texts: Files,
     capabilities: Capabilities,
     // Dropped with the entry, which ends `ended`.
@@ -75,15 +76,15 @@ pub struct Registry {
 impl Registry {
     /// A source already there is replaced.
     pub fn add(&self, capabilities: Capabilities) {
-        let (id, texts) = {
+        let (id, name, texts) = {
             let mut sources = capabilities.sources();
             let first = sources.next().expect("a source with a capability");
             let id = first.id();
             assert!(sources.all(|source| source.id() == id), "{}: a capability of another source", id.as_str());
-            (id, first.texts())
+            (id, first.name(), first.texts())
         };
         let (end, ended) = oneshot::channel();
-        let entry = Entry { id: id.clone(), texts, capabilities, _end: end, ended: ended.shared() };
+        let entry = Entry { id: id.clone(), name, texts, capabilities, _end: end, ended: ended.shared() };
         // Under one lock, so two adds of a source never both stay; the one replaced ends once the lock is let go.
         let replaced = {
             let mut entries = self.entries.write().unwrap_or_else(PoisonError::into_inner);
@@ -117,6 +118,23 @@ impl Registry {
 
     fn tell(&self, change: Change) {
         self.watchers.lock().unwrap_or_else(PoisonError::into_inner).retain(|tx| tx.unbounded_send(change.clone()).is_ok());
+    }
+
+    pub fn has(&self, id: &SourceId) -> bool {
+        self.entries().iter().any(|entry| entry.id == *id)
+    }
+
+    /// The source has games, trainers or accounts: what a cleared cache of it may empty from the page.
+    pub fn plays(&self, id: &SourceId) -> bool {
+        self.entries().iter().any(|entry| {
+            let c = &entry.capabilities;
+            entry.id == *id && (c.games.is_some() || c.trainers.is_some() || c.accounts.is_some())
+        })
+    }
+
+    /// What the user calls a source that is there.
+    pub fn name(&self, id: &SourceId) -> Option<Text> {
+        self.entries().iter().find(|entry| entry.id == *id).map(|entry| entry.name.clone())
     }
 
     /// Each source's catalogs, as they are now.

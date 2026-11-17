@@ -179,7 +179,8 @@ pub struct Group {
 pub enum Icon {
     /// SVG path data in the unit square, y down; the host tints it.
     Glyph { path: String },
-    /// Drawn as it is: the whole picture, or a cell of a sheet (left, top, width, height in its pixels).
+    /// Drawn as it is over the host's marker (selected: its shape, tinted): the symbol, never a whole pin. The whole
+    /// picture, or a cell of a sheet (left, top, width, height in its pixels).
     Image {
         url: String,
         #[serde(default)]

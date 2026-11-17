@@ -5,12 +5,14 @@ mod folder_rows;
 mod folders;
 mod view;
 
-use gpui_kit::{App, Context};
+use std::sync::Arc;
+
+use gpui_kit::{App, Context, Entity};
 use i18n::Language;
-use model::{Files, SourceId};
 use serde::{Deserialize, Serialize};
 
 use client::{
+    Registry,
     library::GameId,
     storage::{Paths, Stored},
 };
@@ -18,9 +20,12 @@ pub(super) use folders::Folders;
 use folders::Shown;
 pub(super) use view::{Looked, SettingsView, Tabs, label, row};
 
-use super::ui::{
-    text::Texts,
-    theme::{ACCENTS, Look},
+use super::{
+    sources::{Sources, SourcesChanged},
+    ui::{
+        text::Texts,
+        theme::{ACCENTS, Look},
+    },
 };
 
 /// The leading item of a sidebar row.
@@ -85,12 +90,18 @@ impl Prefs {
 pub struct Settings {
     prefs: Stored<Prefs>,
     /// The sources' catalogs, for each language's `Texts`.
-    sources: Vec<(SourceId, Files)>,
+    registry: Arc<Registry>,
 }
 
 impl Settings {
-    pub fn new(paths: &Paths, sources: Vec<(SourceId, Files)>, cx: &mut Context<Self>) -> Self {
-        let settings = Self { prefs: Stored::load(paths.settings()), sources };
+    pub fn new(paths: &Paths, registry: Arc<Registry>, sources: &Entity<Sources>, cx: &mut Context<Self>) -> Self {
+        // A source's catalogs come and go with it; the language stays.
+        cx.subscribe(sources, |settings, _, _: &SourcesChanged, cx| {
+            cx.set_global(Texts::new(settings.prefs.language(), &settings.registry.texts()));
+            cx.refresh_windows();
+        })
+        .detach();
+        let settings = Self { prefs: Stored::load(paths.settings()), registry };
         settings.apply(cx);
         settings
     }
@@ -114,7 +125,7 @@ impl Settings {
             cx.set_global(Look { accent });
         }
         if texts {
-            cx.set_global(Texts::new(language, &self.sources));
+            cx.set_global(Texts::new(language, &self.registry.texts()));
             gpui_kit::component::set_locale(language.tag);
         }
         if look || texts {

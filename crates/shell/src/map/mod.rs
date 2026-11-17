@@ -32,7 +32,7 @@ use crate::{
         key,
         text::t,
         theme::*,
-        widgets::{icon_button, mono},
+        widgets::{button, icon_button, mono},
     },
 };
 use board::Board;
@@ -43,6 +43,7 @@ pub use link::TitlePicker;
 pub use live::LiveMap;
 pub use maps::Maps;
 use maps::MapsEvent;
+use panel::linkable;
 pub use panel::{map_panel, paneled};
 use sidebar::Sidebar;
 use stage::Stage;
@@ -63,6 +64,7 @@ impl EventEmitter<MapEvent> for MapView {}
 /// The window's parts of `Maps`.
 pub struct MapView {
     maps: Entity<Maps>,
+    library: Entity<Library>,
     board: Entity<Board>,
     stage: Entity<Stage>,
     sidebar: Entity<Sidebar>,
@@ -104,7 +106,8 @@ impl MapView {
         // The camera lives with the stage.
         let camera = stage.downgrade();
         maps.update(cx, |maps, _| maps.set_camera(move |cx| camera.upgrade().and_then(|stage| stage.read(cx).view())));
-        Self { maps, board, stage, sidebar, card, linker, sidebar_open: true, docked: false, focus: cx.focus_handle() }
+        let library = library.clone();
+        Self { maps, library, board, stage, sidebar, card, linker, sidebar_open: true, docked: false, focus: cx.focus_handle() }
     }
 
     /// The LINK A MAP dialog; whoever draws the page draws it while it is open.
@@ -184,6 +187,13 @@ impl MapView {
                     .overflow_x_scroll()
                     .children(maps.offers().iter().enumerate().map(tab)),
             )
+            // A game with maps of its own takes a plugin's by hand only.
+            .when(!self.docked && linkable(maps, cx), |bar| {
+                bar.child(button(&t(cx, key::MAP_LINK)).id("map-toolbar-link").on_click(cx.listener(|view, _, window, cx| {
+                    let Some(game) = view.library.read(cx).opened().cloned() else { return };
+                    view.linker.update(cx, |linker, cx| linker.open(&game, window, cx));
+                })))
+            })
             .when(!self.docked, |bar| {
                 bar.child(icon_button("map-close", Icon::Close, 32., 12.).on_click(cx.listener(|_, _, _, cx| cx.emit(MapEvent::Close))))
             })

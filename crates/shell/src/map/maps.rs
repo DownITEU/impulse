@@ -12,7 +12,7 @@ use client::{
 };
 use futures::StreamExt;
 use gpui_kit::{App, AppContext, Context, Entity, EventEmitter, Task};
-use model::{Locale, MapOffer, Ref, Snapshot};
+use model::{Locale, MapOffer, Ref, Snapshot, SourceId};
 
 use super::{
     board::{Board, show},
@@ -23,6 +23,7 @@ use crate::{
     Load,
     library::{Library, LibraryEvent},
     run::{RunEvent, Runs},
+    sources::{Sources, SourcesChanged},
     ui::text::{Texts, content_locale},
 };
 
@@ -55,6 +56,8 @@ pub struct Maps {
     offers: Vec<MapOffer>,
     // The title whose offers `discovered` holds, and their locale.
     asked: Option<(Option<Ref>, Locale)>,
+    // The content locale last seen: a new `Texts` in the same language (a source's catalogs) reloads nothing.
+    locale: Locale,
     chosen: usize,
     // The map and revision the board was last asked for.
     held: Option<(Ref, Option<String>)>,
@@ -69,7 +72,14 @@ pub struct Maps {
 impl EventEmitter<MapsEvent> for Maps {}
 
 impl Maps {
-    pub fn new(registry: Arc<Registry>, paths: &Paths, library: Entity<Library>, runs: Entity<Runs>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        registry: Arc<Registry>,
+        paths: &Paths,
+        library: Entity<Library>,
+        runs: Entity<Runs>,
+        sources: &Entity<Sources>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         cx.subscribe(&runs, |maps, _, event: &RunEvent, cx| {
             if !matches!(event, RunEvent::Pressed(_)) {
                 maps.follow(cx);
@@ -78,7 +88,9 @@ impl Maps {
         .detach();
         cx.observe_global::<Texts>(Self::relocalize).detach();
         cx.subscribe(&library, |maps, _, _: &LibraryEvent, cx| maps.gather(cx)).detach();
-        let titles = cx.new(|cx| Titles::new(registry.clone(), cx));
+        // After `Titles`' own: a source gone has left the titles before the offers are gathered.
+        let titles = cx.new(|cx| Titles::new(registry.clone(), sources, cx));
+        cx.subscribe(sources, |maps, _, SourcesChanged(changed), cx| maps.sources_changed(changed, cx)).detach();
         // Whoever offers LINK A MAP reads the titles through `Maps`.
         cx.subscribe(&titles, |maps, _, _: &TitlesEvent, cx| {
             maps.gather(cx);
@@ -103,6 +115,7 @@ impl Maps {
             discovered: Vec::new(),
             offers: Vec::new(),
             asked: None,
+            locale: content_locale(cx),
             chosen: 0,
             held: None,
             minimap: false,
@@ -215,8 +228,9 @@ impl Maps {
         });
     }
 
-    /// The open game's offers: its record's, then the linked title's, else the matched one's. A link to a source not
-    /// there is not used; no title asks the sources again, once per game and locale (M3).
+    /// The open game's offers: its record's, then the linked title's, else, for a game without maps of its own, the
+    /// matched one's. A link to a source not there is not used; no title asks the sources again, once per game and
+    /// locale (M3).
     fn gather(&mut self, cx: &mut Context<Self>) {
         let game = self.library.read(cx).opened().cloned();
         let id = game.as_ref().map(|game| game.id.clone());
@@ -235,7 +249,8 @@ impl Maps {
         if let Some(game) = game.filter(|_| ready) {
             let titled = self.registry.titled();
             let link = self.library.read(cx).link(&game.id).filter(|title| titled.contains(title.source()));
-            let title = link.or_else(|| matched(&game, self.titles.read(cx).all()).map(|title| title.id.clone()));
+            let unmapped = self.native.is_empty();
+            let title = link.or_else(|| matched(&game, self.titles.read(cx).all()).filter(|_| unmapped).map(|title| title.id.clone()));
             let asked = (title, locale);
             if self.asked.as_ref() != Some(&asked) {
                 // Another locale's offers stay until theirs replace them: the chosen map is kept by `Ref`.
@@ -244,6 +259,8 @@ impl Maps {
                 }
                 self._offers = match &asked.0 {
                     Some(title) => self.discover(title, &asked.1, cx),
+                    // A game with maps of its own takes no match: nothing to ask.
+                    None if !unmapped => Task::ready(()),
                     None => {
                         self.titles.update(cx, |titles, cx| titles.refresh(cx));
                         Task::ready(())
@@ -296,6 +313,11 @@ impl Maps {
     /// Another content language: the open map loads again in it, a closed one lets go of its copy; the minimap's
     /// search starts over.
     fn relocalize(&mut self, cx: &mut Context<Self>) {
+        let locale = content_locale(cx);
+        if locale == self.locale {
+            return;
+        }
+        self.locale = locale;
         if self.is_open(cx) {
             self.choose(self.chosen, cx);
         } else {
@@ -304,6 +326,46 @@ impl Maps {
         }
         self.live_map.update(cx, |live, cx| live.relocalize(cx));
         self.gather(cx);
+    }
+
+    /// Sources came, went or were replaced (P1): the title's offers and the map of one still there are asked again,
+    /// those of one gone go; a board that does not ask again lets go of its copy.
+    fn sources_changed(&mut self, changed: &[SourceId], cx: &mut Context<Self>) {
+        let of = |id: &Ref| changed.contains(id.source());
+        if let Some((Some(title), locale)) = self.asked.clone().filter(|(title, _)| title.as_ref().is_some_and(of)) {
+            if self.registry.has(title.source()) {
+                // Replaced: its offers stay until the new ones come.
+                self._offers = self.discover(&title, &locale, cx);
+            } else {
+                (self.asked, self._offers) = (None, Task::ready(()));
+                self.discovered.clear();
+            }
+        }
+        // A titles plugin installed now may know the open game: an unmapped one asks the sources again.
+        if self.asked.as_ref().is_some_and(|(title, _)| title.is_none())
+            && self.registry.titled().iter().any(|source| changed.contains(source))
+        {
+            self.asked = None;
+        }
+        let open = self.is_open(cx);
+        let held = self.held.take_if(|(map, _)| of(map));
+        let reload = open && held.as_ref().is_some_and(|(map, _)| self.registry.has(map.source()));
+        if held.is_some() && !reload {
+            if open {
+                self.keep_view(cx);
+            }
+            self._load = Task::ready(());
+            self.board.update(cx, |board, _| {
+                board.save();
+                board.forget();
+            });
+            // The stage's tiles and epoch go with the map, so no old load lands while a fallback loads.
+            cx.emit(MapsEvent::Retile);
+        }
+        self.gather(cx);
+        if reload && self.held.is_none() {
+            self.choose(self.chosen, cx);
+        }
     }
 
     fn keep_view(&mut self, cx: &mut Context<Self>) {

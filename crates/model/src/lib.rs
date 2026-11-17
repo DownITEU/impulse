@@ -5,6 +5,7 @@ mod failure;
 mod game;
 mod ids;
 mod map;
+mod plugin;
 mod process;
 mod run;
 mod source;
@@ -17,6 +18,7 @@ pub use failure::{Failure, FailureKind};
 pub use game::{Game, Installation, Locator, Offer, Standalone};
 pub use ids::{Ref, SourceId};
 pub use map::{Category, Frame, Glyph, Group, Icon, Label, Level, Map, MapOffer, PIN_LINK, Picture, Pin, Point, Region, TileSet, Tiles};
+pub use plugin::{Approval, Installed, Setting, SettingKind, Value};
 pub use process::{Process, Rule};
 pub use run::{Attach, Event, Live, Runner, Session};
 pub use source::{

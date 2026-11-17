@@ -11,13 +11,13 @@ use std::{
 };
 
 use futures::{StreamExt, executor::block_on};
-use model::{Downloads, FailureKind, Locale, Map, MapOffer, Maps, Ref, Snapshot, Source, StoreId, Titles};
+use model::{Caches, Downloads, FailureKind, Locale, Map, MapOffer, Maps, Ref, Snapshot, Source, StoreId, Titles};
 use sdk::wire;
 
-use crate::{Plugin, runtime::Net, scope::Scope};
+use crate::{Bundle, Plugin, cache::Retired, runtime::Net, scope::Scope};
 
 /// The guest's folder: its manifest and the module, built once per test run.
-fn plugin() -> &'static Path {
+pub(crate) fn plugin() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
         let here = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -57,7 +57,11 @@ fn refusing(_: Arc<Scope>) -> Net {
 }
 
 fn open(cache: &Path, values: serde_json::Value, net: impl FnOnce(Arc<Scope>) -> Net) -> Plugin {
-    Plugin::with(plugin(), cache, values.as_object().unwrap(), net).unwrap_or_else(|e| panic!("{e}"))
+    with_flag(cache, values, net, Arc::default())
+}
+
+fn with_flag(cache: &Path, values: serde_json::Value, net: impl FnOnce(Arc<Scope>) -> Net, retired: Arc<Retired>) -> Plugin {
+    Plugin::with(&Bundle::read(plugin()).unwrap(), cache, values.as_object().unwrap(), net, retired).unwrap_or_else(|e| panic!("{e}"))
 }
 
 /// A net that serves the guest's `net` map and counts every request: each guest call of it is one.
@@ -217,5 +221,37 @@ fn a_plugin_reads_its_catalogs_and_keeps_its_answers_in_a_folder_of_its_id() {
     assert_eq!(texts.len(), 1);
     assert!(&*texts[0].0 == "en" && texts[0].1.contains("level-label = Level"));
     let _ = block_on(plugin.titles(&Locale::new("en")).collect::<Vec<_>>());
-    assert!(dir.join("test-guest").is_dir());
+    assert!(dir.join("plugin-test-guest").is_dir(), "under the source id: a bare id such as `con` is a device name");
+    assert_eq!(plugin.name(), model::Text::Plain("Test guest".into()));
+}
+
+#[test]
+fn a_failed_call_is_the_plugins_failure_until_a_call_succeeds() {
+    let plugin = open(&cache("failure"), serde_json::json!({}), fake);
+    assert!(plugin.failure().is_none());
+    let [_, Snapshot::Fresh(Err(_))] = &ask(&plugin, "gone", "r1", "en")[..] else { panic!("a map the guest lacks") };
+    assert_eq!(plugin.failure().map(|failure| failure.kind), Some(FailureKind::NotFound));
+    assert!(matches!(&ask(&plugin, "city", "r1", "en")[..], [_, Snapshot::Fresh(Ok(_))]));
+    assert!(plugin.failure().is_none());
+}
+
+#[test]
+fn a_retired_plugin_writes_no_answer_and_clearing_empties_its_folder() {
+    let dir = cache("retire");
+    let retired = Arc::new(Retired::default());
+    let plugin = with_flag(&dir, serde_json::json!({}), fake, retired.clone());
+    let folder = dir.join("plugin-test-guest");
+    let [store] = &block_on(plugin.stores())[..] else { panic!("one store") };
+    assert_eq!((store.id.to_string().as_str(), store.bytes), ("plugin-test-guest:answers", 0));
+    assert_eq!(store.hint, model::Text::Plain("*.tiles.example.com, tiles.example.com".into()));
+    assert!(matches!(&ask(&plugin, "city", "r1", "en")[..], [_, Snapshot::Fresh(Ok(_))]));
+    assert!(block_on(plugin.stores())[0].bytes > 0);
+    plugin.refresh(&Ref::new(&plugin.id(), "city"));
+    block_on(plugin.clear(&store.id));
+    assert!(!folder.exists());
+    assert!(matches!(&ask(&plugin, "city", "r1", "en")[..], [Snapshot::Cached(None), Snapshot::Fresh(Ok(_))]), "cleared");
+    std::fs::remove_dir_all(&folder).unwrap();
+    retired.retire();
+    assert!(matches!(&ask(&plugin, "city", "r1", "en")[..], [Snapshot::Cached(None), Snapshot::Fresh(Ok(_))]));
+    assert!(!folder.exists(), "a retired plugin brings no folder back");
 }

@@ -3,11 +3,14 @@
 
 mod view;
 
-use crate::ui::{key, text::app_text};
+use crate::{
+    sources::{Sources, SourcesChanged},
+    ui::{key, text::app_text},
+};
 use std::{sync::Arc, time::Duration};
 
 use blocking::unblock;
-use gpui_kit::{Context, EventEmitter, Task};
+use gpui_kit::{Context, Entity, EventEmitter, Task};
 use i18n::Key;
 use model::{Clear, Ref, SourceId, Store};
 
@@ -17,13 +20,13 @@ use client::{
     storage::{Paths, Stored},
 };
 
-pub use view::ResourcesView;
+pub use view::{ResourcesView, sized};
 
 const SWEEP_EVERY: Duration = Duration::from_secs(600);
 
 pub enum ResourcesEvent {
-    /// A source's store was emptied: what came from it is asked for again.
-    Cleared,
+    /// These sources' stores were emptied: what came from them is asked for again.
+    Cleared(Vec<SourceId>),
 }
 
 /// Sizes as last read.
@@ -38,6 +41,8 @@ pub struct Resources {
     registry: Arc<Registry>,
     paths: Paths,
     usage: Option<Usage>,
+    // A measurement was asked for, so a source change while it is in flight is not lost.
+    measuring: bool,
     kept: Stored<limit::Kept>,
     _measure: Task<()>,
     _sweep: Task<()>,
@@ -46,15 +51,31 @@ pub struct Resources {
 impl EventEmitter<ResourcesEvent> for Resources {}
 
 impl Resources {
-    pub fn new(registry: Arc<Registry>, paths: &Paths, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, paths: &Paths, sources: &Entity<Sources>, cx: &mut Context<Self>) -> Self {
+        // A source's stores come and go with it: read again while they show.
+        cx.subscribe(sources, |resources, _, _: &SourcesChanged, cx| {
+            if resources.measuring {
+                resources.measure(cx);
+            }
+        })
+        .detach();
         let kept = Stored::load(paths.resources());
-        let mut resources = Self { registry, paths: paths.clone(), usage: None, kept, _measure: Task::ready(()), _sweep: Task::ready(()) };
+        let mut resources = Self {
+            registry,
+            paths: paths.clone(),
+            usage: None,
+            measuring: false,
+            kept,
+            _measure: Task::ready(()),
+            _sweep: Task::ready(()),
+        };
         resources.keep_limit(cx);
         resources
     }
 
     /// Reads every size again.
     pub fn measure(&mut self, cx: &mut Context<Self>) {
+        self.measuring = true;
         let (stores, paths) = (self.registry.stores(), self.paths.clone());
         self._measure = cx.spawn(async move |view, cx| {
             let own = unblock(move || {
@@ -84,7 +105,7 @@ impl Resources {
     pub fn clear(&mut self, ids: Vec<Ref>, cx: &mut Context<Self>) {
         let (registry, paths) = (self.registry.clone(), self.paths.clone());
         cx.spawn(async move |view, cx| {
-            let mut provided = false;
+            let mut provided = Vec::new();
             for id in ids {
                 match media_of(&id) {
                     Some(media) => {
@@ -93,13 +114,15 @@ impl Resources {
                     }
                     None => {
                         registry.clear(&id).await;
-                        provided = true;
+                        if !provided.contains(id.source()) {
+                            provided.push(id.source().clone());
+                        }
                     }
                 }
             }
             view.update(cx, |view, cx| {
-                if provided {
-                    cx.emit(ResourcesEvent::Cleared);
+                if !provided.is_empty() {
+                    cx.emit(ResourcesEvent::Cleared(provided));
                 }
                 view.measure(cx);
             })

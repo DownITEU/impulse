@@ -13,6 +13,11 @@ pub trait Source: Send + Sync {
     fn texts(&self) -> Files {
         Files::default()
     }
+
+    /// What the user calls it, where sources are told apart.
+    fn name(&self) -> Text {
+        Text::Plain(self.id().as_str().to_owned())
+    }
 }
 
 /// Catalogs: a language tag and its Fluent source each. Owned: a plugin's are read when it opens.

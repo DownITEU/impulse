@@ -19,7 +19,7 @@ use crate::ui::{
     key,
     text::t,
     theme::*,
-    widgets::{choice, mono, segmented, square, toggle, tracked},
+    widgets::{choice, mono, segmented, square, switch, tracked},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -29,15 +29,17 @@ enum Tab {
     Hotkeys,
     App,
     Resources,
+    Plugins,
 }
 
 // The tabs without a page yet are shown but not clickable.
-const TABS: [(Key, Option<Tab>); 6] = [
+const TABS: [(Key, Option<Tab>); 7] = [
     (key::SETTINGS_APPEARANCE, Some(Tab::Appearance)),
     (key::SETTINGS_OVERLAY, Some(Tab::Overlay)),
     (key::SETTINGS_HOTKEYS, Some(Tab::Hotkeys)),
     (key::SETTINGS_APP, Some(Tab::App)),
     (key::SETTINGS_RESOURCES, Some(Tab::Resources)),
+    (key::SETTINGS_PLUGINS, Some(Tab::Plugins)),
     (key::SETTINGS_ABOUT, None),
 ];
 
@@ -53,6 +55,7 @@ pub struct Tabs {
     pub overlay: AnyView,
     pub hotkeys: AnyView,
     pub resources: AnyView,
+    pub plugins: AnyView,
 }
 
 /// The dialog opened or showed another tab: what it shows may be read again.
@@ -151,20 +154,14 @@ impl SettingsView {
             .child(row(t(cx, key::LANGUAGE), t(cx, key::LANGUAGE_HINT), 64.).mt(px(12.)).border_t_1().child(language))
             .child(
                 row(t(cx, key::CLOSE_TO_TRAY), t(cx, key::CLOSE_TO_TRAY_HINT), 64.).child(
-                    div()
-                        .id("close-to-tray")
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.quit_on_close = close_to_tray, cx)))
-                        .child(toggle(close_to_tray, cx)),
+                    switch("close-to-tray", close_to_tray, cx)
+                        .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.quit_on_close = close_to_tray, cx))),
                 ),
             )
             .child(
                 row(t(cx, key::HIDE_FROM_CAPTURE), t(cx, key::HIDE_FROM_CAPTURE_HINT), 64.).border_b_0().child(
-                    div()
-                        .id("hide-from-capture")
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.hide_from_capture = !hidden, cx)))
-                        .child(toggle(hidden, cx)),
+                    switch("hide-from-capture", hidden, cx)
+                        .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.hide_from_capture = !hidden, cx))),
                 ),
             )
     }
@@ -219,11 +216,8 @@ impl SettingsView {
             ))
             .child(
                 row(t(cx, key::REDUCE_MOTION), t(cx, key::REDUCE_MOTION_HINT), 64.).border_b_0().child(
-                    div()
-                        .id("reduce-motion")
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.reduce_motion = !reduce_motion, cx)))
-                        .child(toggle(reduce_motion, cx)),
+                    switch("reduce-motion", reduce_motion, cx)
+                        .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.reduce_motion = !reduce_motion, cx))),
                 ),
             )
     }
@@ -238,6 +232,7 @@ impl Render for SettingsView {
                 Tab::Hotkeys => self.tabs.hotkeys.clone().into_any_element(),
                 Tab::App => self.app(cx).into_any_element(),
                 Tab::Resources => self.tabs.resources.clone().into_any_element(),
+                Tab::Plugins => self.tabs.plugins.clone().into_any_element(),
             }),
         );
         dialog("settings", t(cx, key::SETTINGS), 640., &self.focus, |view: &mut Self, _, cx| view.close(cx), body, cx)

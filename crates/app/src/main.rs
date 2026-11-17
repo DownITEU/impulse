@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod plugins;
+
 use std::{env, path::PathBuf, sync::Arc};
 
 use client::{
@@ -10,6 +12,8 @@ use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOpt
 use model::SourceId;
 use shell::Root;
 use wand::Wand;
+
+use self::plugins::Host;
 
 fn main() {
     // One Impulse at a time: a second start shows the first, which may sit in the tray.
@@ -33,9 +37,10 @@ fn main() {
         caches: Some(wand),
         ..Capabilities::default()
     });
-    // Release builds load none until installing asks the user to approve a plugin's hosts.
-    #[cfg(debug_assertions)]
-    add_plugins(&paths, &registry);
+    // The crate, not this module of the same name.
+    let store = ::plugins::Store::new(paths.plugins(), paths.plugin_lock(), paths.plugin_cache());
+    let plugins = Arc::new(client::plugins::Plugins::new(Arc::new(Host(store)), registry.clone()));
+    plugins.start();
     gpui_kit::application().with_assets(shell::Assets).run(move |cx| {
         gpui_kit::init(cx);
         shell::init(&data_dir, registry.clone(), cx);
@@ -53,7 +58,7 @@ fn main() {
         });
         #[cfg(not(feature = "remote"))]
         let serve = None;
-        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(registry, data_dir, serve, window, cx)))
+        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(registry, plugins, data_dir, serve, window, cx)))
             .expect("failed to open window");
         // gpui-pre-windows keeps running after the last window closes.
         cx.on_window_closed(|cx, _| {
@@ -65,24 +70,4 @@ fn main() {
         .detach();
         cx.activate(true);
     });
-}
-
-/// Each plugin folder, a source; one that does not open is logged and left out.
-#[cfg(debug_assertions)]
-fn add_plugins(paths: &Paths, registry: &Registry) {
-    let Ok(folders) = std::fs::read_dir(paths.plugins()) else { return };
-    for dir in folders.flatten().map(|entry| entry.path()).filter(|path| path.is_dir()) {
-        match plugins::Plugin::open(&dir, &paths.plugin_cache(), &plugins::Values::new()) {
-            Ok(plugin) => {
-                let plugin = Arc::new(plugin);
-                registry.add(Capabilities {
-                    maps: Some(plugin.clone()),
-                    titles: Some(plugin.clone()),
-                    downloads: Some(plugin),
-                    ..Capabilities::default()
-                });
-            }
-            Err(e) => log::warn!("plugin {}: {}", dir.display(), e.detail),
-        }
-    }
 }

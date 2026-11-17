@@ -234,6 +234,7 @@ settings-overlay = OVERLAY
 settings-hotkeys = HOTKEYS
 settings-app = APP
 settings-resources = RESOURCES
+settings-plugins = PLUGINS
 settings-about = ABOUT
 accent = ACCENT
 accent-hint = marks live state only
@@ -286,6 +287,28 @@ remote-note-not-live = Start the game first.
 remote-note-busy = Another run is on, or the trainer is not there yet.
 remote-note-nothing-on = Turn some mods on first.
 remote-note-name = Name the collection first.
+
+## Plugins
+
+plugins-install = INSTALL
+plugins-install-hint = a folder or a .zip holding a manifest.json; you approve what it may reach first
+plugins-folder = FOLDER
+plugins-zip = ZIP
+plugins-pick-folder = Select the plugin's folder
+plugins-pick-zip = Select the plugin's .zip
+plugins-none = no plugin installed
+plugins-approve-title = INSTALL { $name } { $version }?
+plugins-replaces = replaces version { $version }
+plugins-hosts = FETCHES FROM
+plugins-links = OPENS LINKS TO
+plugins-no-hosts = nothing
+plugins-new = NEW
+plugins-sandbox = It runs in a sandbox and reaches only these hosts. Install only plugins you trust.
+plugins-approve = APPROVE
+plugins-cancel = CANCEL
+plugins-version = version { $version }, keeps { $size }
+plugins-remove = REMOVE
+plugins-value = value
 
 ## Resources
 

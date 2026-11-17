@@ -78,6 +78,7 @@ windows = "0.62"
 windows-registry = "0.6"
 windows-sys = "0.61"
 wry = "0.57.2"
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 
 # Every crate opts in with `[lints] workspace = true`; `scripts/check.ps1` denies warnings.
 [workspace.lints.clippy]

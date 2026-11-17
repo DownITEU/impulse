@@ -25,6 +25,8 @@ sha2.workspace = true
 url.workspace = true
 # Interpreted, compiled lazily: no `wat` or `memory64` in the app (refactor-plan 7.4).
 wasmi = { workspace = true, features = ["std", "stable", "validate", "auto-dispatch"] }
+# Plugins arrive as a folder or a .zip: read in memory, never extracted.
+zip.workspace = true
 
 [dev-dependencies]
 wat.workspace = true

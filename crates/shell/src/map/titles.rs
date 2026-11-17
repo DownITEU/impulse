@@ -5,10 +5,13 @@ use std::sync::Arc;
 
 use client::Registry;
 use futures::StreamExt;
-use gpui_kit::{Context, EventEmitter, Task};
-use model::{Locale, Snapshot, Title};
+use gpui_kit::{Context, Entity, EventEmitter, Task};
+use model::{Locale, Snapshot, SourceId, Text, Title};
 
-use crate::ui::text::{Texts, content_locale};
+use crate::{
+    sources::{Sources, SourcesChanged},
+    ui::text::{Texts, content_locale},
+};
 
 pub enum TitlesEvent {
     /// A read or a refresh ended, with titles or none.
@@ -18,24 +21,45 @@ pub enum TitlesEvent {
 pub struct Titles {
     registry: Arc<Registry>,
     all: Vec<Title>,
+    // What the titled sources are called, where the picker tells them apart.
+    names: Vec<(SourceId, Text)>,
     locale: Option<Locale>,
     /// The disk copies of `locale` are read: a game without a match before then is not a miss.
     ready: bool,
     refreshing: bool,
+    // A titled source gave no copy at all yet: only a refresh can tell.
+    pending: bool,
     _ask: Task<()>,
 }
 
 impl EventEmitter<TitlesEvent> for Titles {}
 
 impl Titles {
-    pub fn new(registry: Arc<Registry>, cx: &mut Context<Self>) -> Self {
+    pub fn new(registry: Arc<Registry>, sources: &Entity<Sources>, cx: &mut Context<Self>) -> Self {
+        // A source gone takes its titles at once; a new one's are read from its disk copy.
+        cx.subscribe(sources, |titles, _, _: &SourcesChanged, cx| {
+            let registry = titles.registry.clone();
+            titles.all.retain(|title| registry.has(title.id.source()));
+            // Keeps a running refresh running instead of cancelling it.
+            titles.ask(titles.refreshing, cx);
+        })
+        .detach();
         cx.observe_global::<Texts>(|titles, cx| {
             if titles.locale.as_ref() != Some(&content_locale(cx)) {
                 titles.ask(false, cx);
             }
         })
         .detach();
-        let mut titles = Self { registry, all: Vec::new(), locale: None, ready: false, refreshing: false, _ask: Task::ready(()) };
+        let mut titles = Self {
+            registry,
+            all: Vec::new(),
+            names: Vec::new(),
+            locale: None,
+            ready: false,
+            refreshing: false,
+            pending: false,
+            _ask: Task::ready(()),
+        };
         titles.ask(false, cx);
         titles
     }
@@ -44,9 +68,18 @@ impl Titles {
         &self.all
     }
 
+    pub fn name(&self, source: &SourceId) -> Option<&Text> {
+        self.names.iter().find(|(id, _)| id == source).map(|(_, name)| name)
+    }
+
     /// The disk copies of `locale` are read; a language change may not have reached this yet.
     pub fn ready(&self, locale: &Locale) -> bool {
         self.ready && self.locale.as_ref() == Some(locale)
+    }
+
+    /// A titled source has no copy, not even an empty one: its titles are unknown until a refresh.
+    pub fn pending(&self) -> bool {
+        self.pending
     }
 
     /// Asks each source again: one calls only when its copy is stale.
@@ -62,10 +95,12 @@ impl Titles {
         if self.locale.as_ref() != Some(&locale) {
             (self.all, self.ready) = (Vec::new(), false);
         }
-        let streams: Vec<_> = self.registry.titled().iter().map(|source| self.registry.titles(source, &locale)).collect();
+        let titled = self.registry.titled();
+        self.names = titled.iter().filter_map(|source| Some((source.clone(), self.registry.name(source)?))).collect();
+        let streams: Vec<_> = titled.iter().map(|source| self.registry.titles(source, &locale)).collect();
         (self.locale, self.refreshing) = (Some(locale), fresh);
         self._ask = cx.spawn(async move |titles, cx| {
-            let mut all = Vec::new();
+            let (mut all, mut pending) = (Vec::new(), false);
             for mut snapshots in streams {
                 let mut kept = None;
                 while let Some(snapshot) = snapshots.next().await {
@@ -78,11 +113,12 @@ impl Titles {
                         break;
                     }
                 }
+                pending |= kept.is_none();
                 all.extend(kept.into_iter().flatten());
             }
             titles
                 .update(cx, |titles, cx| {
-                    (titles.all, titles.ready, titles.refreshing) = (all, true, false);
+                    (titles.all, titles.ready, titles.refreshing, titles.pending) = (all, true, false, pending);
                     cx.emit(TitlesEvent::Changed);
                     cx.notify();
                 })

@@ -97,13 +97,20 @@ impl Inner {
         match asked {
             Ok(value) => {
                 self.stale_keys().remove(key);
+                self.set_failure(None);
                 Ok(value)
             }
             Err(e) => {
                 log::warn!("{}: {key}: {e:#}", self.scope.source.as_str());
-                Err(Failure::from(e))
+                let failure = Failure::from(e);
+                self.set_failure(Some(failure.clone()));
+                Err(failure)
             }
         }
+    }
+
+    fn set_failure(&self, failure: Option<Failure>) {
+        *self.failure.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = failure;
     }
 
     /// The keys `refresh` marked; a poisoned lock holds a plain set that is still good.

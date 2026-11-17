@@ -15,7 +15,7 @@ use client::{
 };
 use futures::{StreamExt, channel::oneshot};
 use gpui_kit::{Context, Entity, EventEmitter};
-use model::{Chord, Snapshot};
+use model::{Chord, Locale, Snapshot};
 
 use crate::{
     library::{Library, LibraryEvent},
@@ -46,6 +46,8 @@ pub struct Trainers {
     shelf: Shelf,
     // Games whose trainer is being read or downloaded right now.
     loading: HashSet<GameId>,
+    // What the copies were asked in: a new `Texts` in the same language (a source's catalogs) reloads nothing.
+    locale: Locale,
 }
 
 impl EventEmitter<TrainerEvent> for Trainers {}
@@ -61,11 +63,16 @@ impl Trainers {
         .detach();
         // Copies in the old language show until their next open asks again; the open game's asks now.
         cx.observe_global::<Texts>(|trainers, cx| {
-            trainers.shelf.outdate(None);
-            trainers.open(cx);
+            let locale = content_locale(cx);
+            if locale != trainers.locale {
+                trainers.locale = locale;
+                trainers.shelf.outdate(None);
+                trainers.open(cx);
+            }
         })
         .detach();
-        Self { registry, library, profiles: Profiles::load(paths), shelf: Shelf::default(), loading: HashSet::new() }
+        let (profiles, locale) = (Profiles::load(paths), content_locale(cx));
+        Self { registry, library, profiles, shelf: Shelf::default(), loading: HashSet::new(), locale }
     }
 
     pub fn get(&self, game: &GameId) -> Option<&Load<Sheet>> {

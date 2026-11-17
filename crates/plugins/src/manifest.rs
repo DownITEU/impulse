@@ -1,6 +1,6 @@
-//! A plugin's manifest as the host trusts it: read and checked when the plugin opens.
+//! A plugin's manifest as the host trusts it: parsed and checked when its bundle is read.
 
-use std::{collections::HashSet, path::Path};
+use std::collections::HashSet;
 
 use anyhow::{Context, Result, bail, ensure};
 use model::{Failure, FailureKind, Locale, SourceId};
@@ -13,15 +13,13 @@ use crate::{
 
 const ID: usize = 25;
 const MOST_SETTINGS: usize = 32;
-const MANIFEST: u64 = 64 << 10;
+/// The largest manifest file.
+pub const MANIFEST: u64 = 64 << 10;
 
-/// The manifest in `dir` and the scope it grants.
-pub fn read(dir: &Path) -> Result<(Manifest, Scope)> {
-    let file = dir.join("manifest.json");
-    let bytes = crate::read(&file, MANIFEST)?;
-    let manifest: Manifest = serde_json::from_slice(&bytes)
-        .with_context(|| format!("{} is not a manifest", file.display()))
-        .context(Failure::new(FailureKind::Refused))?;
+/// The manifest in `bytes` and the scope it grants.
+pub fn parse(bytes: &[u8]) -> Result<(Manifest, Scope)> {
+    let manifest: Manifest =
+        serde_json::from_slice(bytes).context("manifest.json is not a manifest").context(Failure::new(FailureKind::Refused))?;
     if manifest.api != sdk::API {
         return Err(anyhow::anyhow!("speaks wire v{}, this app v{}", manifest.api, sdk::API))
             .context(Failure::new(FailureKind::Unsupported));
@@ -44,14 +42,7 @@ fn check(manifest: &Manifest) -> Result<Scope> {
         module.len() <= 64 && module.ends_with(".wasm") && !module.contains(['/', '\\', ':']) && !module.starts_with('.'),
         "module {module:?}"
     );
-    ensure!(
-        !manifest.locales.is_empty()
-            && manifest
-                .locales
-                .iter()
-                .all(|tag| tag.len() <= 35 && !tag.is_empty() && tag.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')),
-        "locales"
-    );
+    ensure!(!manifest.locales.is_empty() && manifest.locales.iter().all(|tag| language_tag(tag)), "locales");
     ensure!(manifest.refresh >= 1, "refresh of 0 days");
     ensure!(manifest.settings.len() <= MOST_SETTINGS, "more than {MOST_SETTINGS} settings");
     let mut ids = HashSet::new();
@@ -78,6 +69,11 @@ fn check(manifest: &Manifest) -> Result<Scope> {
         }
     }
     Ok(Scope { source, hosts: Hosts::parse(&manifest.hosts).context("hosts")?, links: Hosts::parse(&manifest.links).context("links")? })
+}
+
+/// A language tag as a catalog stem or a manifest locale: 1 to 35 bytes of ASCII letters, digits and `-`.
+pub(crate) fn language_tag(tag: &str) -> bool {
+    (1..=35).contains(&tag.len()) && tag.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
 /// The locale of `served` closest to `asked`: the same tag, else the same language, else the first.
