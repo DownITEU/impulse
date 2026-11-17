@@ -5,6 +5,7 @@ mod board;
 mod card;
 mod icons;
 mod keys;
+mod link;
 mod live;
 mod maps;
 mod markers;
@@ -12,8 +13,9 @@ mod panel;
 mod picture;
 mod sidebar;
 mod stage;
+mod titles;
 
-use client::{library::Game, media::Media, storage::Paths};
+use client::{media::Media, storage::Paths};
 use gpui_kit::{
     App, Context, Entity, EventEmitter, FocusHandle, IntoElement, Render, StyleRefinement, Window,
     component::{h_flex, v_flex},
@@ -37,9 +39,11 @@ use board::Board;
 use card::Card;
 pub use keys::bind_keys;
 use keys::{CONTEXT, CloseMap, FindPlace};
+pub use link::TitlePicker;
 pub use live::LiveMap;
 pub use maps::Maps;
-pub use panel::map_panel;
+use maps::MapsEvent;
+pub use panel::{map_panel, paneled};
 use sidebar::Sidebar;
 use stage::Stage;
 
@@ -63,6 +67,7 @@ pub struct MapView {
     stage: Entity<Stage>,
     sidebar: Entity<Sidebar>,
     card: Entity<Card>,
+    linker: Entity<TitlePicker>,
     sidebar_open: bool,
     // In a dock, whose frame closes it.
     docked: bool,
@@ -79,15 +84,32 @@ impl MapView {
         })
         .detach();
         let board = maps.read(cx).board().clone();
-        cx.observe(&maps, |_, _, cx| cx.notify()).detach();
+        cx.observe_in(&maps, window, |view, maps, window, cx| {
+            // A map whose offer was withdrawn while open closes; a dock's is the overlay's to close.
+            if !view.docked && !maps.read(cx).mapped() {
+                view.hide(window, cx);
+            }
+            cx.notify();
+        })
+        .detach();
         cx.observe(&board, |_, _, cx| cx.notify()).detach();
         let stage = cx.new(|cx| Stage::new(board.clone(), Media::Tiles.dir(paths), cx));
-        let sidebar = cx.new(|cx| Sidebar::new(board.clone(), window, cx));
+        cx.subscribe(&maps, |view, _, event: &MapsEvent, cx| match event {
+            MapsEvent::Retile => view.stage.update(cx, |stage, cx| stage.retile(cx)),
+        })
+        .detach();
+        let sidebar = cx.new(|cx| Sidebar::new(maps.clone(), window, cx));
         let card = cx.new(|cx| Card::new(board.clone(), Media::Videos.dir(paths), window, cx));
+        let linker = cx.new(|cx| TitlePicker::new(maps.clone(), library.clone(), cx));
         // The camera lives with the stage.
         let camera = stage.downgrade();
         maps.update(cx, |maps, _| maps.set_camera(move |cx| camera.upgrade().and_then(|stage| stage.read(cx).view())));
-        Self { maps, board, stage, sidebar, card, sidebar_open: true, docked: false, focus: cx.focus_handle() }
+        Self { maps, board, stage, sidebar, card, linker, sidebar_open: true, docked: false, focus: cx.focus_handle() }
+    }
+
+    /// The LINK A MAP dialog; whoever draws the page draws it while it is open.
+    pub fn linker(&self) -> &Entity<TitlePicker> {
+        &self.linker
     }
 
     pub fn set_docked(&mut self, docked: bool, cx: &mut Context<Self>) {
@@ -95,10 +117,10 @@ impl MapView {
         cx.notify();
     }
 
-    /// Opens on the maps of `game`.
-    pub fn show(&mut self, game: &Game, window: &mut Window, cx: &mut Context<Self>) {
+    /// Opens on the open game's maps.
+    pub fn show(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.stage.update(cx, |stage, cx| stage.take_focus(window, cx));
-        self.maps.update(cx, |maps, cx| maps.open(&game.id, &game.source.maps, cx));
+        self.maps.update(cx, |maps, cx| maps.open(cx));
     }
 
     /// Lets go of what only an open map needs.

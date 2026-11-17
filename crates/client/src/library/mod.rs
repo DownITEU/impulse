@@ -1,8 +1,10 @@
 //! The game list: every installed game with what the app shows about it.
 
 mod id;
+mod links;
 mod picked;
 pub mod sources;
+pub mod titles;
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -14,6 +16,7 @@ use std::{
 use model::{Installation, Origin, Ref, StoreId};
 
 pub use id::GameId;
+pub use links::Links;
 pub use picked::Picked;
 
 use crate::media;

@@ -1,8 +1,6 @@
 //! The overlay's layout over the game: the game's title at the top left, its run's button at the top right,
 //! the docks' toggles between them, and the docks with the slices' views in them.
 
-use std::sync::Arc;
-
 use client::{library::Game, storage::Paths};
 use gpui_kit::{
     App, Bounds, Context, Div, Entity, EventEmitter, FocusHandle, IntoElement, KeyBinding, Pixels, Render, Size, Window, actions,
@@ -184,7 +182,7 @@ impl Hud {
             if matches!(event, LibraryEvent::Opened) && hud.over {
                 hud.place_map(window, cx);
                 // The old game's map may have gone with the focus.
-                if hud.docked(cx).is_none() {
+                if !hud.docked(cx) {
                     hud.focus.focus(window, cx);
                 }
             }
@@ -272,8 +270,8 @@ impl Hud {
             return;
         }
         match (self.docked(cx), self.maps.read(cx).is_open(cx)) {
-            (Some(game), false) => self.map.update(cx, |map, cx| map.show(&game, window, cx)),
-            (None, true) => {
+            (true, false) => self.map.update(cx, |map, cx| map.show(window, cx)),
+            (false, true) => {
                 self.map.update(cx, |map, cx| map.hide(window, cx));
                 // The focus must not stay in the gone map, or Escape would reach nothing.
                 self.focus.focus(window, cx);
@@ -282,10 +280,9 @@ impl Hud {
         }
     }
 
-    /// The game whose map the MAP dock shows: the open one, while the dock is shown and the game has a map.
-    fn docked(&self, cx: &App) -> Option<Arc<Game>> {
-        let shown = self.docks.read(cx).is_shown(MAP_DOCK);
-        self.library.read(cx).opened().filter(|game| shown && !game.source.maps.is_empty()).cloned()
+    /// The MAP dock shows the open game's map: the dock is shown and the game has one.
+    fn docked(&self, cx: &App) -> bool {
+        self.docks.read(cx).is_shown(MAP_DOCK) && self.maps.read(cx).mapped()
     }
 
     fn leave_overlay(&mut self, _: &LeaveOverlay, window: &mut Window, cx: &mut Context<Self>) {
@@ -304,7 +301,8 @@ impl Render for Hud {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let game = self.library.read(cx).opened().cloned();
         let game = game.as_deref();
-        let mapped = game.is_some_and(|game| !game.source.maps.is_empty());
+        // The minimap follows a record's maps alone: a discovered map has no `Frame` (M1).
+        let (mapped, minimapped) = (self.maps.read(cx).mapped(), game.is_some_and(|game| !game.source.maps.is_empty()));
         let shown = self.docks.read(cx).shown();
         let docked = shown
             .into_iter()
@@ -315,10 +313,10 @@ impl Render for Hud {
                     }
                     (MODS, None) => div().p(px(16.)).child(vacant(self.library.read(cx), cx)).into_any_element(),
                     (MAP, Some(_)) if mapped => self.map.clone().into_any_element(),
-                    (MINIMAP, Some(_)) if mapped && self.maps.read(cx).live_map().read(cx).ready(cx) => {
+                    (MINIMAP, Some(_)) if minimapped && self.maps.read(cx).live_map().read(cx).ready(cx) => {
                         self.minimap.clone().into_any_element()
                     }
-                    (MINIMAP, Some(_)) if mapped => div()
+                    (MINIMAP, Some(_)) if minimapped => div()
                         .p(px(16.))
                         .child(notice(
                             t(cx, key::OVERLAY_MINIMAP_TAG),
@@ -356,7 +354,11 @@ impl Render for Hud {
             .child(
                 h_flex()
                     .gap(px(4.))
-                    .child(docks::toolbar(&self.docks, cx, |spec| !matches!(spec.id, MAP | MINIMAP) || mapped))
+                    .child(docks::toolbar(&self.docks, cx, |spec| match spec.id {
+                        MAP => mapped,
+                        MINIMAP => minimapped,
+                        _ => true,
+                    }))
                     .child(div().w(px(1.)).h(px(24.)).mx(px(6.)).bg(line(0.16)))
                     .child(
                         icon_button("hud-close", Icon::Close, 40., 14.)

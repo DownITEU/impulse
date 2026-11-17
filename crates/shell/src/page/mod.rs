@@ -28,7 +28,7 @@ use crate::{
     layer::{Entered, Hud, Layer, OverlaySettings},
     library::{GamePicker, Library, Marks, SIDEBAR_WIDTH, Sidebar, vacant},
     log_view::{LogEvent, LogView},
-    map::{MapEvent, MapView, Maps, map_panel},
+    map::{MapEvent, MapView, Maps, map_panel, paneled},
     remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
     run::{Runs, session_panel},
@@ -87,7 +87,11 @@ impl Page {
         let log = cx.new(|cx| LogView::new(window, cx));
         cx.subscribe(&log, |_, _, _: &LogEvent, cx| cx.notify()).detach();
         let maps = cx.new(|cx| Maps::new(registry.clone(), &paths, library.clone(), runs.clone(), cx));
+        // The map panel reads the open game's offers and the titles to link.
+        cx.observe(&maps, |_, _, cx| cx.notify()).detach();
         let map = cx.new(|cx| MapView::new(maps.clone(), &library, &paths, window, cx));
+        let linker = map.read(cx).linker().clone();
+        cx.observe(&linker, |_, _, cx| cx.notify()).detach();
         cx.subscribe_in(&map, window, |page, map, _: &MapEvent, window, cx| {
             // Over a game the map is a dock, and Escape's last step leaves the overlay.
             if page.layer.read(cx).is_over() {
@@ -224,7 +228,7 @@ impl Page {
             return div().flex_1().p(px(24.)).child(vacant(self.library.read(cx), cx)).into_any_element();
         };
         let cheats = self.cheat_list.clone().into_any_element();
-        let mapped = !game.source.maps.is_empty();
+        let mapped = paneled(&self.map, cx);
         let body = div().flex().gap(px(20.)).px(px(24.)).pt(px(20.)).pb(px(28.));
         let body = match self.settings.read(cx).prefs().panels {
             // Without a map the session takes the row alone, as a strip.
@@ -282,6 +286,7 @@ impl Render for Page {
             .children(self.remote_view.clone().filter(|view| view.read(cx).is_open()))
             .children(self.cheat_list.read(cx).editor().cloned())
             .when(self.picker.read(cx).is_open(), |page| page.child(self.picker.clone()))
+            .children(Some(self.map.read(cx).linker().clone()).filter(|linker| linker.read(cx).is_open()))
             .into_any_element()
     }
 }

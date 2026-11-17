@@ -8,8 +8,9 @@ paths:
 The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Board`, `Stage`, `Sidebar`, `Card`, `LiveMap`. The `Tracker` and the `Run` they follow are `run`'s.
 
 ## Surface
-- `Maps`: the open game's maps, the chosen one, its load and the runs both boards follow; `is_open`, `live_map`, `set_minimap` (the overlay's docking command). `open`, `close`, `choose` are `MapView`'s.
-- `MapView`: the modal's window parts (`show(game)`, `hide`, `set_docked`); emits `MapEvent::Close`. `map_panel` is the page's preview that opens it.
+- `Maps`: the open game's offers (its record's, then the linked or matched title's), the chosen one, its load and the runs both boards follow; `is_open`, `mapped`, `live_map`, `set_minimap` (the overlay's docking command). `open`, `close`, `choose` are `MapView`'s, `refresh` the sidebar's REFRESH. Emits `MapsEvent::Retile`.
+- `Titles`: every source's titles in the content locale, made by `Maps`; `ready` once the disk copies are read; `refresh`.
+- `MapView`: the modal's window parts (`show`, `hide`, `set_docked`) and `linker`, the LINK A MAP dialog (`TitlePicker`) the page draws while open; emits `MapEvent::Close`. `map_panel` is the page's preview that opens it, `paneled` whether the page shows it.
 - `Minimap`: a mini `Stage` over the live board, one per window; `hide(window)` lets go of its tiles.
 - `LiveMap`: the live game's map for the minimap.
 - `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it.
@@ -17,6 +18,10 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 
 ## Rules
 - `Maps` follows `RunEvent`s itself: the open map gets the run of its game, the minimap the live run while its dock is shown. `map` never names the overlay.
+- `Maps` gathers the offers on every `LibraryEvent`, `TitlesEvent` and language change, and asks a source again only when the game, the title or the locale changed; the task is replaced, so nothing of another game lands. A link wins over a match unless its source is not there. A game is matched only once `Titles` is `ready` in the content locale; one without a title asks `Titles::refresh` once per game and locale. A new locale keeps the title's offers until theirs arrive. The chosen map is kept by `Ref`; gone or in a new revision, an open one loads again, a closed one at its next `open` (`held`: the map and revision asked for). A map whose offers are withdrawn while open closes: the modal by `MapView`, the dock by `Hud`, which takes the focus back.
+- `Titles` reads the disk copies alone (it takes `Cached` and drops the stream: no call) at start and on a language change; `refresh` (the picker opening, a game without a title) goes past them, so a source calls only when its copy is stale. The picker orders by `likeness` and never links by itself.
+- The minimap follows a record's maps only: a discovered map has no `Frame`.
+- REFRESH: `Registry::refresh` marks the copy stale, `media::forget_missing` drops the map's absent tiles on disk, `MapsEvent::Retile` the stage's, then the map is asked again as `_load`, which a choice or a language change drops.
 - The camera is the stage's: `Maps` reads it through `set_camera` and keeps it on the board before the board lets go of the map (`close`, `choose`).
 - Each part is its own entity drawn with `cached`, observing the shared `Board`. The board notifies on what a person does, never per frame; the player's moves are `BoardEvent::Moved`, which only the stage hears.
 - `Board::live` (the minimap's) never writes the user's state: `saves` is off and it adopts the big board's `Rc<Saved>`. Only the big board writes.

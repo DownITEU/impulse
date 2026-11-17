@@ -10,13 +10,13 @@ use std::{mem, path::PathBuf, sync::Arc};
 use blocking::unblock;
 use client::{
     Registry,
-    library::{self as listing, Game, GameId, Picked, sources},
+    library::{self as listing, Game, GameId, Links, Picked, sources},
     media::Media,
     storage::Paths,
 };
 use futures::StreamExt;
 use gpui_kit::{AsyncApp, Context, Entity, EventEmitter, Task, WeakEntity};
-use model::Snapshot;
+use model::{Ref, Snapshot};
 
 use crate::{Load, settings::Settings};
 pub use picker::GamePicker;
@@ -30,6 +30,8 @@ pub enum LibraryEvent {
     Opened,
     /// A game's install changed, and with it maybe its trainer.
     Switched,
+    /// The user linked a game to a title for its maps.
+    Linked,
 }
 
 /// What `+ ADD` found for an executable.
@@ -48,6 +50,7 @@ pub struct Library {
     settings: Entity<Settings>,
     art: PathBuf,
     picked: Picked,
+    links: Links,
     list: Load<listing::Library>,
     open: Option<GameId>,
     // Dropped by a reload.
@@ -66,6 +69,7 @@ impl Library {
             settings,
             art: Media::Pictures.dir(paths),
             picked: Picked::load(paths),
+            links: Links::load(paths),
             list: Load::Pending,
             open,
         }
@@ -117,6 +121,17 @@ impl Library {
         let used = sources::exe(&game.install).is_some();
         self.picked.set_used(id, used);
         switched(cx);
+    }
+
+    /// The title the user linked `id` to, whether its source is there or not.
+    pub fn link(&self, id: &GameId) -> Option<Ref> {
+        self.links.get(id)
+    }
+
+    pub fn set_link(&mut self, id: &GameId, title: &Ref, cx: &mut Context<Self>) {
+        self.links.set(id, title);
+        cx.emit(LibraryEvent::Linked);
+        cx.notify();
     }
 
     /// Makes `exe` the source of a listed game.

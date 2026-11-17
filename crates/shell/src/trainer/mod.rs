@@ -52,7 +52,13 @@ impl EventEmitter<TrainerEvent> for Trainers {}
 
 impl Trainers {
     pub fn new(registry: Arc<Registry>, paths: &Paths, library: Entity<Library>, cx: &mut Context<Self>) -> Self {
-        cx.subscribe(&library, |trainers, _, _: &LibraryEvent, cx| trainers.open(cx)).detach();
+        cx.subscribe(&library, |trainers, _, event: &LibraryEvent, cx| {
+            // A map link is not the trainer's.
+            if !matches!(event, LibraryEvent::Linked) {
+                trainers.open(cx);
+            }
+        })
+        .detach();
         // Copies in the old language show until their next open asks again; the open game's asks now.
         cx.observe_global::<Texts>(|trainers, cx| {
             trainers.shelf.outdate(None);

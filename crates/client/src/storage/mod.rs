@@ -45,6 +45,7 @@ entries! {
     minimap: "minimap.json",
     resources: "resources.json",
     remote_devices: "remote.json",
+    map_links: "map-links.json",
     map_state: "map-state",
     pictures: "art",
     tiles: "tiles",

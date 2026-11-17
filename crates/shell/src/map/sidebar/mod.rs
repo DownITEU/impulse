@@ -23,6 +23,7 @@ use model::Map;
 use rustc_hash::FxHashSet;
 
 use super::{
+    Maps,
     board::{Board, BoardEvent},
     kind,
     markers::{Images, ink, legible},
@@ -44,6 +45,7 @@ const LISTED: usize = 100;
 const ICON: f32 = 16.;
 
 pub struct Sidebar {
+    maps: Entity<Maps>,
     board: Entity<Board>,
     search: Entity<InputState>,
     // The search's placeholder follows the language.
@@ -59,7 +61,8 @@ pub struct Sidebar {
 }
 
 impl Sidebar {
-    pub fn new(board: Entity<Board>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(maps: Entity<Maps>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let board = maps.read(cx).board().clone();
         let (search, relabel) = input(key::MAP_SEARCH, window, cx);
         cx.subscribe(&search, |sidebar, search, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
@@ -82,6 +85,7 @@ impl Sidebar {
         })
         .detach();
         Self {
+            maps,
             board,
             search,
             _relabel: relabel,
@@ -368,6 +372,10 @@ fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoEl
                 .when(map.teleport, |cell| cell.on_click(change(|saved| saved.teleport_only ^= true))),
         )
         .child(cell("map-unfound", t(cx, key::MAP_UNFOUND), saved.unfound_only, true).on_click(change(|saved| saved.unfound_only ^= true)))
+        .child(
+            cell("map-refresh", t(cx, key::MAP_REFRESH), false, true)
+                .on_click(cx.listener(|sidebar, _, _, cx| sidebar.maps.update(cx, |maps, cx| maps.refresh(cx)))),
+        )
 }
 
 fn tally(found: usize, total: usize) -> String {

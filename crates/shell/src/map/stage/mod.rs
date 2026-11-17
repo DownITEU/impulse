@@ -218,6 +218,12 @@ impl Stage {
         }
     }
 
+    /// Asks for every tile again, those it gave up on included.
+    pub fn retile(&mut self, cx: &mut Context<Self>) {
+        self.drop_tiles();
+        cx.notify();
+    }
+
     // Loads on their way report to an epoch that is gone.
     fn drop_tiles(&mut self) {
         self.epoch += 1;
