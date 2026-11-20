@@ -21,7 +21,6 @@ const FOURTH: f32 = 0.75;
 const CLICK_LEVEL: f32 = 0.1;
 const CLICK_MS: f32 = 14.;
 
-/// What a cue is made of.
 struct Voice {
     /// The higher note, in hertz.
     hertz: f32,

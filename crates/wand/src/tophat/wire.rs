@@ -137,7 +137,6 @@ impl<'a> Table<'a> {
     }
 }
 
-/// `N` bytes at `at`, or `None` past the end.
 pub fn read<const N: usize>(buf: &[u8], at: usize) -> Option<[u8; N]> {
     buf.get(at..at.checked_add(N)?)?.try_into().ok()
 }

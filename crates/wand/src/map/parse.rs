@@ -17,7 +17,6 @@ const GRAY: u32 = 0x80_80_80;
 /// The sphere Wand's coordinates are projected on.
 const CIRCUMFERENCE: f64 = 2. * PI * 6_371_000.;
 
-// A null counts as missing.
 fn or_default<'de, D: Deserializer<'de>, T: Deserialize<'de> + Default>(d: D) -> Result<T, D::Error> {
     Ok(Option::deserialize(d)?.unwrap_or_default())
 }
@@ -316,7 +315,6 @@ fn color(text: Option<&str>, fallback: u32) -> u32 {
         .unwrap_or(fallback)
 }
 
-/// A `[lng, lat]` on the unit square (Web Mercator, y down).
 /// Wand's links to pins (`wemod://maps/<title>/<map>?location=<pin id>`) point at the pin with `model::PIN_LINK`;
 /// other links into Wand keep their text only, so a click never starts it.
 fn relink(markdown: &str, pins: &HashSet<String>) -> String {
@@ -353,6 +351,7 @@ fn label_start(before: &str) -> Option<usize> {
     })
 }
 
+/// Projects `[lng, lat]` in degrees to normalized Web Mercator (y down), without clamping.
 fn point(coordinates: &[f64]) -> Option<Point> {
     let &[lng, lat, ..] = coordinates else { return None };
     let at = Point { x: (lng + 180.) / 360., y: 0.5 - (PI / 4. + lat * PI / 360.).tan().ln() / (2. * PI) };

@@ -174,7 +174,6 @@ impl Registry {
         }
     }
 
-    /// The sources that have titles.
     pub fn titled(&self) -> Vec<SourceId> {
         self.entries().iter().filter(|entry| entry.capabilities.titles.is_some()).map(|entry| entry.id.clone()).collect()
     }
@@ -184,7 +183,6 @@ impl Registry {
         routed.map_or_else(|| missing(source.as_str()), |(titles, ended)| cut(titles.titles(locale), ended))
     }
 
-    /// A title's maps.
     pub fn offers(&self, title: &Ref, locale: &Locale) -> BoxStream<'static, Snapshot<Vec<MapOffer>>> {
         let routed = self.route(title.source(), |c| c.titles.as_ref());
         routed.map_or_else(|| missing(title), |(titles, ended)| cut(titles.offers(title, locale), ended))

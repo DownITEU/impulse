@@ -1,5 +1,3 @@
-//! Mouse and keys on the map.
-
 use std::time::Duration;
 
 use gpui_kit::{
@@ -202,7 +200,6 @@ impl Stage {
         pins::hit(&markers, &lifted, camera, self.size(), pixel)
     }
 
-    /// The topmost shown mark of the user's under `pixel`.
     fn hit_mark(&self, camera: &Camera, pixel: Pixel, cx: &App) -> Option<usize> {
         let (board, size) = (self.board.read(cx), self.size());
         mark_order(&board.saved, board.mark).rev().find(|&index| {

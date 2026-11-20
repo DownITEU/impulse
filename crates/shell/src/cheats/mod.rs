@@ -37,7 +37,6 @@ pub struct CheatList {
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
     hotkeys: Entity<Hotkeys>,
-    // The open game's rows as printed.
     printed: Option<Printed>,
     filter: Entity<InputState>,
     menu: Option<Menu>,

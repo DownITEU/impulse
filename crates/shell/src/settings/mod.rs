@@ -101,7 +101,6 @@ pub struct Prefs {
     pub lead: Lead,
     pub panels: Panels,
     pub reduce_motion: bool,
-    /// The game the user opened last.
     pub game: Option<GameId>,
     /// Off, the default: the close button hides Impulse in the tray.
     pub quit_on_close: bool,

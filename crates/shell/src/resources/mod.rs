@@ -73,7 +73,6 @@ impl Resources {
         resources
     }
 
-    /// Reads every size again.
     pub fn measure(&mut self, cx: &mut Context<Self>) {
         self.measuring = true;
         let (stores, paths) = (self.registry.stores(), self.paths.clone());
@@ -157,7 +156,6 @@ impl Resources {
     }
 }
 
-/// A media folder's store id, name and what it holds.
 fn store_ref(media: Media) -> Ref {
     Ref::new(&SourceId::app(), describe(media).0)
 }

@@ -48,9 +48,7 @@ pub fn bind_keys(cx: &mut App) {
 }
 
 pub enum LogEvent {
-    /// Opened or closed.
     Toggled,
-    /// The error or warning count changed.
     Problems,
 }
 
@@ -84,7 +82,6 @@ fn slot(level: Level) -> usize {
     LEVELS.iter().position(|l| *l == level).unwrap_or(LEVELS.len() - 1)
 }
 
-/// A level's caption and color.
 fn look(level: Level) -> (Key, u32) {
     match level {
         Level::Error => (key::LOG_ERROR, DANGER),

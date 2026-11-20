@@ -59,7 +59,6 @@ pub struct Game {
 }
 
 impl Game {
-    /// Uses the other install.
     pub fn switch(&mut self) {
         if let Some(other) = &mut self.other {
             mem::swap(&mut self.install, other);

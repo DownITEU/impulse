@@ -39,7 +39,6 @@ pub enum Locator {
 
 /// What the game list knows about a trainer before it is opened.
 pub struct Offer {
-    /// The trainer's.
     pub id: Ref,
     pub cheats: u32,
     pub builds: Vec<u32>,

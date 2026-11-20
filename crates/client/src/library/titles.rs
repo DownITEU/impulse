@@ -1,4 +1,4 @@
-//! Which discovered title is a library game's (M2): by store id, never by name; names only order the picker.
+//! Which discovered title is a library game's: by store id, never by name; names only order the picker.
 
 use std::{cmp::Reverse, collections::HashSet};
 

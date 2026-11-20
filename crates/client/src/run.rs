@@ -5,7 +5,6 @@ pub use play::{Request, Stage, run as start};
 
 use crate::profile::{GameProfile, TrainerProfile, Values};
 
-/// Starting `plan` on the installed game.
 pub fn request(install: &Installation, plan: &Plan) -> Request {
     Request {
         runner: plan.runner.clone(),

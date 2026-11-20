@@ -94,7 +94,6 @@ pub struct Stage {
     corners: Vec<gpui_kit::Point<Pixels>>,
     drag: Option<Drag>,
     layers_open: bool,
-    // The view moves with the player.
     follow: bool,
     // The player as drawn, easing toward the board's fixes.
     player: Option<Walk>,
@@ -253,7 +252,6 @@ impl Stage {
         }
     }
 
-    /// The shown map, once loaded.
     fn map(&self, cx: &App) -> Option<Rc<Map>> {
         match &self.board.read(cx).map {
             Load::Ready(map) => Some(map.clone()),

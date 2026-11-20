@@ -243,7 +243,6 @@ pub struct Label {
     pub zoom: Option<[f32; 2]>,
 }
 
-/// What `http_get` asks the host for.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct HttpRequest {
     pub url: String,

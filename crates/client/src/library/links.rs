@@ -1,4 +1,4 @@
-//! `map-links.json`: the title the user linked a game to, for maps a source discovers (M4).
+//! `map-links.json`: the title the user linked a game to, for maps a source discovers.
 
 use std::collections::BTreeMap;
 

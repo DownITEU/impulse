@@ -1,4 +1,4 @@
-//! Executables the user picked for a game, as Wand's "game source".
+//! Installations inferred from executables the user picked.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -14,7 +14,6 @@ use super::installation;
 /// Folders above a picked executable tried as the install: `Binaries\Win64\x.exe` is three down.
 const DEPTH: usize = 5;
 
-/// An executable the user picked for a game.
 pub struct Custom {
     pub game: Ref,
     pub exe: PathBuf,

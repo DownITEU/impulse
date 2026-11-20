@@ -1,4 +1,4 @@
-//! Every source's titles (M2, M3): the disk copies read at start and on a language change; the sources are asked
+//! Every source's titles: the disk copies read at start and on a language change; the sources are asked
 //! again only by `refresh`.
 
 use std::sync::Arc;

@@ -45,7 +45,6 @@ impl Bundle {
         Self::load(pick).map_err(Failure::from)
     }
 
-    /// The hash of each file by name.
     pub fn hashes(&self) -> &BTreeMap<String, String> {
         &self.hashes
     }
@@ -225,7 +224,6 @@ mod tests {
         serde_json::to_vec(&json).unwrap()
     }
 
-    /// Files by name, as a folder.
     fn write_folder(dir: &Path, files: &[(&str, &[u8])]) {
         for (name, bytes) in files {
             let file = dir.join(name);

@@ -52,7 +52,6 @@ pub struct Marker {
     pub picture: bool,
 }
 
-/// What a group's icon is drawn with, as far as it is in.
 impl Marker {
     /// What its mark is drawn in: a selected marker turns bright, its mark dark or its fill.
     pub fn ink(&self) -> u32 {

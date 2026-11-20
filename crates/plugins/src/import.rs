@@ -1,4 +1,4 @@
-//! A guest's map made safe for the app (P5): bounded, consistent and inside its scope. Runs on every fresh answer and
+//! A guest's map made safe for the app: bounded, consistent and inside its scope. Runs on every fresh answer and
 //! on every copy read from disk. A broken structure refuses the map; media outside the scope is left out.
 
 mod discovery;

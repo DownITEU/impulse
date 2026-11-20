@@ -48,7 +48,6 @@ pub fn caps(hotkeys: &Entity<Hotkeys>, game: &GameId, sheet: &Sheet, index: usiz
     }))
 }
 
-/// Binds a cheat's slot by what the user presses.
 fn bind_slot(hotkeys: &Entity<Hotkeys>, game: GameId, cheat: String, slot: usize, window: &mut Window, cx: &mut App) {
     let target = Target::Slot { game: game.clone(), cheat: cheat.clone(), slot };
     let Some(outcome) = hotkeys.update(cx, |hotkeys, cx| hotkeys.capture(target, window, cx)) else { return };

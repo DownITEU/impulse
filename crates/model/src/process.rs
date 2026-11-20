@@ -14,8 +14,7 @@ pub struct Process {
     pub created: u64,
 }
 
-/// Finds the game the way Wand does: by executable name or install folder, once it has run long
-/// enough to be past its start-up.
+/// Selects a game process by executable path or install folder and a minimum process age.
 #[derive(Clone)]
 pub struct Rule {
     /// Path suffix of the executable, `*` matching inside one folder or file name. Without it

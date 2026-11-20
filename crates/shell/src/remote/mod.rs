@@ -225,7 +225,6 @@ impl Remote {
         }
     }
 
-    /// The cached file of the game's thumbnail.
     fn art(&self, handle: u32, cx: &App) -> Option<PathBuf> {
         let game = self.library.read(cx).game(self.handles.game(handle)?)?;
         game.thumbnail.as_deref().map(|url| media::file(&self.pictures, url))

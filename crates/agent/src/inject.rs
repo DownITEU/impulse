@@ -85,7 +85,6 @@ fn open(pid: u32) -> Result<Handle> {
     Ok(Handle(handle))
 }
 
-/// Copies `data` into fresh memory of the process.
 fn write<'a>(process: &'a Handle, data: &[u8]) -> Result<Remote<'a>> {
     // SAFETY: plain Win32 call; a null result is checked below.
     let ptr = unsafe { VirtualAllocEx(process.0, ptr::null(), data.len(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };

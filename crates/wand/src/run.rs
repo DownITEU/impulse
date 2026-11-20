@@ -19,7 +19,6 @@ use crate::{
     trainer::{Binary, Plan},
 };
 
-/// What a run hands back across the contract.
 type Answer<T> = std::result::Result<T, Failure>;
 
 /// Runs WeMod trainers on one Tophat server, started with the first run and kept for the app's life.
@@ -52,7 +51,6 @@ impl Host {
 
 struct Runner {
     host: Host,
-    /// `Err` says why this trainer cannot run here.
     binary: Result<Binary, String>,
     variables: Vec<String>,
 }

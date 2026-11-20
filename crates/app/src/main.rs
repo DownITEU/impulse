@@ -23,12 +23,11 @@ fn main() {
     }
     let data_dir = PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("Impulse");
     journal::init(&data_dir);
-    // What an update's swap left beside this executable.
     if let Ok(exe) = env::current_exe() {
         updater::cleanup(&exe);
     }
     let paths = Paths::new(data_dir.clone());
-    // Wand wrote every file before ids named their source.
+    // The v1 files have unqualified ids from the original single source.
     storage::migrate(&paths, &SourceId::new(Wand::SOURCE).expect("a valid source id"));
     // Built before the window: its browser bridge takes a moment to come up.
     let wand = Arc::new(Wand::new(data_dir.clone()));

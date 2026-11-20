@@ -87,7 +87,6 @@ impl Reader {
         }
     }
 
-    /// Back to the first frame.
     pub fn rewind(&mut self) -> Result<()> {
         let start = PROPVARIANT::from(0i64);
         // SAFETY: the reader is live; the GUID and the variant outlive the call.

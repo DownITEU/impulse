@@ -26,7 +26,6 @@ impl Node {
     }
 }
 
-/// Parses a whole file as the root map.
 pub fn parse(text: &str) -> Option<Node> {
     let mut lexer = Lexer { s: text, i: 0 };
     map(&mut lexer, false).map(Node::Map)

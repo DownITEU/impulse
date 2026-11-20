@@ -12,7 +12,6 @@ const GLIDE: f64 = 0.07;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
-    /// The plane point in the middle of the view.
     pub center: Point,
     /// Pixels across the whole plane.
     pub span: f64,
@@ -64,7 +63,6 @@ impl Camera {
         level.clamp(*levels.start() as f64, *levels.end() as f64) as u8
     }
 
-    /// The columns and rows of `level` the view shows.
     pub fn tiles(&self, level: u8, size: Pixel) -> (RangeInclusive<u32>, RangeInclusive<u32>) {
         let count = (1u32 << level) as f64;
         let (low, high) = (self.to_plane((0., 0.), size), self.to_plane(size, size));

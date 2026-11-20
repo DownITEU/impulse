@@ -126,7 +126,6 @@ impl Maps {
         }
     }
 
-    /// The open game has a map to show.
     pub fn mapped(&self) -> bool {
         !self.offers.is_empty()
     }
@@ -228,9 +227,8 @@ impl Maps {
         });
     }
 
-    /// The open game's offers: its record's, then the linked title's, else, for a game without maps of its own, the
-    /// matched one's. A link to a source not there is not used; no title asks the sources again, once per game and
-    /// locale (M3).
+    /// Adds linked maps after the record's. Without a usable link or maps of its own, the game uses a title match
+    /// or refreshes titles once per game and locale.
     fn gather(&mut self, cx: &mut Context<Self>) {
         let game = self.library.read(cx).opened().cloned();
         let id = game.as_ref().map(|game| game.id.clone());
@@ -328,8 +326,7 @@ impl Maps {
         self.gather(cx);
     }
 
-    /// Sources came, went or were replaced (P1): the title's offers and the map of one still there are asked again,
-    /// those of one gone go; a board that does not ask again lets go of its copy.
+    /// Refreshes offers and the open map on source replacement. Discards map copies that will not reload.
     fn sources_changed(&mut self, changed: &[SourceId], cx: &mut Context<Self>) {
         let of = |id: &Ref| changed.contains(id.source());
         if let Some((Some(title), locale)) = self.asked.clone().filter(|(title, _)| title.as_ref().is_some_and(of)) {

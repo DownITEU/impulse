@@ -13,7 +13,6 @@ impl GameId {
         Self(game.to_string().into())
     }
 
-    /// The source's game it names.
     pub fn game(&self) -> Option<Ref> {
         Ref::parse(&self.0)
     }

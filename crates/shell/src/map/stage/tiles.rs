@@ -123,7 +123,6 @@ impl Tiles {
         }
     }
 
-    // Marks a loaded tile drawn in this frame.
     fn touch(&mut self, key: Key) -> Option<Arc<RenderImage>> {
         let Some(Slot::Ready(image, drawn)) = self.slots.get_mut(&key) else { return None };
         self.shown += usize::from(*drawn != self.frame);

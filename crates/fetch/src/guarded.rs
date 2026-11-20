@@ -20,7 +20,6 @@ use url::Url;
 
 use crate::{Response, etag_of};
 
-/// Redirects followed before giving up.
 const MAX_REDIRECTS: usize = 5;
 
 /// Marker for a URL, redirect hop or host outside what the caller allowed. A caller detects it with

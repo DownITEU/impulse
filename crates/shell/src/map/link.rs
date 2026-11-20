@@ -1,4 +1,4 @@
-//! LINK A MAP: which source title the open game is, for its maps (M4). Names only order the list; the user picks.
+//! LINK A MAP: which source title the open game is, for its maps. Names only order the list; the user picks.
 
 use std::sync::Arc;
 

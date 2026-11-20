@@ -71,7 +71,6 @@ pub fn customize(cheats: &mut [model::Cheat], custom: &HashMap<String, Slots>) {
     }
 }
 
-/// Where each profile keeps its store.
 fn profiles() -> Vec<PathBuf> {
     let root = env::var_os("APPDATA").map(PathBuf::from).unwrap_or_default();
     PROFILES.iter().map(|profile| root.join(profile).join(r"Local Storage\leveldb")).collect()

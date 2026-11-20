@@ -150,7 +150,6 @@ try {
                 $modules = $p.Modules
                 $now = @{}
                 foreach ($t in $p.Threads) { $now[$t.Id] = $t.TotalProcessorTime.TotalSeconds }
-                # Unnamed threads go by the module they started in.
                 $rows = foreach ($id in $now.Keys) {
                     $before = if ($seen -and $seen.ContainsKey($id)) { $seen[$id] } else { 0 }
                     $name = if ($id -eq $main) { 'main' } else { [W]::ThreadName($id) }

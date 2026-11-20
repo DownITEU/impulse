@@ -46,7 +46,6 @@ pub fn init(data_dir: &Path, registry: Arc<Registry>, cx: &mut App) {
     ui::dialog::bind_keys(cx);
 }
 
-/// The window's Win32 handle.
 fn hwnd(window: &Window) -> Option<isize> {
     match HasWindowHandle::window_handle(window).map(|handle| handle.as_raw()) {
         Ok(RawWindowHandle::Win32(handle)) => Some(handle.hwnd.get()),

@@ -59,7 +59,6 @@ enum Ask {
     Extra(Slot),
 }
 
-/// An extra hotkey was pressed.
 struct Pressed(Slot);
 
 /// The live game as the HUD sees it; emitted on change.

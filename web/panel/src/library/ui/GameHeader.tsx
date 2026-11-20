@@ -16,7 +16,6 @@ type GameHeaderProps = {
     online: boolean;
 };
 
-/** The open game over its trainer: its run, favorite, start and stop. */
 export const GameHeader = ({ game, run, online }: GameHeaderProps) => {
     const ours = run?.game === game.game ? run : null;
 
@@ -43,7 +42,6 @@ export const GameHeader = ({ game, run, online }: GameHeaderProps) => {
     );
 };
 
-/** The run of this game: its state and, live, its clock. */
 const RunLine = ({ run }: { run: Run | null }) => {
     const t = useT();
     const tag = useLanguage();

@@ -13,7 +13,6 @@ path = "src/main.rs"
 
 [features]
 default = ["remote"]
-# The remote panel's server.
 remote = ["dep:remote"]
 
 [dependencies]

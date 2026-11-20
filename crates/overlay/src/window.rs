@@ -32,7 +32,6 @@ pub struct Monitor {
     pub scale: f32,
 }
 
-/// The window in front, if any.
 pub fn foreground() -> Option<isize> {
     // SAFETY: no arguments.
     let window = unsafe { GetForegroundWindow() };

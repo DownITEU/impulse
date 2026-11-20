@@ -108,7 +108,6 @@ struct Args {
 }
 
 impl Trainer {
-    /// `plan` is what running it takes; see `plan()`.
     pub fn into_model(self, plan: model::Plan) -> model::Trainer {
         let flags = self.blueprint.flags;
         let strings = self.strings;
@@ -133,7 +132,6 @@ fn read(Answer { trainer, i18n }: &Answer) -> Result<Trainer, serde_json::Error>
 }
 
 fn cheat(cheat: Cheat, strings: &HashMap<String, String>) -> model::Cheat {
-    // A miss keeps the English.
     let translate = |text: String| strings.get(&text).cloned().unwrap_or(text);
     // A scalar is shown as a slider, an incremental as a number without a text field.
     let typed = matches!(cheat.kind, Kind::Number);

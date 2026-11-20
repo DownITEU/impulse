@@ -215,7 +215,6 @@ impl CollectionEditor {
             _ => cx.notify(),
         });
         let typed = Subscription::join(typed, relabel);
-        // Typing replaces the old name.
         name.update(cx, |name, cx| {
             name.focus(window, cx);
             name.select_all(window, cx);

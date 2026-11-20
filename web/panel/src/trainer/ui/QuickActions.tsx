@@ -118,7 +118,6 @@ const NameDialog = ({
     const [name, setName] = useState('');
     const trimmed = name.trim();
 
-    // Modal: focus stays inside, then goes back to the opener.
     useEffect(() => {
         const opener = document.activeElement as HTMLElement | null;
         dialog.current?.showModal();

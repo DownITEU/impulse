@@ -18,7 +18,7 @@ pub enum Event {
     Ready,
     Status(String),
     Log(String),
-    /// The trainer's current value of a variable.
+    /// `trainer_value_request` reports a variable's current value.
     Value {
         id: u64,
         name: String,
@@ -158,7 +158,6 @@ pub fn plugin_handle(payload: &[u8]) -> Result<u64> {
     Ok(checked(payload)?.u64(2))
 }
 
-/// A message as the service sends it, for the tests' fake service.
 #[cfg(test)]
 pub fn from_service(kind: &str, payload: &[u8], seq: u64) -> Vec<u8> {
     table(&[(0, Field::Str(kind)), (1, Field::Bytes(payload)), (2, Field::U64(seq)), (4, Field::Str("service"))])

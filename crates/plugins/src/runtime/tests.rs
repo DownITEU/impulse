@@ -49,7 +49,6 @@ fn a_reply_comes_back_and_a_request_goes_through_the_host() {
     assert_eq!(ask(&guest(1, &fetched, "")).unwrap(), 7);
 }
 
-/// A guest that makes `n` requests, then replies.
 fn requesting(n: usize) -> Vec<u8> {
     let call = format!(
         "(block $done (loop $again (br_if $done (i64.eq (local.get $n) (i64.const {n}))) \

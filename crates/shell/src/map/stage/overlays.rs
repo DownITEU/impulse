@@ -84,7 +84,6 @@ impl Stage {
     pub(super) fn target_menu(&self, map: &Map, board: &Board, cx: &Context<Self>) -> Option<AnyElement> {
         let (target, camera) = (self.shown.target?, self.camera?);
         let ((x, y), (width, height)) = (camera.to_view(target, self.size()), self.size());
-        // Inside the view near its right and bottom edges.
         let (x, y) = (x.min(width - MENU.0).max(0.), y.min(height - MENU.1).max(0.));
         let teleport = board.can_teleport_to_plane(map).then(|| {
             button(&t(cx, key::MAP_TELEPORT_HERE)).id("map-teleport").border_color(rgb(accent(cx))).on_click(cx.listener(

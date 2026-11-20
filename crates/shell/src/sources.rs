@@ -5,7 +5,6 @@ use futures::StreamExt;
 use gpui_kit::{Context, EventEmitter, Task};
 use model::SourceId;
 
-/// The sources that came, went or were replaced.
 pub struct SourcesChanged(pub Vec<SourceId>);
 
 pub struct Sources {

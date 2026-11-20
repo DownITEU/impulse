@@ -76,7 +76,7 @@ impl Saved {
         Self { hidden: hidden.flat_map(|category| category.groups.iter().map(|group| group.id.clone())).collect(), ..Self::default() }
     }
 
-    /// The tile set of `map` shown, with its index: the chosen one, else the first.
+    /// Uses the first tile set if there is no saved choice or it no longer exists.
     pub fn tile_set_of<'a>(&self, map: &'a Map) -> (usize, &'a TileSet) {
         map.tile_set(self.tile_set.as_deref())
     }

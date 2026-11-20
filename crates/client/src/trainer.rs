@@ -34,7 +34,6 @@ pub struct Sheet {
     /// Whether a run tells where the player is, and can move them.
     pub location: bool,
     pub teleport: bool,
-    /// What running this trainer takes.
     pub plan: Plan,
 }
 
@@ -119,7 +118,6 @@ impl Sheet {
         profile.folded_labels.retain(|label| self.section(label).is_none());
     }
 
-    /// A trainer starts with every cheat at rest.
     pub fn reset(&mut self) {
         self.values = self.cheats.iter().map(initial).collect();
     }
@@ -133,7 +131,6 @@ impl Sheet {
         (0..self.cheats.len()).filter(|&index| self.is_live(index)).count()
     }
 
-    /// The cheats away from rest.
     pub fn live_values(&self) -> Values {
         let live = (0..self.cheats.len()).filter(|&index| self.is_live(index) && self.values[index].is_finite());
         live.map(|index| (self.cheats[index].id.clone(), self.values[index])).collect()
@@ -155,14 +152,12 @@ impl Sheet {
         !values.is_empty() && self.changes(values).is_empty()
     }
 
-    /// What the cheat's hotkey `slot` does to it now.
     pub fn step(&self, index: usize, slot: usize) -> Option<Step> {
         step(&self.cheats[index], self.values[index], slot)
     }
 }
 
-/// Stepped as Wand steps it: a pair moves by the step and stops at the ends, a selection wraps. `None` when
-/// nothing changes.
+/// Numbers stop at their bounds; selections wrap. Returns `None` when nothing changes.
 fn step(cheat: &Cheat, value: f64, slot: usize) -> Option<Step> {
     let up = slot == 1;
     let next = match cheat.kind {
@@ -241,8 +236,7 @@ impl Span {
     }
 }
 
-/// Rounds to the decimals of the step and of `min`, so repeated steps do not drift (Wand rounds
-/// to the step's alone, which turns 0.5 + 1 into 2).
+/// Keeps the precision of both the step and `min`: adding 1 to 0.5 should give 1.5, not 2.
 fn round_to(value: f64, args: &Args, step: f64) -> f64 {
     let decimals = |x: f64| x.to_string().split_once('.').map_or(0, |(_, fraction)| fraction.len());
     let scale = 10_f64.powi(decimals(step).max(args.min.map_or(0, decimals)) as i32);

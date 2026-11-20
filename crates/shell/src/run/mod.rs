@@ -28,11 +28,9 @@ use crate::{
 };
 
 pub enum RunEvent {
-    /// A start began.
     Starting,
     /// A start failed; `state` says why until the next one.
     Failed,
-    /// A trainer went live.
     Live,
     /// STOP: the trainer is being taken down.
     Stopping,
@@ -80,7 +78,6 @@ enum Play {
         run: Run,
         _hold: Hold,
         _events: Task<()>,
-        /// Repaints the session clock.
         _clock: Task<()>,
     },
     /// The trainer is being taken down: a new run waits until it is gone.
@@ -136,7 +133,6 @@ impl Runs {
         }
     }
 
-    /// The live game's process.
     pub fn pid(&self) -> Option<u32> {
         match self.play {
             Play::Live { pid, .. } => Some(pid),
@@ -144,7 +140,6 @@ impl Runs {
         }
     }
 
-    /// When the live run began.
     pub fn since(&self) -> Option<Instant> {
         match self.play {
             Play::Live { since, .. } => Some(since),
@@ -209,8 +204,7 @@ impl Runs {
         cx.notify();
     }
 
-    /// Ends the run: a live trainer is stopped the way Wand stops it, and the run stays until that is done; a
-    /// starting one is abandoned, which closes its session as it is dropped.
+    /// A live run stays active until the session stops. Cancelling startup drops the session.
     pub fn stop(&mut self, cx: &mut Context<Self>) {
         self.close(cx);
         match mem::replace(&mut self.play, Play::Idle) {
@@ -351,7 +345,6 @@ impl Runs {
             _events: watcher,
             _clock: clock,
         };
-        // Counts the run and sets the mods kept for it.
         if let Some(kept) = self.trainers.update(cx, |trainers, cx| trainers.run_opened(&game, cx)) {
             self.apply(&kept, cx);
         }

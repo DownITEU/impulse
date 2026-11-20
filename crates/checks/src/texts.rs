@@ -33,7 +33,6 @@ fn calls(source: &str) -> impl Iterator<Item = String> + '_ {
     })
 }
 
-/// The ids a source file uses.
 fn used(path: &str, source: &str) -> Vec<String> {
     match path.rsplit_once('.').map(|(_, extension)| extension) {
         Some("rs") => keys(source).collect(),

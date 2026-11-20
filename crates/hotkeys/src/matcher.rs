@@ -1,5 +1,4 @@
-//! Which bindings a key fires, matched as Wand does: Easymic's `HotkeyService` without multi-press,
-//! tap-only or per-app scopes.
+//! Matches chords without multi-press or tap-only modes. App scope is handled by the caller.
 
 use model::Chord;
 

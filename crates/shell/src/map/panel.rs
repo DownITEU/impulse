@@ -114,7 +114,6 @@ pub(super) fn linked(library: &Entity<Library>, cx: &App) -> bool {
     library.open_id().is_some_and(|id| library.link(id).is_some())
 }
 
-/// Takes the link from the open game.
 pub(super) fn unlink(library: &Entity<Library>, cx: &mut App) {
     let Some(id) = library.read(cx).open_id().cloned() else { return };
     library.update(cx, |library, cx| library.unlink(&id, cx));

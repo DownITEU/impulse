@@ -58,7 +58,6 @@ pub fn trigger(id: impl Into<ElementId>, current: impl Into<SharedString>) -> St
         .child(icon(Icon::ChevronDown, 11., rgb(DIM)))
 }
 
-/// Closes `menu` when it is the open one.
 pub fn close<V: 'static, M: PartialEq>(view: &mut V, slot: Slot<V, M>, menu: M, cx: &mut Context<V>) {
     let open = slot(view);
     if *open == Some(menu) {

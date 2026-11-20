@@ -1,4 +1,4 @@
-//! Mouse hook messages in Wand's codes (`model::mouse`).
+//! Translates mouse hook messages to the chord codes in `model::mouse`.
 
 use model::mouse::{LBUTTON, MBUTTON, RBUTTON, WHEEL_DOWN, WHEEL_UP, XBUTTON1, XBUTTON2};
 use windows_sys::Win32::UI::WindowsAndMessaging::{

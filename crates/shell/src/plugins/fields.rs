@@ -100,7 +100,6 @@ fn field(plugin: SourceId, setting: String, number: bool, window: &mut Window, c
     Field { plugin, setting, number, state, _relabel: relabel, _keep: keep }
 }
 
-/// A value as its field shows it.
 fn printed(value: &Value) -> String {
     match value {
         Value::Text(text) => text.clone(),

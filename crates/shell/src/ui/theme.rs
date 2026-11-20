@@ -71,7 +71,6 @@ pub fn accent(cx: &App) -> u32 {
     cx.global::<Look>().accent
 }
 
-/// The family text is drawn in.
 pub fn ui_font(cx: &App) -> &'static str {
     cx.global::<Look>().ui
 }
@@ -102,7 +101,6 @@ pub fn alpha(hex: u32, a: f32) -> Rgba {
     Rgba { a, ..rgb(hex) }
 }
 
-/// Hairlines: the text color at a low alpha.
 pub fn line(a: f32) -> Rgba {
     alpha(TEXT, a)
 }

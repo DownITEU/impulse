@@ -18,7 +18,6 @@ export function countShown(shown: Shown[]): number {
     return new Set(shown.flatMap((one) => one.cheats)).size;
 }
 
-/** The toggles among `cheats` and how many of them are on. */
 export function countToggles(
     ready: Ready,
     cheats: number[],

@@ -11,7 +11,6 @@ use serde_json::{Map as Object, Value};
 
 use crate::wire::{Call, Error, ErrorKind, HttpRequest, Map, MapOffer, Point, Reply, Request, Title};
 
-/// What every call is given.
 pub struct Context {
     /// One of the manifest's `locales`, the closest to the user's.
     pub locale: String,

@@ -1,4 +1,4 @@
-//! The user's values for a plugin's settings (P11): each one checked against its field when read; a bad or unknown
+//! The user's values for a plugin's settings: each one checked against its field when read; a bad or unknown
 //! one is the field's default. The guest gets them with every call and cannot write them.
 
 use sdk::manifest::{Field, FieldKind};

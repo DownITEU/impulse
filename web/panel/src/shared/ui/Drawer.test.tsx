@@ -71,13 +71,10 @@ describe('Drawer', () => {
         const input = screen.getByPlaceholderText('Search');
         expect(document.activeElement).toBe(input);
 
-        // Update the callback
         fireEvent.click(screen.getByText('Update'));
 
-        // Focus should remain on the input
         expect(document.activeElement).toBe(input);
 
-        // Escape should call the latest callback
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(spy1).not.toHaveBeenCalled();
         expect(spy2).toHaveBeenCalledOnce();
@@ -97,12 +94,10 @@ describe('Drawer', () => {
 
         expect(document.activeElement).toBe(first);
 
-        // Third element is active, Tab wraps to First
         third.focus();
         fireEvent.keyDown(document, { key: 'Tab' });
         expect(document.activeElement).toBe(first);
 
-        // First element is active, Shift+Tab wraps to Third
         fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
         expect(document.activeElement).toBe(third);
     });

@@ -1,5 +1,3 @@
-//! The log panel.
-
 use i18n::Key;
 
 pub const LOG_TITLE: Key = Key("log-title");

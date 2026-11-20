@@ -197,7 +197,6 @@ impl Card {
         Some(card.into_any_element())
     }
 
-    /// The pins closest to the selected one, a click away.
     fn nearby(&mut self, map: &Map, board: &Board, window: &Window, cx: &Context<Self>) -> Option<AnyElement> {
         if self.near.is_empty() {
             return None;

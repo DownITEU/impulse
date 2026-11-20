@@ -9,7 +9,6 @@ const TONES: Record<Link, string> = {
     lost: 'border-white/10 text-(--deck-fg-4)',
 };
 
-/** The socket to the app. */
 export const StatusPill = ({ link }: { link: Link }) => {
     const t = useT();
     const caption = () => {

@@ -29,7 +29,6 @@ pub use caps::{cap, caps};
 pub use scope::hotkeys_scope;
 pub use settings::HotkeySettings;
 
-/// What a capture binds.
 #[derive(Clone, PartialEq)]
 pub enum Target {
     // An id, not an index: a newer cheat list may arrive meanwhile.
@@ -85,7 +84,6 @@ impl Hotkeys {
         .detach();
         cx.subscribe(&trainers, |hotkeys, trainers, event: &TrainerEvent, cx| {
             let TrainerEvent::Installed(game) = event else { return };
-            // The user's choices over the source's.
             let slots = trainers.read(cx).sheet(game).map(|sheet| hotkeys.slots(sheet));
             if let Some(slots) = slots {
                 trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));

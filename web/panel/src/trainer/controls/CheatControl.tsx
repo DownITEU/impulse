@@ -61,6 +61,5 @@ export const CheatControl = ({
     }
 };
 
-/** Controls wider than a toggle go under the cheat's name. */
 export const isStacked = ({ control }: CheatRow): boolean =>
     control.kind !== 'toggle' && control.kind !== 'none';

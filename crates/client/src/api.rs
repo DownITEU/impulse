@@ -123,7 +123,6 @@ pub enum Control {
     Selection {
         options: Vec<String>,
     },
-    /// Nothing to set.
     None,
 }
 

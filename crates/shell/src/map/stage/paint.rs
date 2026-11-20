@@ -210,7 +210,6 @@ impl Stage {
         });
     }
 
-    /// The shown pins, grouped for the camera's zoom.
     pub(super) fn markers(&mut self, map: &Map, camera: &Camera, cx: &App) -> Rc<Vec<pins::Marker>> {
         // Half-level steps: pins do not regroup on every wheel tick.
         let step = (camera.span.log2() * 2.).round() as i32;
@@ -383,7 +382,6 @@ fn home(map: &Map, pyramid: &Tiles, area: Pixel, spans: &RangeInclusive<f64>) ->
     }
 }
 
-/// A closed polygon through `corners`.
 fn path(corners: &[gpui_kit::Point<Pixels>], mut builder: PathBuilder) -> Option<gpui_kit::Path<Pixels>> {
     let (first, rest) = corners.split_first()?;
     builder.move_to(*first);

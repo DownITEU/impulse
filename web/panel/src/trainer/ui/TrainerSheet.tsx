@@ -15,7 +15,6 @@ type TrainerSheetProps = {
     live: boolean;
 };
 
-/** The open game's cheats, or why they are not there. */
 export const TrainerSheet = ({
     trainer: { sheet, trainer },
     values,

@@ -1,6 +1,5 @@
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 
-/// A Win32 handle closed on drop.
 pub struct Handle(pub HANDLE);
 
 impl Drop for Handle {

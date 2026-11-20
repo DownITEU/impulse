@@ -1,4 +1,4 @@
-//! A description's links and pictures (M12): a pin link stays, a web link stays only on one of the plugin's link
+//! A description's links and pictures: a pin link stays, a web link stays only on one of the plugin's link
 //! hosts, any other shows as its words; pictures show as their alt text, HTML is dropped. Parsed as GFM, as the
 //! card reads it, so reference links and bare URLs are caught too.
 

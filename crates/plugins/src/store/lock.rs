@@ -25,6 +25,6 @@ pub struct Entry {
     pub links: Vec<String>,
     /// Sha256 by file name: `open` refuses a folder that differs.
     pub files: BTreeMap<String, String>,
-    /// The user's settings by field id (P11).
+    /// The user's settings by field id.
     pub values: Values,
 }

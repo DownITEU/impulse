@@ -254,7 +254,6 @@ pub(super) fn open_menu(view: &mut SettingsView) -> &mut Option<Menu> {
     &mut view.menu
 }
 
-/// A setting's name with what it does under it.
 pub fn label(title: impl Into<SharedString>, hint: impl Into<SharedString>) -> Div {
     v_flex()
         .gap(px(4.))

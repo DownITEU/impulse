@@ -95,7 +95,6 @@ pub fn stacked_row(
         .child(v_flex().flex_1().min_w_0().gap(px(10.)).child(label(title, hint)).child(controls))
 }
 
-/// A link's row and its button.
 fn entry(cx: &App, glyph: Icon, link: Link, [title, action]: [Key; 2], hint: SharedString, lit: bool) -> Div {
     let go = button(&t(cx, action)).id(title.0).on_click(move |_, _, cx| link.open(cx)).child(icon(Icon::External, 12., rgb(DIM)));
     let go = if lit { go.border_color(rgb(accent(cx))).text_color(rgb(accent(cx))) } else { go };

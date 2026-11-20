@@ -23,7 +23,6 @@ use model::{Game, Installation, Origin, Ref, StoreId};
 pub use custom::{Custom, install, owners};
 pub use start::start;
 
-/// An install as a launcher reports it.
 struct App {
     store_id: String,
     location: PathBuf,

@@ -10,7 +10,6 @@ type SliderGesture = {
     y: number;
     value: number;
     dragging: boolean;
-    /** The value of the last move. */
     last: number | null;
 };
 

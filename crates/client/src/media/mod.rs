@@ -30,7 +30,6 @@ impl Media {
     }
 }
 
-/// `url`'s file in `cache`.
 pub fn file(cache: &Path, url: &str) -> PathBuf {
     cache.join(name(url))
 }

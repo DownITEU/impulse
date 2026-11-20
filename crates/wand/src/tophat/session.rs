@@ -291,7 +291,6 @@ impl Shared {
         outgoing.unbounded_send(message).map_err(|_| closed())
     }
 
-    /// Sends a request; the receiver resolves with the reply payload.
     fn ask(&self, kind: &str, payload: &[u8]) -> Result<(u64, oneshot::Receiver<Vec<u8>>)> {
         let seq = self.next_seq();
         let (reply, replies) = oneshot::channel();

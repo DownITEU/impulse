@@ -16,9 +16,7 @@ pub use view::PluginsView;
 pub struct Plugins {
     plugins: Arc<client::plugins::Plugins>,
     list: Vec<Installed>,
-    /// A pick waiting for the user's approval.
     approval: Option<(PathBuf, Approval)>,
-    /// The last command's failure.
     failure: Option<Failure>,
     busy: bool,
 }

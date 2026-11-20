@@ -1,4 +1,4 @@
-//! A game's sources, as Wand calls them: its launcher's install and an executable the user picked.
+//! The game source menu offers the launcher's install and an executable the user picked.
 
 use std::{collections::HashSet, path::Path};
 
@@ -54,7 +54,6 @@ pub fn entries(game: &Game) -> (Vec<(Entry, Label)>, usize) {
     (entries, current)
 }
 
-/// The executable the user picked as this install.
 pub fn exe(install: &Installation) -> Option<&Path> {
     match &install.origin {
         Origin::Picked(exe) => Some(exe),

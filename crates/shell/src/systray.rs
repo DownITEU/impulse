@@ -73,7 +73,6 @@ impl TrayIcon {
             }
         })
         .detach();
-        // The menu names the live game and the overlay's state.
         cx.observe(&icon.runs, |icon, _, cx| icon.set_menu(cx)).detach();
         cx.observe(&icon.library, |icon, _, cx| icon.set_menu(cx)).detach();
         cx.observe(&icon.layer, |icon, _, cx| icon.set_menu(cx)).detach();

@@ -144,7 +144,6 @@ pub fn content_locale(cx: &App) -> Locale {
     cx.global::<Texts>().locale.clone()
 }
 
-/// A message without arguments.
 pub fn t(cx: &App, key: Key) -> SharedString {
     cx.global::<Texts>().made(APP, key.0)
 }

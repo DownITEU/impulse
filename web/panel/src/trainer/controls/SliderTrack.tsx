@@ -7,7 +7,6 @@ type SliderTrackProps = {
     value: number;
     label: string;
     disabled: boolean;
-    /** A drag moved the value. */
     onMove: (value: number) => void;
     /** The drag ended, or the keyboard set the value. */
     onEnd: (value: number) => void;

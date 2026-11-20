@@ -252,7 +252,6 @@ impl Page {
         &self.map
     }
 
-    /// The open game, held while drawing.
     fn game(&self, cx: &App) -> Option<Arc<Game>> {
         self.library.read(cx).opened().cloned()
     }

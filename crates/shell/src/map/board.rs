@@ -31,7 +31,7 @@ pub enum BoardEvent {
     Filtered,
     /// A pin or a mark of the user's was opened or closed.
     Selected,
-    /// A mark of the user's was added and opened.
+    /// The new mark is already open.
     MarkAdded,
     /// The view should show `to`; `close`: near enough to tell pins apart.
     Bring { to: Point, close: bool },
@@ -124,12 +124,10 @@ impl Board {
         self.id.as_ref()
     }
 
-    /// The map and the locale this board asked for.
     pub fn asked(&self) -> Option<(&Ref, &Locale)> {
         self.id.as_ref().zip(self.locale.as_ref())
     }
 
-    /// The map `id` in `locale`, when this board holds it.
     pub fn loaded(&self, id: &Ref, locale: &Locale) -> Option<Shared> {
         let (Load::Ready(map), Some((icons, _))) = (&self.map, &self.icons) else { return None };
         (self.asked() == Some((id, locale))).then(|| Shared { map: map.clone(), icons: icons.clone(), settled: self.settled })
@@ -149,7 +147,6 @@ impl Board {
         self.install(shared.map, Some(shared.icons), cx);
     }
 
-    /// What group `at` of the shown map is drawn with.
     pub fn icon<'a>(&'a self, at: (usize, usize), cx: &'a App) -> GroupIcon<'a> {
         let Load::Ready(map) = &self.map else { return GroupIcon::Default };
         let picture = || self.icons.as_ref().and_then(|(icons, _)| icons.read(cx).get(at));
@@ -336,7 +333,6 @@ impl Board {
         open
     }
 
-    /// A pin of the user's own at `at`, opened.
     pub fn add_mark(&mut self, at: Point, cx: &mut Context<Self>) {
         let saved = self.saved_mut();
         let count = saved.marks.len();

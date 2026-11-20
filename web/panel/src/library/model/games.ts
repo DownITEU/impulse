@@ -11,7 +11,6 @@ export function arranged(games: Game[], query: string): { favorites: Game[]; res
     };
 }
 
-/** The letters a game without a cover shows: the first of its first two words. */
 export function initials(name: string): string {
     return name
         .split(/[\s:]+/)

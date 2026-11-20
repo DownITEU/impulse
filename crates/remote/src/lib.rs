@@ -17,7 +17,6 @@ use async_net::TcpListener;
 use client::api::ServerSide;
 use futures::{FutureExt, StreamExt, future, select, stream::FuturesUnordered};
 
-/// Connections open at once.
 const CONNECTIONS: usize = 16;
 /// The panel's port, or one of the next free ones.
 const PORT: u16 = 8742;

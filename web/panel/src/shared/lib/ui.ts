@@ -1,4 +1,3 @@
-/** Class names, the falsy ones left out. */
 export const cn = (...classes: (string | false | null | undefined)[]): string =>
     classes.filter(Boolean).join(' ');
 

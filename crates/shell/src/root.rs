@@ -13,7 +13,6 @@ use crate::{
     ui::theme::*,
 };
 
-// The open map's distance from the window's edges.
 const MAP_INSET: f32 = 40.;
 
 pub struct Root {

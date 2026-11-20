@@ -8,9 +8,7 @@ Screenshots of the main states into target\smoke\<label>\, to compare before and
 #>
 param(
     [Parameter(Mandatory)][string]$Label,
-    # Overrides the steps, for finding coordinates.
     [string]$Steps,
-    # A language tag for the run only, like the pref.
     [string]$Language
 )
 $out = Join-Path $PSScriptRoot "..\target\smoke\$Label"

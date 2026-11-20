@@ -1,4 +1,4 @@
-//! A plugin's answers kept on disk (M15), as the guest gave them: imported again when read, asked again when stale.
+//! A plugin's answers kept on disk, as the guest gave them: imported again when read, asked again when stale.
 
 use std::{
     fs,
@@ -31,7 +31,7 @@ const MOST: u64 = 64 << 20;
 pub struct Stamp {
     pub api: u32,
     pub version: String,
-    /// The locale it was served in.
+    /// The plugin's served locale, not necessarily the app's requested tag.
     pub locale: String,
     pub settings: Values,
     pub revision: Option<String>,

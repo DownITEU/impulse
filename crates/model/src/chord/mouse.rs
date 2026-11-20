@@ -1,5 +1,4 @@
-//! The mouse in Wand's codes: the buttons' virtual keys, and 10 and 11 (reserved by Windows) for a
-//! wheel notch.
+//! Mouse buttons use Windows virtual-key codes; wheel notches use the reserved `0x0A` and `0x0B`.
 
 pub const LBUTTON: u8 = 0x01;
 pub const RBUTTON: u8 = 0x02;

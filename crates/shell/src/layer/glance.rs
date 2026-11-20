@@ -104,7 +104,6 @@ impl Glance {
             Playing::Front(_) | Playing::Away => None,
         };
         self.follow(game.is_some(), cx);
-        // Where the dock's minimap is.
         let want = game.filter(|_| self.live.read(cx).placed()).and_then(|game| {
             let monitor = overlay::monitor_of(game)?;
             let screen = size(px(monitor.size.0 as f32 / monitor.scale), px(monitor.size.1 as f32 / monitor.scale));
@@ -117,7 +116,6 @@ impl Glance {
         }
         let (window, hwnd) = (hud.window, hud.hwnd);
         hud.placed = want;
-        // Hidden, it lets go of its tiles.
         if want.is_none() {
             window.update(cx, |card, window, cx| card.minimap.update(cx, |minimap, cx| minimap.hide(window, cx))).ok();
         }

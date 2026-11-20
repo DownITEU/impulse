@@ -61,7 +61,6 @@ mod tests {
         let read = |name| fs::read_to_string(dir.join(name)).unwrap();
         assert_eq!(read(PREVIOUS), "first line, over the limit\n");
         assert_eq!(read(CURRENT), "second\n");
-        // A new run appends to the current file.
         Sink::open(&dir, 10).unwrap().write("third").unwrap();
         assert_eq!(read(CURRENT), "second\nthird\n");
         fs::remove_dir_all(&dir).unwrap();

@@ -1,4 +1,4 @@
-//! A hotkey chord in Wand's key codes, its names, and the keys being pressed.
+//! Hotkey chords use virtual-key codes and reserve two codes for mouse wheel input.
 
 pub mod mouse;
 mod names;

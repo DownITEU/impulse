@@ -6,7 +6,6 @@ import { StatusPill } from './StatusPill';
 
 type TopBarProps = {
     link: Link;
-    /** The open game's name. */
     title: string | null;
     onOpenConnection: () => void;
 };

@@ -100,7 +100,6 @@ impl Cues {
         });
     }
 
-    /// Back to `cue`'s own tone.
     pub fn clear(&mut self, cue: Cue, cx: &mut Context<Self>) {
         self.refused = None;
         self.choice = Task::ready(());

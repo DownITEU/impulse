@@ -1,4 +1,4 @@
-//! One call into a plugin's module (M16): a fresh instance with its limits, the host's imports, the reply read
+//! One call into a plugin's module: a fresh instance with its limits, the host's imports, the reply read
 //! back. Blocking: run it off the UI thread. Past a limit, the call fails as `Refused`.
 
 #[cfg(test)]
@@ -19,7 +19,7 @@ use wasmi::{
 };
 
 const MEMORY: usize = 64 << 20;
-// About 8 times what parsing a 1.4 MB map takes (refactor-plan 7.4).
+// About 8 times what parsing a 1.4 MB map takes.
 const FUEL: u64 = 2_000_000_000;
 /// The largest reply, and the largest body a request brings back.
 pub const ANSWER: usize = 16 << 20;

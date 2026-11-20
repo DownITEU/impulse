@@ -10,7 +10,6 @@ use crate::storage::{Paths, Stored};
 /// Slot: VKs, or `null` for unbound; a missing slot is the source's.
 type Slots = BTreeMap<usize, Option<Vec<u16>>>;
 
-/// What `choose` sets a slot to.
 pub enum Choice {
     Bound(Chord),
     Unbound,
@@ -41,7 +40,6 @@ pub struct Store {
 }
 
 impl Store {
-    /// A missing or damaged file means no choices.
     pub fn load(paths: &Paths) -> Self {
         Self { saved: Stored::load(paths.hotkeys()) }
     }
@@ -97,8 +95,7 @@ impl Store {
         });
     }
 
-    /// Sets a slot of the cheat unless its chord is taken; the cheat's new slots. As in Wand, a cheat never
-    /// holds one chord twice, nor one `reserved` elsewhere.
+    /// Returns the cheat's new slots, or `None` if another slot uses the chord or it is reserved elsewhere.
     pub fn rebind(
         &mut self,
         trainer: &Ref,

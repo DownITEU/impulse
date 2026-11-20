@@ -94,7 +94,6 @@ enum LocatorKind {
     Unknown,
 }
 
-/// A game whose title is missing is left out.
 fn parse(json: &[u8]) -> Result<Vec<Game>> {
     let Catalog { games, titles, platforms, maps } = serde_json::from_slice(json).context("parse catalog")?;
     let wand = crate::source();

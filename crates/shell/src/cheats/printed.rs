@@ -22,7 +22,6 @@ pub struct Row {
 }
 
 pub struct Printed {
-    /// Whose sheet it prints.
     pub game: GameId,
     pub rows: Vec<Row>,
     /// Text fields of the cheats applied with a button, by cheat index.
@@ -56,7 +55,6 @@ impl Printed {
         }
     }
 
-    /// The caps after the hotkeys changed.
     pub fn recap(&mut self, sheet: &Sheet) {
         for ((row, cheat), slots) in self.rows.iter_mut().zip(&sheet.cheats).zip(&sheet.hotkeys) {
             row.keys = caps(cheat.kind, slots);

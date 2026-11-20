@@ -23,7 +23,6 @@ const DIR: &str = "maps";
 struct Stored<'a> {
     /// The catalog's `updatedAt` of the map the copy was fetched for.
     stamp: Option<String>,
-    /// The content locale the copy was fetched in.
     #[serde(default = "crate::locale::english")]
     locale: String,
     #[serde(borrow)]
@@ -35,7 +34,7 @@ pub struct Cached {
     pub map: model::Map,
     /// The catalog's `updatedAt` the copy was fetched for.
     pub stamp: Option<String>,
-    /// The content locale the copy was fetched in.
+    /// The fetch locale after mapping the app's requested tag to a supported one.
     pub locale: String,
     /// Set while some group icon is not on disk yet.
     pub icons: Option<Icons>,

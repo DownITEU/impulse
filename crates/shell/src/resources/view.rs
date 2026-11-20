@@ -155,7 +155,6 @@ pub fn sized(cx: &App, bytes: u64) -> SharedString {
     tf(cx, UNITS[unit], &[("size", Arg::Str(&digits(cx, &number)))])
 }
 
-/// The number and the index of its unit.
 fn size(bytes: u64) -> (String, usize) {
     let (mut value, mut unit) = (bytes as f64, 0);
     while value >= 1024. && unit < UNITS.len() - 1 {

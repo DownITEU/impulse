@@ -61,7 +61,6 @@ impl ClipView {
     }
 }
 
-/// A picture of `size` scaled to cover `bounds`, centred on it.
 fn cover(bounds: Bounds<Pixels>, (width, height): (u32, u32)) -> Bounds<Pixels> {
     let (width, height) = (width as f32, height as f32);
     let scale = (f32::from(bounds.size.width) / width).max(f32::from(bounds.size.height) / height);

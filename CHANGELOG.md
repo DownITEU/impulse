@@ -9,7 +9,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 
 - Your installed games from Steam, Epic, GOG, Ubisoft, Xbox, Rockstar and EA, or any executable you add, matched to Wand's catalog.
 - Trainers from your Wand account: launch, attach, every kind of control, pins, saved mods and named collections.
-- Hotkeys from Wand and your own, firing anywhere or only while the game is in front.
+- Imported and custom hotkeys, firing anywhere or only while the game is in front.
 - Interactive maps with pins, regions, search and found pins, and your position and heading while a trainer runs.
 - An overlay over the game with movable docks (mods, map, minimap, session) and a minimap that screen capture can skip.
 - A remote panel to control a trainer from your phone on the local network.

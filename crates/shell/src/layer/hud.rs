@@ -128,7 +128,6 @@ pub struct Hud {
     map: Entity<MapView>,
     cheat_list: Entity<CheatList>,
     docks: Entity<Docks>,
-    // The minimap in its dock over the game.
     minimap: Entity<Minimap>,
     // The HUD window over the game while Impulse is behind it.
     _glance: Entity<Glance>,
@@ -240,7 +239,6 @@ impl Hud {
         self.let_go_minimap(window, cx);
         if !over {
             self.warning.update(cx, |warning, cx| warning.hide(cx));
-            // The dock's map goes with the overlay.
             return self.map.update(cx, |map, cx| map.hide(window, cx));
         }
         // What belongs to the window closes, and the docks show the running game.
@@ -304,7 +302,6 @@ impl Hud {
         self.warning.update(cx, |warning, cx| warning.refocus(window, cx));
     }
 
-    /// The MAP dock shows the open game's map: the dock is shown and the game has one.
     fn docked(&self, cx: &App) -> bool {
         self.docks.read(cx).is_shown(MAP_DOCK) && self.maps.read(cx).mapped()
     }
@@ -327,7 +324,7 @@ impl Render for Hud {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let game = self.library.read(cx).opened().cloned();
         let game = game.as_deref();
-        // The minimap follows a record's maps alone: a discovered map has no `Frame` (M1).
+        // The minimap follows a record's maps alone: a discovered map has no `Frame`.
         let (mapped, minimapped) = (self.maps.read(cx).mapped(), game.is_some_and(|game| !game.source.maps.is_empty()));
         let shown = self.docks.read(cx).shown();
         let docked = shown

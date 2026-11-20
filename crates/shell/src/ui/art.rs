@@ -61,7 +61,6 @@ impl HttpClient for CdnClient {
     }
 }
 
-/// What a map tile's URL gave.
 pub enum Fetched<T = Vec<u8>> {
     Ready(T),
     /// Not on the server: remembered, never asked again.

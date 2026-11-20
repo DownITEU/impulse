@@ -235,7 +235,6 @@ fn status(code: u16) -> HeaderMap {
 struct Inbound {
     body: RecvStream,
     buf: BytesMut,
-    /// The largest message accepted.
     max: usize,
 }
 

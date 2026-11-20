@@ -1,4 +1,4 @@
-//! The installed plugins: their files, the lock of what the user approved, their settings and their answers (P7, P8).
+//! The installed plugins: their files, the lock of what the user approved, their settings and their answers.
 //! Ids at the surface are source ids (`plugin-<manifest id>`); the lock is keyed by their text.
 
 mod install;

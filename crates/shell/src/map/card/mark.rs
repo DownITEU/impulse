@@ -59,7 +59,6 @@ fn edits<T: EventEmitter<InputEvent>>(
 }
 
 impl Card {
-    /// Puts the open mark's name and note in the fields.
     pub(super) fn fill_mark(&mut self, board: &Entity<Board>, window: &mut Window, cx: &mut Context<Self>) {
         let board = board.read(cx);
         let Some(mark) = board.mark.and_then(|index| board.saved.marks.get(index)) else { return };

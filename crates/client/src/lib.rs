@@ -17,7 +17,6 @@ pub mod trainer;
 
 pub use registry::{Capabilities, Change, Registry};
 
-/// Something that arrives after the window opens.
 pub enum Load<T> {
     Pending,
     Ready(T),

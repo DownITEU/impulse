@@ -259,7 +259,6 @@ fn button_frame() -> Div {
         .hover(|style| style.bg(rgb(RAISED_HOVER)))
 }
 
-/// `/ filter` field: the accent slash and a bare mono input.
 /// The text of a `filter`; `V` repaints as it changes (`set_value` sends no change).
 pub fn filter_input<V: 'static>(placeholder: Key, window: &mut Window, cx: &mut Context<V>) -> (Entity<InputState>, Subscription) {
     let (state, relabel) = input(placeholder, window, cx);

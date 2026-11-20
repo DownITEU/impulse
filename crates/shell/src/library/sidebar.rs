@@ -34,7 +34,6 @@ pub struct Marks {
     pub live: bool,
 }
 
-/// Reads a game's marks.
 type MarksOf = Box<dyn Fn(&GameId, &App) -> Marks>;
 
 pub struct Sidebar {

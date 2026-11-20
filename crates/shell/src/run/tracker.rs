@@ -26,7 +26,6 @@ pub struct Fix {
 
 pub enum Tracked {
     Fix(Fix),
-    /// The trainer stopped answering.
     Lost,
 }
 

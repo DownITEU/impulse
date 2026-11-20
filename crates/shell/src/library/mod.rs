@@ -24,7 +24,6 @@ pub use sidebar::{Marks, Sidebar, WIDTH as SIDEBAR_WIDTH, vacant};
 pub use source_menu::{pick_source, source_options};
 
 pub enum LibraryEvent {
-    /// A new list.
     Listed,
     /// Another game is open: the user's pick, or the first when the open one left the list.
     Opened,

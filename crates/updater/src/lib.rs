@@ -10,7 +10,6 @@ pub use feed::{Channel, Check, Fetched, Release, check, newer, parse};
 pub use install::{cleanup, download, restart, restarted, swap};
 pub use semver::Version;
 
-/// The running build's version.
 pub fn current() -> Version {
     Version::parse(env!("CARGO_PKG_VERSION")).expect("the workspace version is semver")
 }

@@ -5,7 +5,6 @@ mod pseudo;
 use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
 use unic_langid::LanguageIdentifier;
 
-/// A language we ship.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Language {
     /// A BCP 47 tag, also the name of a domain's file.
@@ -25,7 +24,6 @@ pub const TURKISH: Language = Language { tag: "tr", name: "TÜRKÇE" };
 pub const RUSSIAN: Language = Language { tag: "ru", name: "РУССКИЙ" };
 pub const UKRAINIAN: Language = Language { tag: "uk", name: "УКРАЇНСЬКА" };
 
-/// What a language menu lists.
 pub const LANGUAGES: &[Language] = &[ENGLISH, FRENCH, GERMAN, SPANISH, ITALIAN, PORTUGUESE, POLISH, TURKISH, RUSSIAN, UKRAINIAN];
 
 impl Language {
@@ -49,7 +47,6 @@ fn closest(tag: &str) -> Option<Language> {
     LANGUAGES.iter().copied().find(|ours| language(ours.tag) == language(tag))
 }
 
-/// A message of a domain's catalog.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Key(pub &'static str);
 

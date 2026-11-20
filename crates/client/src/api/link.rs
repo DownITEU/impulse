@@ -21,13 +21,11 @@ const NOTES: usize = 16;
 const KINDS: usize = 5;
 
 pub enum Ask {
-    /// A device trades a pairing code for its token.
     Pair {
         code: String,
         user_agent: String,
         reply: oneshot::Sender<Option<String>>,
     },
-    /// The device a token belongs to.
     Device {
         token: String,
         reply: oneshot::Sender<Option<u32>>,

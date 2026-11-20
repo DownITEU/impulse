@@ -1,5 +1,3 @@
-//! The map.
-
 use i18n::Key;
 
 pub const TELEPORT_FAILED: Key = Key("teleport-failed");

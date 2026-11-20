@@ -1,6 +1,5 @@
-//! Which way the player heads, from how they moved: the trainer tells where the player is, not where they look.
-//! Lengths are on the map plane, which holds the game's world (8 to 17 km across on the maps seen), so
-//! Wand's metre limits become parts of it.
+//! Derives heading from movement because the trainer reports position, not facing direction.
+//! Distance thresholds are fractions of the map plane; sampled maps span 8 to 17 km.
 
 use std::{
     f64::consts::PI,

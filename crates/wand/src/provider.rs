@@ -31,7 +31,6 @@ use crate::{
 
 type Link = Result<(Arc<Session>, Transport, Source), Failure>;
 
-// Store ids.
 const MAPS: &str = "maps";
 const CATALOG: &str = "catalog";
 const TRAINERS: &str = "trainers";
@@ -223,7 +222,6 @@ impl model::Maps for Wand {
                 icons = fetched.as_mut().ok().and_then(|copy| copy.icons.take());
                 send(&tx, Snapshot::Fresh(fetched.map(|copy| copy.map).map_err(Failure::from)));
             }
-            // The map shows first; icons it misses follow.
             if let Some(icons) = icons
                 && let Some(map) = unblock(move || icons.download(&dir)).await
             {

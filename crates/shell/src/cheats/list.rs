@@ -56,7 +56,6 @@ impl CheatList {
                 return column.child(notice(t(cx, key::CHEATS_LOADING_TAG), t(cx, key::CHEATS_LOADING), t(cx, key::CHEATS_KEPT)));
             }
         };
-        // Printed as the sheet shows, before a frame draws.
         let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == game.id) else { return column };
         column
             .when(game.support == Support::UpdatePending, |column| column.child(update_callout(cx)))

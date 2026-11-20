@@ -41,7 +41,6 @@ struct Saved {
     skipped: Option<Version>,
 }
 
-/// What a dialog shows.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     /// The notes of every release newer than this build.
@@ -56,7 +55,6 @@ pub struct Present(pub Mode);
 
 #[derive(Clone, PartialEq)]
 pub enum Status {
-    /// Nothing known yet.
     Idle,
     Checking,
     Current,
@@ -106,7 +104,6 @@ pub struct Updates {
     selected: (String, updater::Channel),
     busy: Option<Busy>,
     failed: Option<Failed>,
-    /// A check finished since start.
     checked: bool,
     /// CHECK NOW was pressed since start, whatever came of it.
     asked: bool,
@@ -178,7 +175,6 @@ impl Updates {
         &self.current
     }
 
-    /// The newest release on offer.
     pub fn latest(&self) -> Option<&Release> {
         self.offer.first()
     }

@@ -40,8 +40,6 @@ export function texts(tag: string): Words {
 
 export const Texts = createContext<Words>(texts('en'));
 
-/** Captions in the app's language; a component that uses them follows a change. */
 export const useT = (): T => useContext(Texts).t;
 
-/** The app's language tag: numbers follow it as captions do. */
 export const useLanguage = (): string => useContext(Texts).tag;

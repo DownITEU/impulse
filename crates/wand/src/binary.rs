@@ -12,11 +12,11 @@ use sha2::{Digest, Sha256};
 // Not under `trainers`: that folder is the metadata's, and dropping it must not reach here.
 const DIR: &str = "trainer-binaries";
 
-/// Drops every downloaded DLL; the next run fetches again. A DLL loaded in a game stays.
 pub fn size(data_dir: &Path) -> u64 {
     disk::size(&data_dir.join(DIR))
 }
 
+/// Drops every downloaded DLL; the next run fetches again. A DLL loaded in a game stays.
 pub fn forget(data_dir: &Path) {
     let _ = fs::remove_dir_all(data_dir.join(DIR));
 }

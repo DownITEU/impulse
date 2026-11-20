@@ -124,7 +124,6 @@ impl Session {
         got
     }
 
-    /// A request was refused with this access token.
     pub fn is_rejected(&self) -> bool {
         self.rejected.load(Ordering::Relaxed)
     }

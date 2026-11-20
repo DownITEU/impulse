@@ -27,10 +27,12 @@ pub use title::title;
 pub enum TrainerEvent {
     /// A copy of the game's trainer shows: the first, a newer one, or the one that waited.
     Installed(GameId),
-    /// The game's hotkeys changed.
     Rebound(GameId),
-    /// A cheat's value changed.
-    Set { game: GameId, index: usize, value: f64 },
+    Set {
+        game: GameId,
+        index: usize,
+        value: f64,
+    },
     /// Anything else of the game's trainer that shows: its load, pins, collections, star, values at rest.
     Changed(GameId),
 }
@@ -45,7 +47,6 @@ pub struct Trainers {
     library: Entity<Library>,
     profiles: Profiles,
     shelf: Shelf,
-    // Games whose trainer is being read or downloaded right now.
     loading: HashSet<GameId>,
     // What the copies were asked in: a new `Texts` in the same language (a source's catalogs) reloads nothing.
     locale: Locale,
@@ -122,7 +123,6 @@ impl Trainers {
         let (release, released) = oneshot::channel::<()>();
         self.shelf.hold(game.clone());
         cx.spawn(async move |trainers, cx| {
-            // Ends as the `Hold` drops.
             let _ = released.await;
             trainers
                 .update(cx, |trainers, cx| {

@@ -32,7 +32,6 @@ fn caption(label: &Label, cx: &App) -> SharedString {
     }
 }
 
-/// A pick in `game`'s menu.
 pub fn pick_source(library: &Entity<Library>, game: &Game, at: usize, cx: &mut App) {
     let (id, entry) = (game.id.clone(), entries(game).0.get(at).map(|(entry, _)| *entry));
     match entry {

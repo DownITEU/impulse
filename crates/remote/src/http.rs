@@ -172,7 +172,6 @@ fn request(parsed: &httparse::Request) -> Option<Request> {
     Some(request)
 }
 
-/// Reads until `read` holds `end` bytes.
 async fn body(stream: &mut TcpStream, read: &mut Vec<u8>, end: usize) -> Option<()> {
     let mut chunk = [0u8; BODY];
     while read.len() < end {

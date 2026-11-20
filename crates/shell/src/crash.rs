@@ -34,7 +34,6 @@ pub fn install() {
     }));
 }
 
-/// Follows the runs that go live.
 pub fn watch(runs: &Entity<Runs>, cx: &mut App) {
     cx.subscribe(runs, |runs, event: &RunEvent, cx| {
         if let (RunEvent::Live, Some((_, run))) = (event, runs.read(cx).live_run()) {

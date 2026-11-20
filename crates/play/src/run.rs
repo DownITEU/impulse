@@ -7,7 +7,7 @@ use model::{Failure, Live, Origin, Process, Rule, Runner};
 
 type Result<T> = std::result::Result<T, Failure>;
 
-// Wand's wait after it starts a game itself; when the user has to start it there is more to do.
+// Allow extra time when the user has to launch the game manually.
 const LAUNCHED_WITHIN: Duration = Duration::from_secs(45);
 const STARTED_BY_USER_WITHIN: Duration = Duration::from_secs(180);
 

@@ -106,7 +106,6 @@ impl Remote {
         Ok(())
     }
 
-    /// The listed game a handle names.
     fn game(&self, handle: u32, cx: &App) -> Result<GameId, Key> {
         let game = self.handles.game(handle).filter(|game| self.library.read(cx).game(game).is_some());
         game.cloned().ok_or(CHANGED)

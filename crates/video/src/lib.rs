@@ -13,7 +13,6 @@ pub use gpu::Texture;
 pub use playback::{Playback, Timed};
 pub use windows::Win32::Graphics::Direct3D11::ID3D11Device;
 
-/// One decoded picture.
 pub struct Frame {
     /// NV12, the picture's own size; back to the decoder once the frame is dropped.
     pub texture: Texture,

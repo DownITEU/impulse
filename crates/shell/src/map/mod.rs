@@ -120,7 +120,6 @@ impl MapView {
         cx.notify();
     }
 
-    /// Opens on the open game's maps.
     pub fn show(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.stage.update(cx, |stage, cx| stage.take_focus(window, cx));
         self.maps.update(cx, |maps, cx| maps.open(cx));
@@ -250,7 +249,6 @@ fn group<'a>(map: &'a Map, pin: &Pin) -> &'a Group {
     &map.categories[pin.group.0].groups[pin.group.1]
 }
 
-/// "CATEGORY / GROUP" under a pin's name.
 fn kind(map: &Map, pin: &Pin) -> String {
     format!("{} / {}", map.categories[pin.group.0].name, group(map, pin).name).to_uppercase()
 }
