@@ -5,22 +5,22 @@ store-maps-hint = repères, régions et icônes
 store-catalog = CATALOGUE
 store-catalog-hint = les jeux et le nom de votre compte
 store-trainers = TRAINERS
-store-trainers-hint = listes de cheats
-store-trainer-files = FICHIERS TRAINER
-store-trainer-files-hint = DLL de trainers, depuis le CDN
+store-trainers-hint = listes de mods
+store-trainer-files = DLL DES TRAINERS
+store-trainer-files-hint = DLL des trainers téléchargées depuis le CDN
 store-browser = NAVIGATEUR
 store-browser-hint = cache WebView2
 
 ## The folder
 
 folder = DOSSIER WAND
-folder-hint = d'où sont lus les binaires du trainer
+folder-hint = dossier qui contient les fichiers des trainers
 folder-empty = aucun fichier de trainer Wand dans ce dossier
-folder-unset = Dossier de Wand non défini
+folder-unset = aucun dossier Wand sélectionné
 
 ## Categories
 
-category-challenge = MODS DE DÉFI
+category-challenge = DÉFIS
 category-enemies = ENNEMIS
 category-game = JEU
 category-inventory = INVENTAIRE
@@ -33,4 +33,5 @@ category-weapons = ARMES
 
 ## Failures
 
-signed-out = Wand est déconnecté : ouvrez Wand et connectez-vous
+signed-out = vous n'êtes pas connecté à Wand. Ouvrez l'appli et connectez-vous
+not-installed = Wand n'est pas configuré sur ce PC. Installez-le, ouvrez-le et connectez-vous

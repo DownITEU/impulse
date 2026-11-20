@@ -5,14 +5,14 @@ use client::{
     trainer::{Sheet, Span, TOP_TICK},
 };
 use gpui_kit::{
-    AnyElement, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful,
+    AnyElement, App, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful,
     component::{h_flex, input::Input},
     div,
     prelude::*,
     px, rgb,
 };
 use i18n::{Arg, Key};
-use model::Kind;
+use model::{Cheat, Kind};
 
 use super::{CheatList, Menu, Printed, number, open_menu};
 use crate::ui::{
@@ -26,6 +26,26 @@ use crate::ui::{
 impl CheatList {
     fn set_value(&mut self, index: usize, value: f64, cx: &mut Context<Self>) {
         self.runs.update(cx, |runs, cx| runs.set(index, value, cx));
+    }
+
+    /// The cheat and its value in the live sheet, for the game a handler was drawn for: a render may be behind the
+    /// pointer, so none once another game is open or its sheet has no such cheat.
+    fn current<'a>(&self, game: &GameId, index: usize, cx: &'a App) -> Option<(&'a Cheat, f64)> {
+        if self.library.read(cx).open_id() != Some(game) {
+            return None;
+        }
+        let sheet = self.trainers.read(cx).sheet(game)?;
+        Some((sheet.cheats.get(index)?, *sheet.values.get(index)?))
+    }
+
+    /// `set_value` to what `to` makes of the live value, but not for what the cheat already has: a drag inside one tick
+    /// or a click at a limit sends nothing and makes no sound.
+    fn change_value(&mut self, game: &GameId, index: usize, to: impl FnOnce(&Cheat, f64) -> f64, cx: &mut Context<Self>) {
+        let Some((cheat, now)) = self.current(game, index, cx) else { return };
+        let value = to(cheat, now);
+        if value != now {
+            self.set_value(index, value, cx);
+        }
     }
 
     pub(super) fn control(
@@ -44,21 +64,22 @@ impl CheatList {
             Kind::Toggle => div()
                 .id(("toggle", index))
                 .cursor_pointer()
-                .on_click(cx.listener(move |list, _, _, cx| {
-                    if running {
-                        list.set_value(index, if value == 0. { 1. } else { 0. }, cx);
-                    }
-                }))
+                .on_click({
+                    let game = printed.game.clone();
+                    cx.listener(move |list, _, _, cx| {
+                        // Inverts the live value: two clicks before a repaint must not send the same one twice.
+                        if running {
+                            list.change_value(&game, index, |_, now| if now == 0. { 1. } else { 0. }, cx);
+                        }
+                    })
+                })
                 .child(toggle(live, cx))
                 .into_any_element(),
-            Kind::Slider => {
-                let span = Span::of(&cheat.args);
-                h_flex()
-                    .gap(px(5.))
-                    .child(self.ticks(index, span, value, running, live, cx))
-                    .child(mono(number(value), 12.5).w(px(38.)).flex().justify_end().text_color(value_color))
-                    .into_any_element()
-            }
+            Kind::Slider => h_flex()
+                .gap(px(5.))
+                .child(self.ticks(&printed.game, sheet, index, running, live, cx))
+                .child(mono(number(value), 12.5).w(px(38.)).flex().justify_end().text_color(value_color))
+                .into_any_element(),
             Kind::Number if cheat.args.button => h_flex()
                 .gap(px(8.))
                 .when_some(printed.inputs.get(&index), |control, input| {
@@ -74,18 +95,16 @@ impl CheatList {
                         ),
                     )
                 })
-                .child(self.press(index, key::CHEATS_SET, key::CHEATS_SET_DONE, running, cx))
+                .child(self.press(&printed.game, index, key::CHEATS_SET, key::CHEATS_SET_DONE, running, cx))
                 .into_any_element(),
             Kind::Number => {
                 let step = cheat.args.stride();
                 let nudge = |id: &'static str, label: &'static str, by: f64| {
+                    let game = printed.game.clone();
                     button(label).id((id, index)).w(px(26.)).px_0().font_family(MONO).text_size(px(14.)).on_click(cx.listener(
                         move |list, _, _, cx| {
-                            let game = list.selected(cx).filter(|_| running);
-                            let next =
-                                game.and_then(|game| Some(list.trainers.read(cx).sheet(&game)?.cheats[index].args.clamp(value + by)));
-                            if let Some(next) = next {
-                                list.set_value(index, next, cx);
+                            if running {
+                                list.change_value(&game, index, |cheat, now| cheat.args.clamp(now + by), cx);
                             }
                         },
                     ))
@@ -97,7 +116,9 @@ impl CheatList {
                     .child(nudge("increase", "+", step))
                     .into_any_element()
             }
-            Kind::Button => self.press(index, key::CHEATS_EXECUTE, key::CHEATS_EXECUTE_DONE, running, cx).px(px(14.)).into_any_element(),
+            Kind::Button => {
+                self.press(&printed.game, index, key::CHEATS_EXECUTE, key::CHEATS_EXECUTE_DONE, running, cx).px(px(14.)).into_any_element()
+            }
             Kind::Selection => {
                 let options = printed.rows[index].options.clone();
                 let current = value as usize;
@@ -107,7 +128,10 @@ impl CheatList {
                 }
                 let menu = Menu::Cheat(index);
                 dropdown(trigger, menu, open_menu, self.menu == Some(menu), options, current, span, cx, move |list, option, _, cx| {
-                    list.set_value(index, option as f64, cx)
+                    // The menu is dropped when another game opens, so the open game is the one it was drawn for.
+                    if let Some(game) = list.selected(cx) {
+                        list.change_value(&game, index, |_, _| option as f64, cx);
+                    }
                 })
                 .into_any_element()
             }
@@ -116,46 +140,50 @@ impl CheatList {
     }
 
     /// A button with no state of its own: it confirms the press for a moment.
-    fn press(&self, index: usize, label: Key, done: Key, running: bool, cx: &Context<Self>) -> Stateful<Div> {
+    fn press(&self, game: &GameId, index: usize, label: Key, done: Key, running: bool, cx: &Context<Self>) -> Stateful<Div> {
+        let game = game.clone();
         flash_button(&t(cx, label), &t(cx, done), self.is_flashed(index), cx).id(("press", index)).on_click(cx.listener(
             move |list, _, _, cx| {
                 if !running {
                     return;
                 }
                 // A cheat with a text field takes its value from it; a button cheat sends its own and
-                // keeps no state.
-                let Some(game) = list.selected(cx) else { return };
-                let (typed, button) = list.trainers.read(cx).sheet(&game).map_or((None, false), |sheet| {
-                    let cheat = &sheet.cheats[index];
-                    let input = list.printed.as_ref().and_then(|printed| printed.inputs.get(&index));
-                    let typed = input.and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
-                    (typed, cheat.kind == Kind::Button)
-                });
+                // keeps no state. A control drawn for another game does nothing.
+                let Some((cheat, _)) = list.current(&game, index, cx) else { return };
+                let input = list.printed.as_ref().filter(|printed| printed.game == game).and_then(|printed| printed.inputs.get(&index));
+                let typed = input.and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
+                let button = cheat.kind == Kind::Button;
                 if let Some(value) = typed {
                     list.set_value(index, value, cx);
                 }
+                // A press flashes on `RunEvent::Pressed`, as a hotkey's does.
                 if button {
                     list.runs.update(cx, |runs, cx| runs.press(index, cx));
+                } else {
+                    list.flash(index, cx);
                 }
-                list.flash(index, cx);
             },
         ))
     }
 
     /// Ten ticks: click or drag across them, or use the wheel.
-    fn ticks(&self, index: usize, span: Span, value: f64, running: bool, live: bool, cx: &Context<Self>) -> impl IntoElement {
+    fn ticks(&self, game: &GameId, sheet: &Sheet, index: usize, running: bool, live: bool, cx: &Context<Self>) -> impl IntoElement {
+        let (span, value) = (Span::of(&sheet.cheats[index].args), sheet.values[index]);
         let lit = if live { accent(cx) } else { TICK_IDLE };
         let level = span.tick(value);
+        let wheel = game.clone();
         h_flex()
             .when(running, |ticks| {
                 ticks.cursor_pointer().on_scroll(cx.listener(move |list, event: &ScrollEvent, window, cx| {
                     let up = event.delta.pixel_delta(window.line_height()).y > px(0.);
-                    list.set_value(index, span.nudge(value, up), cx);
+                    // From the live value: two notches before a render each move the slider.
+                    list.change_value(&wheel, index, |_, now| span.nudge(now, up), cx);
                     // Keeps the pane from scrolling under the slider.
                     cx.stop_propagation();
                 }))
             })
             .children((0..=TOP_TICK).map(|tick| {
+                let (pressed, dragged) = (game.clone(), game.clone());
                 // The 3 px gap belongs to the cell, so a drag never falls between ticks.
                 div()
                     .pr(px(3.))
@@ -163,12 +191,12 @@ impl CheatList {
                         cell.on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |list, _, _, cx| {
-                                list.set_value(index, span.value(tick), cx);
+                                list.change_value(&pressed, index, |_, _| span.value(tick), cx);
                             }),
                         )
                         .on_mouse_move(cx.listener(move |list, event: &MouseMoveEvent, _, cx| {
                             if event.pressed_button == Some(MouseButton::Left) {
-                                list.set_value(index, span.value(tick), cx);
+                                list.change_value(&dragged, index, |_, _| span.value(tick), cx);
                             }
                         }))
                     })

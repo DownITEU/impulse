@@ -16,7 +16,9 @@ i18n.workspace = true
 journal.workspace = true
 model.workspace = true
 overlay.workspace = true
+sound.workspace = true
 tray.workspace = true
+updater.workspace = true
 video.workspace = true
 
 anyhow.workspace = true

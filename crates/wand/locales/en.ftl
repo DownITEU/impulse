@@ -34,3 +34,4 @@ category-weapons = WEAPONS
 ## Failures
 
 signed-out = Wand is signed out: open Wand and sign in
+not-installed = Wand is not set up on this PC: install it, open it and sign in

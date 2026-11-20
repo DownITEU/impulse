@@ -8,7 +8,7 @@ use std::{
 };
 
 use gpui_kit::{App, Global, SharedString};
-use i18n::{Arg, Catalog, Key, Language};
+use i18n::{Arg, Catalog, ENGLISH, FRENCH, GERMAN, ITALIAN, Key, Language, POLISH, PORTUGUESE, RUSSIAN, SPANISH, TURKISH, UKRAINIAN};
 use model::{Failure, FailureKind, Files, Locale, SourceId, Text};
 use rustc_hash::{FxHashMap, FxHasher};
 
@@ -16,10 +16,21 @@ use super::key;
 
 const APP: &str = SourceId::APP;
 static FILES: LazyLock<Files> = LazyLock::new(|| {
-    [("en", include_str!("../../locales/en.ftl")), ("fr", include_str!("../../locales/fr.ftl"))]
-        .iter()
-        .map(|&(tag, source)| (tag.into(), source.into()))
-        .collect()
+    [
+        (ENGLISH, include_str!("../../locales/en.ftl")),
+        (FRENCH, include_str!("../../locales/fr.ftl")),
+        (GERMAN, include_str!("../../locales/de.ftl")),
+        (SPANISH, include_str!("../../locales/es.ftl")),
+        (ITALIAN, include_str!("../../locales/it.ftl")),
+        (PORTUGUESE, include_str!("../../locales/pt-BR.ftl")),
+        (POLISH, include_str!("../../locales/pl.ftl")),
+        (TURKISH, include_str!("../../locales/tr.ftl")),
+        (RUSSIAN, include_str!("../../locales/ru.ftl")),
+        (UKRAINIAN, include_str!("../../locales/uk.ftl")),
+    ]
+    .iter()
+    .map(|&(language, source)| (language.tag.into(), source.into()))
+    .collect()
 });
 
 pub struct Texts {
@@ -203,7 +214,7 @@ fn kind(kind: FailureKind) -> Key {
 
 #[cfg(test)]
 mod tests {
-    use i18n::{Arg, ENGLISH, FRENCH};
+    use i18n::{Arg, ENGLISH, FRENCH, GERMAN, ITALIAN, POLISH, PORTUGUESE, RUSSIAN, SPANISH, TURKISH, UKRAINIAN};
 
     use super::{Texts, key};
 
@@ -211,6 +222,14 @@ mod tests {
     fn a_number_takes_the_language_marks() {
         assert_eq!(Texts::new(ENGLISH, &[]).digits("3,645 1.5"), "3,645 1.5");
         assert_eq!(Texts::new(FRENCH, &[]).digits("3,645 1.5"), "3\u{a0}645 1,5");
+        assert_eq!(Texts::new(GERMAN, &[]).digits("3,645 1.5"), "3.645 1,5");
+        assert_eq!(Texts::new(SPANISH, &[]).digits("3,645 1.5"), "3.645 1,5");
+        assert_eq!(Texts::new(ITALIAN, &[]).digits("3,645 1.5"), "3.645 1,5");
+        assert_eq!(Texts::new(PORTUGUESE, &[]).digits("3,645 1.5"), "3.645 1,5");
+        assert_eq!(Texts::new(POLISH, &[]).digits("3,645 1.5"), "3\u{a0}645 1,5");
+        assert_eq!(Texts::new(TURKISH, &[]).digits("3,645 1.5"), "3.645 1,5");
+        assert_eq!(Texts::new(RUSSIAN, &[]).digits("3,645 1.5"), "3\u{a0}645 1,5");
+        assert_eq!(Texts::new(UKRAINIAN, &[]).digits("3,645 1.5"), "3\u{a0}645 1,5");
     }
 
     #[test]

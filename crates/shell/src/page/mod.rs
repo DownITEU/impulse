@@ -1,9 +1,12 @@
 //! The combined page: the title bar, the installed games, the open game's pane and the status
 //! bar. It makes the slices' entities and lays out their views; over a game the overlay's `Hud` takes its place.
 
+mod disclaimer;
 mod header;
 mod hero;
+mod signed_out;
 mod status;
+mod update_notice;
 
 use std::sync::Arc;
 
@@ -21,6 +24,7 @@ use gpui_kit::{
 };
 
 use crate::{
+    about::AboutView,
     account::Account,
     bindings::{HotkeySettings, Hotkeys, hotkeys_scope},
     cheats::CheatList,
@@ -34,14 +38,19 @@ use crate::{
     resources::{Resources, ResourcesEvent, ResourcesView},
     run::{Runs, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
+    sounds::{Cues, SoundsView},
     sources::Sources,
     systray::TrayIcon,
     trainer::Trainers,
     ui::{theme::*, widgets::grid},
+    update::{UpdatePanel, Updates},
 };
+use disclaimer::Disclaimer;
 use header::header;
 use hero::Hero;
+use signed_out::SignedOut;
 use status::status_bar;
+use update_notice::{Opened, UpdateNotice};
 
 // Below this pane width the side panels drop under the cheat list.
 const WIDE_PANE: f32 = 900.;
@@ -70,6 +79,11 @@ pub struct Page {
     resources: Entity<Resources>,
     cheat_list: Entity<CheatList>,
     hero: Entity<Hero>,
+    disclaimer: Entity<Disclaimer>,
+    signed_out: Entity<SignedOut>,
+    updates: Entity<Updates>,
+    update_notice: Entity<UpdateNotice>,
+    _cues: Entity<Cues>,
     _sources: Entity<Sources>,
 }
 
@@ -85,12 +99,16 @@ impl Page {
         let sources = cx.new(|cx| Sources::new(&registry, cx));
         let settings = cx.new(|cx| Settings::new(&paths, registry.clone(), &sources, cx));
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
+        let disclaimer = cx.new(|cx| Disclaimer::new(settings.clone(), registry.clone(), window, cx));
+        cx.observe(&disclaimer, |_, _, cx| cx.notify()).detach();
         let folders = cx.new(|cx| Folders::new(registry.clone(), cx));
-        let account = cx.new(|cx| Account::new(registry.clone(), cx));
-        cx.observe(&account, |_, _, cx| cx.notify()).detach();
         let library = cx.new(|cx| Library::new(registry.clone(), &paths, settings.clone(), cx));
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
-        let trainers = cx.new(|cx| Trainers::new(registry.clone(), &paths, library.clone(), cx));
+        let account = cx.new(|cx| Account::new(registry.clone(), &library, cx));
+        cx.observe(&account, |_, _, cx| cx.notify()).detach();
+        let signed_out = cx.new(|cx| SignedOut::new(account.clone(), disclaimer.clone(), registry.clone(), window, cx));
+        cx.observe(&signed_out, |_, _, cx| cx.notify()).detach();
+        let trainers = cx.new(|cx| Trainers::new(registry.clone(), &paths, library.clone(), &account, cx));
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         let runs = cx.new(|cx| Runs::new(library.clone(), trainers.clone(), cx));
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
@@ -141,11 +159,19 @@ impl Page {
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         let cheat_list = cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), window, cx));
         cx.observe(&cheat_list, |_, _, cx| cx.notify()).detach();
+        let cues = cx.new(|cx| Cues::new(&runs, &trainers, &settings, cx));
+        let updates = cx.new(|cx| Updates::new(settings.clone(), runs.clone(), &paths, cx));
+        cx.observe(&updates, |_, _, cx| cx.notify()).detach();
+        let update_notice = cx.new(|cx| UpdateNotice::new(updates.clone(), disclaimer.clone(), signed_out.clone(), window, cx));
+        cx.observe(&update_notice, |_, _, cx| cx.notify()).detach();
+        let update_panel = cx.new(|cx| UpdatePanel::new(updates.clone(), settings.clone(), cx));
         let tabs = Tabs {
-            overlay: cx.new(|cx| OverlaySettings::new(layer.clone(), hotkeys.clone(), trainers.clone(), cx)).into(),
+            overlay: cx.new(|cx| OverlaySettings::new(layer.clone(), hotkeys.clone(), trainers.clone(), settings.clone(), cx)).into(),
             hotkeys: cx.new(|cx| HotkeySettings::new(hotkeys.clone(), cx)).into(),
+            sounds: cx.new(|cx| SoundsView::new(settings.clone(), cues.clone(), cx)).into(),
             resources: cx.new(|cx| ResourcesView::new(resources.clone(), cx)).into(),
             plugins: cx.new(|cx| PluginsView::new(plugins.clone(), window, cx)).into(),
+            about: cx.new(|_| AboutView::new(update_panel.into())).into(),
         };
         let settings_view = cx.new(|cx| SettingsView::new(settings.clone(), folders, tabs, window, cx));
         cx.observe(&settings_view, |_, _, cx| cx.notify()).detach();
@@ -156,6 +182,8 @@ impl Page {
             cx.observe(&view, |_, _, cx| cx.notify()).detach();
             view
         });
+        // A dialog over Settings would leave it mounted beneath.
+        cx.subscribe(&update_notice, |page, _, _: &Opened, cx| page.settings_view.update(cx, |view, cx| view.close(cx))).detach();
         cx.subscribe(&settings_view, move |page, _, _: &Looked, cx| {
             page.resources.update(cx, |resources, cx| resources.measure(cx));
             plugins.update(cx, |plugins, cx| plugins.refresh(cx));
@@ -210,6 +238,11 @@ impl Page {
             resources,
             cheat_list,
             hero,
+            disclaimer,
+            signed_out,
+            updates,
+            update_notice,
+            _cues: cues,
             _sources: sources,
         }
     }
@@ -280,14 +313,19 @@ impl Page {
 impl Render for Page {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.layer.read(cx).is_over() {
-            return self.hud.clone().into_any_element();
+            // Entering the overlay first must not skip the disclaimer.
+            return if self.disclaimer.read(cx).is_open(cx) {
+                div().relative().size_full().child(self.hud.clone()).child(self.disclaimer.clone()).into_any_element()
+            } else {
+                self.hud.clone().into_any_element()
+            };
         }
         v_flex()
             .relative()
             .size_full()
             .bg(rgb(BG))
             .child(grid(32., line(0.025)))
-            .child(header(self.library.read(cx), self.account.read(cx), &self.settings_view, self.remote_view.as_ref(), window, cx))
+            .child(header(self.account.read(cx), &self.settings_view, self.remote_view.as_ref(), window, cx))
             .child(
                 h_flex()
                     .flex_1()
@@ -299,11 +337,22 @@ impl Render for Page {
                         body.child(div().occlude().absolute().top_0().left_0().size_full().child(self.log.clone()))
                     }),
             )
-            .child(status_bar(&self.log, self.runs.read(cx), self.library.read(cx), self.trainers.read(cx), self.hotkeys.read(cx), cx))
+            .child(status_bar(
+                &self.log,
+                &self.updates,
+                self.runs.read(cx),
+                self.library.read(cx),
+                self.trainers.read(cx),
+                self.hotkeys.read(cx),
+                cx,
+            ))
             .when(self.settings_view.read(cx).is_open(), |page| page.child(self.settings_view.clone()))
             .children(self.remote_view.clone().filter(|view| view.read(cx).is_open()))
             .children(self.cheat_list.read(cx).editor().cloned())
             .when(self.picker.read(cx).is_open(), |page| page.child(self.picker.clone()))
+            .when(self.disclaimer.read(cx).is_open(cx), |page| page.child(self.disclaimer.clone()))
+            .when(self.signed_out.read(cx).is_open(cx), |page| page.child(self.signed_out.clone()))
+            .when(self.update_notice.read(cx).is_open(cx), |page| page.child(self.update_notice.clone()))
             .into_any_element()
     }
 }

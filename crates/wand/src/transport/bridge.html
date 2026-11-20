@@ -5,7 +5,8 @@ const post = (path, body) => fetch('http://impulse.localhost' + path, { method: 
 window.impulse = async ({ id, method, url, headers, body }) => {
   let reply;
   try {
-    const res = await fetch(url, { method, headers, body });
+    // Bounds the body too: a reply that never comes would leave its caller waiting.
+    const res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(120000) });
     reply = { id, status: res.status, body: await res.text() };
   } catch (e) {
     reply = { id, error: String(e) };

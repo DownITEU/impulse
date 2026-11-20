@@ -1,17 +1,19 @@
 //! Design tokens, the single source for colors and fonts.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Once};
 
 use gpui_kit::{
     App, Global, Rgba,
     component::{Theme, ThemeMode},
     px, rgb,
 };
-use i18n::Key;
+use i18n::{Key, Language};
 
 use super::key;
 
-pub const UI: &str = "Chakra Petch";
+const UI: &str = "Chakra Petch";
+/// The UI font of Cyrillic languages: Chakra Petch has none, and Exo 2 is the closest in metrics.
+const UI_CYRILLIC: &str = "Exo 2";
 pub const MONO: &str = "JetBrains Mono";
 
 pub const BG: u32 = 0x0A0B0A;
@@ -51,15 +53,49 @@ pub const ACCENTS: [(&str, u32, Key); 4] = [
     ("WHITE", 0xF2F2F2, key::ACCENT_WHITE),
 ];
 
-/// The look the user chose, for every widget to read; set by `Settings`.
+macro_rules! font {
+    ($file:literal) => {
+        Cow::Borrowed(include_bytes!(concat!("../../assets/fonts/", $file, ".ttf")).as_slice())
+    };
+}
+
+/// The look the user chose and their language's font, for every widget to read; set by `Settings`.
 pub struct Look {
     pub accent: u32,
+    ui: &'static str,
 }
 
 impl Global for Look {}
 
 pub fn accent(cx: &App) -> u32 {
     cx.global::<Look>().accent
+}
+
+/// The family text is drawn in.
+pub fn ui_font(cx: &App) -> &'static str {
+    cx.global::<Look>().ui
+}
+
+fn ui_family(language: Language) -> &'static str {
+    if language.is_cyrillic() { UI_CYRILLIC } else { UI }
+}
+
+/// Sets the look; false when it already was. Exo 2 joins the font system when a language first needs it.
+pub fn set_look(cx: &mut App, accent: u32, language: Language) -> bool {
+    let ui = ui_family(language);
+    if cx.try_global::<Look>().is_some_and(|look| look.accent == accent && look.ui == ui) {
+        return false;
+    }
+    if ui == UI_CYRILLIC {
+        static LOADED: Once = Once::new();
+        LOADED.call_once(|| {
+            let fonts = vec![font!("Exo2-Regular"), font!("Exo2-Medium"), font!("Exo2-SemiBold"), font!("Exo2-Bold")];
+            cx.text_system().add_fonts(fonts).expect("bundled fonts load");
+        });
+    }
+    Theme::global_mut(cx).font_family = ui.into();
+    cx.set_global(Look { accent, ui });
+    true
 }
 
 pub fn alpha(hex: u32, a: f32) -> Rgba {
@@ -69,12 +105,6 @@ pub fn alpha(hex: u32, a: f32) -> Rgba {
 /// Hairlines: the text color at a low alpha.
 pub fn line(a: f32) -> Rgba {
     alpha(TEXT, a)
-}
-
-macro_rules! font {
-    ($file:literal) => {
-        Cow::Borrowed(include_bytes!(concat!("../../assets/fonts/", $file, ".ttf")).as_slice())
-    };
 }
 
 pub fn init(cx: &mut App) {
@@ -105,4 +135,18 @@ pub fn init(cx: &mut App) {
     theme.scrollbar = alpha(BG, 0.).into();
     theme.scrollbar_thumb = rgb(SCROLL_THUMB).into();
     theme.scrollbar_thumb_hover = rgb(GHOST).into();
+}
+
+#[cfg(test)]
+mod tests {
+    use i18n::{ENGLISH, RUSSIAN, UKRAINIAN};
+
+    use super::*;
+
+    #[test]
+    fn a_cyrillic_language_gets_the_font_that_has_its_letters() {
+        assert_eq!(ui_family(ENGLISH), UI);
+        assert_eq!(ui_family(RUSSIAN), UI_CYRILLIC);
+        assert_eq!(ui_family(UKRAINIAN), UI_CYRILLIC);
+    }
 }

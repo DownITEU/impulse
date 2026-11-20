@@ -30,7 +30,7 @@ pub enum LibraryEvent {
     Opened,
     /// A game's install changed, and with it maybe its trainer.
     Switched,
-    /// The user linked a game to a title for its maps.
+    /// The user linked a game to a title for its maps, or took the link away.
     Linked,
 }
 
@@ -132,6 +132,14 @@ impl Library {
         self.links.set(id, title);
         cx.emit(LibraryEvent::Linked);
         cx.notify();
+    }
+
+    /// The user takes the link away: the game's maps are matched by store id again.
+    pub fn unlink(&mut self, id: &GameId, cx: &mut Context<Self>) {
+        if self.links.clear(id) {
+            cx.emit(LibraryEvent::Linked);
+            cx.notify();
+        }
     }
 
     /// Makes `exe` the source of a listed game.

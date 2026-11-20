@@ -5,6 +5,7 @@ mod vault;
 use std::{
     fmt,
     path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -21,11 +22,14 @@ const CLIENT_ID: &str = "overlay";
 // Refresh with under a day left, so a running app does not hit expiry mid-use.
 const REFRESH_MARGIN: u64 = 86_400;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Session {
     access_token: String,
     refresh_token: String,
     expires_at: u64,
+    // The API refused the access token before its expiry: the next connect refreshes it.
+    #[serde(skip)]
+    rejected: AtomicBool,
 }
 
 impl fmt::Debug for Session {
@@ -34,6 +38,7 @@ impl fmt::Debug for Session {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum Source {
     Restored,
     Refreshed,
@@ -54,18 +59,18 @@ struct Token {
 
 impl From<Token> for Session {
     fn from(t: Token) -> Self {
-        Self { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: now() + t.expires_in }
+        Self { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: now() + t.expires_in, ..Self::default() }
     }
 }
 
-/// Stored session, refreshed when close to expiry; a new one from Wand only when there is none or it was revoked.
-pub async fn connect(t: &Transport, vault: PathBuf) -> Result<(Session, Source)> {
+/// Stored session, refreshed when close to expiry or `refresh`; a new one from Wand only when there is none or it was revoked.
+pub async fn connect(t: &Transport, vault: PathBuf, refresh: bool) -> Result<(Session, Source)> {
     let stored = {
         let vault = vault.clone();
         unblock(move || vault::load(&vault)).await
     };
     let (session, source) = match stored {
-        Some(s) if s.expires_at > now() + REFRESH_MARGIN => return Ok((s, Source::Restored)),
+        Some(s) if !refresh && s.expires_at > now() + REFRESH_MARGIN => return Ok((s, Source::Restored)),
         Some(s) => match s.refresh(t).await {
             Ok(s) => (s, Source::Refreshed),
             // Network errors must not burn a new Wand handoff; only a rejected refresh token does.
@@ -112,7 +117,16 @@ impl Session {
 
     /// Authorized GET of a JSON resource.
     pub async fn get<T: DeserializeOwned>(&self, t: &Transport, path: &str) -> Result<T> {
-        api::call(t, "GET", path, Some(&self.access_token), None, 200).await
+        let got = api::call(t, "GET", path, Some(&self.access_token), None, 200).await;
+        if got.as_ref().is_err_and(api::is_unauthorized) {
+            self.rejected.store(true, Ordering::Relaxed);
+        }
+        got
+    }
+
+    /// A request was refused with this access token.
+    pub fn is_rejected(&self) -> bool {
+        self.rejected.load(Ordering::Relaxed)
     }
 }
 
@@ -126,7 +140,8 @@ mod tests {
 
     #[test]
     fn debug_is_redacted() {
-        let session = Session { access_token: "secret-access".to_owned(), refresh_token: "secret-refresh".to_owned(), expires_at: 0 };
+        let session =
+            Session { access_token: "secret-access".to_owned(), refresh_token: "secret-refresh".to_owned(), ..Session::default() };
         assert_eq!(format!("{session:?}"), "Session(<redacted>)");
     }
 }

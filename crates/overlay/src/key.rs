@@ -19,6 +19,10 @@ impl Key {
     pub const DEFAULT: Self = Self { modifiers: MOD_CONTROL | MOD_SHIFT, vk: b'O' };
     /// Ctrl+Shift+M.
     pub const MINIMAP: Self = Self { modifiers: MOD_CONTROL | MOD_SHIFT, vk: b'M' };
+    /// Ctrl+Shift+Plus (the main block's key).
+    pub const ZOOM_IN: Self = Self { modifiers: MOD_CONTROL | MOD_SHIFT, vk: 0xBB };
+    /// Ctrl+Shift+Minus.
+    pub const ZOOM_OUT: Self = Self { modifiers: MOD_CONTROL | MOD_SHIFT, vk: 0xBD };
 
     /// For a thread message; never 0, which is no key.
     pub(crate) fn pack(self) -> usize {

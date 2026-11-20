@@ -43,7 +43,7 @@ pub use link::TitlePicker;
 pub use live::LiveMap;
 pub use maps::Maps;
 use maps::MapsEvent;
-use panel::linkable;
+use panel::{linkable, linked, unlink};
 pub use panel::{map_panel, paneled};
 use sidebar::Sidebar;
 use stage::Stage;
@@ -192,6 +192,11 @@ impl MapView {
                 bar.child(button(&t(cx, key::MAP_LINK)).id("map-toolbar-link").on_click(cx.listener(|view, _, window, cx| {
                     let Some(game) = view.library.read(cx).opened().cloned() else { return };
                     view.linker.update(cx, |linker, cx| linker.open(&game, window, cx));
+                })))
+            })
+            .when(!self.docked && linked(&self.library, cx), |bar| {
+                bar.child(button(&t(cx, key::MAP_UNLINK)).id("map-toolbar-unlink").on_click(cx.listener(|view, _, _, cx| {
+                    unlink(&view.library, cx);
                 })))
             })
             .when(!self.docked, |bar| {

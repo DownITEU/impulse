@@ -1,6 +1,7 @@
 //! The app's messages, one const per message of `locales/en.ftl`, a file per UI area and its `##` sections; `checks` holds the two
 //! together.
 
+mod about;
 mod cheats;
 mod log_view;
 mod map;
@@ -9,9 +10,10 @@ mod page;
 mod remote;
 mod run;
 mod settings;
+mod update;
 
 use i18n::Key;
-pub use {cheats::*, log_view::*, map::*, overlay::*, page::*, remote::*, run::*, settings::*};
+pub use {about::*, cheats::*, log_view::*, map::*, overlay::*, page::*, remote::*, run::*, settings::*, update::*};
 
 pub const OFF: Key = Key("off");
 pub const ON: Key = Key("on");

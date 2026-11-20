@@ -9,7 +9,6 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use futures::channel::oneshot;
-use model::{Failure, FailureKind};
 use serde::{Deserialize, Serialize};
 use tao::{
     event::{Event, StartCause},
@@ -20,7 +19,7 @@ use tao::{
 use webview2_com::Error::WindowsError;
 use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, http::Response as HttpResponse};
 
-use super::{Cmd, Request, Response};
+use super::{BRIDGE, Cmd, Request, Response, offline};
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Response>>>>>;
 // Fields drop in order: the WebView closes before its window.
@@ -64,19 +63,29 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
         match event {
             Event::UserEvent(Cmd::Ready) => ready = true,
             Event::UserEvent(Cmd::Fetch(request, tx)) => {
-                last = Instant::now();
+                let new = bridge.is_none();
                 let built = bridge.take().map_or_else(|| build_retrying(&data_dir, target, proxy.clone(), pending.clone()), Ok);
+                // After the build, as its retries can outlast the idle time; a page still loading keeps its deadline.
+                if new || ready {
+                    last = Instant::now();
+                }
                 match built {
                     Ok(built) => {
                         bridge = Some(built);
                         queue.push((request, tx));
                     }
                     Err(e) => {
-                        let _ = tx.send(Err(anyhow!("{e:#}")));
+                        let _ = tx.send(Err(offline(&format!("{e:#}"))));
                     }
                 }
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
+                // A page that never loaded would hold its queue forever.
+                if !ready {
+                    for (_, tx) in queue.drain(..) {
+                        let _ = tx.send(Err(offline("the bridge page did not load")));
+                    }
+                }
                 if queue.is_empty() && pending.lock().unwrap().is_empty() {
                     (bridge, ready) = (None, false);
                     log::debug!("WebView2 closed while idle");
@@ -99,7 +108,7 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
             let sent = serde_json::to_string(&Call { id: next_id, request: &request })
                 .is_ok_and(|json| webview.evaluate_script(&format!("impulse({json})")).is_ok());
             if !sent && let Some(tx) = pending.lock().unwrap().remove(&next_id) {
-                let _ = tx.send(Err(anyhow!("webview dispatch failed")));
+                let _ = tx.send(Err(offline("webview dispatch failed")));
             }
         }
     });
@@ -135,6 +144,8 @@ fn build_retrying(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: E
 
 // COM: WebViewBuilder::build runs CoInitializeEx(STA) on this thread, and tao skips OLE with drag and drop off.
 fn build(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopProxy<Cmd>, pending: Pending) -> Result<Bridge> {
+    // Written for each build: a page removed since the last one would never load.
+    std::fs::write(data_dir.join("bridge.html"), BRIDGE)?;
     let window = WindowBuilder::new().with_visible(false).with_drag_and_drop(false).build(target)?;
     let mut context = WebContext::new(Some(data_dir.join(super::PROFILE)));
     let url = url::Url::from_file_path(data_dir.join("bridge.html")).map_err(|()| anyhow!("data dir is not an absolute path"))?;
@@ -161,7 +172,7 @@ fn reply(pending: &Pending, raw: &[u8]) {
     };
     let result = match reply.status {
         Some(status) => Ok(Response { status, body: reply.body.unwrap_or_default() }),
-        None => Err(anyhow!("fetch failed: {}", reply.error.unwrap_or_default()).context(Failure::new(FailureKind::Offline))),
+        None => Err(offline(&format!("fetch failed: {}", reply.error.unwrap_or_default()))),
     };
     if let Some(tx) = pending.lock().unwrap().remove(&reply.id) {
         let _ = tx.send(result);

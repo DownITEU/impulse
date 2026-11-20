@@ -9,6 +9,7 @@ pub const MAP_FAILED_BODY: Key = Key("map-failed-body");
 pub const MAP_TITLE: Key = Key("map-title");
 pub const MAP_NONE: Key = Key("map-none");
 pub const MAP_LINK: Key = Key("map-link");
+pub const MAP_UNLINK: Key = Key("map-unlink");
 pub const MAP_LINK_TITLE: Key = Key("map-link-title");
 pub const MAP_LINK_CAPTION: Key = Key("map-link-caption");
 pub const MAP_LINK_EMPTY: Key = Key("map-link-empty");

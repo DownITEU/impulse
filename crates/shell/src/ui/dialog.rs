@@ -1,11 +1,11 @@
 //! A titled box over the dimmed page: SETTINGS, REMOTE PANEL and the collection editor.
 
 use gpui_kit::{
-    App, Context, FocusHandle, FontWeight, IntoElement, KeyBinding, SharedString, Window, actions,
+    App, Context, Div, FocusHandle, FontWeight, IntoElement, KeyBinding, SharedString, Stateful, Window, actions,
     component::{FocusTrapElement, h_flex, v_flex},
     div,
     prelude::*,
-    px, rgb,
+    px, relative, rgb,
 };
 
 use super::{
@@ -22,13 +22,48 @@ pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", CloseDialog, Some(CONTEXT))]);
 }
 
+type Close<V> = fn(&mut V, &mut Window, &mut Context<V>);
+
 /// `close` runs on a press beside the box, on its × and on Escape while `focus` is in it; Tab stays in the box.
 pub fn dialog<V: 'static>(
     id: &'static str,
     title: impl Into<SharedString>,
     width: f32,
     focus: &FocusHandle,
-    close: fn(&mut V, &mut Window, &mut Context<V>),
+    close: Close<V>,
+    body: impl IntoElement,
+    cx: &Context<V>,
+) -> impl IntoElement {
+    frame(id, title, width, focus, Some(close), body, cx)
+}
+
+/// A `dialog` that only its body's buttons end: no ×, no press beside the box, Escape does nothing.
+pub fn pledge<V: 'static>(
+    id: &'static str,
+    title: impl Into<SharedString>,
+    width: f32,
+    focus: &FocusHandle,
+    body: impl IntoElement,
+    cx: &Context<V>,
+) -> impl IntoElement {
+    frame(id, title, width, focus, None, body, cx)
+}
+
+/// A dialog's body: `text` at reading size over `buttons` pressed to the right.
+pub fn message(text: impl Into<SharedString>, buttons: impl IntoIterator<Item = Stateful<Div>>) -> Div {
+    v_flex()
+        .gap(px(20.))
+        .p(px(20.))
+        .child(div().text_size(px(15.)).line_height(relative(1.5)).text_color(rgb(TEXT)).child(text.into()))
+        .child(h_flex().justify_end().gap(px(10.)).children(buttons))
+}
+
+fn frame<V: 'static>(
+    id: &'static str,
+    title: impl Into<SharedString>,
+    width: f32,
+    focus: &FocusHandle,
+    close: Option<Close<V>>,
     body: impl IntoElement,
     cx: &Context<V>,
 ) -> impl IntoElement {
@@ -45,13 +80,18 @@ pub fn dialog<V: 'static>(
         .pt(px(96.))
         .pb(px(40.))
         .bg(alpha(SUNKEN, 0.78))
-        .on_click(cx.listener(move |view, _, window, cx| close(view, window, cx)))
+        .when_some(close, |backdrop, close| backdrop.on_click(cx.listener(move |view, _, window, cx| close(view, window, cx))))
         .child(
             v_flex()
                 .id(id)
                 .key_context(CONTEXT)
                 .track_focus(focus)
-                .on_action(cx.listener(move |view, _: &CloseDialog, window, cx| close(view, window, cx)))
+                // Handled even without a `close`, so Escape stops here.
+                .on_action(cx.listener(move |view, _: &CloseDialog, window, cx| {
+                    if let Some(close) = close {
+                        close(view, window, cx);
+                    }
+                }))
                 .w(px(width))
                 // A long body scrolls inside a short window.
                 .max_h_full()
@@ -69,10 +109,12 @@ pub fn dialog<V: 'static>(
                         .border_b_1()
                         .border_color(line(0.09))
                         .child(tracked(&title.into(), 13., 0.16).font_weight(FontWeight::BOLD))
-                        .child(
-                            icon_button((id, 1usize), Icon::Close, 32., 12.)
-                                .on_click(cx.listener(move |view, _, window, cx| close(view, window, cx))),
-                        ),
+                        .when_some(close, |bar, close| {
+                            bar.child(
+                                icon_button((id, 1usize), Icon::Close, 32., 12.)
+                                    .on_click(cx.listener(move |view, _, window, cx| close(view, window, cx))),
+                            )
+                        }),
                 )
                 .child(body)
                 .focus_trap((id, 2usize), focus),

@@ -1,28 +1,23 @@
 //! The custom title bar: gaps drag the window, controls occlude the drag area.
 
-use gpui_kit::{
-    App, Div, Entity, FontWeight, IntoElement, SharedString, Stateful, Window, WindowControlArea, component::h_flex, div, prelude::*, px,
-    rgb,
-};
-use i18n::Arg;
-
 use crate::{
-    Load,
     account::Account,
-    library::Library,
     remote::RemoteView,
     settings::SettingsView,
     ui::{
         assets::Icon,
         key,
-        text::{digits, t, tf},
+        text::t,
         theme::*,
-        widgets::{icon, icon_button, mono, square, tip, tracked},
+        widgets::{icon, icon_button, square, tip, tracked},
     },
+};
+use gpui_kit::{
+    App, Div, Entity, FontWeight, IntoElement, SharedString, Stateful, Window, WindowControlArea, component::h_flex, div, prelude::*, px,
+    rgb,
 };
 
 pub fn header(
-    library: &Library,
     account: &Account,
     settings: &Entity<SettingsView>,
     remote: Option<&Entity<RemoteView>>,
@@ -31,6 +26,8 @@ pub fn header(
 ) -> impl IntoElement {
     let accent = rgb(accent(cx));
     let maximize = if window.is_maximized() { Icon::WinRestore } else { Icon::WinMax };
+    /* The command search, hidden until it works (restore the `search` child below, `library: &Library` as the
+    first param and the imports `Load`, `Arg`, `digits`, `tf`, `mono`, `Library`):
     let search = match library.list() {
         Load::Ready(library) => {
             let count = library.trainers;
@@ -39,10 +36,12 @@ pub fn header(
         }
         _ => t(cx, key::PAGE_SEARCH_NONE),
     };
-    let name = match (account.user(), account.signed_out()) {
-        (Some(user), _) => user.name.clone().into(),
-        (None, true) => t(cx, key::PAGE_SIGNED_OUT),
-        (None, false) => SharedString::default(),
+    */
+    // A kept name is no session.
+    let name = match (account.signed_out(), account.user()) {
+        (true, _) => t(cx, key::PAGE_SIGNED_OUT),
+        (false, Some(user)) => user.name.clone().into(),
+        (false, None) => SharedString::default(),
     };
     let settings = settings.clone();
     h_flex()
@@ -55,7 +54,7 @@ pub fn header(
         .bg(alpha(BG, 0.94))
         .window_control_area(WindowControlArea::Drag)
         .child(h_flex().gap(px(10.)).child(square(9., accent)).child(tracked("IMPULSE", 16., 0.22).font_weight(FontWeight::BOLD)))
-        .child(
+        /* .child(
             h_flex()
                 .id("search")
                 .occlude()
@@ -82,7 +81,7 @@ pub fn header(
                         .border_color(line(0.16))
                         .text_color(rgb(MUTED)),
                 ),
-        )
+        ) */
         .child(div().flex_1())
         .child(
             h_flex()

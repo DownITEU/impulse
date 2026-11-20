@@ -1,7 +1,8 @@
 use std::{
     collections::{BTreeMap, HashMap},
     env, fmt, fs,
-    path::Path,
+    panic::{self, AssertUnwindSafe},
+    path::{Path, PathBuf},
     process,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -13,7 +14,7 @@ use rusty_leveldb::{DB, Options};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::texts::{SIGNED_OUT, text};
+use crate::texts::{NOT_INSTALLED, SIGNED_OUT, text};
 
 // Chromium layout: `_<origin>\0` + script key; both keys and values carry an encoding byte.
 const KEY: &[u8] = b"_file://\x00\x01infinity:globalStore";
@@ -43,7 +44,11 @@ pub type Custom = HashMap<String, HashMap<String, Slots>>;
 
 /// Reads Wand's access token from a copy of its localStorage leveldb (blocking).
 pub fn read() -> Result<WandToken> {
-    let found = stores()?.iter().filter_map(token).collect();
+    let found: Vec<_> = stores()?.iter().filter_map(token).collect();
+    if found.is_empty() && !profiles().iter().any(|dir| dir.is_dir()) {
+        let missing = Failure::new(FailureKind::SignedOut).saying(text(NOT_INSTALLED));
+        return Err(anyhow!("Wand has no profile on this PC").context(missing));
+    }
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64();
     newest(found, now)
 }
@@ -66,13 +71,19 @@ pub fn customize(cheats: &mut [model::Cheat], custom: &HashMap<String, Slots>) {
     }
 }
 
+/// Where each profile keeps its store.
+fn profiles() -> Vec<PathBuf> {
+    let root = env::var_os("APPDATA").map(PathBuf::from).unwrap_or_default();
+    PROFILES.iter().map(|profile| root.join(profile).join(r"Local Storage\leveldb")).collect()
+}
+
 /// Each profile's store; a profile's error only when none could be read.
 fn stores() -> Result<Vec<Value>> {
-    let root = env::var_os("APPDATA").context("APPDATA is not set")?;
+    env::var_os("APPDATA").context("APPDATA is not set")?;
     let mut found = Vec::new();
     let mut failed = None;
-    for profile in PROFILES {
-        match read_profile(&Path::new(&root).join(profile).join(r"Local Storage\leveldb")) {
+    for dir in profiles() {
+        match read_profile(&dir) {
             Ok(Some(store)) => found.push(store),
             Ok(None) => {}
             Err(e) => failed = Some(e),
@@ -126,8 +137,12 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
 
 fn read_db(dir: &Path) -> Result<Option<Value>> {
     let opt = Options { create_if_missing: false, ..Options::default() };
-    let mut db = DB::open(dir, opt).context("open Wand store copy")?;
-    db.get(KEY).map(|raw| parse(&raw)).transpose()
+    // The decoder can panic on a damaged store; that must not end the app.
+    panic::catch_unwind(AssertUnwindSafe(|| {
+        let mut db = DB::open(dir, opt).context("open Wand store copy")?;
+        db.get(KEY).map(|raw| parse(&raw)).transpose()
+    }))
+    .unwrap_or_else(|_| Err(anyhow!("Wand store is damaged")))
 }
 
 fn parse(raw: &[u8]) -> Result<Value> {

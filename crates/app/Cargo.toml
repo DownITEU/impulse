@@ -25,6 +25,7 @@ plugins.workspace = true
 remote = { workspace = true, optional = true }
 shell.workspace = true
 tray.workspace = true
+updater.workspace = true
 wand.workspace = true
 
 gpui-kit.workspace = true

@@ -53,7 +53,12 @@ mod tests {
     #[test]
     fn round_trip_is_encrypted() {
         let path = std::env::temp_dir().join(format!("impulse-vault-test-{}.bin", std::process::id()));
-        let session = Session { access_token: "secret-access".to_owned(), refresh_token: "secret-refresh".to_owned(), expires_at: 1234 };
+        let session = Session {
+            access_token: "secret-access".to_owned(),
+            refresh_token: "secret-refresh".to_owned(),
+            expires_at: 1234,
+            ..Session::default()
+        };
         save(&path, &session).unwrap();
         let raw = fs::read(&path).unwrap();
         assert!(!raw.windows(6).any(|w| w == b"secret"));

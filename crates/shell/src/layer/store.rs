@@ -1,17 +1,84 @@
-//! `overlay.json`: the overlay's and the minimap's hotkeys.
+//! `overlay.json`: the overlay's and the extra hotkeys' keys.
 
-use overlay::Key;
+use overlay::{EXTRAS, Key};
 use serde::{Deserialize, Serialize};
 
 use client::storage::{Paths, Stored};
+
+/// The hotkeys beside the overlay's own, in `overlay`'s numbering.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Slot {
+    Minimap,
+    ZoomIn,
+    ZoomOut,
+}
+
+impl Slot {
+    pub const ALL: [Slot; EXTRAS] = [Slot::Minimap, Slot::ZoomIn, Slot::ZoomOut];
+
+    pub fn number(self) -> usize {
+        self as usize
+    }
+
+    pub fn default_key(self) -> Key {
+        match self {
+            Slot::Minimap => Key::MINIMAP,
+            Slot::ZoomIn => Key::ZOOM_IN,
+            Slot::ZoomOut => Key::ZOOM_OUT,
+        }
+    }
+}
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 struct Saved {
     /// Virtual keys; missing or unusable means the default.
     hotkey: Option<Vec<u8>>,
-    /// The same; empty means none.
+    /// The same for each extra; empty means none.
     minimap: Option<Vec<u8>>,
+    zoom_in: Option<Vec<u8>>,
+    zoom_out: Option<Vec<u8>>,
+}
+
+impl Saved {
+    fn extra(&self, slot: Slot) -> &Option<Vec<u8>> {
+        match slot {
+            Slot::Minimap => &self.minimap,
+            Slot::ZoomIn => &self.zoom_in,
+            Slot::ZoomOut => &self.zoom_out,
+        }
+    }
+
+    fn extra_mut(&mut self, slot: Slot) -> &mut Option<Vec<u8>> {
+        match slot {
+            Slot::Minimap => &mut self.minimap,
+            Slot::ZoomIn => &mut self.zoom_in,
+            Slot::ZoomOut => &mut self.zoom_out,
+        }
+    }
+
+    fn overlay_key(&self) -> Key {
+        self.hotkey.as_ref().and_then(|vks| Key::from_vks(vks.iter().copied())).unwrap_or(Key::DEFAULT)
+    }
+
+    /// What the user saved for `slot`, when it is a usable key.
+    fn saved_key(&self, slot: Slot) -> Option<Key> {
+        self.extra(slot).as_ref().and_then(|vks| Key::from_vks(vks.iter().copied()))
+    }
+
+    fn key(&self, slot: Slot) -> Option<Key> {
+        match self.extra(slot) {
+            Some(vks) if vks.is_empty() => None,
+            _ => self.saved_key(slot).or_else(|| self.default_key(slot)),
+        }
+    }
+
+    /// A default never takes a key the user already holds: an upgrade must not bind one key twice.
+    fn default_key(&self, slot: Slot) -> Option<Key> {
+        let key = slot.default_key();
+        let held = key == self.overlay_key() || Slot::ALL.into_iter().any(|other| other != slot && self.saved_key(other) == Some(key));
+        (!held).then_some(key)
+    }
 }
 
 pub(super) struct Store {
@@ -24,21 +91,55 @@ impl Store {
     }
 
     pub fn hotkey(&self) -> Key {
-        self.saved.hotkey.as_ref().and_then(|vks| Key::from_vks(vks.iter().copied())).unwrap_or(Key::DEFAULT)
+        self.saved.overlay_key()
     }
 
     pub fn set_hotkey(&mut self, key: Key) {
         self.saved.edit(|saved| saved.hotkey = Some(key.vks().collect()));
     }
 
-    pub fn minimap(&self) -> Option<Key> {
-        match &self.saved.minimap {
-            Some(vks) if vks.is_empty() => None,
-            vks => vks.as_ref().and_then(|vks| Key::from_vks(vks.iter().copied())).or(Some(Key::MINIMAP)),
-        }
+    pub fn key(&self, slot: Slot) -> Option<Key> {
+        self.saved.key(slot)
     }
 
-    pub fn set_minimap(&mut self, key: Option<Key>) {
-        self.saved.edit(|saved| saved.minimap = Some(key.map_or_else(Vec::new, |key| key.vks().collect())));
+    pub fn set_key(&mut self, slot: Slot, key: Option<Key>) {
+        self.saved.edit(|saved| *saved.extra_mut(slot) = Some(key.map_or_else(Vec::new, |key| key.vks().collect())));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn saved(json: &str) -> Saved {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn a_fresh_file_gives_each_slot_its_default() {
+        let saved = saved("{}");
+        assert_eq!(Slot::ALL.map(|slot| saved.key(slot)), Slot::ALL.map(|slot| Some(slot.default_key())));
+    }
+
+    #[test]
+    fn a_slots_number_is_its_place_in_all() {
+        // The watch registers by `number` and answers by place in `ALL`.
+        assert!(Slot::ALL.into_iter().enumerate().all(|(place, slot)| slot.number() == place));
+    }
+
+    #[test]
+    fn an_empty_save_means_no_key() {
+        assert_eq!(saved(r#"{"zoom_in":[]}"#).key(Slot::ZoomIn), None);
+    }
+
+    #[test]
+    fn a_default_gives_way_to_a_key_the_user_already_holds() {
+        // Ctrl, Shift and "=": the zoom-in default, saved earlier as the minimap's key.
+        let held = saved(r#"{"minimap":[162,160,187]}"#);
+        assert_eq!(held.key(Slot::Minimap), Some(Key::ZOOM_IN));
+        assert_eq!(held.key(Slot::ZoomIn), None);
+        assert_eq!(held.key(Slot::ZoomOut), Some(Key::ZOOM_OUT));
+        let overlay = saved(r#"{"hotkey":[162,160,189]}"#);
+        assert_eq!(overlay.key(Slot::ZoomOut), None);
     }
 }

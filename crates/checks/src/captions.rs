@@ -30,12 +30,17 @@ const QUIET: &[&str] = &[
     "panic",
     "var",
     "var_os",
+    "env",
 ];
 /// Calls that show every string they take: an id-shaped literal given to one is a caption.
-const SINKS: &[&str] = &["child", "tracked", "mono", "button", "flash_button", "segment", "tip", "notice", "placeholder", "row", "label"];
+const SINKS: &[&str] =
+    &["child", "tracked", "mono", "button", "flash_button", "segment", "badge", "tip", "notice", "placeholder", "row", "label"];
 /// Names, not words: fonts, key contexts, the saved accent ids, the brand.
 const NAMES: &[&str] = &[
     "Chakra Petch",
+    // The release list's query, joined to a repository address.
+    "/releases?per_page=30",
+    "Exo 2",
     "JetBrains Mono",
     "Dialog",
     "MapView",
@@ -46,7 +51,8 @@ const NAMES: &[&str] = &[
     "WHITE",
     "Impulse",
     "IMPULSE",
-    "IMPULSE 0.1",
+    // The brand before the version in the status bar.
+    "IMPULSE ",
 ];
 
 /// A string literal outside tests and attributes: its line and the call it is an argument of.
@@ -134,7 +140,11 @@ fn caption(literal: &Literal) -> bool {
     let path = text.starts_with('M') && text[1..].starts_with(|c: char| c.is_ascii_digit());
     let call = literal.call.as_deref().unwrap_or("");
     let id = words.bytes().all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' | b':' | b'/' | b'-'));
+    // A web or mail address, or a percent-encoded one, written without a space.
+    let escape = text.as_bytes().windows(3).any(|at| at[0] == b'%' && at[1].is_ascii_hexdigit() && at[2].is_ascii_hexdigit());
+    let address = !text.contains(char::is_whitespace) && (text.contains("://") || (text.contains('@') && text.contains('.')) || escape);
     words.chars().any(char::is_alphabetic)
+        && !address
         && !text.starts_with('<')
         && !text.starts_with('%')
         && !path
@@ -158,8 +168,8 @@ fn shell_has_no_literal_caption() {
 #[test]
 fn captions_are_told_from_names() {
     let source = r##"
-        fn f() { div().id("row-1").child("SAVE").child(format!("{n:02} MODS")).placeholder("name").font_family("x"); }
-        fn g() { tracing::warn!("no file: {e}"); x.context("reading the file")?; let a = '"'; let s = r#"<svg/>"#; }
+        fn f() { div().id("row-1").child("SAVE").child(format!("{n:02} MODS")).placeholder("name").font_family("x").child("100%OFF"); badge("alpha", 1); }
+        fn g() { tracing::warn!("no file: {e}"); x.context("reading the file")?; let a = '"'; let s = r#"<svg/>"#; open("https://a.b/C", "me@a.dev", env!("CARGO_PKG_VERSION")); }
         fn h<'a>(x: &'a str) { if open { "OPEN" } else { "shut" }; vec!["ROW"]; b"BYTES \" B"; format!("{}\n{}"); "M1 2z"; }
         // child("COMMENT")
         /* child("BLOCK") */
@@ -171,7 +181,7 @@ fn captions_are_told_from_names() {
         struct T { #[cfg(test)] a: u8, b: u8 } fn q() { x.child("MORE"); }
     "##;
     let shown: Vec<_> = literals(source).into_iter().filter(caption).map(|literal| (literal.line, literal.text)).collect();
-    let expected = [(2, "SAVE"), (2, "{n:02} MODS"), (2, "name"), (4, "OPEN"), (4, "ROW"), (9, "LAST")];
+    let expected = [(2, "SAVE"), (2, "{n:02} MODS"), (2, "name"), (2, "100%OFF"), (2, "alpha"), (4, "OPEN"), (4, "ROW"), (9, "LAST")];
     let expected = expected.into_iter().chain([(10, "on"), (10, "off"), (11, "REAL"), (12, "MORE")]);
     assert_eq!(shown, expected.map(|(line, text)| (line, text.to_owned())).collect::<Vec<_>>());
 }

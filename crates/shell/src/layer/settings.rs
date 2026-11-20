@@ -1,40 +1,80 @@
-//! The Settings `OVERLAY` tab and the overlay's and minimap's hotkeys' rebinding.
+//! The Settings `OVERLAY` tab and the overlay's and the extra hotkeys' rebinding.
 
 use gpui_kit::{App, Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, prelude::*, px, rgb};
 use hotkeys::Outcome;
+use i18n::Key as Message;
 use model::Chord;
 use overlay::Key;
 
-use super::Layer;
+use super::{Layer, Slot};
 use crate::{
     bindings::{Hotkeys, Target},
-    settings::row,
+    settings::{Settings, row},
     trainer::Trainers,
     ui::{
         key,
         text::t,
         theme::*,
-        widgets::{choice, keycap, segmented},
+        widgets::{choice, keycap, segmented, switch},
     },
 };
 
 const OVERLAY: Target = Target::Key { name: "overlay", required: true };
-const MINIMAP: Target = Target::Key { name: "minimap", required: false };
+
+/// Each extra hotkey's capture target, cap id, title and hint.
+const EXTRA_ROWS: [(Slot, Target, &str, Message, Message); overlay::EXTRAS] = [
+    (
+        Slot::Minimap,
+        Target::Key { name: "minimap", required: false },
+        "minimap-hotkey",
+        key::OVERLAY_MINIMAP_HOTKEY,
+        key::OVERLAY_MINIMAP_HOTKEY_HINT,
+    ),
+    (
+        Slot::ZoomIn,
+        Target::Key { name: "zoom-in", required: false },
+        "zoom-in-hotkey",
+        key::OVERLAY_ZOOM_IN_HOTKEY,
+        key::OVERLAY_ZOOM_IN_HOTKEY_HINT,
+    ),
+    (
+        Slot::ZoomOut,
+        Target::Key { name: "zoom-out", required: false },
+        "zoom-out-hotkey",
+        key::OVERLAY_ZOOM_OUT_HOTKEY,
+        key::OVERLAY_ZOOM_OUT_HOTKEY_HINT,
+    ),
+];
 
 pub struct OverlaySettings {
     layer: Entity<Layer>,
     hotkeys: Entity<Hotkeys>,
     trainers: Entity<Trainers>,
+    settings: Entity<Settings>,
 }
 
 impl OverlaySettings {
-    pub fn new(layer: Entity<Layer>, hotkeys: Entity<Hotkeys>, trainers: Entity<Trainers>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        layer: Entity<Layer>,
+        hotkeys: Entity<Hotkeys>,
+        trainers: Entity<Trainers>,
+        settings: Entity<Settings>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         cx.observe(&layer, |_, _, cx| cx.notify()).detach();
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
-        Self { layer, hotkeys, trainers }
+        cx.observe(&settings, |_, _, cx| cx.notify()).detach();
+        Self { layer, hotkeys, trainers, settings }
     }
 
-    fn hotkey_cap(&self, id: &'static str, target: Target, key: Option<Key>, cx: &mut Context<Self>) -> impl IntoElement {
+    fn hotkey_cap(
+        &self,
+        id: &'static str,
+        target: Target,
+        slot: Option<Slot>,
+        key: Option<Key>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let held = self.hotkeys.read(cx).held(&target);
         let text: SharedString = match held {
             Some(held) => held.map_or_else(|| t(cx, key::HOTKEYS_PRESS_KEYS), |chord| chord.to_string().into()),
@@ -54,18 +94,17 @@ impl OverlaySettings {
                     .text_color(accent)
                     .on_mouse_down_out(cx.listener(|view, _, _, cx| view.hotkeys.update(cx, |hotkeys, cx| hotkeys.cancel(cx))))
             })
-            .on_click(cx.listener(move |view, _, window, cx| view.bind(target.clone(), window, cx)))
+            .on_click(cx.listener(move |view, _, window, cx| view.bind(target.clone(), slot, window, cx)))
     }
 
-    /// Binds the overlay's or the minimap's hotkey by what the user presses.
-    fn bind(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
-        let overlay = target == OVERLAY;
+    /// Binds the overlay's hotkey (`slot` none) or an extra one by what the user presses.
+    fn bind(&mut self, target: Target, slot: Option<Slot>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(outcome) = self.hotkeys.update(cx, |hotkeys, cx| hotkeys.capture(target, window, cx)) else { return };
         cx.spawn(async move |view, cx| {
             let Ok(outcome) = outcome.await else { return };
-            view.update(cx, |view, cx| match overlay {
-                true => view.rebind_overlay(outcome, cx),
-                false => view.rebind_minimap(outcome, cx),
+            view.update(cx, |view, cx| match slot {
+                None => view.rebind_overlay(outcome, cx),
+                Some(slot) => view.rebind_extra(slot, outcome, cx),
             })
             .ok();
         })
@@ -79,27 +118,34 @@ impl OverlaySettings {
             Outcome::Reset => Some(Key::DEFAULT),
             _ => None,
         };
-        let minimap = self.layer.read(cx).minimap_hotkey();
-        if let Some(key) = key.filter(|&key| Some(key) != minimap && !self.cheats_hold(key, cx))
+        if let Some(key) = key.filter(|&key| !self.extras_hold(key, None, cx) && !self.cheats_hold(key, cx))
             && let Err(e) = self.layer.update(cx, |layer, cx| layer.set_hotkey(key, cx))
         {
             log::warn!("overlay hotkey not changed: {e}");
         }
     }
 
-    fn rebind_minimap(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
+    fn rebind_extra(&mut self, slot: Slot, outcome: Outcome, cx: &mut Context<Self>) {
         let key = match outcome {
             Outcome::Bound(chord) => match Key::from_vks(chord.vks()) {
                 Some(key) => Some(key),
                 None => return,
             },
-            Outcome::Reset => Some(Key::MINIMAP),
+            Outcome::Reset => Some(slot.default_key()),
             Outcome::Unbound => None,
             Outcome::Cancelled => return,
         };
-        if !key.is_some_and(|key| key == self.layer.read(cx).hotkey() || self.cheats_hold(key, cx)) {
-            self.layer.update(cx, |layer, cx| layer.set_minimap_hotkey(key, cx));
+        let taken = key
+            .is_some_and(|key| key == self.layer.read(cx).hotkey() || self.extras_hold(key, Some(slot), cx) || self.cheats_hold(key, cx));
+        if !taken {
+            self.layer.update(cx, |layer, cx| layer.set_key(slot, key, cx));
         }
+    }
+
+    /// Whether an extra hotkey other than `except` is `key`.
+    fn extras_hold(&self, key: Key, except: Option<Slot>, cx: &App) -> bool {
+        let layer = self.layer.read(cx);
+        Slot::ALL.into_iter().any(|slot| Some(slot) != except && layer.key(slot) == Some(key))
     }
 
     fn cheats_hold(&self, key: Key, cx: &App) -> bool {
@@ -110,7 +156,17 @@ impl OverlaySettings {
 impl Render for OverlaySettings {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let layer = self.layer.read(cx);
-        let (overlay, minimap) = (Some(layer.hotkey()), layer.minimap_hotkey());
+        let overlay = Some(layer.hotkey());
+        let extras = EXTRA_ROWS.map(|(slot, ..)| layer.key(slot));
+        let extra_rows: Vec<_> = EXTRA_ROWS
+            .into_iter()
+            .zip(extras)
+            .map(|((slot, target, id, title, hint), key)| {
+                row(t(cx, title), t(cx, hint), 64.).child(self.hotkey_cap(id, target, Some(slot), key, cx))
+            })
+            .collect();
+        // On until DON'T SHOW AGAIN was pressed in the question itself.
+        let asked = !self.settings.read(cx).prefs().skip_exclusive_warning;
         v_flex()
             .flex_1()
             .px(px(18.))
@@ -126,17 +182,16 @@ impl Render for OverlaySettings {
             .child(row(t(cx, key::OVERLAY_HOTKEY), t(cx, key::OVERLAY_HOTKEY_HINT), 64.).child(self.hotkey_cap(
                 "overlay-hotkey",
                 OVERLAY,
+                None,
                 overlay,
                 cx,
             )))
-            .child(
-                row(t(cx, key::OVERLAY_MINIMAP_HOTKEY), t(cx, key::OVERLAY_MINIMAP_HOTKEY_HINT), 64.).border_b_0().child(self.hotkey_cap(
-                    "minimap-hotkey",
-                    MINIMAP,
-                    minimap,
-                    cx,
-                )),
-            )
+            .children(extra_rows)
+            .child(row(t(cx, key::OVERLAY_EXCLUSIVE_TITLE), t(cx, key::OVERLAY_EXCLUSIVE_ASK_HINT), 64.).border_b_0().child(
+                switch("exclusive-ask", asked, cx).on_click(cx.listener(move |view, _, _, cx| {
+                    view.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.skip_exclusive_warning = asked, cx));
+                })),
+            ))
     }
 }
 

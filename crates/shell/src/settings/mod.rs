@@ -5,11 +5,16 @@ mod folder_rows;
 mod folders;
 mod view;
 
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use gpui_kit::{App, Context, Entity};
 use i18n::Language;
 use serde::{Deserialize, Serialize};
+use sound::Cue;
 
 use client::{
     Registry,
@@ -24,7 +29,7 @@ use super::{
     sources::{Sources, SourcesChanged},
     ui::{
         text::Texts,
-        theme::{ACCENTS, Look},
+        theme::{ACCENTS, set_look},
     },
 };
 
@@ -48,6 +53,46 @@ pub enum Panels {
     Side,
 }
 
+/// The cues that play, and the WAV the user chose for a cue in place of its tone. A slider and a number fire
+/// on every step of a drag, so they start off.
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct Sounds {
+    on: BTreeSet<Cue>,
+    files: BTreeMap<Cue, PathBuf>,
+}
+
+impl Default for Sounds {
+    fn default() -> Self {
+        Self { on: BTreeSet::from([Cue::ToggleOn, Cue::ToggleOff, Cue::Button, Cue::Selection]), files: BTreeMap::new() }
+    }
+}
+
+impl Sounds {
+    pub fn plays(&self, cue: Cue) -> bool {
+        self.on.contains(&cue)
+    }
+
+    pub fn set(&mut self, cue: Cue, on: bool) {
+        if on {
+            self.on.insert(cue);
+        } else {
+            self.on.remove(&cue);
+        }
+    }
+
+    pub fn file(&self, cue: Cue) -> Option<&Path> {
+        self.files.get(&cue).map(PathBuf::as_path)
+    }
+
+    pub fn set_file(&mut self, cue: Cue, file: Option<PathBuf>) {
+        match file {
+            Some(file) => self.files.insert(cue, file),
+            None => self.files.remove(&cue),
+        };
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Prefs {
@@ -66,6 +111,16 @@ pub struct Prefs {
     pub language: Option<String>,
     /// The remote panel's server listens; off by default.
     pub remote: bool,
+    /// The first-launch notice about the account data was accepted.
+    pub disclaimer_seen: bool,
+    /// The overlay no longer asks about an exclusive fullscreen game.
+    pub skip_exclusive_warning: bool,
+    /// On, Impulse does not look for a new version by itself; CHECK NOW still does.
+    pub no_update_check: bool,
+    pub update_channel: updater::Channel,
+    /// A release feed in place of the project's own: whoever runs it publishes what Impulse installs.
+    pub update_feed: Option<String>,
+    pub cues: Sounds,
 }
 
 impl Prefs {
@@ -119,11 +174,8 @@ impl Settings {
 
     fn apply(&self, cx: &mut App) {
         let (accent, language) = (self.prefs.accent(), self.prefs.language());
-        let look = cx.try_global::<Look>().is_none_or(|look| look.accent != accent);
+        let look = set_look(cx, accent, language);
         let texts = cx.try_global::<Texts>().is_none_or(|texts| texts.language() != language);
-        if look {
-            cx.set_global(Look { accent });
-        }
         if texts {
             cx.set_global(Texts::new(language, &self.registry.texts()));
             gpui_kit::component::set_locale(language.tag);
@@ -148,5 +200,31 @@ mod tests {
         assert_eq!(cyan.accent(), ACCENTS[2].1);
         cyan.set_accent(ACCENTS[1].1);
         assert_eq!(cyan.accent, "AMBER");
+    }
+
+    #[test]
+    fn sounds_start_on_for_the_cues_that_do_not_repeat_and_use_their_own_tone() {
+        let prefs: Prefs = serde_json::from_str("{}").unwrap();
+        let plays = Cue::ALL.map(|cue| prefs.cues.plays(cue));
+        assert_eq!(plays, [true, true, false, false, true, true]);
+        assert!(Cue::ALL.iter().all(|&cue| prefs.cues.file(cue).is_none()));
+        assert!(!prefs.disclaimer_seen && !prefs.skip_exclusive_warning);
+    }
+
+    #[test]
+    fn a_saved_choice_of_cues_replaces_the_defaults_and_keeps_its_files() {
+        let json = r#"{"cues":{"on":["slider"],"files":{"slider":"C:\\clicks\\tick.wav"}}}"#;
+        let mut prefs: Prefs = serde_json::from_str(json).unwrap();
+        assert!(prefs.cues.plays(Cue::Slider) && !prefs.cues.plays(Cue::ToggleOn));
+        assert_eq!(prefs.cues.file(Cue::Slider), Some(Path::new(r"C:\clicks\tick.wav")));
+        prefs.cues.set_file(Cue::Slider, None);
+        prefs.cues.set(Cue::Slider, false);
+        assert_eq!(serde_json::to_string(&prefs.cues).unwrap(), r#"{"on":[],"files":{}}"#);
+    }
+
+    #[test]
+    fn the_array_an_older_build_saved_as_sounds_is_ignored() {
+        let prefs: Prefs = serde_json::from_str(r#"{"sounds":["toggle"]}"#).unwrap();
+        assert!(prefs.cues.plays(Cue::Button));
     }
 }

@@ -5,8 +5,11 @@
 use std::{cell::RefCell, io, mem, ptr, thread, time::Duration};
 
 use windows_sys::Win32::{
-    Foundation::{ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, POINT, WPARAM},
-    System::{LibraryLoader::GetModuleHandleW, Threading::CreateMutexW},
+    Foundation::{CloseHandle, ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, POINT, WPARAM},
+    System::{
+        LibraryLoader::GetModuleHandleW,
+        Threading::{CreateMutexW, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+    },
     UI::{
         Shell::{NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, Shell_NotifyIconW},
         WindowsAndMessaging::{
@@ -23,6 +26,8 @@ use windows_sys::Win32::{
 const CLASS: &str = "ImpulseTray";
 const CALLBACK: u32 = WM_APP + 1;
 const WAKE: u32 = WM_APP + 2;
+// An Impulse started by an update waits this long at most for the one it replaces to end.
+const HANDOVER_WAIT: u32 = 15_000;
 // Menu ids; 0 is no pick.
 const OPEN: usize = 1;
 const STOP: usize = 2;
@@ -126,7 +131,11 @@ impl Drop for Tray {
 }
 
 /// Claims the one Impulse of this session. `false`: another runs, and was asked to show its window.
-pub fn claim() -> bool {
+/// `after` is the pid of an Impulse that is ending (an update's restart): it is waited for, not woken.
+pub fn claim(after: Option<u32>) -> bool {
+    if let Some(pid) = after {
+        wait_for_exit(pid);
+    }
     // SAFETY: a plain call with a NUL-terminated name. The handle stays open for the process's life.
     let other = unsafe {
         let mutex = CreateMutexW(ptr::null(), 0, wide(r"Local\Impulse").as_ptr());
@@ -144,6 +153,17 @@ pub fn claim() -> bool {
         }
     }
     !other
+}
+
+fn wait_for_exit(pid: u32) {
+    // SAFETY: plain calls; the handle is closed here, and a pid that is gone only fails the open.
+    unsafe {
+        let process = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+        if !process.is_null() {
+            WaitForSingleObject(process, HANDOVER_WAIT);
+            CloseHandle(process);
+        }
+    }
 }
 
 /// Asks the Impulse running to show its window. `false`: no icon of one yet.

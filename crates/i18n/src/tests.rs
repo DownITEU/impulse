@@ -16,6 +16,17 @@ fn a_message_falls_back_to_english_then_to_its_key() {
 }
 
 #[test]
+fn a_message_that_cannot_format_falls_back_to_english_then_to_its_key() {
+    const LEVEL: &[(&str, &str)] = &[("en", "level = Level { $name }\n"), ("xx", "level = Stufe { $name }\n")];
+    let catalog = Catalog::new(XX, false, [("app", LEVEL)]);
+    assert_eq!(catalog.text("app", "level", &[("name", "Ann".into())]), "Stufe Ann");
+    assert_eq!(catalog.text("app", "level", &[("other", "Ann".into())]), "level");
+    const PARTIAL: &[(&str, &str)] = &[("en", "level = Level\n"), ("xx", "level = Stufe { $name }\n")];
+    let catalog = Catalog::new(XX, false, [("app", PARTIAL)]);
+    assert_eq!(catalog.text("app", "level", &[]), "Level");
+}
+
+#[test]
 fn plurals_follow_the_number() {
     let catalog = Catalog::new(ENGLISH, false, [("app", APP)]);
     assert_eq!(catalog.text("app", "played", &[("hours", 1u32.into())]), "1 HOUR");
@@ -42,7 +53,21 @@ fn a_system_tag_matches_ours_by_language() {
     assert_eq!(closest("en-GB"), Some(ENGLISH));
     assert_eq!(closest("EN_us"), Some(ENGLISH));
     assert_eq!(closest("fr-CA"), Some(FRENCH));
+    assert_eq!(closest("de-AT"), Some(GERMAN));
+    assert_eq!(closest("es-MX"), Some(SPANISH));
+    assert_eq!(closest("it-CH"), Some(ITALIAN));
+    assert_eq!(closest("pt-PT"), Some(PORTUGUESE));
+    assert_eq!(closest("pl-PL"), Some(POLISH));
+    assert_eq!(closest("tr-TR"), Some(TURKISH));
+    assert_eq!(closest("ru-RU"), Some(RUSSIAN));
+    assert_eq!(closest("uk-UA"), Some(UKRAINIAN));
     assert_eq!(closest("xx-YY"), None);
+}
+
+#[test]
+fn only_the_cyrillic_languages_need_another_font() {
+    let cyrillic: Vec<_> = LANGUAGES.iter().filter(|language| language.is_cyrillic()).map(|language| language.tag).collect();
+    assert_eq!(cyrillic, ["ru", "uk"]);
 }
 
 #[test]

@@ -13,8 +13,8 @@ use std::{
 
 pub use key::Key;
 pub use window::{
-    Monitor, cloak, exclude_from_capture, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place, raise,
-    unminimize, window_of,
+    Monitor, cloak, exclude_from_capture, exclusive, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place,
+    raise, unminimize, window_of,
 };
 use windows_sys::Win32::{
     Foundation::HWND,
@@ -29,14 +29,18 @@ use windows_sys::Win32::{
     },
 };
 
-// Hotkey ids, and the thread message that sets the minimap's.
+// Hotkey ids: the overlay's, then the extras' (`EXTRAS` of them, set by the thread message).
 const OVERLAY: usize = 1;
-const MINIMAP: usize = 2;
-const SET_MINIMAP: u32 = WM_USER + 1;
+const FIRST_EXTRA: usize = 2;
+/// How many extra hotkeys a `Watch` holds, numbered from 0.
+pub const EXTRAS: usize = 3;
+const LAST_EXTRA: usize = FIRST_EXTRA + EXTRAS;
+const SET_EXTRA: u32 = WM_USER + 1;
 
 pub enum Event {
     Hotkey,
-    Minimap,
+    /// The extra hotkey of this number was pressed.
+    Extra(usize),
     /// Another window came in front; read which with `foreground`, as the event may be late.
     Foreground,
 }
@@ -51,7 +55,7 @@ thread_local! {
 pub struct Watch {
     thread: u32,
     join: Option<JoinHandle<()>>,
-    // `set_minimap`'s answers.
+    // `set_extra`'s answers.
     set: mpsc::Receiver<io::Result<()>>,
 }
 
@@ -90,31 +94,34 @@ impl Watch {
                 while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
                     match (msg.message, msg.wParam) {
                         (WM_HOTKEY, OVERLAY) => emit(Event::Hotkey),
-                        (WM_HOTKEY, MINIMAP) => emit(Event::Minimap),
-                        (SET_MINIMAP, packed) => {
-                            UnregisterHotKey(ptr::null_mut(), MINIMAP as i32);
-                            let key = Key::unpack(packed);
-                            let taken = key.is_some_and(|key| {
-                                RegisterHotKey(ptr::null_mut(), MINIMAP as i32, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0
-                            });
+                        (WM_HOTKEY, id @ FIRST_EXTRA..LAST_EXTRA) => emit(Event::Extra(id - FIRST_EXTRA)),
+                        (SET_EXTRA, packed) => {
+                            let id = (FIRST_EXTRA + msg.lParam as usize) as i32;
+                            UnregisterHotKey(ptr::null_mut(), id);
+                            let taken = Key::unpack(packed)
+                                .is_some_and(|key| RegisterHotKey(ptr::null_mut(), id, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0);
                             let _ = answer.send(if taken { Err(io::Error::last_os_error()) } else { Ok(()) });
                         }
                         _ => {}
                     }
                 }
                 UnhookWinEvent(hook);
-                UnregisterHotKey(ptr::null_mut(), OVERLAY as i32);
-                UnregisterHotKey(ptr::null_mut(), MINIMAP as i32);
+                for id in OVERLAY..LAST_EXTRA {
+                    UnregisterHotKey(ptr::null_mut(), id as i32);
+                }
             }
         })?;
         let thread = started.recv().map_err(|_| io::Error::other("the overlay thread ended"))??;
         Ok(Self { thread, join: Some(join), set })
     }
 
-    /// The minimap's hotkey, or none; fails when another app holds it, which leaves none.
-    pub fn set_minimap(&self, key: Option<Key>) -> io::Result<()> {
+    /// Extra hotkey `number` (below `EXTRAS`), or none; fails when another app holds it, which leaves none.
+    pub fn set_extra(&self, number: usize, key: Option<Key>) -> io::Result<()> {
+        if number >= EXTRAS {
+            return Err(io::Error::other("no such extra hotkey"));
+        }
         // SAFETY: posts to the watch thread's queue, made before `start` returned.
-        if unsafe { PostThreadMessageW(self.thread, SET_MINIMAP, key.map_or(0, Key::pack), 0) } == 0 {
+        if unsafe { PostThreadMessageW(self.thread, SET_EXTRA, key.map_or(0, Key::pack), number as isize) } == 0 {
             return Err(io::Error::last_os_error());
         }
         self.set.recv().map_err(|_| io::Error::other("the overlay thread ended"))?

@@ -1,8 +1,9 @@
-//! The workspace's rules that a test can hold: the crate graph, where GPUI may go, file sizes, the agent rules, the texts.
+//! The workspace's rules that a test can hold: the crate graph, where GPUI may go, file sizes, the agent rules, the texts, the release notes.
 #![cfg(test)]
 
 mod captions;
 mod graph;
+mod release;
 mod rules;
 mod size;
 mod texts;

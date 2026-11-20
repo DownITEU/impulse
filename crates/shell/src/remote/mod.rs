@@ -21,11 +21,16 @@ use qrcodegen::{QrCode, QrCodeEcc};
 use crate::{
     library::Library,
     run::{RunEvent, Runs},
-    settings::Settings,
+    settings::{Prefs, Settings},
     trainer::{TrainerEvent, Trainers},
 };
 pub use view::RemoteView;
 use views::{Dirty, Shown};
+
+/// On, and the disclaimer accepted: a paired device must not start a trainer before it.
+fn serves(prefs: &Prefs) -> bool {
+    prefs.remote && prefs.disclaimer_seen
+}
 
 /// What `app` hands over to serve the panel: where it listens and the serving future, for the server's side of a
 /// link. A build without the server has none.
@@ -72,7 +77,7 @@ impl Remote {
         cx: &mut Context<Self>,
     ) -> Self {
         cx.observe(&settings, |remote, settings, cx| {
-            match (settings.read(cx).prefs().remote, matches!(remote.state, State::Off)) {
+            match (serves(settings.read(cx).prefs()), matches!(remote.state, State::Off)) {
                 (true, true) => remote.start(cx),
                 (false, false) => remote.stop(cx),
                 // The language words the views too.
@@ -99,7 +104,7 @@ impl Remote {
             }
         })
         .detach();
-        let on = settings.read(cx).prefs().remote;
+        let on = serves(settings.read(cx).prefs());
         let mut remote = Self {
             serve,
             settings,

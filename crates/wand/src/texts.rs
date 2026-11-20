@@ -2,7 +2,18 @@
 
 use model::Text;
 
-const FILES: [(&str, &str); 2] = [("en", include_str!("../locales/en.ftl")), ("fr", include_str!("../locales/fr.ftl"))];
+const FILES: [(&str, &str); 10] = [
+    ("en", include_str!("../locales/en.ftl")),
+    ("fr", include_str!("../locales/fr.ftl")),
+    ("de", include_str!("../locales/de.ftl")),
+    ("es", include_str!("../locales/es.ftl")),
+    ("it", include_str!("../locales/it.ftl")),
+    ("pt-BR", include_str!("../locales/pt-BR.ftl")),
+    ("pl", include_str!("../locales/pl.ftl")),
+    ("tr", include_str!("../locales/tr.ftl")),
+    ("ru", include_str!("../locales/ru.ftl")),
+    ("uk", include_str!("../locales/uk.ftl")),
+];
 
 pub fn files() -> model::Files {
     FILES.iter().map(|&(tag, source)| (tag.into(), source.into())).collect()
@@ -35,6 +46,7 @@ pub const CATEGORY_TELEPORT: Key = Key("category-teleport");
 pub const CATEGORY_VEHICLES: Key = Key("category-vehicles");
 pub const CATEGORY_WEAPONS: Key = Key("category-weapons");
 pub const SIGNED_OUT: Key = Key("signed-out");
+pub const NOT_INSTALLED: Key = Key("not-installed");
 
 pub fn text(key: Key) -> Text {
     Text::key(&crate::source(), key.0)

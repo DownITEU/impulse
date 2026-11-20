@@ -13,6 +13,7 @@ use windows_sys::Win32::{
     System::Threading::{AttachThreadInput, GetCurrentThreadId},
     UI::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+        Shell::{QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState},
         WindowsAndMessaging::{
             EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
             HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, SW_HIDE, SW_RESTORE, SW_SHOWNOACTIVATE,
@@ -69,6 +70,25 @@ pub fn window_of(pid: u32) -> Option<isize> {
     // SAFETY: `found` outlives the enumeration, which calls `each` synchronously.
     unsafe { EnumWindows(Some(each), (&raw mut found) as LPARAM) };
     found.1.map(|(_, window)| window)
+}
+
+/// Whether `game` is in front in exclusive fullscreen, or in an optimized one that asked for it: a layer over it may
+/// not show. Windows answers for the whole session and a few seconds late, so the game must be the window in front,
+/// covering its monitor, and this is asked before our window goes over it.
+pub fn exclusive(game: isize) -> bool {
+    let Some(monitor) = monitor_of(game) else { return false };
+    let mut state = 0;
+    // SAFETY: RECT is plain integers, so all zeros is a valid value.
+    let mut rect: RECT = unsafe { mem::zeroed() };
+    // SAFETY: plain Win32 calls; `state` and `rect` outlive them, and a gone window fails them.
+    let fullscreen = unsafe {
+        GetForegroundWindow() == game as HWND
+            && SHQueryUserNotificationState(&mut state) == 0
+            && state == QUNS_RUNNING_D3D_FULL_SCREEN
+            && GetWindowRect(game as HWND, &mut rect) != 0
+    };
+    let (left, top) = monitor.origin;
+    fullscreen && rect.left <= left && rect.top <= top && rect.right >= left + monitor.size.0 && rect.bottom >= top + monitor.size.1
 }
 
 /// Keeps `window` off the screen while it still draws, so a new layout shows only once drawn.

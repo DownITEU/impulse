@@ -19,7 +19,7 @@ use crate::ui::{
     key,
     text::t,
     theme::*,
-    widgets::{choice, mono, segmented, square, switch, tracked},
+    widgets::{badge, choice, mono, segmented, square, switch, tracked},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -27,20 +27,22 @@ enum Tab {
     Appearance,
     Overlay,
     Hotkeys,
+    Sounds,
     App,
     Resources,
     Plugins,
+    About,
 }
 
-// The tabs without a page yet are shown but not clickable.
-const TABS: [(Key, Option<Tab>); 7] = [
-    (key::SETTINGS_APPEARANCE, Some(Tab::Appearance)),
-    (key::SETTINGS_OVERLAY, Some(Tab::Overlay)),
-    (key::SETTINGS_HOTKEYS, Some(Tab::Hotkeys)),
-    (key::SETTINGS_APP, Some(Tab::App)),
-    (key::SETTINGS_RESOURCES, Some(Tab::Resources)),
-    (key::SETTINGS_PLUGINS, Some(Tab::Plugins)),
-    (key::SETTINGS_ABOUT, None),
+const TABS: [(Key, Tab); 8] = [
+    (key::SETTINGS_APPEARANCE, Tab::Appearance),
+    (key::SETTINGS_OVERLAY, Tab::Overlay),
+    (key::SETTINGS_HOTKEYS, Tab::Hotkeys),
+    (key::SETTINGS_SOUNDS, Tab::Sounds),
+    (key::SETTINGS_APP, Tab::App),
+    (key::SETTINGS_RESOURCES, Tab::Resources),
+    (key::SETTINGS_PLUGINS, Tab::Plugins),
+    (key::SETTINGS_ABOUT, Tab::About),
 ];
 
 /// The dialog's open list: a folder row's picks or the languages.
@@ -54,8 +56,10 @@ pub(super) enum Menu {
 pub struct Tabs {
     pub overlay: AnyView,
     pub hotkeys: AnyView,
+    pub sounds: AnyView,
     pub resources: AnyView,
     pub plugins: AnyView,
+    pub about: AnyView,
 }
 
 /// The dialog opened or showed another tab: what it shows may be read again.
@@ -108,9 +112,9 @@ impl SettingsView {
     }
 
     fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().w(px(168.)).flex_none().py(px(8.)).border_r_1().border_color(line(0.07)).bg(rgb(SUNKEN)).children(TABS.into_iter().map(
-            |(name, tab)| {
-                let current = tab == Some(self.tab);
+        v_flex().min_w(px(168.)).flex_none().py(px(8.)).border_r_1().border_color(line(0.07)).bg(rgb(SUNKEN)).children(
+            TABS.into_iter().map(|(name, tab)| {
+                let current = tab == self.tab;
                 h_flex()
                     .id(name.0)
                     .h(px(34.))
@@ -118,18 +122,18 @@ impl SettingsView {
                     .gap(px(10.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(rgb(if current { TEXT_BRIGHT } else { DIM }))
-                    .when(current, |tab| tab.bg(rgb(ROW_SELECTED)))
-                    .when_some(tab, |item, tab| {
-                        item.cursor_pointer().on_click(cx.listener(move |view, _, _, cx| {
-                            view.tab = tab;
-                            cx.emit(Looked);
-                            cx.notify();
-                        }))
-                    })
+                    .when(current, |item| item.bg(rgb(ROW_SELECTED)))
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.tab = tab;
+                        cx.emit(Looked);
+                        cx.notify();
+                    }))
                     .child(div().w(px(6.)).when(current, |cell| cell.child(square(6., rgb(accent(cx))))))
-                    .child(tracked(&t(cx, name), 12., 0.12))
-            },
-        ))
+                    .child(tracked(&t(cx, name), 12., 0.12).flex_nowrap())
+                    .when(tab == Tab::Plugins, |item| item.child(badge(t(cx, key::ALPHA), WARN)))
+            }),
+        )
     }
 
     fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -230,9 +234,11 @@ impl Render for SettingsView {
                 Tab::Appearance => self.appearance(cx).into_any_element(),
                 Tab::Overlay => self.tabs.overlay.clone().into_any_element(),
                 Tab::Hotkeys => self.tabs.hotkeys.clone().into_any_element(),
+                Tab::Sounds => self.tabs.sounds.clone().into_any_element(),
                 Tab::App => self.app(cx).into_any_element(),
                 Tab::Resources => self.tabs.resources.clone().into_any_element(),
                 Tab::Plugins => self.tabs.plugins.clone().into_any_element(),
+                Tab::About => self.tabs.about.clone().into_any_element(),
             }),
         );
         dialog("settings", t(cx, key::SETTINGS), 640., &self.focus, |view: &mut Self, _, cx| view.close(cx), body, cx)

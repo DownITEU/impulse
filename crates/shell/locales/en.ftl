@@ -50,6 +50,14 @@ page-binding = PRESS KEYS · ESC CANCEL · BKSP DEFAULT
 page-binding-unbind = PRESS KEYS · ESC CANCEL · BKSP DEFAULT · DEL UNBIND
 page-hotkeys-on = HOTKEYS ON
 page-hotkeys-off = HOTKEYS OFF
+disclaimer-title = BEFORE YOU START
+disclaimer-body = Impulse is an unofficial client for your own { $sources } account and install. It signs in through the session that app already has on this PC, uses the files in its folder and asks the service for your games and trainers on your behalf. It never asks for your password, and your account data stays on this PC apart from those requests. Impulse is not affiliated with or endorsed by the service. Trainers can get you banned in online games: use them at your own risk.
+disclaimer-accept = I AGREE
+disclaimer-exit = EXIT
+signed-out-title = SIGN-IN FAILED
+signed-out-body = Impulse could not sign in to { $sources }. Make sure it is installed and signed in on this PC and that you are online, then try again. Trainers cannot load until it works.
+signed-out-retry = TRY AGAIN
+signed-out-close = CLOSE
 
 ## Library
 
@@ -165,6 +173,7 @@ map-failed-body = It could not be loaded: { $why }.
 map-title = MAP
 map-none = NO INTERACTIVE MAP FOR THIS GAME
 map-link = LINK A MAP
+map-unlink = UNLINK MAP
 map-link-title = LINK A MAP
 map-link-caption = WHICH OF THESE TITLES IS THIS GAME?
 map-link-empty = No map source has a title by that name.
@@ -225,6 +234,16 @@ overlay-hotkey = HOTKEY
 overlay-hotkey-hint = modifiers and one key, free in other apps and mods
 overlay-minimap-hotkey = MINIMAP HOTKEY
 overlay-minimap-hotkey-hint = shows or hides the minimap; held only while the game is in front
+overlay-zoom-in-hotkey = MINIMAP ZOOM IN
+overlay-zoom-in-hotkey-hint = brings the minimap closer; held only while the game is in front
+overlay-zoom-out-hotkey = MINIMAP ZOOM OUT
+overlay-zoom-out-hotkey-hint = moves the minimap further; held only while the game is in front
+overlay-exclusive-title = EXCLUSIVE FULLSCREEN
+overlay-exclusive-body = This game runs in exclusive fullscreen, where the overlay may not show and the game may minimize. For the best result, switch the game to borderless windowed in its video settings.
+overlay-exclusive-chip = EXCLUSIVE FULLSCREEN: SWITCH THE GAME TO BORDERLESS
+overlay-exclusive-skip = DON'T SHOW AGAIN
+overlay-exclusive-ok = OK
+overlay-exclusive-ask-hint = ask when the overlay opens over a game in exclusive fullscreen
 
 ## Settings
 
@@ -261,6 +280,24 @@ hide-from-capture = HIDE FROM CAPTURE
 hide-from-capture-hint = screenshots, recordings and streams show no Impulse window
 folder-path = path to the folder
 folder-select = Select the folder
+settings-sounds = SOUNDS
+sounds-toggle-on = SWITCHED ON
+sounds-toggle-on-hint = a rising tone when a mod turns on
+sounds-toggle-off = SWITCHED OFF
+sounds-toggle-off-hint = a falling tone when a mod turns off
+sounds-slider = SLIDERS
+sounds-slider-hint = a tick for each step; plays often while you drag
+sounds-number = NUMBERS
+sounds-number-hint = a tick when a value changes
+sounds-button = BUTTONS
+sounds-button-hint = a click when a button mod is applied
+sounds-selection = CHOICES
+sounds-selection-hint = a tone when another option is picked
+sounds-listen = Listen
+sounds-choose = Pick a WAV file to play instead
+sounds-reset = Back to the built-in sound
+sounds-refused = not a WAV file, or over 1 MB
+sounds-prompt = Pick a WAV file
 
 ## Remote
 
@@ -361,3 +398,62 @@ log-copied = COPIED
 log-clear = CLEAR
 log-folder = FOLDER
 log-detail-empty = CLICK A ROW TO READ AND SELECT THE FULL RECORD
+
+## About
+
+about-version = VERSION { $version }
+about-tagline = FREE AND OPEN SOURCE
+about-intro = Impulse is built by one person in their spare time. It is free and open source. A star, a bug report or a coffee is what keeps it going.
+about-github = GITHUB
+about-github-hint = read the code, follow the releases, leave a star so others find it
+about-star = STAR
+about-discord = DISCORD
+about-discord-hint = ask a question, ask for a game or a feature, chat with other users
+about-join = JOIN
+about-bug = FOUND A BUG?
+about-bug-hint = open an issue with what happened and what you expected; the LOG in the status bar helps
+about-report = REPORT
+about-support = SUPPORT IMPULSE
+about-support-hint = free and open source; a coffee pays for the time behind each update
+about-coffee = BUY A COFFEE
+about-contact = CONTACT
+about-contact-hint = anything else, or something private: { $address }
+about-email = EMAIL
+alpha = ALPHA
+plugins-alpha-hint = Plugins are experimental. The format may change, and a plugin may stop working after an update.
+remote-copy = copy the address
+
+## Updates
+
+update-title = UPDATES
+update-state-idle = version { $version }
+update-state-current = you are on the latest version, { $version }
+update-state-skipped = version { $version } is skipped: CHECK NOW offers it again
+update-state-checking = checking for updates...
+update-state-available = version { $version } is available
+update-state-downloading = downloading { $version }...
+update-state-ready = { $version } is ready: restart Impulse to install it
+update-check-failed = could not reach the release feed
+update-install-failed = the update could not be installed
+update-check = CHECK NOW
+update-changelog = CHANGELOG
+update-channel = UPDATE CHANNEL
+update-channel-hint = pre-releases come earlier and may be unstable; going back to stable never downgrades
+update-channel-stable = STABLE
+update-channel-pre = PRE-RELEASE
+update-auto = CHECK FOR UPDATES
+update-auto-hint = at start and every few hours; only the release list is requested, nothing about you is sent
+update-title-available = UPDATE AVAILABLE
+update-title-new = WHAT'S NEW IN { $version }
+update-from-to = from { $current } to { $latest }
+update-later = LATER
+update-skip = SKIP THIS VERSION
+update-restart = RESTART NOW
+update-close = CLOSE
+update-busy = a trainer is running: the update installs when you quit Impulse
+update-no-notes = no release notes
+update-chip-available = UPDATE { $version }
+update-chip-downloading = DOWNLOADING...
+update-chip-ready = RESTART TO UPDATE
+update-changelog-hint = what changed in every release
+update-open = OPEN

@@ -8,6 +8,7 @@ mod glance;
 mod hud;
 mod settings;
 mod store;
+mod warning;
 
 use std::{io, pin::pin, time::Duration};
 
@@ -23,9 +24,9 @@ use gpui_kit::{
 };
 pub use hud::{Entered, Hud, bind_keys};
 use model::Chord;
-use overlay::{Event, Key, Watch};
+use overlay::{EXTRAS, Event, Key, Watch};
 pub use settings::{OverlaySettings, overlay_hotkey};
-use store::Store;
+use store::{Slot, Store};
 
 use client::storage::Paths;
 
@@ -55,11 +56,11 @@ enum Ask {
     Foreground,
     /// A run started or ended.
     Recheck,
-    Minimap,
+    Extra(Slot),
 }
 
-/// The minimap's hotkey was pressed.
-pub(super) struct MinimapKey;
+/// An extra hotkey was pressed.
+struct Pressed(Slot);
 
 /// The live game as the HUD sees it; emitted on change.
 #[derive(Clone, Copy, PartialEq)]
@@ -78,8 +79,10 @@ pub(super) struct Layer {
     asks: mpsc::UnboundedSender<Ask>,
     hwnd: Option<isize>,
     watch: Option<Watch>,
-    // The minimap's hotkey as registered now.
-    minimap: Option<Key>,
+    // The extras' keys as registered now, by `Slot::number`.
+    held: [Option<Key>; EXTRAS],
+    // The game in front was in exclusive fullscreen when the overlay went over it.
+    exclusive: bool,
     runs: WeakEntity<Runs>,
     _switches: Task<()>,
 }
@@ -129,7 +132,8 @@ impl Layer {
             asks,
             hwnd,
             watch,
-            minimap: None,
+            held: [None; EXTRAS],
+            exclusive: false,
             runs: runs.downgrade(),
             _switches: switches,
         }
@@ -157,48 +161,62 @@ impl Layer {
         self.store.hotkey()
     }
 
-    /// Whether the overlay's or the minimap's hotkey fires on `chord`.
+    /// Whether the overlay's or an extra hotkey fires on `chord`.
     pub fn takes(&self, chord: Chord) -> bool {
-        self.hotkey().fired_by(chord.vks()) || self.minimap_hotkey().is_some_and(|key| key.fired_by(chord.vks()))
+        self.hotkey().fired_by(chord.vks()) || Slot::ALL.into_iter().any(|slot| self.key(slot).is_some_and(|key| key.fired_by(chord.vks())))
+    }
+
+    /// The game in front was in exclusive fullscreen as the overlay went over it: the layer may not show over it.
+    pub fn exclusive(&self) -> bool {
+        self.exclusive
     }
 
     /// Fails, keeping the old one, when another app holds `key`.
     pub fn set_hotkey(&mut self, key: Key, cx: &mut Context<Self>) -> io::Result<()> {
-        if key == self.hotkey() || self.hwnd.is_none() {
+        // An unchanged key still registers when its watch never started (another app held it then).
+        if self.hwnd.is_none() || (key == self.hotkey() && self.watch.is_some()) {
             return Ok(());
         }
         // Registered before the old one goes, so a refused key leaves the old in place.
         self.watch = Some(watch(key, &self.asks)?);
         self.store.set_hotkey(key);
-        // The old watch took the minimap's with it.
-        self.minimap = None;
-        self.hold_minimap_key(cx);
+        // The old watch took the extras' with it.
+        self.held = [None; EXTRAS];
+        self.hold_keys(cx);
         cx.notify();
         Ok(())
     }
 
-    pub fn minimap_hotkey(&self) -> Option<Key> {
-        self.store.minimap()
+    pub fn key(&self, slot: Slot) -> Option<Key> {
+        self.store.key(slot)
     }
 
-    pub fn set_minimap_hotkey(&mut self, key: Option<Key>, cx: &mut Context<Self>) {
-        self.store.set_minimap(key);
-        self.hold_minimap_key(cx);
+    pub fn set_key(&mut self, slot: Slot, key: Option<Key>, cx: &mut Context<Self>) {
+        self.store.set_key(slot, key);
+        self.hold_keys(cx);
         cx.notify();
     }
 
-    /// Taken from every app, so only while there is a minimap to toggle: the live game in front or under the overlay.
-    fn hold_minimap_key(&mut self, cx: &App) {
+    /// The extras are taken from every app, so only while there is a minimap to act on: the live game in front or under
+    /// the overlay.
+    fn hold_keys(&mut self, cx: &App) {
         let under = match self.mode {
             Mode::Over { game } => self.live(cx).is_some_and(|pid| overlay::owner(game) == pid),
             Mode::Window { .. } => false,
         };
-        let wanted = (matches!(self.playing, Playing::Front(_)) || under).then(|| self.store.minimap()).flatten();
+        let held = matches!(self.playing, Playing::Front(_)) || under;
         let Some(watch) = &self.watch else { return };
-        if wanted != self.minimap {
-            self.minimap = wanted;
-            if let Err(e) = watch.set_minimap(wanted) {
-                log::warn!("minimap hotkey: {e}");
+        for slot in Slot::ALL {
+            let wanted = held.then(|| self.store.key(slot)).flatten();
+            if wanted != self.held[slot.number()] {
+                // A refused key leaves none registered, so the next recheck tries it again.
+                self.held[slot.number()] = match watch.set_extra(slot.number(), wanted) {
+                    Ok(()) => wanted,
+                    Err(e) => {
+                        log::warn!("{slot:?} hotkey: {e}");
+                        None
+                    }
+                };
             }
         }
     }
@@ -221,21 +239,25 @@ impl Layer {
             self.playing = playing;
             cx.emit(playing);
         }
-        self.hold_minimap_key(cx);
+        self.hold_keys(cx);
     }
 }
 
 impl EventEmitter<Playing> for Layer {}
-impl EventEmitter<MinimapKey> for Layer {}
+impl EventEmitter<Pressed> for Layer {}
 
 fn watch(key: Key, asks: &mpsc::UnboundedSender<Ask>) -> io::Result<Watch> {
     let asks = asks.clone();
     Watch::start(key, move |event| {
-        let _ = asks.unbounded_send(match event {
+        let ask = match event {
             Event::Hotkey => Ask::Toggle,
-            Event::Minimap => Ask::Minimap,
+            Event::Extra(number) => match Slot::ALL.get(number) {
+                Some(&slot) => Ask::Extra(slot),
+                None => return,
+            },
             Event::Foreground => Ask::Foreground,
-        });
+        };
+        let _ = asks.unbounded_send(ask);
     })
 }
 
@@ -246,7 +268,7 @@ async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::Unbounde
         let (mode, live) = layer.read_with(cx, |layer, cx| (layer.mode, layer.live(cx)))?;
         let front = overlay::foreground();
         match (mode, ask) {
-            (_, Ask::Minimap) => layer.update(cx, |_, cx| cx.emit(MinimapKey))?,
+            (_, Ask::Extra(slot)) => layer.update(cx, |_, cx| cx.emit(Pressed(slot)))?,
             (Mode::Window { armed }, Ask::Toggle) => {
                 let other = front.filter(|&front| front != hwnd);
                 if let Some(game) = other.or(armed.filter(|&game| overlay::is_window(game))).or_else(|| live.and_then(overlay::window_of)) {
@@ -280,10 +302,13 @@ async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::Unbounde
 }
 
 async fn enter(layer: &WeakEntity<Layer>, hwnd: isize, game: isize, cx: &mut AsyncWindowContext) -> Result<()> {
+    // Asked before our window covers the game: it would change the answer.
+    let exclusive = overlay::exclusive(game);
     overlay::cloak(hwnd, true);
     // Fullscreen saves the window's rect for the way back, and a minimized one has none.
     overlay::unminimize(hwnd);
     layer.update_in(cx, |layer, window, cx| {
+        layer.exclusive = exclusive;
         layer.set(Mode::Over { game }, cx);
         see_through(true, window, cx);
         window.toggle_fullscreen();
@@ -300,6 +325,7 @@ async fn leave(layer: &WeakEntity<Layer>, hwnd: isize, below: isize, armed: Opti
     overlay::cloak(hwnd, true);
     overlay::lower(hwnd, Some(below));
     layer.update_in(cx, |layer, window, cx| {
+        layer.exclusive = false;
         layer.set(Mode::Window { armed }, cx);
         see_through(false, window, cx);
         window.toggle_fullscreen();

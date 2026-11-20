@@ -18,6 +18,7 @@ use gpui_kit::{Context, Entity, EventEmitter};
 use model::{Chord, Locale, Snapshot};
 
 use crate::{
+    account::{Account, SignedIn},
     library::{Library, LibraryEvent},
     ui::text::{Texts, content_locale},
 };
@@ -53,7 +54,13 @@ pub struct Trainers {
 impl EventEmitter<TrainerEvent> for Trainers {}
 
 impl Trainers {
-    pub fn new(registry: Arc<Registry>, paths: &Paths, library: Entity<Library>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        registry: Arc<Registry>,
+        paths: &Paths,
+        library: Entity<Library>,
+        account: &Entity<Account>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         cx.subscribe(&library, |trainers, _, event: &LibraryEvent, cx| {
             // A map link is not the trainer's.
             if !matches!(event, LibraryEvent::Linked) {
@@ -61,6 +68,8 @@ impl Trainers {
             }
         })
         .detach();
+        // The session is back: the open game's trainer that failed for want of it asks again.
+        cx.subscribe(account, |trainers, _, _: &SignedIn, cx| trainers.open(cx)).detach();
         // Copies in the old language show until their next open asks again; the open game's asks now.
         cx.observe_global::<Texts>(|trainers, cx| {
             let locale = content_locale(cx);

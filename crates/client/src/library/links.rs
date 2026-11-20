@@ -33,6 +33,15 @@ impl Links {
             file.links.insert(game.clone(), title.to_string());
         });
     }
+
+    /// Forgets the link, saved at once; whether there was one.
+    pub fn clear(&mut self, game: &GameId) -> bool {
+        let linked = self.0.links.contains_key(game);
+        if linked {
+            self.0.edit(|file| file.links.remove(game));
+        }
+        linked
+    }
 }
 
 #[cfg(test)]
@@ -46,6 +55,9 @@ mod tests {
         let (game, title) = (GameId::of(&Ref::parse("wand:1").unwrap()), Ref::parse("plugin-maps:night").unwrap());
         Links::load(&paths).set(&game, &title);
         assert_eq!(Links::load(&paths).get(&game), Some(title));
+        let mut links = Links::load(&paths);
+        assert!(links.clear(&game) && !links.clear(&game));
+        assert_eq!(Links::load(&paths).get(&game), None);
         std::fs::write(paths.map_links(), r#"{"version": 2, "links": {"wand:1": "not a ref"}}"#).unwrap();
         assert_eq!(Links::load(&paths).get(&game), None);
         let _ = std::fs::remove_dir_all(dir);

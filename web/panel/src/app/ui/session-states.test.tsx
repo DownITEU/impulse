@@ -45,7 +45,7 @@ describe('the session placeholders', () => {
     });
 
     it('fall back to English for a language the panel does not ship', () => {
-        renderIn('de', <SessionPlaceholder why="offline" onOpenLibrary={() => undefined} />);
+        renderIn('xx', <SessionPlaceholder why="offline" onOpenLibrary={() => undefined} />);
         expect(screen.getByText('Not connected')).toBeTruthy();
     });
 });

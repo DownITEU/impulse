@@ -71,7 +71,7 @@ impl Render for Root {
         div()
             .relative()
             .size_full()
-            .font_family(UI)
+            .font_family(ui_font(cx))
             .text_size(px(14.))
             .text_color(rgb(TEXT))
             .child(self.page.clone().cached(StyleRefinement::default().size_full()))

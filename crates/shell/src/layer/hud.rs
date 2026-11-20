@@ -4,16 +4,17 @@
 use client::{library::Game, storage::Paths};
 use gpui_kit::{
     App, Bounds, Context, Div, Entity, EventEmitter, FocusHandle, IntoElement, KeyBinding, Pixels, Render, Size, Window, actions,
-    component::{h_flex, scroll::ScrollableElement},
+    component::{h_flex, scroll::ScrollableElement, v_flex},
     div, point,
     prelude::*,
     px, size,
 };
 
 use super::{
-    Layer, MinimapKey,
+    Layer, Pressed, Slot,
     docks::{self, Docks, Spec},
     glance::Glance,
+    warning::{Closed, Warning, chip},
 };
 use crate::{
     bindings::{Hotkeys, hotkeys_scope},
@@ -45,6 +46,8 @@ const EDGE: f32 = 24.;
 const GAP: f32 = 16.;
 const LIST: f32 = 560.;
 const SIDE: f32 = 320.;
+// A zoom hotkey's step, in map levels: the span is seven, so a dozen presses cross it.
+const ZOOM_STEP: f64 = 0.5;
 
 /// The toolbar's order.
 pub(super) static DOCKS: [Spec; 4] = [
@@ -129,6 +132,7 @@ pub struct Hud {
     minimap: Entity<Minimap>,
     // The HUD window over the game while Impulse is behind it.
     _glance: Entity<Glance>,
+    warning: Entity<Warning>,
     over: bool,
     focus: FocusHandle,
 }
@@ -155,6 +159,13 @@ impl Hud {
         let live_map = maps.read(cx).live_map().clone();
         let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), live_map.clone(), settings, cx));
         let minimap = cx.new(|cx| Minimap::new(live_map.clone(), cx));
+        let warning = cx.new(|cx| Warning::new(settings.clone(), cx));
+        cx.observe(&warning, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&warning, window, |hud, _, _: &Closed, window, cx| {
+            // The focus must not stay in the gone dialog, or Escape would reach nothing.
+            hud.focus.focus(window, cx);
+        })
+        .detach();
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
@@ -168,7 +179,12 @@ impl Hud {
             cx.notify();
         })
         .detach();
-        cx.subscribe(&layer, |hud, _, _: &MinimapKey, cx| hud.minimap_key(cx)).detach();
+        cx.subscribe(&layer, |hud, _, &Pressed(slot), cx| match slot {
+            Slot::Minimap => hud.minimap_key(cx),
+            Slot::ZoomIn => hud.maps.update(cx, |maps, cx| maps.zoom_minimap(ZOOM_STEP, cx)),
+            Slot::ZoomOut => hud.maps.update(cx, |maps, cx| maps.zoom_minimap(-ZOOM_STEP, cx)),
+        })
+        .detach();
         cx.observe_in(&docks, window, |hud, _, window, cx| {
             hud.place_map(window, cx);
             hud.dock_minimap(cx);
@@ -180,11 +196,12 @@ impl Hud {
         // of the two hears `Opened` first.
         cx.subscribe_in(&library, window, |hud, _, event: &LibraryEvent, window, cx| {
             if matches!(event, LibraryEvent::Opened) && hud.over {
-                hud.place_map(window, cx);
-                // The old game's map may have gone with the focus.
+                // The old game's map may have gone with the focus. `place_map` ends with the warning's refocus, so
+                // the question keeps the focus (the map's Escape would leave the overlay with it still up).
                 if !hud.docked(cx) {
                     hud.focus.focus(window, cx);
                 }
+                hud.place_map(window, cx);
             }
         })
         .detach();
@@ -209,6 +226,7 @@ impl Hud {
             docks,
             minimap,
             _glance: glance,
+            warning,
             over: false,
             focus: cx.focus_handle(),
         };
@@ -221,6 +239,7 @@ impl Hud {
         self.map.update(cx, |map, cx| map.set_docked(over, cx));
         self.let_go_minimap(window, cx);
         if !over {
+            self.warning.update(cx, |warning, cx| warning.hide(cx));
             // The dock's map goes with the overlay.
             return self.map.update(cx, |map, cx| map.hide(window, cx));
         }
@@ -237,6 +256,10 @@ impl Hud {
         // An open map keeps the focus: its Escape closes its own things first, then leaves.
         if !self.maps.read(cx).is_open(cx) {
             self.focus.focus(window, cx);
+        }
+        // Last: the question takes the focus from the above.
+        if self.layer.read(cx).exclusive() {
+            self.warning.update(cx, |warning, cx| warning.entered(window, cx));
         }
     }
 
@@ -278,6 +301,7 @@ impl Hud {
             }
             _ => {}
         }
+        self.warning.update(cx, |warning, cx| warning.refocus(window, cx));
     }
 
     /// The MAP dock shows the open game's map: the dock is shown and the game has one.
@@ -286,8 +310,10 @@ impl Hud {
     }
 
     fn leave_overlay(&mut self, _: &LeaveOverlay, window: &mut Window, cx: &mut Context<Self>) {
-        // An open dialog or menu closes first.
-        if !self.cheat_list.update(cx, |list, cx| list.close_top(window, cx)) {
+        // An open dialog or menu closes first; the warning even when a late `Opened` took the focus from it.
+        if self.warning.update(cx, |warning, cx| warning.hide(cx)) {
+            self.focus.focus(window, cx);
+        } else if !self.cheat_list.update(cx, |list, cx| list.close_top(window, cx)) {
             self.layer.read(cx).leave();
         }
     }
@@ -340,17 +366,27 @@ impl Render for Hud {
             .h(px(TOP - GAP))
             .px(px(EDGE))
             .gap(px(GAP))
-            .child(h_flex().flex_1().min_w_0().when_some(game, |left, game| {
-                left.child(
-                    title(self.trainers.read(cx), game, 24., cx)
-                        .max_w_full()
-                        .px(px(14.))
-                        .py(px(8.))
-                        .bg(alpha(BG, 0.85))
-                        .border_1()
-                        .border_color(line(0.1)),
-                )
-            }))
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .items_start()
+                    .gap(px(4.))
+                    // With the warning the group is taller than the bar: from the top it still ends above the docks.
+                    .when(self.layer.read(cx).exclusive(), |left| left.self_start())
+                    .when_some(game, |left, game| {
+                        left.child(
+                            title(self.trainers.read(cx), game, 24., cx)
+                                .max_w_full()
+                                .px(px(14.))
+                                .py(px(8.))
+                                .bg(alpha(BG, 0.85))
+                                .border_1()
+                                .border_color(line(0.1)),
+                        )
+                    })
+                    .when(self.layer.read(cx).exclusive(), |left| left.child(chip(cx))),
+            )
             .child(
                 h_flex()
                     .gap(px(4.))
@@ -381,5 +417,6 @@ impl Render for Hud {
             .children(frames)
             .child(docks::input(&self.docks))
             .children(self.cheat_list.read(cx).editor().cloned())
+            .children(Some(self.warning.clone()).filter(|warning| warning.read(cx).is_open()))
     }
 }

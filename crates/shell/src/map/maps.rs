@@ -380,6 +380,13 @@ impl Maps {
         self.follow_minimap(cx);
     }
 
+    /// The minimap's zoom: closer for more `levels`, further for fewer. With no live map there is nothing to zoom.
+    pub fn zoom_minimap(&self, levels: f64, cx: &mut Context<Self>) {
+        if self.live_map.read(cx).ready(cx) {
+            self.live_map.update(cx, |live, cx| live.zoom_by(levels, cx));
+        }
+    }
+
     /// The open map follows the live run of its game; the minimap the live run, wherever.
     fn follow(&mut self, cx: &mut Context<Self>) {
         let open = self.is_open(cx);

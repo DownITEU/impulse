@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use gpui_kit::{
-    App, Bounds, Context, Entity, FocusHandle, FontWeight, IntoElement, Render, Window, canvas,
+    App, Bounds, ClipboardItem, Context, Entity, FocusHandle, FontWeight, IntoElement, Render, Task, Window, canvas,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div, fill, point,
     prelude::*,
@@ -16,11 +16,12 @@ use super::Remote;
 use crate::{
     settings::{Settings, label, row},
     ui::{
+        assets::Icon,
         dialog::dialog,
         key,
         text::{t, tf},
         theme::*,
-        widgets::{button, mono, square, toggle, tracked},
+        widgets::{button, flash, mono, square, switch, tinted_icon_button, tip, tracked},
     },
 };
 
@@ -35,6 +36,8 @@ pub struct RemoteView {
     remote: Entity<Remote>,
     settings: Entity<Settings>,
     open: bool,
+    // The address was just copied; dropping it hides the confirmation.
+    copied: Option<Task<()>>,
     focus: FocusHandle,
 }
 
@@ -42,7 +45,7 @@ impl RemoteView {
     pub fn new(remote: Entity<Remote>, settings: Entity<Settings>, cx: &mut Context<Self>) -> Self {
         cx.observe(&remote, |_, _, cx| cx.notify()).detach();
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
-        Self { remote, settings, open: false, focus: cx.focus_handle() }
+        Self { remote, settings, open: false, copied: None, focus: cx.focus_handle() }
     }
 
     pub fn is_open(&self) -> bool {
@@ -69,21 +72,34 @@ impl RemoteView {
 impl Render for RemoteView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (remote, on) = (self.remote.read(cx), self.settings.read(cx).prefs().remote);
-        let switch = div()
-            .id("remote-switch")
-            .cursor_pointer()
-            .on_click(
-                cx.listener(move |view, _, _, cx| view.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.remote = !on, cx))),
-            )
-            .child(toggle(on, cx));
+        let switch = switch("remote-switch", on, cx).on_click(
+            cx.listener(move |view, _, _, cx| view.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.remote = !on, cx))),
+        );
+        let copied = self.copied.is_some();
         let pairing = remote.link().map(|(link, qr)| {
+            // The tooltip stays the same: GPUI keeps an open one until the pointer leaves, so only the glyph confirms.
+            let (text, copy) = (t(cx, key::REMOTE_COPY), link.clone());
+            let copier = tinted_icon_button(
+                "remote-copy",
+                if copied { Icon::Check } else { Icon::Copy },
+                28.,
+                14.,
+                if copied { accent(cx) } else { DIM },
+            )
+            .border_1()
+            .border_color(line(0.16))
+            .tooltip(move |window, cx| tip(text.clone(), window, cx))
+            .on_click(cx.listener(move |view, _, _, cx| {
+                cx.write_to_clipboard(ClipboardItem::new_string(copy.to_string()));
+                view.copied = Some(flash(cx, |view: &mut Self| view.copied = None));
+            }));
             h_flex().gap(px(18.)).py(px(14.)).border_b_1().border_color(line(0.07)).children(qr.map(code)).child(
                 v_flex()
                     .flex_1()
                     .min_w_0()
                     .gap(px(12.))
                     .child(label(t(cx, key::REMOTE_ADDRESS), t(cx, key::REMOTE_ADDRESS_HINT)))
-                    .child(mono(link, 13.).text_color(rgb(TEXT_BRIGHT))),
+                    .child(h_flex().gap(px(10.)).child(mono(link, 13.).min_w_0().text_color(rgb(TEXT_BRIGHT))).child(copier)),
             )
         });
         let devices = remote.devices().iter().map(|device| {

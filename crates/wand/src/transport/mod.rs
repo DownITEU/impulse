@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow};
 use futures::channel::oneshot;
+use model::{Failure, FailureKind};
 use serde::Serialize;
 use tao::event_loop::EventLoopProxy;
 
@@ -62,7 +63,6 @@ impl Transport {
                 _ => drop(fs::remove_file(data_dir.join(CLEAR))),
             }
         }
-        fs::write(data_dir.join("bridge.html"), BRIDGE).context("write bridge.html")?;
         let (started, wait) = mpsc::sync_channel(0);
         thread::Builder::new()
             .name("impulse-transport".into())
@@ -74,7 +74,12 @@ impl Transport {
 
     pub async fn fetch(&self, request: Request) -> Result<Response> {
         let (tx, rx) = oneshot::channel();
-        self.proxy.send_event(Cmd::Fetch(request, tx)).map_err(|_| anyhow!("transport is closed"))?;
-        rx.await.map_err(|_| anyhow!("transport dropped the request"))?
+        self.proxy.send_event(Cmd::Fetch(request, tx)).map_err(|_| offline("transport is closed"))?;
+        rx.await.map_err(|_| offline("transport dropped the request"))?
     }
+}
+
+/// A request the bridge could not make: the UI words it as no connection.
+fn offline(why: &str) -> anyhow::Error {
+    anyhow!("{why}").context(Failure::new(FailureKind::Offline))
 }

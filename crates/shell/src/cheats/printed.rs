@@ -27,7 +27,8 @@ pub struct Printed {
     pub rows: Vec<Row>,
     /// Text fields of the cheats applied with a button, by cheat index.
     pub inputs: HashMap<usize, Entity<InputState>>,
-    /// The control column: as wide as the widest control here, so the caps sit next to it.
+    /// The control column's least width: the widest control here, so the caps sit next to it. A longer button text widens
+    /// its own row instead of running over the caps.
     pub control_width: f32,
 }
 

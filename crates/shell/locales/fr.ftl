@@ -17,25 +17,25 @@ tray-quit = Quitter
 failure-offline = pas de connexion
 failure-signed-out = déconnecté
 failure-not-found = introuvable
-failure-unsupported = pas encore géré
-failure-setup-needed = un réglage manque : voir Paramètres, APP
+failure-unsupported = pas encore pris en charge
+failure-setup-needed = il manque un réglage : voir Paramètres > App
 failure-game-not-found = le jeu est introuvable
 failure-refused = refusé
-failure-internal = un problème est survenu : détails dans le log
-failure-place = { $why } : voir Paramètres, APP
+failure-internal = erreur inattendue : voir le log
+failure-place = { $why } : voir Paramètres > App
 
 ## Page
 
-catalog-failed-tag = [ SANS CATALOGUE ]
-catalog-failed = LE CATALOGUE DES JEUX EST INDISPONIBLE
-catalog-failed-body = Téléchargement impossible : { $why }. Impulse réessaie au prochain démarrage.
+catalog-failed-tag = [ INDISPO ]
+catalog-failed = CATALOGUE INDISPONIBLE
+catalog-failed-body = Téléchargement impossible : { $why }. Impulse réessaiera au prochain démarrage.
 library-filter = filtrer
 picker-filter = nom du jeu
 page-search = { $count ->
-    [one] chercher { $trainers } trainer
-   *[other] chercher { $trainers } trainers
+    [one] rechercher parmi { $trainers } trainer
+   *[other] rechercher parmi { $trainers } trainers
 }
-page-search-none = chercher un trainer
+page-search-none = rechercher un trainer
 page-search-key = CTRL K
 page-signed-out = NON CONNECTÉ
 page-overlay = OVERLAY
@@ -44,33 +44,41 @@ page-folder = Ouvrir le dossier du jeu
 page-launcher = Ouvrir dans { $launcher }
 page-source = Source du jeu
 page-custom = PERSO
-page-live = LIVE
+page-live = ACTIF
 page-active = { $active ->
     [one] { $active }/{ $total } ACTIF
    *[other] { $active }/{ $total } ACTIFS
 }
 page-idle = INACTIF
 page-log = LOG
-page-binding = APPUYEZ · ESC ANNULER · BKSP DÉFAUT
-page-binding-unbind = APPUYEZ · ESC ANNULER · BKSP DÉFAUT · DEL EFFACER
+page-binding = TAPEZ LE RACCOURCI · ESC ANNULER · BKSP RÉTABLIR
+page-binding-unbind = TAPEZ LE RACCOURCI · ESC ANNULER · BKSP RÉTABLIR · DEL EFFACER
 page-hotkeys-on = RACCOURCIS ON
 page-hotkeys-off = RACCOURCIS OFF
+disclaimer-title = AVANT DE COMMENCER
+disclaimer-body = Impulse est un client non officiel pour { $sources }. Il utilise les fichiers de l'appli installée sur ce PC et votre session déjà ouverte pour récupérer vos jeux et trainers auprès du service. Impulse ne vous demande jamais votre mot de passe. En dehors de ces échanges avec le service, les données de votre compte restent sur ce PC. Impulse n'est pas affilié au service et n'a pas son approbation. L'utilisation de trainers peut entraîner un bannissement dans les jeux en ligne : vous les utilisez à vos risques et périls.
+disclaimer-accept = J'ACCEPTE
+disclaimer-exit = QUITTER
+signed-out-title = CONNEXION IMPOSSIBLE
+signed-out-body = Impulse n'a pas pu se connecter à { $sources }. Vérifiez que l'appli est installée sur ce PC, que vous êtes connecté à votre compte et que vous avez accès à Internet, puis réessayez. Les trainers ne seront disponibles qu'une fois la connexion rétablie.
+signed-out-retry = RÉESSAYER
+signed-out-close = FERMER
 
 ## Library
 
 library-favorites = FAVORIS
 library-games = JEUX
 library-no-match = AUCUN RÉSULTAT
-library-add = + AJOUTER
-library-live = LIVE
+library-add = + JEU
+library-live = ACTIF
 library-scanning-tag = [ ANALYSE ]
 library-scanning = RECHERCHE DES JEUX INSTALLÉS
-library-scanning-body = Lecture du catalogue des jeux et de vos lanceurs.
+library-scanning-body = Impulse compare le catalogue aux jeux installés via vos lanceurs.
 library-empty-tag = [ AUCUN JEU ]
-library-empty = AUCUN JEU INSTALLÉ TROUVÉ
-library-empty-body = Impulse cherche dans Steam, Epic, GOG, Ubisoft, Xbox, Rockstar et EA les jeux pour lesquels il a des trainers.
+library-empty = AUCUN JEU INSTALLÉ DÉTECTÉ
+library-empty-body = Impulse cherche les jeux pour lesquels un trainer est disponible parmi ceux installés via Steam, Epic, GOG, Ubisoft, Xbox, Rockstar ou EA.
 library-source-exe = EXE  { $file }
-library-source-add = + AJOUTER .EXE
+library-source-add = + .EXE
 library-source-change = CHANGER .EXE
 library-source-remove = RETIRER .EXE
 
@@ -78,44 +86,44 @@ library-source-remove = RETIRER .EXE
 
 picker-title = AJOUTER UN JEU
 picker-owned = PLUSIEURS JEUX CORRESPONDENT : LEQUEL ?
-picker-unowned = AUCUNE CORRESPONDANCE : CHERCHEZ-LE PAR NOM
+picker-unowned = JEU NON IDENTIFIÉ : RECHERCHEZ-LE PAR NOM
 picker-in-library = { $store }  EN BIBLIOTHÈQUE
-picker-prompt = Choisir le .exe du jeu
+picker-prompt = Choisir le fichier .EXE du jeu
 
 ## Cheats
 
 cheats-failed-tag = [ SANS DONNÉES ]
-cheats-failed = LA LISTE DES CHEATS N'EST PAS TÉLÉCHARGÉE
-cheats-failed-body = Téléchargement impossible : { $why }. Impulse réessaie à l'ouverture du jeu.
+cheats-failed = LISTE DES MODS INDISPONIBLE
+cheats-failed-body = Téléchargement impossible : { $why }. Impulse réessaiera la prochaine fois que vous ouvrirez ce jeu.
 cheats-filter = filtrer les mods
 cheats-pinned = ÉPINGLÉS
-cheats-kept = Conservée sur le disque après le premier téléchargement.
+cheats-kept = Une fois téléchargée, la liste reste sur votre PC.
 cheats-no-trainer-tag = [ AUCUN TRAINER ]
-cheats-no-trainer = PAS DE TRAINER POUR { $game }
-cheats-no-trainer-body = Il n'existe pas encore de trainer pour ce jeu. Impulse le signalera dans votre bibliothèque dès qu'il sortira.
+cheats-no-trainer = PAS ENCORE DE TRAINER POUR { $game }
+cheats-no-trainer-body = Dès qu'un trainer sortira pour ce jeu, Impulse l'indiquera dans votre bibliothèque.
 cheats-loading-tag = [ CHARGEMENT ]
-cheats-loading = CHARGEMENT DES CHEATS
+cheats-loading = CHARGEMENT DES MODS
 cheats-shown = { $count ->
     [one] { $shown } MOD
    *[other] { $shown } MODS
 }
-cheats-no-match = AUCUN MOD NE CORRESPOND
+cheats-no-match = AUCUN MOD TROUVÉ
 cheats-updated = JEU MIS À JOUR
-cheats-updated-body = Cette version dépasse celle gérée par le trainer. Des mods risquent de ne pas fonctionner avant sa mise à jour.
-cheats-set = FIXER
+cheats-updated-body = Le jeu est plus récent que le trainer. Certains mods risquent de ne pas fonctionner tant que le trainer n'aura pas été mis à jour.
+cheats-set = OK
 cheats-set-done = OK
-cheats-execute = EXÉCUTER
-cheats-execute-done = APPLIQUÉ
-cheats-save = SAUVER
+cheats-execute = LANCER
+cheats-execute-done = FAIT
+cheats-save = GARDER
 cheats-saved = { $count ->
-    [one] SAUVÉ { $saved }
-   *[other] SAUVÉS { $saved }
+    [one] { $saved } GARDÉ
+   *[other] { $saved } GARDÉS
 }
-cheats-save-tip = Les mods laissés actifs reviennent à la session suivante.
-cheats-reset = RAZ
+cheats-save-tip = Les mods encore actifs en fin de session se réactivent à la suivante.
+cheats-reset = RESET
 cheats-no-collections = AUCUNE COLLECTION
-cheats-collect-tip = Enregistre les mods actifs comme collection.
-cheats-edit = ÉDITER
+cheats-collect-tip = Enregistre les mods actifs dans une collection.
+cheats-edit = MODIFIER
 cheats-delete = SUPPRIMER
 cheats-name-field = nom
 cheats-cancel = ANNULER
@@ -125,7 +133,7 @@ cheats-collection-mods = { $count ->
     [one] { $mods } MOD
    *[other] { $mods } MODS
 }
-cheats-edit-collection = MODIFIER COLLECTION
+cheats-edit-collection = MODIFIER LA COLLECTION
 cheats-new-collection = NOUVELLE COLLECTION
 
 ## Hotkeys
@@ -135,9 +143,9 @@ hotkeys-off = OFF
 hotkeys-in-game = EN JEU
 hotkeys-global = GLOBAL
 hotkeys-enabled = RACCOURCIS
-hotkeys-enabled-hint = raccourcis du trainer pendant le jeu
-hotkeys-works-in = PORTÉE
-hotkeys-works-in-hint = en jeu : seulement quand le jeu est au premier plan
+hotkeys-enabled-hint = active les raccourcis du trainer pendant la session
+hotkeys-works-in = CONTEXTE
+hotkeys-works-in-hint = en jeu : uniquement quand le jeu est au premier plan
 
 ## Trainer
 
@@ -148,7 +156,7 @@ trainer-mods = { $count ->
 }
 trainer-version = V{ $version }
 trainer-version-unknown = VERSION INCONNUE
-trainer-update-pending = MÀJ EN ATTENTE
+trainer-update-pending = MAJ EN ATTENTE
 trainer-sessions = { $count ->
     [one] { $count } SESSION
    *[other] { $count } SESSIONS
@@ -158,47 +166,48 @@ trainer-played-hours = { $hours } H DE JEU
 
 ## Run
 
-run-no-cheats = liste des cheats non chargée
+run-no-cheats = la liste des mods n'est pas chargée
 run-preparing = PRÉPARATION DU TRAINER
 run-launching = LANCEMENT DU JEU
-run-waiting = EN ATTENTE DU JEU
+run-waiting = ATTENTE DU JEU
 run-attaching = CHARGEMENT DU TRAINER
 run-stopping = ARRÊT DU TRAINER
 run-stop = STOP
-run-launch = LANCER + ATTACHER
+run-launch = JOUER + TRAINER
 run-enter = ENTRÉE
 run-session = SESSION
 run-last-session = DERNIÈRE SESSION
 run-active = ACTIFS
 run-hotkeys = RACCOURCIS
-run-idle = TRAINER INACTIF · COMMANDES DÉBLOQUÉES APRÈS LANCEMENT
+run-idle = LANCEZ LE JEU POUR UTILISER LES MODS
 
 ## Map
 
-teleport-failed = ÉCHEC TÉLÉPORTATION : { $why }
-map-failed-tag = [ SANS CARTE ]
-map-failed = LA CARTE EST INDISPONIBLE
+teleport-failed = TÉLÉPORTATION IMPOSSIBLE : { $why }
+map-failed-tag = [ PAS DE CARTE ]
+map-failed = CARTE INDISPONIBLE
 map-failed-body = Chargement impossible : { $why }.
 map-title = CARTE
 map-none = PAS DE CARTE INTERACTIVE POUR CE JEU
 map-link = LIER UNE CARTE
+map-unlink = DISSOCIER LA CARTE
 map-link-title = LIER UNE CARTE
-map-link-caption = LEQUEL DE CES TITRES EST CE JEU ?
-map-link-empty = Aucune source de cartes n'a de titre de ce nom.
+map-link-caption = QUEL TITRE CORRESPOND À CE JEU ?
+map-link-empty = Aucune carte trouvée pour ce titre.
 map-refresh = ACTUALISER
 map-loading-tag = [ CHARGEMENT ]
 map-loading = CHARGEMENT DE LA CARTE
-map-loading-body = Repères et tuiles restent sur disque après la première fois.
-map-search = trouver un lieu, un groupe, un mot
-map-unfinished = Cartographie en cours : des repères peuvent manquer ou bouger.
+map-loading-body = Au premier chargement, le fond de carte et les repères sont enregistrés sur votre PC.
+map-search = rechercher un lieu, un groupe ou un mot-clé
+map-unfinished = Carte en cours de création : certains repères peuvent manquer ou changer de place.
 map-found = TROUVÉ
 map-found-count = TROUVÉS
-map-mark-found = MARQUER TROUVÉ
+map-mark-found = JE L'AI TROUVÉ
 map-unfound = À TROUVER
 map-show-all = TOUT VOIR
-map-hide-all = TOUT MASQUER
+map-hide-all = TOUT CACHER
 map-teleport = TÉLÉPORTER
-map-filter-teleport = TÉLÉPORT
+map-filter-teleport = AVEC TP
 map-teleport-here = TÉLÉPORTER ICI
 map-confirm = CONFIRMER
 map-delete = SUPPRIMER
@@ -206,7 +215,7 @@ map-add-pin = NOUVEAU REPÈRE
 map-my-pin = MON REPÈRE
 map-my-pins = MES REPÈRES
 map-pin-name = Mon repère { $number }
-map-name-field = nommer ce repère
+map-name-field = nom du repère
 map-note-field = note
 map-no-pins = Clic droit sur la carte pour en ajouter.
 map-regions = RÉGIONS
@@ -216,14 +225,14 @@ map-places = { $count ->
    *[other] { $places } LIEUX
 }
 map-no-matches = Aucun résultat. Essayez un groupe ou un mot plus court.
-map-nearby = PROCHES
+map-nearby = À PROXIMITÉ
 map-copy = COPIER
 map-copied = COPIÉ
 map-hide-group = MASQUER { $group } SUR LA CARTE
 map-video = VIDÉO
 map-photo = PHOTO
 map-layer-labels = NOMS DES LIEUX
-map-layer-clusters = GROUPER SI PROCHES
+map-layer-clusters = REGROUPER LES REPÈRES
 map-axis-x = X
 map-axis-y = Y
 map-axis-z = Z
@@ -235,16 +244,26 @@ overlay-dock-map = CARTE
 overlay-dock-session = SESSION
 overlay-dock-minimap = MINICARTE
 overlay-minimap-tag = [ MINICARTE ]
-overlay-no-live-map = SANS CARTE LIVE
-overlay-no-live-map-hint = Elle suit le joueur quand un trainer capable de le situer tourne dans un jeu avec une carte.
+overlay-no-live-map = SUIVI INACTIF
+overlay-no-live-map-hint = Pour que la minicarte suive votre position, le jeu doit avoir une carte et le trainer actif doit pouvoir vous localiser.
 overlay-mode = MODE
-overlay-mode-hint = en jeu, dessiné dans le jeu : plus tard
-overlay-mode-over = SUR LE JEU
-overlay-mode-in-game = EN JEU
+overlay-mode-hint = l'affichage intégré au jeu n'est pas encore disponible
+overlay-mode-over = PAR-DESSUS
+overlay-mode-in-game = INTÉGRÉ
 overlay-hotkey = RACCOURCI
-overlay-hotkey-hint = modificateurs et une touche, libres dans d'autres applis et mods
+overlay-hotkey-hint = combinez des touches comme Ctrl ou Maj avec une autre touche. Évitez les raccourcis déjà utilisés par vos applis ou vos mods
 overlay-minimap-hotkey = RACCOURCI MINICARTE
-overlay-minimap-hotkey-hint = affiche ou masque la minicarte ; actif seulement quand le jeu est au premier plan
+overlay-minimap-hotkey-hint = affiche ou masque la minicarte, uniquement quand le jeu est au premier plan
+overlay-zoom-in-hotkey = ZOOM + MINICARTE
+overlay-zoom-in-hotkey-hint = zoome sur la minicarte, uniquement quand le jeu est au premier plan
+overlay-zoom-out-hotkey = ZOOM − MINICARTE
+overlay-zoom-out-hotkey-hint = élargit la vue sur la minicarte, uniquement quand le jeu est au premier plan
+overlay-exclusive-title = PLEIN ÉCRAN EXCLUSIF
+overlay-exclusive-body = En plein écran exclusif, l'overlay risque de ne pas s'afficher et la fenêtre du jeu peut se réduire. Pour éviter ça, choisissez le mode « Fenêtré sans bordure » dans les réglages vidéo du jeu.
+overlay-exclusive-chip = PLEIN ÉCRAN EXCLUSIF : PASSEZ EN FENÊTRÉ SANS BORDURE
+overlay-exclusive-skip = NE PLUS AFFICHER
+overlay-exclusive-ok = OK
+overlay-exclusive-ask-hint = demander quand l'overlay s'ouvre sur un jeu en plein écran exclusif
 
 ## Settings
 
@@ -256,111 +275,129 @@ settings-app = APP
 settings-resources = RESSOURCES
 settings-plugins = PLUGINS
 settings-about = À PROPOS
-accent = ACCENT
-accent-hint = marque seulement le LIVE
-accent-lime = LIME
+accent = COULEUR
+accent-hint = met uniquement en évidence les éléments actifs
+accent-lime = ANIS
 accent-amber = AMBRE
 accent-cyan = CYAN
 accent-white = BLANC
 sidebar = BARRE LATÉRALE
-sidebar-hint = en tête de chaque ligne de jeu
+sidebar-hint = ce qui s'affiche devant le nom du jeu
 sidebar-number = NUMÉRO
 sidebar-thumbnail = VIGNETTE
 panels = PANNEAUX
-panels-hint = carte et session au-dessus des mods, ou à côté
+panels-hint = place la carte et la session au-dessus ou à côté des mods
 panels-top = HAUT
 panels-side = CÔTÉ
-reduce-motion = ANIMATIONS RÉDUITES
-reduce-motion-hint = ni LIVE clignotant ni transitions
+reduce-motion = RÉDUIRE LES ANIMATIONS
+reduce-motion-hint = désactive le clignotement du statut ACTIF et les transitions
 language = LANGUE
 language-hint = la langue des textes d'Impulse
 language-system = SYSTÈME
-close-to-tray = RÉDUIRE EN FERMANT
-close-to-tray-hint = Fermer masque Impulse ; quitter par l'icône de notification
-hide-from-capture = MASQUER À LA CAPTURE
-hide-from-capture-hint = captures d'écran, enregistrements et streams n'affichent pas Impulse
+close-to-tray = MASQUER EN FERMANT
+close-to-tray-hint = fermer la fenêtre masque Impulse. Pour quitter, passez par son icône dans la zone de notification
+hide-from-capture = EXCLURE DES CAPTURES
+hide-from-capture-hint = Impulse n'apparaît ni dans les captures d'écran, ni dans les enregistrements, ni sur les streams
 folder-path = chemin du dossier
 folder-select = Choisir le dossier
+settings-sounds = SONS
+sounds-toggle-on = ACTIVATION
+sounds-toggle-on-hint = une note montante quand un mod s'active
+sounds-toggle-off = DÉSACTIVATION
+sounds-toggle-off-hint = une note descendante quand un mod se désactive
+sounds-slider = CURSEURS
+sounds-slider-hint = un clic à chaque cran quand vous déplacez le curseur
+sounds-number = VALEURS
+sounds-number-hint = un clic quand une valeur change
+sounds-button = BOUTONS
+sounds-button-hint = un clic quand vous lancez un mod à l'aide d'un bouton
+sounds-selection = CHOIX
+sounds-selection-hint = une note à chaque changement d'option
+sounds-listen = Écouter
+sounds-choose = Remplacer par un fichier WAV
+sounds-reset = Rétablir le son par défaut
+sounds-refused = fichier non WAV ou de plus de 1 Mo
+sounds-prompt = Choisir un fichier WAV
 
 ## Remote
 
-remote = PANNEAU À DISTANCE
-remote-open = Panneau à distance : piloter Impulse depuis un téléphone
-remote-switch = ACCÈS TÉLÉPHONE
-remote-hint = piloter Impulse depuis un téléphone sur ce réseau
+remote = TÉLÉCOMMANDE
+remote-open = Télécommande : pilotez Impulse depuis votre téléphone
+remote-switch = ACCÈS MOBILE
+remote-hint = pilotez Impulse depuis un téléphone connecté à ce réseau
 remote-address = ADRESSE
-remote-address-hint = à scanner avec l'appareil photo : le code associe une fois et change toutes les cinq minutes
-remote-failed = aucune adresse réseau où écouter
+remote-address-hint = scannez le code QR avec votre téléphone. Ce code est à usage unique et change toutes les cinq minutes
+remote-failed = aucune adresse réseau disponible
 remote-devices = APPAREILS
-remote-devices-hint = téléphones et navigateurs associés ; un appareil révoqué est déconnecté aussitôt
+remote-devices-hint = téléphones et navigateurs associés. Si vous retirez un accès, l'appareil se déconnecte aussitôt
 remote-no-devices = aucun appareil pour l'instant
 remote-device = appareil { $number }
 remote-unknown-device = NAVIGATEUR
-remote-revoke = RÉVOQUER
-remote-trust = HTTP simple : tout ce réseau peut le voir. Réseaux de confiance seulement.
+remote-revoke = RETIRER L'ACCÈS
+remote-trust = Connexion HTTP non chiffrée : n'importe qui sur ce réseau peut voir les échanges. N'utilisez cette option que sur un réseau de confiance.
 remote-tips = SI LE TÉLÉPHONE NE SE CONNECTE PAS
-remote-tip-network = Le téléphone doit être sur le réseau de ce PC : pas en données mobiles, sur un Wi-Fi invité ou un VPN.
-remote-tip-firewall = Le pare-feu Windows peut bloquer Impulse sans rien demander, surtout sur un réseau public : rendez ce réseau privé, ou autorisez Impulse dans Sécurité Windows > Pare-feu et protection du réseau > Autoriser une application via le pare-feu.
-remote-tip-isolation = Certains routeurs isolent les appareils Wi-Fi entre eux (isolation AP ou client) : désactivez-la, ou essayez un autre réseau.
-remote-note-changed = La liste a changé : réessayez.
+remote-tip-network = Connectez votre téléphone au même réseau que ce PC, sans passer par les données mobiles, un Wi-Fi invité ni un VPN.
+remote-tip-firewall = Le pare-feu Windows peut bloquer Impulse sans vous prévenir, surtout sur un réseau public. Passez le réseau en mode privé ou autorisez Impulse dans Sécurité Windows > Pare-feu et protection du réseau > Autoriser une application via le pare-feu.
+remote-tip-isolation = Certains routeurs empêchent les appareils Wi-Fi de communiquer entre eux (isolation AP ou client). Désactivez cette option ou essayez un autre réseau.
+remote-note-changed = La liste a changé. Réessayez.
 remote-note-not-live = Lancez d'abord le jeu.
-remote-note-busy = Une autre partie tourne, ou le trainer n'est pas encore là.
+remote-note-busy = Une autre session est en cours ou le trainer n'est pas encore prêt.
 remote-note-nothing-on = Activez d'abord des mods.
 remote-note-name = Nommez d'abord la collection.
 
 ## Plugins
 
 plugins-install = INSTALLER
-plugins-install-hint = un dossier ou un .zip contenant un manifest.json ; vous approuvez d'abord ce qu'il peut joindre
+plugins-install-hint = choisissez un dossier ou un fichier .zip contenant manifest.json, puis validez les accès demandés
 plugins-folder = DOSSIER
 plugins-zip = ZIP
-plugins-pick-folder = Choisissez le dossier du plugin
-plugins-pick-zip = Choisissez le .zip du plugin
+plugins-pick-folder = Choisir le dossier du plugin
+plugins-pick-zip = Choisir le fichier .zip du plugin
 plugins-none = aucun plugin installé
-plugins-approve-title = INSTALLER { $name } { $version } ?
+plugins-approve-title = INSTALLER { $name } { $version } ?
 plugins-replaces = remplace la version { $version }
-plugins-hosts = CHARGE DEPUIS
-plugins-links = OUVRE DES LIENS VERS
-plugins-no-hosts = rien
+plugins-hosts = ACCÈS RÉSEAU
+plugins-links = LIENS EXTERNES
+plugins-no-hosts = aucun
 plugins-new = NOUVEAU
-plugins-sandbox = Il tourne dans un bac à sable et ne joint que ces hôtes. N'installez que des plugins de confiance.
+plugins-sandbox = Le plugin s'exécute dans un environnement isolé et ne peut se connecter qu'aux adresses indiquées. N'installez que des plugins de confiance.
 plugins-approve = APPROUVER
 plugins-cancel = ANNULER
-plugins-version = version { $version }, garde { $size }
-plugins-remove = SUPPRIMER
+plugins-version = version { $version } · { $size } sur le disque
+plugins-remove = DÉSINSTALLER
 plugins-value = valeur
 
 ## Resources
 
 media-pictures = IMAGES
-media-pictures-hint = visuels et photos de repères
+media-pictures-hint = visuels des jeux et photos des repères
 media-tiles = FONDS DE CARTE
-media-tiles-hint = le fond des cartes ouvertes
+media-tiles-hint = fonds des cartes consultées
 media-videos = VIDÉOS
-media-videos-hint = clips de repères
+media-videos-hint = vidéos associées aux repères
 resources-reading = CALCUL EN COURS...
-resources-in-use = UTILISÉ
-resources-in-use-hint = tout ce qu'Impulse garde sur ce PC
+resources-in-use = ESPACE UTILISÉ
+resources-in-use-hint = tout ce qu'Impulse stocke sur ce PC
 resources-clear = VIDER
 resources-on-restart = AU REDÉMARRAGE
 resources-clears-on-restart = VIDÉ AU REDÉMARRAGE
 resources-clear-caches = VIDER LES CACHES
-resources-clear-caches-hint = sauf vos données ci-dessous
+resources-clear-caches-hint = les données ci-dessous sont conservées
 resources-clear-all = TOUT VIDER
-resources-limit = LIMITE MÉDIAS
-resources-limit-hint = au-delà, le moins récemment utilisé est retiré
+resources-limit = LIMITE DES MÉDIAS
+resources-limit-hint = au-delà de cette limite, Impulse supprime d'abord les médias qui n'ont pas servi depuis le plus longtemps
 resources-limit-500m = 500 Mo
 resources-limit-1g = 1 Go
 resources-limit-2g = 2 Go
 resources-limit-5g = 5 Go
 resources-limit-none = AUCUNE
-resources-kept = GARDÉ
-resources-progress = PROGRESSION CARTES
-resources-progress-hint = repères trouvés et vos repères
+resources-kept = HORS CACHE
+resources-progress = PROGRESSION SUR LES CARTES
+resources-progress-hint = repères trouvés et repères ajoutés
 resources-hotkeys = RACCOURCIS
-resources-hotkeys-hint = les touches assignées
+resources-hotkeys-hint = les touches que vous avez attribuées
 resources-logs = LOGS
-resources-logs-hint = deux fichiers au plus, lus par LOG
+resources-logs-hint = deux fichiers maximum, consultables dans le log
 resources-bytes = { $size } o
 resources-kilobytes = { $size } Ko
 resources-megabytes = { $size } Mo
@@ -369,8 +406,8 @@ resources-gigabytes = { $size } Go
 ## Log
 
 log-title = LOG
-log-error = ERROR
-log-warn = WARN
+log-error = ERREUR
+log-warn = AVERT.
 log-info = INFO
 log-debug = DEBUG
 log-filter = filtrer le log
@@ -380,4 +417,63 @@ log-copy = COPIER { $count }
 log-copied = COPIÉ
 log-clear = VIDER
 log-folder = DOSSIER
-log-detail-empty = CLIC SUR UNE LIGNE POUR LIRE ET SÉLECTIONNER TOUTE L'ENTRÉE
+log-detail-empty = CLIQUEZ SUR UNE LIGNE POUR LIRE ET SÉLECTIONNER LE TEXTE COMPLET
+
+## About
+
+about-version = VERSION { $version }
+about-tagline = GRATUIT ET OPEN SOURCE
+about-intro = Impulse est développé par une seule personne sur son temps libre. Il est gratuit et open source. Une étoile, un rapport de bug ou un café suffisent à le faire vivre.
+about-github = GITHUB
+about-github-hint = lisez le code, suivez les versions et laissez une étoile pour qu'on le trouve plus facilement
+about-star = ÉTOILE
+about-discord = DISCORD
+about-discord-hint = posez une question, demandez un jeu ou une fonction, discutez avec les autres utilisateurs
+about-join = REJOINDRE
+about-bug = UN BUG ?
+about-bug-hint = ouvrez un ticket avec ce qui s'est passé et ce que vous attendiez. Le LOG de la barre d'état aide
+about-report = SIGNALER
+about-support = SOUTENIR IMPULSE
+about-support-hint = gratuit et open source : un café paie le temps passé sur chaque mise à jour
+about-coffee = UN CAFÉ
+about-contact = CONTACT
+about-contact-hint = pour tout le reste, ou pour un sujet privé : { $address }
+about-email = E-MAIL
+alpha = ALPHA
+plugins-alpha-hint = les plugins sont expérimentaux. Le format peut changer et un plugin peut cesser de fonctionner après une mise à jour.
+remote-copy = copier l'adresse
+
+## Updates
+
+update-title = MISES À JOUR
+update-state-idle = version { $version }
+update-state-current = vous avez la dernière version, { $version }
+update-state-skipped = la version { $version } est ignorée : VÉRIFIER la propose de nouveau
+update-state-checking = recherche de mises à jour...
+update-state-available = la version { $version } est disponible
+update-state-downloading = téléchargement de la { $version }...
+update-state-ready = la { $version } est prête : redémarrez Impulse pour l'installer
+update-check-failed = impossible de joindre la liste des versions
+update-install-failed = la mise à jour n'a pas pu être installée
+update-check = VÉRIFIER
+update-changelog = HISTORIQUE
+update-channel = CANAL DE MISE À JOUR
+update-channel-hint = les préversions arrivent plus tôt et peuvent être instables ; revenir au canal stable ne rétrograde jamais
+update-channel-stable = STABLE
+update-channel-pre = PRÉVERSION
+update-auto = RECHERCHER LES MISES À JOUR
+update-auto-hint = au démarrage et toutes les quelques heures ; seule la liste des versions est demandée, rien sur vous n'est envoyé
+update-title-available = MISE À JOUR DISPONIBLE
+update-title-new = NOUVEAUTÉS DE LA { $version }
+update-from-to = de la { $current } à la { $latest }
+update-later = PLUS TARD
+update-skip = IGNORER CETTE VERSION
+update-restart = REDÉMARRER
+update-close = FERMER
+update-busy = un trainer est en cours : la mise à jour s'installera quand vous quitterez Impulse
+update-no-notes = pas de notes de version
+update-chip-available = MISE À JOUR { $version }
+update-chip-downloading = TÉLÉCHARGEMENT...
+update-chip-ready = REDÉMARRER POUR METTRE À JOUR
+update-changelog-hint = ce qui a changé dans chaque version
+update-open = OUVRIR

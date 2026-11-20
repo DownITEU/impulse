@@ -13,7 +13,9 @@ use futures::{
     future::{self, BoxFuture, Shared},
     stream::{self, BoxStream},
 };
-use model::{Account, Clear, Failure, Folder, Game, Installation, Locale, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
+use model::{
+    Account, Clear, Failure, FailureKind, Folder, Game, Installation, Locale, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store,
+};
 
 use crate::{
     binary, catalog,
@@ -27,7 +29,7 @@ use crate::{
     transport::{self, Transport},
 };
 
-type Link = Result<(Arc<Session>, Transport), Failure>;
+type Link = Result<(Arc<Session>, Transport, Source), Failure>;
 
 // Store ids.
 const MAPS: &str = "maps";
@@ -39,8 +41,9 @@ const BRIDGE: &str = "bridge";
 pub struct Wand {
     data_dir: PathBuf,
     transport: Result<Transport, Failure>,
-    // Shared by every caller; a failed connection is tried again by the next `sign_in`.
-    session: Mutex<Shared<BoxFuture<'static, Link>>>,
+    // Shared by every caller; a failed or rejected connection is tried again by the next. The flag: it refreshes,
+    // so a refresh that failed is tried again as one.
+    session: Mutex<(Shared<BoxFuture<'static, Link>>, bool)>,
     folder: Arc<Setting>,
     host: Host,
     // The hotkeys the user changed in Wand, read when a trainer first needs them.
@@ -59,7 +62,7 @@ impl Wand {
         });
         let folder = Arc::new(Setting::load(&data_dir));
         Self {
-            session: Mutex::new(connect(&transport, &data_dir)),
+            session: Mutex::new((connect(&transport, &data_dir, false), false)),
             host: Host::new(data_dir.clone(), folder.clone()),
             transport,
             folder,
@@ -76,7 +79,17 @@ impl Wand {
     }
 
     fn session(&self) -> Shared<BoxFuture<'static, Link>> {
-        self.session.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        let mut guard = self.session.lock().unwrap_or_else(PoisonError::into_inner);
+        let (link, refreshes) = &mut *guard;
+        let refresh = match link.peek() {
+            Some(Err(_)) => Some(*refreshes),
+            Some(Ok((session, ..))) if session.is_rejected() => Some(true),
+            _ => None,
+        };
+        if let Some(refresh) = refresh {
+            (*link, *refreshes) = (connect(&self.transport, &self.data_dir, refresh), refresh);
+        }
+        link.clone()
     }
 }
 
@@ -88,18 +101,15 @@ impl model::Source for Wand {
     fn texts(&self) -> model::Files {
         texts::files()
     }
+
+    fn name(&self) -> model::Text {
+        model::Text::Plain("Wand".to_owned())
+    }
 }
 
 impl model::Accounts for Wand {
     fn sign_in(&self) -> BoxStream<'static, SignIn> {
-        let session = {
-            let mut session = self.session.lock().unwrap_or_else(PoisonError::into_inner);
-            if matches!(session.peek(), Some(Err(_))) {
-                *session = connect(&self.transport, &self.data_dir);
-            }
-            session.clone()
-        };
-        let dir = self.data_dir.clone();
+        let (session, dir) = (self.session(), self.data_dir.clone());
         channel(|tx| async move {
             let cached = {
                 let dir = dir.clone();
@@ -109,16 +119,22 @@ impl model::Accounts for Wand {
             if let Some((account, _)) = cached {
                 send(&tx, SignIn::Account(Account { name: account.username }));
             }
-            let (session, transport) = match session.await {
+            let (session, transport, source) = match session.await {
                 Ok(link) => link,
                 Err(_) => return send(&tx, SignIn::Failed),
             };
-            if known {
+            // A new session from Wand may be another account than the one kept.
+            if known && !matches!(source, Source::Wand) {
                 return;
             }
             match account::fetch(&session, &transport, &dir).await {
                 Ok(account) => send(&tx, SignIn::Account(Account { name: account.username })),
-                Err(e) => log::warn!("account: {e:#}"),
+                Err(e) => {
+                    log::warn!("account: {e:#}");
+                    if e.downcast_ref::<Failure>().is_some_and(|failure| failure.kind == FailureKind::SignedOut) {
+                        send(&tx, SignIn::Failed);
+                    }
+                }
             }
         })
     }
@@ -170,7 +186,7 @@ impl model::Trainers for Wand {
                 return;
             }
             let fetched = async {
-                let (session, transport) = session.await?;
+                let (session, transport, _) = session.await?;
                 trainer::fetch(&session, &transport, &dir, &id, stamp).await
             }
             .await;
@@ -197,7 +213,7 @@ impl model::Maps for Wand {
             send(&tx, Snapshot::Cached(copy.map(|copy| copy.map)));
             if !fresh {
                 let mut fetched = async {
-                    let (session, transport) = session.await?;
+                    let (session, transport, _) = session.await?;
                     map::fetch(&session, &transport, &dir, offer.id.id(), offer.revision.clone(), served).await
                 }
                 .await;
@@ -277,14 +293,23 @@ fn snapshot(trainer: Trainer, host: &Host, custom: Option<&HashMap<String, store
     trainer
 }
 
-fn connect(transport: &Result<Transport, Failure>, data_dir: &Path) -> Shared<BoxFuture<'static, Link>> {
-    let (transport, vault) = (transport.clone(), data_dir.join("session.bin"));
+fn connect(transport: &Result<Transport, Failure>, data_dir: &Path, refresh: bool) -> Shared<BoxFuture<'static, Link>> {
+    let (transport, vault, dir) = (transport.clone(), data_dir.join("session.bin"), data_dir.to_owned());
     async move {
         let transport = transport?;
-        let (session, source) = session::connect(&transport, vault).await.map_err(|e| {
-            log::error!("Session: {e:#}");
-            Failure::from(e)
+        let (session, source) = session::connect(&transport, vault, refresh).await.map_err(|e| {
+            let failure = Failure::from(e);
+            // No Wand, no sign-in or no network is the user's setup, not a fault.
+            match failure.kind {
+                FailureKind::Internal => log::error!("Session: {failure}"),
+                _ => log::warn!("Session: {failure}"),
+            }
+            failure
         })?;
+        // The kept name may be another account's.
+        if matches!(source, Source::Wand) {
+            unblock(move || account::forget(&dir)).await;
+        }
         let how = match source {
             Source::Restored => "restored",
             Source::Refreshed => "refreshed",
@@ -292,7 +317,7 @@ fn connect(transport: &Result<Transport, Failure>, data_dir: &Path) -> Shared<Bo
         };
         let days = (session.expires_in().as_secs() + 43_200) / 86_400;
         log::info!("Session: {how}, expires in {days} d");
-        Ok((Arc::new(session), transport))
+        Ok((Arc::new(session), transport, source))
     }
     .boxed()
     .shared()

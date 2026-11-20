@@ -8,6 +8,7 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 - `cargo build` - debug build (shaders compile at runtime; release needs `fxc.exe` and `rc.exe` from the Windows SDK). `cargo test -p <crate>` tests one crate; crates other than `shell` and `app` build without GPUI.
 - `scripts\ui.ps1 -Steps 'click:1016,25;wait:800;shot:out.png'` - starts the debug exe, drives it with posted window messages (`wait`, `move`, `click`, `rclick`, `wheel`, `text`, `key`, `shot`, `mem`, `threads`; client pixels) and captures it with `PrintWindow`, then kills it. No real cursor, focus or screen capture; refuses to run while Impulse is open. Build first with `cargo build`.
 - `scripts\panel.ps1` - builds the remote panel (`web/panel`, pnpm) into `web/panel/dist`, which the next cargo build embeds; `-Dev` runs its dev server (`/?demo`).
+- `scripts\release-notes.ps1 -Tag v0.2.0` - checks a release tag against the workspace version (`v1.2.3`, a pre-release `v1.2.3-pre`) and prints its `CHANGELOG.md` section; `.github/workflows/release.yml` uses it on a tag push.
 - `scripts\smoke.ps1 <label>` - screenshots of the main states into `target\smoke\<label>\`, to compare before and after a change. Set `IMPULSE_LOCALE=pseudo` first for the pseudo-locale (debug builds).
 
 ## Invariants
@@ -31,7 +32,8 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 - `plugins` - the WASM host: a plugin as a source, its limits, the import of its answers, their cache.
 - `sdk` - what a plugin builds against: the v1 wire, the manifest's format, the guest's side of the ABI.
 - `i18n` - the languages we ship and the catalogs: Fluent messages by domain, over English.
-- `hotkeys`, `overlay`, `tray`, `video` - Win32 and media leaves: key hooks, the overlay's window calls, the tray icon, clips on the GPU.
+- `hotkeys`, `overlay`, `tray`, `video`, `sound` - Win32 and media leaves: key hooks, the overlay's window calls, the tray icon, clips on the GPU, cue sounds.
+- `updater` - self-update: the release feed, the download checked against its digest, the swap of the running executable, `CHANGELOG.md`'s sections.
 - `journal`, `disk`, `fetch`, `pe` - the log, atomic file writes and typed JSON files, public CDN GETs, PE headers.
 - `checks` - tests holding the crate graph, file sizes, the texts (no literal caption, every id in every language) and the rule files' globs; they cover `web/panel` too.
 

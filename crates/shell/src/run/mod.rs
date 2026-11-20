@@ -262,6 +262,7 @@ impl Runs {
         let Some(game) = self.live() else { return };
         if let Some(pressed) = self.trainers.read(cx).sheet(game).map(|sheet| sheet.cheats[index].args.pressed) {
             self.send(index, pressed, cx);
+            cx.emit(RunEvent::Pressed(index));
         }
     }
 

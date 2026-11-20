@@ -1,0 +1,37 @@
+## Caches
+
+store-maps = MAPPE
+store-maps-hint = pin, regioni e icone
+store-catalog = CATALOGO
+store-catalog-hint = i giochi e il nome del tuo account
+store-trainers = TRAINER
+store-trainers-hint = elenchi delle mod
+store-trainer-files = FILE TRAINER
+store-trainer-files-hint = DLL dei trainer scaricate dalla CDN
+store-browser = BROWSER
+store-browser-hint = cache di WebView2
+
+## The folder
+
+folder = CARTELLA WAND
+folder-hint = cartella da cui Impulse carica i file dei trainer
+folder-empty = nessun file dei trainer di Wand in questa cartella
+folder-unset = cartella di Wand non selezionata
+
+## Categories
+
+category-challenge = SFIDE
+category-enemies = NEMICI
+category-game = GIOCO
+category-inventory = INVENTARIO
+category-physics = FISICA
+category-player = GIOCATORE
+category-stats = STATS
+category-teleport = TELETRASPORTO
+category-vehicles = VEICOLI
+category-weapons = ARMI
+
+## Failures
+
+signed-out = accesso a Wand non effettuato: apri Wand e accedi
+not-installed = Wand non è configurato su questo PC: installalo, aprilo e accedi

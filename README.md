@@ -16,6 +16,7 @@ Impulse works with the Wand you already have: it signs in through Wand's session
 - **Tray** - closing hides Impulse in the tray; quitting stops a live trainer first.
 - **Resources** - the size of every cache, clearing, a limit for media.
 - **Log** - the app's log with levels, a filter and copy.
+- **Updates** - a new release is fetched in the background and installed on restart; a stable or a pre-release channel, skip a version or turn the checks off; what changed is shown in the app and in `CHANGELOG.md`.
 
 ## Requirements
 

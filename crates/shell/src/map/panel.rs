@@ -13,12 +13,15 @@ use gpui_kit::{
 };
 
 use super::{MapView, Maps, TitlePicker};
-use crate::ui::{
-    assets::Icon,
-    key,
-    text::t,
-    theme::*,
-    widgets::{brackets, button, grid, icon_button, mono},
+use crate::{
+    library::Library,
+    ui::{
+        assets::Icon,
+        key,
+        text::t,
+        theme::*,
+        widgets::{brackets, button, grid, icon_button, mono},
+    },
 };
 
 const HEIGHT: f32 = 204.;
@@ -90,6 +93,11 @@ pub fn map_panel(view: &Entity<MapView>, game: &Arc<Game>, cx: &App) -> Div {
                 .when(linkable(maps, cx), |empty| {
                     empty.child(button(&t(cx, key::MAP_LINK)).id("map-link").on_click(links(view.read(cx).linker(), game)))
                 })
+                // A link whose title has no maps (or whose source left) would otherwise stay for good.
+                .when(linked(&view.read(cx).library, cx), |empty| {
+                    let library = view.read(cx).library.clone();
+                    empty.child(button(&t(cx, key::MAP_UNLINK)).id("map-unlink").on_click(move |_, _, cx| unlink(&library, cx)))
+                })
                 .into_any_element(),
         })
         .children(brackets(cx))
@@ -98,6 +106,18 @@ pub fn map_panel(view: &Entity<MapView>, game: &Arc<Game>, cx: &App) -> Div {
 fn opens(view: &Entity<MapView>) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
     let view = view.clone();
     move |_, window, cx| view.update(cx, |map, cx| map.show(window, cx))
+}
+
+/// The open game has a map linked by hand.
+pub(super) fn linked(library: &Entity<Library>, cx: &App) -> bool {
+    let library = library.read(cx);
+    library.open_id().is_some_and(|id| library.link(id).is_some())
+}
+
+/// Takes the link from the open game.
+pub(super) fn unlink(library: &Entity<Library>, cx: &mut App) {
+    let Some(id) = library.read(cx).open_id().cloned() else { return };
+    library.update(cx, |library, cx| library.unlink(&id, cx));
 }
 
 fn links(linker: &Entity<TitlePicker>, game: &Arc<Game>) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {

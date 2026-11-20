@@ -21,12 +21,15 @@ use gpui_kit::{
     px, rgb, uniform_list,
 };
 
-use super::ui::{
-    assets::Icon,
-    key,
-    text::{Texts, t, tf},
-    theme::*,
-    widgets::{button, filter, flash, flash_button, icon_button, input, mono, square, tracked},
+use super::{
+    about::Link,
+    ui::{
+        assets::Icon,
+        key,
+        text::{Texts, t, tf},
+        theme::*,
+        widgets::{button, filter, flash, flash_button, icon_button, input, mono, square, tip, tracked},
+    },
 };
 use i18n::{Arg, Key, Language};
 use journal::{Level, Record};
@@ -317,6 +320,13 @@ impl LogView {
                     cx.open_with_system(dir);
                 }
             }))
+            .child({
+                // An icon: the toolbar already fills the narrowest window.
+                let text = t(cx, key::ABOUT_BUG);
+                icon_button("report", Icon::Bug, 32., 14.)
+                    .tooltip(move |window, cx| tip(text.clone(), window, cx))
+                    .on_click(|_, _, cx| Link::Bug.open(cx))
+            })
             .child(icon_button("log-close", Icon::Close, 32., 12.).on_click(cx.listener(|view, _, _, cx| view.close(cx))))
     }
 

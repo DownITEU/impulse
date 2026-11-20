@@ -26,7 +26,9 @@ play = { path = "crates/play" }
 plugins = { path = "crates/plugins" }
 sdk = { path = "crates/sdk" }
 shell = { path = "crates/shell" }
+sound = { path = "crates/sound" }
 tray = { path = "crates/tray" }
+updater = { path = "crates/updater" }
 video = { path = "crates/video" }
 wand = { path = "crates/wand" }
 
@@ -57,6 +59,7 @@ rustc-hash = "2"
 unicode-segmentation = "1"
 qrcodegen = "1.8"
 rusty-leveldb = "4.0.2"
+semver = "1"
 rust-embed = "8"
 serde = "1"
 proc-macro2 = "1"

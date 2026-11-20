@@ -5,6 +5,7 @@ use gpui_kit::{AssetSource, Result, SharedString, assets::Assets as KitAssets};
 macro_rules! icons {
     ($($name:ident = $file:literal),* $(,)?) => {
         #[derive(Clone, Copy)]
+        #[expect(dead_code, reason = "Sort returns with the sidebar's reordering")]
         pub enum Icon { $($name),* }
 
         impl Icon {
@@ -64,6 +65,13 @@ icons! {
     Rocket = "rocket",
     Ghost = "ghost",
     Crown = "crown",
+    Copy = "copy",
+    Coffee = "coffee",
+    Bug = "bug",
+    Mail = "mail",
+    Github = "github",
+    Discord = "discord",
+    Download = "download",
 }
 
 /// Impulse's icons, then the kit's icons for stock components.

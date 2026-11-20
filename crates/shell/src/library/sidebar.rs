@@ -22,7 +22,7 @@ use crate::{
         key,
         text::{failed, t},
         theme::*,
-        widgets::{filter, filter_input, icon, icon_button, mono, notice, square},
+        widgets::{filter, filter_input, icon, mono, notice, square},
     },
 };
 
@@ -152,22 +152,13 @@ impl Render for Sidebar {
             .border_color(line(0.09))
             .bg(alpha(BG, 0.82))
             .child(
-                h_flex()
-                    .h(px(44.))
-                    .flex_none()
-                    .pl(px(16.))
-                    .pr(px(10.))
-                    .justify_between()
-                    .border_b_1()
-                    .border_color(line(0.07))
-                    .child(
-                        h_flex()
-                            .gap(px(7.))
-                            .child(mono(t(cx, key::LIBRARY_GAMES), 11.).text_color(rgb(DIM)))
-                            .child(mono("/", 11.).text_color(rgb(GHOST)))
-                            .child(mono(games.len().to_string(), 11.).text_color(rgb(TEXT_2))),
-                    )
-                    .child(icon_button("sort", Icon::Sort, 30., 15.)),
+                h_flex().h(px(44.)).flex_none().pl(px(16.)).pr(px(10.)).justify_between().border_b_1().border_color(line(0.07)).child(
+                    h_flex()
+                        .gap(px(7.))
+                        .child(mono(t(cx, key::LIBRARY_GAMES), 11.).text_color(rgb(DIM)))
+                        .child(mono("/", 11.).text_color(rgb(GHOST)))
+                        .child(mono(games.len().to_string(), 11.).text_color(rgb(TEXT_2))),
+                ), // Hidden until reordering works (needs `icon_button`): .child(icon_button("sort", Icon::Sort, 30., 15.))
             )
             .child(
                 filter(&self.filter, cx)

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "crates/{hotkeys,overlay,tray,video,journal,disk,fetch,pe}/**"
+  - "crates/{hotkeys,overlay,tray,video,sound,journal,disk,fetch,pe,updater}/**"
 ---
 
 # Platform leaves
@@ -13,17 +13,22 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 - The mouse hook runs on every move: start it only when a chord `uses_mouse()`. A later hook sees keys first.
 
 ## overlay
-- `Key` (modifiers and one key), `Watch` (one thread: `RegisterHotKey`, a foreground hook, the minimap key), and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `pass_through`, ...).
+- `Key` (modifiers and one key), `Watch` (one thread: `RegisterHotKey`, a foreground hook, `EXTRAS` extra keys by number: `set_extra`, `Event::Extra`), and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `pass_through`, `exclusive`, ...).
+- `exclusive(game)`: `SHQueryUserNotificationState` says D3D fullscreen and `game` is the window in front covering its monitor. The state is the session's and lags a mode change; borderless gives `QUNS_BUSY`.
 - `Watch`'s sink runs on the watch thread: forward to a channel. The calls take `isize` handles and are made outside GPUI updates.
 
 ## tray
 - `Tray` lives on GPUI's main thread (its hidden window needs that loop); dropping it removes the icon. `set_menu` feeds the next right click.
-- `claim()` is the single-instance mutex; a second start wakes the first and gets `false`. `hide` and `show` take the app window's HWND.
+- `claim(after)` is the single-instance mutex; a second start wakes the first and gets `false`. `after` is the pid of an Impulse that is ending (an update's restart): it is waited for (15 s at most), not woken, then the claim is made as any other, so a start that wins the race wakes the child's Impulse instead. `hide` and `show` take the app window's HWND.
 - The menu's words come from `shell` in `Menu`.
 
 ## video
 - `Playback::start(file, device)`: MP4 (H.264) decoded on its own thread to NV12 textures on the window's D3D11 device, which must be multithread protected. `frame(elapsed)` never blocks.
 - A `Frame`'s texture returns to the pool when dropped: hold none longer than needed. Dropping the `Playback` ends the thread.
+
+## sound
+- `Cue` (toggle on and off, slider, number, button, selection; serde, so `shell` saves it by name), `play(cue, file)` and `is_clip(file)`: async `PlaySoundW` of WAVs generated in memory once (no files ship: `synth` makes struck notes, a pair a fourth apart with a soft click and an exponential decay, the off sound a fourth below the on), or of the user's `file` when winmm takes it.
+- One sound at a time: a new cue replaces the one playing. `play` never waits for the sound and may be called from any thread; a `file` is opened inside the call (winmm answers `FALSE` for a missing one: the built-in tone plays), so only local files are expected. `is_clip` (RIFF/WAVE with a format and a nonempty data chunk, 1 MiB, a path of 255 units) reads the file: call it off the UI thread.
 
 ## journal
 - `init` first in `main`, before anything logs. `since`, `subscribe`, `closing` (call when the last window closes), `dir`.
@@ -37,6 +42,12 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 ## fetch
 - `get(url, etag)`: blocking GET for public CDNs only (they send no CORS headers). The WeMod API goes through `wand`'s bridge. Body capped at 64 MiB and left unread on a 4xx or 5xx, 120 s timeout. Run it off the UI thread.
 - `guarded(url, allowed, limit, timeout)` for plugins: https only, every hop (5 redirects at most, followed by hand) must pass `allowed(host)`, public addresses only (the resolver drops the rest; IPv6 is global unicast, mapped and NAT64 follow their IPv4), no proxy, no headers but the user agent. An out-of-scope URL, hop or host, or a body past `limit`, is an error carrying `Refused` (`downcast_ref`).
+
+## updater
+- No GPUI; every call blocks, run it off the UI thread. `check(feed, etag)` reads a GitHub-shaped release list (Gitea, Forgejo and a static copy answer alike) into `Release`s: a draft, a tag that is not semver and a release without `Impulse.exe`, its SHA-256 `digest` and an https asset address are dropped, so nothing unverified is offered; a feed is read to its first 30 releases and 16 KiB of notes each. Build metadata does not make a version newer. The tag is `v1.30.1`, a pre-release `v1.30.1-pre`; `pre` is the tag's suffix or the host's flag. `newer(releases, current, channel)`: Stable skips pre-releases, Pre takes both, newest by semver, never a downgrade.
+- The feed is the publisher: https only (plain http to this machine for a feed under test), and the digest vouches for the transport, not for whoever runs the feed. A feed other than the project's own is the user's choice (`update_feed` in `settings.json`). The executable stays under `fetch`'s 64 MiB cap.
+- `download` writes `<exe>.new` after the digest matches. `swap(exe)` renames the running executable to `<exe>.old`, then `<exe>.new` into its place, and puts the old one back if that fails; Windows renames a running executable but never overwrites it. A crash between the two renames leaves no executable at the path. `cleanup` (at start) removes `.old` and a stale `.new`. `restart` starts the new executable with `--restarted <pid>`; `restarted()` reads it for `tray::claim`.
+- `sections(CHANGELOG.md)`: `## [x.y.z] - YYYY-MM-DD` then markdown; `base` drops a `-pre`, so one section covers a version's pre-releases and its release.
 
 ## pe
 - `header` (machine, timestamp) and `export` (RVA, forwarders skipped). `header` reads headers only: executables can be gigabytes.

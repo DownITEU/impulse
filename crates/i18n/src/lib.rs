@@ -16,11 +16,24 @@ pub struct Language {
 
 pub const ENGLISH: Language = Language { tag: "en", name: "ENGLISH" };
 pub const FRENCH: Language = Language { tag: "fr", name: "FRANÇAIS" };
+pub const GERMAN: Language = Language { tag: "de", name: "DEUTSCH" };
+pub const SPANISH: Language = Language { tag: "es", name: "ESPAÑOL" };
+pub const ITALIAN: Language = Language { tag: "it", name: "ITALIANO" };
+pub const PORTUGUESE: Language = Language { tag: "pt-BR", name: "PORTUGUÊS (BRASIL)" };
+pub const POLISH: Language = Language { tag: "pl", name: "POLSKI" };
+pub const TURKISH: Language = Language { tag: "tr", name: "TÜRKÇE" };
+pub const RUSSIAN: Language = Language { tag: "ru", name: "РУССКИЙ" };
+pub const UKRAINIAN: Language = Language { tag: "uk", name: "УКРАЇНСЬКА" };
 
 /// What a language menu lists.
-pub const LANGUAGES: &[Language] = &[ENGLISH, FRENCH];
+pub const LANGUAGES: &[Language] = &[ENGLISH, FRENCH, GERMAN, SPANISH, ITALIAN, PORTUGUESE, POLISH, TURKISH, RUSSIAN, UKRAINIAN];
 
 impl Language {
+    /// Written in Cyrillic: the UI's Latin font has no letters for it.
+    pub fn is_cyrillic(&self) -> bool {
+        matches!(self.tag, "ru" | "uk")
+    }
+
     pub fn find(tag: &str) -> Option<Self> {
         LANGUAGES.iter().copied().find(|language| language.tag == tag)
     }
@@ -94,7 +107,7 @@ impl Catalog {
         self.language
     }
 
-    /// A domain's message: in English when the language lacks it, else its key.
+    /// A domain's message: in English when the language lacks it or cannot format it (a missing variable), else its key.
     pub fn text(&self, domain: &str, key: &str, args: &[(&str, Arg)]) -> String {
         let args: Option<FluentArgs> = (!args.is_empty()).then(|| args.iter().map(|(name, arg)| (*name, value(arg))).collect());
         let bundles = self.domains.iter().find(|(name, _)| name == domain).map_or(&[][..], |(_, bundles)| bundles);
@@ -102,8 +115,10 @@ impl Catalog {
             let Some(pattern) = bundle.get_message(key).and_then(|message| message.value()) else { continue };
             let mut errors = Vec::new();
             let text = bundle.format_pattern(pattern, args.as_ref(), &mut errors);
-            debug_assert!(errors.is_empty(), "{domain} {key}: {errors:?}");
-            return text.into_owned();
+            // A plugin's text may name a variable it is not given: English answers instead of a broken text.
+            if errors.is_empty() {
+                return text.into_owned();
+            }
         }
         key.to_owned()
     }

@@ -18,7 +18,7 @@ use crate::{
         key,
         text::{t, tf, why},
         theme::*,
-        widgets::{button, mono, switch, tracked},
+        widgets::{badge, button, mono, switch, tracked},
     },
 };
 
@@ -145,9 +145,22 @@ impl Render for PluginsView {
         );
         let mut next = 0;
         let cards: Vec<Div> = list.iter().enumerate().map(|(at, plugin)| self.plugin(at, plugin, &mut next, cx)).collect();
+        // The format and the host may still change, so it stays in view for as long as plugins are alpha.
+        let warning = h_flex()
+            .items_start()
+            .gap(px(10.))
+            .my(px(10.))
+            .px(px(12.))
+            .py(px(10.))
+            .border_1()
+            .border_color(alpha(WARN, 0.4))
+            .bg(alpha(WARN, 0.08))
+            .child(badge(t(cx, key::ALPHA), WARN))
+            .child(mono(t(cx, key::PLUGINS_ALPHA_HINT), 11.).flex_1().min_w_0().text_color(rgb(TEXT_2)));
         v_flex()
             .px(px(18.))
             .py(px(6.))
+            .child(warning)
             .child(install)
             .children(failure.map(|failure| mono(why(cx, &failure), 11.).pt(px(10.)).text_color(rgb(DANGER))))
             .children(approval.map(|approval| self.approval(&approval, cx)))

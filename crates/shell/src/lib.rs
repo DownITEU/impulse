@@ -1,6 +1,7 @@
 //! Impulse's window: `Root` draws the page (`page/`) and the open map over it. Each folder is a slice with its
 //! model entities and their views; the page composes them.
 
+mod about;
 mod account;
 mod bindings;
 mod cheats;
@@ -16,10 +17,12 @@ mod resources;
 mod root;
 mod run;
 mod settings;
+mod sounds;
 mod sources;
 mod systray;
 mod trainer;
 mod ui;
+mod update;
 
 use std::{path::Path, sync::Arc};
 

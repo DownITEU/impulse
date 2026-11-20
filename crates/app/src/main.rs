@@ -16,12 +16,17 @@ use wand::Wand;
 use self::plugins::Host;
 
 fn main() {
-    // One Impulse at a time: a second start shows the first, which may sit in the tray.
-    if !tray::claim() {
+    // One Impulse at a time: a second start shows the first, which may sit in the tray. An update's restart
+    // waits for the one it replaces instead.
+    if !tray::claim(updater::restarted()) {
         return;
     }
     let data_dir = PathBuf::from(env::var_os("LOCALAPPDATA").expect("LOCALAPPDATA is set on Windows")).join("Impulse");
     journal::init(&data_dir);
+    // What an update's swap left beside this executable.
+    if let Ok(exe) = env::current_exe() {
+        updater::cleanup(&exe);
+    }
     let paths = Paths::new(data_dir.clone());
     // Wand wrote every file before ids named their source.
     storage::migrate(&paths, &SourceId::new(Wand::SOURCE).expect("a valid source id"));

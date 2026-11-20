@@ -137,6 +137,11 @@ impl Registry {
         self.entries().iter().find(|entry| entry.id == *id).map(|entry| entry.name.clone())
     }
 
+    /// What the user calls each source that has an account.
+    pub fn account_names(&self) -> Vec<Text> {
+        self.entries().iter().filter(|entry| entry.capabilities.accounts.is_some()).map(|entry| entry.name.clone()).collect()
+    }
+
     /// Each source's catalogs, as they are now.
     pub fn texts(&self) -> Vec<(SourceId, Files)> {
         self.entries().iter().map(|entry| (entry.id.clone(), entry.texts.clone())).collect()

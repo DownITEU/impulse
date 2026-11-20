@@ -152,10 +152,10 @@ impl Stage {
             }
 
             let markers = self.markers(&map, &camera, cx);
-            let mut lifted = Vec::new();
+            let off = |(x, y): (f64, f64)| x < -SIZE.0 || y < -GROUP_RADIUS || x > area.0 + SIZE.0 || y > area.1 + SIZE.1;
             for marker in markers.iter() {
                 let (x, y) = camera.to_view(marker.at, area);
-                if x < -SIZE.0 || y < -GROUP_RADIUS || x > area.0 + SIZE.0 || y > area.1 + SIZE.1 {
+                if off((x, y)) {
                     continue;
                 }
                 if marker.count > 1 {
@@ -165,22 +165,23 @@ impl Stage {
                     window.paint_quad(quad(disc(center, side), px(side / 2.), rgb(color), px(RING.0), ring, BorderStyle::default()));
                     let count = self.shown.counts.entry(marker.count).or_insert_with(|| marker.count.to_string().into()).clone();
                     text(count, COUNT_TEXT, ink(color), false, center, window, cx);
-                } else if self.look(marker.pin, selected) != Look::Plain {
-                    lifted.push(marker.pin);
-                } else {
+                } else if self.look(marker.pin, selected) == Look::Plain {
                     self.paint_marker(&shot, marker.pin, (x, y), window, cx);
                 }
             }
-            // The selected pin shows even when a filter or a group hides it, and over the rest.
-            if let Some(pin) = selected.filter(|pin| !lifted.contains(pin)) {
-                lifted.push(pin);
+            // The hovered pin over the rest, again by iterating: nothing is collected per frame.
+            for marker in markers.iter().filter(|marker| marker.count == 1) {
+                let at = camera.to_view(marker.at, area);
+                if !off(at) && self.look(marker.pin, selected) == Look::Hovered {
+                    self.paint_marker(&shot, marker.pin, at, window, cx);
+                }
             }
-            lifted.sort_by_key(|pin| selected == Some(*pin));
-            for pin in lifted {
+            // The selected pin shows even when a filter or a group hides it, and over the rest.
+            if let Some(pin) = selected {
                 let tip = camera.to_view(map.pins[pin].at, area);
                 self.paint_marker(&shot, pin, tip, window, cx);
             }
-            for index in mark_order(saved, shot.mark).collect::<Vec<_>>() {
+            for index in mark_order(saved, shot.mark) {
                 let look = self.mark_look(index, shot.mark);
                 let marker = Marker { group: None, fill: saved.marks[index].color, look, found: false, level: None, picture: false };
                 self.paint_look(marker, None, camera.to_view(plane(saved.marks[index].at), area), window, cx);
@@ -395,8 +396,9 @@ fn path(corners: &[gpui_kit::Point<Pixels>], mut builder: PathBuilder) -> Option
 fn text(text: SharedString, height: f32, color: u32, shadow: bool, at: gpui_kit::Point<Pixels>, window: &mut Window, cx: &mut App) {
     let line_height = px(height * 1.3);
     // GPUI keeps shapes between frames, and a shape does not hold its color: the shadow's costs a lookup.
+    let family = ui_font(cx);
     let shape = |color: Rgba, window: &mut Window| {
-        let font = Font { weight: FontWeight::BOLD, ..font(UI) };
+        let font = Font { weight: FontWeight::BOLD, ..font(family) };
         let run = TextRun { len: text.len(), font, color: color.into(), background_color: None, underline: None, strikethrough: None };
         window.text_system().shape_line(text.clone(), px(height), &[run], None)
     };

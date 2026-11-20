@@ -243,8 +243,9 @@ impl CheatList {
             .child(caps(&self.hotkeys, &printed.game, sheet, index, &row.keys, cx))
             .child(
                 h_flex()
-                    .w(px(printed.control_width))
+                    .min_w(px(printed.control_width))
                     .flex_none()
+                    .justify_end()
                     .gap(px(8.))
                     .opacity(if running { 1. } else { 0.4 })
                     .child(self.control(index, sheet, printed, running, live, cx)),

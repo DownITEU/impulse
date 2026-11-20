@@ -165,6 +165,11 @@ pub fn switch(id: impl Into<ElementId>, on: bool, cx: &App) -> Stateful<Div> {
 }
 
 pub fn icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size: f32) -> Stateful<Div> {
+    tinted_icon_button(id, glyph, side, glyph_size, DIM)
+}
+
+/// An `icon_button` whose glyph rests in `color` and lights on hover.
+pub fn tinted_icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size: f32, color: u32) -> Stateful<Div> {
     const GROUP: &str = "icon-button";
     div()
         .id(id)
@@ -176,7 +181,20 @@ pub fn icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size:
         .justify_center()
         .cursor_pointer()
         .hover(|style| style.bg(line(0.06)))
-        .child(icon(glyph, glyph_size, rgb(DIM)).group_hover(GROUP, |style| style.text_color(rgb(TEXT))))
+        .child(icon(glyph, glyph_size, rgb(color)).group_hover(GROUP, |style| style.text_color(rgb(TEXT))))
+}
+
+/// A small outlined tag in `color`, for a state worth noticing.
+pub fn badge(label: impl Into<SharedString>, color: u32) -> Div {
+    mono(label, 9.5)
+        .font_weight(FontWeight::BOLD)
+        .flex_none()
+        .px(px(6.))
+        .py(px(2.))
+        .border_1()
+        .border_color(alpha(color, 0.55))
+        .bg(alpha(color, 0.12))
+        .text_color(rgb(color))
 }
 
 /// A dashed card that stands in for content that is not there.

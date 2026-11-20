@@ -8,8 +8,21 @@ pub const CATALOG_FAILED_BODY: Key = Key("catalog-failed-body");
 pub const LIBRARY_FILTER: Key = Key("library-filter");
 pub const PICKER_FILTER: Key = Key("picker-filter");
 
+pub const DISCLAIMER_TITLE: Key = Key("disclaimer-title");
+pub const DISCLAIMER_BODY: Key = Key("disclaimer-body");
+pub const DISCLAIMER_ACCEPT: Key = Key("disclaimer-accept");
+pub const DISCLAIMER_EXIT: Key = Key("disclaimer-exit");
+
+pub const SIGNED_OUT_TITLE: Key = Key("signed-out-title");
+pub const SIGNED_OUT_BODY: Key = Key("signed-out-body");
+pub const SIGNED_OUT_RETRY: Key = Key("signed-out-retry");
+pub const SIGNED_OUT_CLOSE: Key = Key("signed-out-close");
+
+#[expect(dead_code, reason = "the header's search is hidden until it works")]
 pub const PAGE_SEARCH: Key = Key("page-search");
+#[expect(dead_code, reason = "the header's search is hidden until it works")]
 pub const PAGE_SEARCH_NONE: Key = Key("page-search-none");
+#[expect(dead_code, reason = "the header's search is hidden until it works")]
 pub const PAGE_SEARCH_KEY: Key = Key("page-search-key");
 pub const PAGE_SIGNED_OUT: Key = Key("page-signed-out");
 pub const PAGE_OVERLAY: Key = Key("page-overlay");

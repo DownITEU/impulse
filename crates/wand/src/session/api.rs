@@ -54,6 +54,11 @@ pub(super) fn is_rejected(e: &anyhow::Error) -> bool {
     e.downcast_ref::<HttpError>().is_some_and(|h| matches!(h.status, 400 | 401))
 }
 
+/// A resource refused the access token.
+pub(super) fn is_unauthorized(e: &anyhow::Error) -> bool {
+    e.downcast_ref::<HttpError>().is_some_and(|h| h.status == 401)
+}
+
 fn parse<T: DeserializeOwned>(status: u16, body: &str, expect: u16) -> Result<T> {
     if !(200..300).contains(&status) {
         let error = serde_json::from_str::<Value>(body).ok().and_then(|v| v["error"].as_str().map(str::to_owned));
@@ -78,7 +83,7 @@ mod tests {
     fn error_has_status_and_error_field_only() {
         let err = parse::<Value>(401, r#"{"error":"invalid_grant","access_token":"S3CRET"}"#, 200).unwrap_err();
         assert_eq!(err.root_cause().to_string(), "HTTP 401: invalid_grant");
-        assert!(is_rejected(&err));
+        assert!(is_rejected(&err) && is_unauthorized(&err));
         let err = parse::<Value>(502, "<html>S3CRET</html>", 200).unwrap_err();
         assert_eq!(err.root_cause().to_string(), "HTTP 502");
         assert!(!is_rejected(&err));
