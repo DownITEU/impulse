@@ -138,6 +138,12 @@ hotkeys-enabled = HOTKEYS
 hotkeys-enabled-hint = Trainer-Hotkeys während einer Sitzung
 hotkeys-works-in = AKTIV IN
 hotkeys-works-in-hint = „Im Spiel“: Hotkeys nur bei aktivem Spielfenster
+hotkeys-bind-hint = ESC ABBRUCH · RÜCKTASTE STANDARD · ENTF LÖSCHEN
+hotkeys-clash = { $keys } ist schon belegt durch { $name }
+hotkeys-clash-overlay = { $keys } ist für das Overlay reserviert
+hotkeys-keep = BEIDE BEHALTEN
+hotkeys-rebind = NEU BELEGEN
+hotkeys-shared-tip = ein anderer Mod hat diesen Hotkey auch: beide werden ausgelöst
 
 ## Trainer
 

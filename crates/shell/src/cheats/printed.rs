@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use client::{library::GameId, trainer::Sheet};
+use client::{bindings, library::GameId, trainer::Sheet};
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use model::{Cheat, Chord, Kind};
 
@@ -17,6 +17,8 @@ pub struct Row {
     pub category: SharedString,
     /// One cap per hotkey slot.
     pub keys: Vec<SharedString>,
+    /// Per slot: another slot of the game holds the same keys.
+    pub shared: Vec<bool>,
     pub tip: Option<SharedString>,
     pub options: Vec<SharedString>,
 }
@@ -47,17 +49,26 @@ impl Printed {
                 (index, input)
             })
             .collect();
+        let shared = bindings::shared(&sheet.hotkeys);
         Self {
             game,
-            rows: sheet.cheats.iter().zip(&sheet.hotkeys).map(|(cheat, slots)| row(cheat, slots, cx)).collect(),
+            rows: sheet
+                .cheats
+                .iter()
+                .zip(&sheet.hotkeys)
+                .zip(shared)
+                .map(|((cheat, slots), shared)| row(cheat, slots, shared, cx))
+                .collect(),
             control_width: sheet.cheats.iter().map(control_width).fold(0., f32::max),
             inputs,
         }
     }
 
     pub fn recap(&mut self, sheet: &Sheet) {
-        for ((row, cheat), slots) in self.rows.iter_mut().zip(&sheet.cheats).zip(&sheet.hotkeys) {
+        let shared = bindings::shared(&sheet.hotkeys);
+        for (((row, cheat), slots), shared) in self.rows.iter_mut().zip(&sheet.cheats).zip(&sheet.hotkeys).zip(shared) {
             row.keys = caps(cheat.kind, slots);
+            row.shared = shared;
         }
     }
 
@@ -94,12 +105,13 @@ pub fn category(cheat: &Cheat, cx: &App) -> SharedString {
     cheat.category_name.as_ref().map_or_else(|| cheat.category.to_uppercase().into(), |name| text(cx, name))
 }
 
-fn row(cheat: &Cheat, slots: &[Option<Chord>], cx: &App) -> Row {
+fn row(cheat: &Cheat, slots: &[Option<Chord>], shared: Vec<bool>, cx: &App) -> Row {
     Row {
         name: cheat.name.to_uppercase().into(),
         search: cheat.name.to_lowercase(),
         category: category(cheat, cx),
         keys: caps(cheat.kind, slots),
+        shared,
         tip: cheat.instructions.clone().or_else(|| cheat.description.clone()).filter(|text| !text.is_empty()).map(SharedString::from),
         options: cheat.args.options.iter().map(|option| option.to_uppercase().into()).collect(),
     }

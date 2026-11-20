@@ -2,6 +2,8 @@
 //! the saved choices. Every hook is global: a capture's runs first and hides what it takes from every app.
 
 mod caps;
+mod clash;
+mod popover;
 mod scope;
 mod settings;
 
@@ -15,7 +17,7 @@ use futures::{
     StreamExt,
     channel::{mpsc, oneshot},
 };
-use gpui_kit::{App, Context, Entity, Task, Window};
+use gpui_kit::{App, Context, Entity, FocusHandle, Task, Window};
 use hotkeys::{Binding, Capture, Fired, Hook, Matcher, Outcome, Step};
 use model::Chord;
 
@@ -25,7 +27,10 @@ use crate::{
     trainer::{TrainerEvent, Trainers},
 };
 
+use clash::Conflict;
+
 pub use caps::{cap, caps};
+pub use popover::bind_keys;
 pub use scope::hotkeys_scope;
 pub use settings::HotkeySettings;
 
@@ -64,6 +69,9 @@ pub struct Hotkeys {
     // Dropping it stops the hotkeys.
     armed: Option<(Hook, Task<()>)>,
     capture: Option<Capturing>,
+    // A pressed chord that another hotkey holds, waiting for its answer.
+    conflict: Option<Conflict>,
+    focus: FocusHandle,
 }
 
 impl Hotkeys {
@@ -88,8 +96,8 @@ impl Hotkeys {
             if let Some(slots) = slots {
                 trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
             }
-            // Its cap may be gone, and with it the click that ends the capture.
-            if matches!(hotkeys.capturing(), Some(Target::Slot { game: bound, .. }) if bound == game) {
+            // Its cap may be gone, and with it the click that ends the capture or the question.
+            if hotkeys.binding_game() == Some(game) {
                 hotkeys.cancel(cx);
             }
         })
@@ -103,11 +111,14 @@ impl Hotkeys {
         // A capture hides keys from every app: it must not outlive the user's attention.
         cx.observe_window_activation(window, |hotkeys, window, cx| {
             if !window.is_window_active() {
+                // A question holds the focus: it goes back while there is a window to give it in.
+                hotkeys.dismiss(window, cx);
                 hotkeys.cancel(cx);
             }
         })
         .detach();
-        Self { store: Store::load(paths), trainers, runs, reserved: Box::new(reserved), armed: None, capture: None }
+        let focus = cx.focus_handle();
+        Self { store: Store::load(paths), trainers, runs, reserved: Box::new(reserved), armed: None, capture: None, conflict: None, focus }
     }
 
     /// Each cheat's slots, with the user's choices laid over the source's.
@@ -192,31 +203,23 @@ impl Hotkeys {
         Some(outcome)
     }
 
+    /// Ends a capture and drops a question with no focus to give back: its window is not at hand.
     pub fn cancel(&mut self, cx: &mut Context<Self>) {
-        if self.capture.take().is_some() {
+        let (capture, conflict) = (self.capture.take(), self.conflict.take());
+        if capture.is_some() || conflict.is_some() {
             cx.notify();
         }
     }
 
-    /// Binds a cheat's slot as a capture ended; refused when another slot of it or someone else's hotkey holds the chord.
-    pub fn rebind(&mut self, game: &GameId, cheat: &str, slot: usize, outcome: Outcome, cx: &mut Context<Self>) {
+    /// Binds a cheat's slot as a capture ended; a chord another hotkey holds becomes a question over the slot's cap.
+    pub fn rebind(&mut self, game: &GameId, cheat: &str, slot: usize, outcome: Outcome, window: &mut Window, cx: &mut Context<Self>) {
         let choice = match outcome {
             Outcome::Cancelled => return,
             Outcome::Reset => Choice::Default,
             Outcome::Unbound => Choice::Unbound,
             Outcome::Bound(chord) => Choice::Bound(chord),
         };
-        let app: &App = cx;
-        let Some(sheet) = self.trainers.read(app).sheet(game) else { return };
-        let Some(cheat) = sheet.cheats.iter().find(|found| found.id == cheat) else { return };
-        if self.store.rebind(&sheet.trainer, cheat, slot, choice, |chord| (self.reserved)(chord, app)).is_none() {
-            return;
-        }
-        let slots = self.slots(sheet);
-        self.trainers.update(cx, |trainers, cx| trainers.bind(game, slots, cx));
-        if self.runs.read(cx).is_live(game) {
-            self.arm(cx);
-        }
+        self.bind(game, cheat, slot, choice, None, window, cx);
     }
 
     fn step(&mut self, step: Step, cx: &mut Context<Self>) {

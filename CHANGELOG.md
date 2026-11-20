@@ -3,6 +3,17 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
+## [0.1.1] - 2026-11-20
+
+### Features
+
+- Binding a hotkey shows its keys (cancel, default, unbind) above the cap. A chord another cheat already holds asks to KEEP BOTH or REBIND; one the overlay or the same cheat holds cannot be kept. Esc or a click aside drops the new chord.
+- Hotkeys that two cheats of a game share are outlined in orange.
+
+### Fixes
+
+- The update check no longer fails with a gzip error from the second check on.
+
 ## [0.1.0] - 2026-11-20
 
 ### Features

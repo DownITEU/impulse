@@ -106,11 +106,9 @@ fn links(cx: &App) -> impl IntoElement {
 
 /// The hotkeys' state; while binding, the keys that end it.
 fn hotkeys_status(hotkeys: &Hotkeys, cx: &App) -> Div {
-    if let Some(target) = hotkeys.capturing() {
-        let keys = match target {
-            Target::Key { required: true, .. } => t(cx, key::PAGE_BINDING),
-            _ => t(cx, key::PAGE_BINDING_UNBIND),
-        };
+    // A cheat's slot has its keys in a popover over its cap.
+    if let Some(Target::Key { required, .. }) = hotkeys.capturing() {
+        let keys = t(cx, if *required { key::PAGE_BINDING } else { key::PAGE_BINDING_UNBIND });
         return mono(keys, 11.).text_color(rgb(accent(cx)));
     }
     match hotkeys.is_armed() {

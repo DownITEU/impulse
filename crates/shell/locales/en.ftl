@@ -132,6 +132,12 @@ hotkeys-enabled = HOTKEYS
 hotkeys-enabled-hint = trainer hotkeys during a run
 hotkeys-works-in = WORKS IN
 hotkeys-works-in-hint = in game: only while the game is in front
+hotkeys-bind-hint = ESC CANCEL · BKSP DEFAULT · DEL UNBIND
+hotkeys-clash = { $keys } is used by { $name }
+hotkeys-clash-overlay = { $keys } is reserved for the overlay
+hotkeys-keep = KEEP BOTH
+hotkeys-rebind = REBIND
+hotkeys-shared-tip = another cheat has this hotkey too: both fire
 
 ## Trainer
 

@@ -147,6 +147,12 @@ hotkeys-enabled = ХОТКЕИ
 hotkeys-enabled-hint = хоткеи модов, пока запущен трейнер
 hotkeys-works-in = ГДЕ РАБОТАЮТ
 hotkeys-works-in-hint = «В игре» — только пока окно игры на переднем плане
+hotkeys-bind-hint = ESC ОТМЕНА · BKSP СБРОС · DEL СНЯТЬ
+hotkeys-clash = { $keys } уже занято: { $name }
+hotkeys-clash-overlay = { $keys } зарезервировано для оверлея
+hotkeys-keep = ОСТАВИТЬ ОБА
+hotkeys-rebind = ПЕРЕНАЗНАЧИТЬ
+hotkeys-shared-tip = у другого мода такой же хоткей: сработают оба
 
 ## Trainer
 

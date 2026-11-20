@@ -239,7 +239,7 @@ impl CheatList {
                             ),
                     ),
             )
-            .child(caps(&self.hotkeys, &printed.game, sheet, index, &row.keys, cx))
+            .child(caps(&self.hotkeys, &printed.game, sheet, index, &row.keys, &row.shared, cx))
             .child(
                 h_flex()
                     .min_w(px(printed.control_width))

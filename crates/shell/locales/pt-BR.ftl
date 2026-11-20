@@ -151,6 +151,12 @@ hotkeys-enabled = ATALHOS
 hotkeys-enabled-hint = ativa os atalhos do trainer durante a sessão
 hotkeys-works-in = ONDE USAR
 hotkeys-works-in-hint = no jogo: só quando o jogo está em primeiro plano
+hotkeys-bind-hint = ESC CANCELA · BKSP PADRÃO · DEL REMOVE
+hotkeys-clash = { $keys } já é usado por { $name }
+hotkeys-clash-overlay = { $keys } é reservado para o overlay
+hotkeys-keep = MANTER AMBOS
+hotkeys-rebind = REATRIBUIR
+hotkeys-shared-tip = outro mod também tem este atalho: os dois são ativados
 
 ## Trainer
 

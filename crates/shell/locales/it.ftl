@@ -138,6 +138,12 @@ hotkeys-enabled = HOTKEY
 hotkeys-enabled-hint = hotkey del trainer durante una sessione
 hotkeys-works-in = DOVE
 hotkeys-works-in-hint = in gioco: solo con il gioco in primo piano
+hotkeys-bind-hint = ESC ANNULLA · BKSP RIPRISTINA · DEL RIMUOVI
+hotkeys-clash = { $keys } è già usato da { $name }
+hotkeys-clash-overlay = { $keys } è riservato all'overlay
+hotkeys-keep = TIENI ENTRAMBI
+hotkeys-rebind = RIASSEGNA
+hotkeys-shared-tip = anche un altro mod ha questa hotkey: scattano entrambi
 
 ## Trainer
 

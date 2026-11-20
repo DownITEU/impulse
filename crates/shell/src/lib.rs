@@ -44,6 +44,7 @@ pub fn init(data_dir: &Path, registry: Arc<Registry>, cx: &mut App) {
     map::bind_keys(cx);
     layer::bind_keys(cx);
     ui::dialog::bind_keys(cx);
+    bindings::bind_keys(cx);
 }
 
 fn hwnd(window: &Window) -> Option<isize> {

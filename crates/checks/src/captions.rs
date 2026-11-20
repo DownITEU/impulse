@@ -45,6 +45,7 @@ const NAMES: &[&str] = &[
     "Exo 2",
     "JetBrains Mono",
     "Dialog",
+    "Conflict",
     "MapView",
     "MapStage",
     "LIME",

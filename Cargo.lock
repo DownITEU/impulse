@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "agent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "blocking",
@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "checks"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -945,7 +945,7 @@ dependencies = [
 
 [[package]]
 name = "client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "disk",
@@ -1497,7 +1497,7 @@ dependencies = [
 
 [[package]]
 name = "disk"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "log",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "fetch"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "ureq",
@@ -3400,7 +3400,7 @@ dependencies = [
 
 [[package]]
 name = "hotkeys"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "model",
  "windows-sys 0.61.2",
@@ -3539,7 +3539,7 @@ dependencies = [
 
 [[package]]
 name = "i18n"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fluent-bundle",
  "sys-locale",
@@ -3789,7 +3789,7 @@ checksum = "6e44b0a4eaa4c82f441d50a963f2d5f05a787240aeee097597033e72accfd22f"
 
 [[package]]
 name = "impulse"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "client",
  "embed-resource",
@@ -4041,7 +4041,7 @@ dependencies = [
 
 [[package]]
 name = "journal"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "futures",
@@ -4122,7 +4122,7 @@ dependencies = [
 
 [[package]]
 name = "launchers"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes",
  "anyhow",
@@ -4513,7 +4513,7 @@ dependencies = [
 
 [[package]]
 name = "model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "futures",
@@ -5365,7 +5365,7 @@ dependencies = [
 
 [[package]]
 name = "overlay"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -5467,7 +5467,7 @@ dependencies = [
 
 [[package]]
 name = "pe"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "percent-encoding"
@@ -5660,7 +5660,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "play"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent",
  "anyhow",
@@ -5671,7 +5671,7 @@ dependencies = [
 
 [[package]]
 name = "plugins"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "blocking",
@@ -6280,7 +6280,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "remote"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-io",
  "async-net",
@@ -6689,7 +6689,7 @@ dependencies = [
 
 [[package]]
 name = "sdk"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -6931,7 +6931,7 @@ dependencies = [
 
 [[package]]
 name = "shell"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "blocking",
@@ -7115,7 +7115,7 @@ dependencies = [
 
 [[package]]
 name = "sound"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -7946,7 +7946,7 @@ dependencies = [
 
 [[package]]
 name = "tray"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "windows-sys 0.61.2",
 ]
@@ -8145,7 +8145,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "updater"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "disk",
@@ -8317,7 +8317,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "video"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "log",
@@ -8362,7 +8362,7 @@ dependencies = [
 
 [[package]]
 name = "wand"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent",
  "anyhow",

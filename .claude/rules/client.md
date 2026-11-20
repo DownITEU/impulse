@@ -12,7 +12,7 @@ The app's logic without GPUI: what `shell`'s entities hold and decide, and the f
 - `storage`: `Paths` names every app file and folder (`update.json` is the shell's `Updates`'); `Stored<T>`, `read`, `write` (for the per-map files), `disk`'s, re-exported; `migrate` (v1 files to v2, run by `app` before the window); `by_ref` (serde for a map keyed by `Ref`); `name` (an id as a file name).
 - `media`: `Media` (a cache folder per kind), the file per URL, `known_missing`, `forget_missing` (a map's absent tiles, by template), `steam_hero`; `limit` (`Kept`, `sweep`).
 - `profile`: `Profiles` (`games.json`): a `GameProfile` by `GameId`, a `TrainerProfile` by the trainer's `Ref`; `Collection` (`new`: the name rule, `NAME_LENGTH`), `Values`.
-- `bindings`: `Store` (`hotkeys.json`, by trainer `Ref`), `Choice`, `rebind` with the "no chord twice" rule.
+- `bindings`: `Store` (`hotkeys.json`, by trainer `Ref`), `Choice`, `rebind` with its `Clash` and `Resolution` (a held chord is bound only by `Keep` or `Take`), `shared` (the slots whose chord another slot holds too).
 - `Load`: something that arrives after the window opens, or the `Failure` why it did not.
 - `trainer`: `Sheet`, a trainer as the app holds it, with its `Ref` and folds by section id (`PINNED` or a category), `step` (a hotkey's `Step`), `Span` (a slider), `sections` (the list's grouping, pins first), `initial`; `Shelf`, the sheets by game and the holds (a held game's newer copy waits), `outdate` (the language changed).
 - `library`: `Game` (`store`: the launcher, `None` for a picked exe), `GameId` (the first source's game `Ref` as text), `Library`, `Support`, `Stamp`, `scan` (launchers joined with the catalog), `Picked` (`picked.json`), `Links` (`map-links.json`: a title `Ref` per game; `set`, `clear`), `titles` (`matched`: a store id of the record or the active install, never a sibling release or a name; `likeness`, the picker's order), `sources` (the source menu: `Entry`, and `Label`, data that shell words).
@@ -30,6 +30,6 @@ The app's logic without GPUI: what `shell`'s entities hold and decide, and the f
 - Keys are the source's ids: no code here splits a `Ref` or names a source. A change of a file's keys or shape is a new version with its step in `migrate`.
 - An id reaches a file name only through `storage::name`; a new `Saved` field is `#[serde(default)]`.
 - Strings a frame prints are made once (`Game::name` is upper case, an `Arc<str>`); `shell` turns them into `SharedString` without a copy.
-- A rebind is refused when the chord is held by another slot of the cheat (`Chord::same_keys`) or `reserved` says so: the overlay's test merges modifier sides.
+- A rebind answers a held chord with its `Clash`, checked against the bindings as they are at the write: `reserved` (the overlay's test merges modifier sides) is never bound; a slot of the same cheat holding it (`Chord::same_keys`) allows only `Take`, slots of other cheats `Keep` too (Wand fires every cheat bound to a chord); `Take` unbinds every holder.
 - A protocol change bumps `api::VERSION` and regenerates the TypeScript. No source id or source name goes into a view: games are the bridge's handles, texts are worded.
 - Stepping follows Wand's, except that `round_to` keeps the decimals of `min` too.

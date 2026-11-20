@@ -46,6 +46,12 @@ pub const HOTKEYS_ENABLED: Key = Key("hotkeys-enabled");
 pub const HOTKEYS_ENABLED_HINT: Key = Key("hotkeys-enabled-hint");
 pub const HOTKEYS_WORKS_IN: Key = Key("hotkeys-works-in");
 pub const HOTKEYS_WORKS_IN_HINT: Key = Key("hotkeys-works-in-hint");
+pub const HOTKEYS_BIND_HINT: Key = Key("hotkeys-bind-hint");
+pub const HOTKEYS_CLASH: Key = Key("hotkeys-clash");
+pub const HOTKEYS_CLASH_OVERLAY: Key = Key("hotkeys-clash-overlay");
+pub const HOTKEYS_KEEP: Key = Key("hotkeys-keep");
+pub const HOTKEYS_REBIND: Key = Key("hotkeys-rebind");
+pub const HOTKEYS_SHARED_TIP: Key = Key("hotkeys-shared-tip");
 
 pub const TRAINER_NONE: Key = Key("trainer-none");
 pub const TRAINER_MODS: Key = Key("trainer-mods");

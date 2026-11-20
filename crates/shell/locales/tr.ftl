@@ -132,6 +132,12 @@ hotkeys-enabled = KISAYOLLAR
 hotkeys-enabled-hint = trainer kısayolları oturum boyunca çalışır
 hotkeys-works-in = NEREDE ÇALIŞIR?
 hotkeys-works-in-hint = oyun içi kısayollar sadece oyun penceresi öndeyken çalışır
+hotkeys-bind-hint = ESC İPTAL · BKSP SIFIRLA · DEL KALDIR
+hotkeys-clash = { $keys } zaten kullanımda: { $name }
+hotkeys-clash-overlay = { $keys } overlay için ayrılmış
+hotkeys-keep = İKİSİNİ DE TUT
+hotkeys-rebind = YENİDEN ATA
+hotkeys-shared-tip = başka bir hilede de bu kısayol var: ikisi de çalışır
 
 ## Trainer
 

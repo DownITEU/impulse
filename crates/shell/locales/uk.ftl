@@ -147,6 +147,12 @@ hotkeys-enabled = ГАРЯЧІ КЛАВІШІ
 hotkeys-enabled-hint = гарячі клавіші трейнера під час гри
 hotkeys-works-in = ДЕ ДІЮТЬ
 hotkeys-works-in-hint = у режимі «У ГРІ» клавіші діють, лише коли вікно гри активне
+hotkeys-bind-hint = ESC СКАСУВАТИ · BKSP СКИНУТИ · DEL СТЕРТИ
+hotkeys-clash = { $keys } уже зайнято: { $name }
+hotkeys-clash-overlay = { $keys } зарезервовано для оверлея
+hotkeys-keep = ЗАЛИШИТИ ОБИДВА
+hotkeys-rebind = ПЕРЕПРИЗНАЧИТИ
+hotkeys-shared-tip = інший мод теж має цю гарячу клавішу: спрацюють обидва
 
 ## Trainer
 

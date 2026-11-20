@@ -147,6 +147,12 @@ hotkeys-enabled = SKRÓTY
 hotkeys-enabled-hint = skróty klawiszowe trainera w trakcie sesji
 hotkeys-works-in = GDZIE DZIAŁAJĄ
 hotkeys-works-in-hint = „W grze” oznacza, że skróty działają tylko w aktywnym oknie gry
+hotkeys-bind-hint = ESC ANULUJ · BKSP PRZYWRÓĆ · DEL USUŃ
+hotkeys-clash = { $keys } jest już przypisany do: { $name }
+hotkeys-clash-overlay = { $keys } jest zarezerwowany dla nakładki
+hotkeys-keep = ZOSTAW OBA
+hotkeys-rebind = PRZYPISZ PONOWNIE
+hotkeys-shared-tip = inny mod ma ten sam skrót: zadziałają oba
 
 ## Trainer
 

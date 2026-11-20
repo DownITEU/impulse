@@ -10,11 +10,66 @@ use crate::storage::{Paths, Stored};
 /// Slot: VKs, or `null` for unbound; a missing slot is the source's.
 type Slots = BTreeMap<usize, Option<Vec<u16>>>;
 
+#[derive(Clone, Copy)]
 pub enum Choice {
     Bound(Chord),
     Unbound,
     /// Back to the source's binding.
     Default,
+}
+
+impl Choice {
+    /// The chord `slot` of `cheat` ends up with.
+    pub fn chord(self, cheat: &Cheat, slot: usize) -> Option<Chord> {
+        match self {
+            Choice::Bound(chord) => Some(chord),
+            Choice::Unbound => None,
+            Choice::Default => cheat.hotkeys.get(slot).copied().flatten(),
+        }
+    }
+}
+
+/// Why a chord is not simply bound.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Clash {
+    /// Someone else's hotkey: nothing frees it.
+    Reserved,
+    /// The slots holding it as (cheat index, slot). A duplicate is allowed (`keep`) unless one is the bound cheat's own.
+    Slots { held: Vec<(usize, usize)>, keep: bool },
+}
+
+/// How a held chord is bound anyway.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Resolution {
+    /// Both fire: Wand fires every cheat bound to a chord.
+    Keep,
+    /// Every holder is left unbound.
+    Take,
+}
+
+/// The slots of `slots`, a sheet's hotkeys as they fire, other than `at` (cheat, slot) that hold `chord`'s keys.
+fn holders(slots: &[Vec<Option<Chord>>], at: (usize, usize), chord: Chord) -> impl Iterator<Item = (usize, usize)> {
+    let bound = slots.iter().enumerate().flat_map(|(cheat, row)| row.iter().enumerate().map(move |(slot, held)| (cheat, slot, held)));
+    bound
+        .filter(move |&(cheat, slot, held)| (cheat, slot) != at && held.is_some_and(|held| held.same_keys(chord)))
+        .map(|(cheat, slot, _)| (cheat, slot))
+}
+
+/// The slots whose chord another slot of the sheet holds too, by cheat then slot: Wand fires them all.
+pub fn shared(slots: &[Vec<Option<Chord>>]) -> Vec<Vec<bool>> {
+    let shares = |at, chord| holders(slots, at, chord).next().is_some();
+    let rows = slots.iter().enumerate();
+    rows.map(|(cheat, row)| row.iter().enumerate().map(|(slot, held)| held.is_some_and(|held| shares((cheat, slot), held))).collect())
+        .collect()
+}
+
+/// Why `chord` cannot go to the slot `at`: the overlay's key first, then a slot of the cheat itself.
+fn clash(slots: &[Vec<Option<Chord>>], at: (usize, usize), chord: Chord, reserved: impl Fn(Chord) -> bool) -> Option<Clash> {
+    if reserved(chord) {
+        return Some(Clash::Reserved);
+    }
+    let held: Vec<_> = holders(slots, at, chord).collect();
+    (!held.is_empty()).then(|| Clash::Slots { keep: held.iter().all(|&(cheat, _)| cheat != at.0), held })
 }
 
 #[derive(Serialize, Deserialize)]
@@ -95,28 +150,38 @@ impl Store {
         });
     }
 
-    /// Returns the cheat's new slots, or `None` if another slot uses the chord or it is reserved elsewhere.
+    /// Binds `choice` to the slot `at` (cheat, slot) of `cheats`, or says why not. A held chord is bound only by the
+    /// resolution that fits it, checked against the bindings as they are now: `Keep` where a duplicate is allowed, `Take`.
     pub fn rebind(
         &mut self,
         trainer: &Ref,
-        cheat: &Cheat,
-        slot: usize,
+        cheats: &[Cheat],
+        at: (usize, usize),
         choice: Choice,
+        resolution: Option<Resolution>,
         reserved: impl Fn(Chord) -> bool,
-    ) -> Option<Vec<Option<Chord>>> {
-        let wanted = match choice {
-            Choice::Bound(chord) => Some(chord),
-            Choice::Unbound => None,
-            Choice::Default => cheat.hotkeys.get(slot).copied().flatten(),
+    ) -> Result<(), Clash> {
+        let (index, slot) = at;
+        let wanted = choice.chord(&cheats[index], slot);
+        let clash_now = |store: &Self| {
+            let slots: Vec<_> = cheats.iter().map(|cheat| store.slots(trainer, cheat)).collect();
+            wanted.and_then(|chord| clash(&slots, at, chord, &reserved))
         };
-        let slots = self.slots(trainer, cheat);
-        let other =
-            |chord: Chord| slots.iter().enumerate().any(|(at, bound)| at != slot && bound.is_some_and(|bound| bound.same_keys(chord)));
-        if wanted.is_some_and(|chord| reserved(chord) || other(chord)) {
-            return None;
+        match clash_now(self) {
+            None => {}
+            Some(Clash::Slots { keep: true, .. }) if resolution == Some(Resolution::Keep) => {}
+            Some(Clash::Slots { .. }) if resolution == Some(Resolution::Take) => {
+                // Unbinding a holder may show a default its choice hid: look again until none holds the chord.
+                while let Some(Clash::Slots { held, .. }) = clash_now(self) {
+                    for (cheat, slot) in held {
+                        self.choose(trainer, &cheats[cheat].id, slot, Choice::Unbound);
+                    }
+                }
+            }
+            Some(clash) => return Err(clash),
         }
-        self.choose(trainer, &cheat.id, slot, choice);
-        Some(self.slots(trainer, cheat))
+        self.choose(trainer, &cheats[index].id, slot, choice);
+        Ok(())
     }
 }
 
@@ -167,19 +232,74 @@ mod tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 
+    fn chord(vks: &[u16]) -> Chord {
+        Chord::from_vks(vks).unwrap()
+    }
+
     #[test]
-    fn a_chord_held_elsewhere_or_reserved_is_refused() {
+    fn a_chord_clashes_with_other_slots_or_the_reserved() {
+        let (f1, f2, f3) = (chord(&[112]), chord(&[113]), chord(&[114]));
+        let slots = vec![vec![Some(f1), None], vec![Some(f2)]];
+        assert_eq!(clash(&slots, (0, 1), f1, |_| false), Some(Clash::Slots { held: vec![(0, 0)], keep: false }));
+        assert_eq!(clash(&slots, (0, 1), f2, |_| false), Some(Clash::Slots { held: vec![(1, 0)], keep: true }));
+        assert_eq!(clash(&slots, (0, 0), f1, |_| false), None, "a slot does not hold against itself");
+        assert_eq!(clash(&slots, (0, 1), f3, |_| false), None);
+        assert_eq!(clash(&slots, (0, 1), f1, |_| true), Some(Clash::Reserved), "the overlay's key comes first");
+        let pair = vec![vec![Some(chord(&[17, 112]))]];
+        assert_eq!(clash(&pair, (1, 0), chord(&[112, 17]), |_| false), Some(Clash::Slots { held: vec![(0, 0)], keep: true }));
+    }
+
+    #[test]
+    fn a_slot_is_shared_when_another_holds_its_keys() {
+        let (f1, f2) = (chord(&[112]), chord(&[113]));
+        let slots = vec![vec![Some(f1), None], vec![Some(f1), Some(f2)], vec![None]];
+        assert_eq!(shared(&slots), vec![vec![true, false], vec![true, false], vec![false]]);
+    }
+
+    #[test]
+    fn taking_a_chord_also_frees_a_default_its_holder_hid() {
+        let dir = std::env::temp_dir().join(format!("impulse-take-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut store = Store::load(&Paths::new(dir.clone()));
+        let g = Ref::parse("s:g").unwrap();
+        let f1 = chord(&[112]);
+        let cheats =
+            [Cheat { id: "d".into(), hotkeys: vec![Some(f1), None], ..cheat() }, Cheat { id: "e".into(), hotkeys: vec![], ..cheat() }];
+        let slots = |store: &Store| cheats.iter().map(|cheat| store.slots(&g, cheat)).collect::<Vec<_>>();
+        // The user's own F1 on slot 1 hides the source's F1 on slot 0.
+        store.choose(&g, "d", 1, Choice::Bound(f1));
+        assert_eq!(slots(&store), [[None, Some(f1)], [None, None]]);
+        assert_eq!(store.rebind(&g, &cheats, (1, 0), Choice::Bound(f1), Some(Resolution::Take), |_| false), Ok(()));
+        assert_eq!(slots(&store), [[None, None], [Some(f1), None]]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_held_chord_is_bound_only_by_the_resolution_that_fits() {
         let dir = std::env::temp_dir().join(format!("impulse-rebind-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let mut store = Store::load(&Paths::new(dir.clone()));
         let g = Ref::parse("s:g").unwrap();
-        let (f1, f2) = (Chord::from_vks(&[112]).unwrap(), Chord::from_vks(&[113]).unwrap());
-        assert_eq!(store.rebind(&g, &cheat(), 1, Choice::Bound(f1), |_| false), None);
-        assert_eq!(store.rebind(&g, &cheat(), 1, Choice::Bound(f2), |chord| chord == f2), None);
-        assert_eq!(store.rebind(&g, &cheat(), 0, Choice::Bound(f1), |_| false), Some(vec![Some(f1), None]));
-        assert_eq!(store.rebind(&g, &cheat(), 1, Choice::Bound(f2), |_| false), Some(vec![Some(f1), Some(f2)]));
-        assert_eq!(store.rebind(&g, &cheat(), 0, Choice::Bound(f2), |_| false), None);
-        assert_eq!(store.rebind(&g, &cheat(), 0, Choice::Unbound, |_| true), Some(vec![None, Some(f2)]));
+        let (f1, f2) = (chord(&[112]), chord(&[113]));
+        let cheats = [cheat(), Cheat { id: "b".into(), hotkeys: vec![Some(f2)], ..cheat() }];
+        let slots = |store: &Store| cheats.iter().map(|cheat| store.slots(&g, cheat)).collect::<Vec<_>>();
+        let free = |_: Chord| false;
+
+        let other = Clash::Slots { held: vec![(0, 0)], keep: true };
+        assert_eq!(store.rebind(&g, &cheats, (1, 0), Choice::Bound(f1), None, free), Err(other));
+        assert_eq!(store.rebind(&g, &cheats, (1, 0), Choice::Bound(f1), Some(Resolution::Keep), free), Ok(()));
+        assert_eq!(slots(&store), [[Some(f1), None], [Some(f1), None]]);
+
+        let (own, both) = (Clash::Slots { held: vec![(0, 0), (1, 0)], keep: false }, Resolution::Keep);
+        assert_eq!(store.rebind(&g, &cheats, (0, 1), Choice::Bound(f1), Some(both), free), Err(own));
+        assert_eq!(store.rebind(&g, &cheats, (0, 1), Choice::Bound(f1), Some(Resolution::Take), free), Ok(()));
+        assert_eq!(slots(&store), [[None, Some(f1)], [None, None]]);
+
+        let reserved = |held: Chord| held == f2;
+        assert_eq!(store.rebind(&g, &cheats, (0, 0), Choice::Bound(f2), Some(Resolution::Take), reserved), Err(Clash::Reserved));
+        assert_eq!(store.rebind(&g, &cheats, (0, 1), Choice::Unbound, None, |_| true), Ok(()));
+        assert_eq!(store.rebind(&g, &cheats, (1, 0), Choice::Default, None, free), Ok(()));
+        assert_eq!(slots(&store), [[None, None], [Some(f2), None]]);
         fs::remove_dir_all(&dir).unwrap();
     }
 }

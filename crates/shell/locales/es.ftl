@@ -147,6 +147,12 @@ hotkeys-enabled = ATAJOS
 hotkeys-enabled-hint = atajos del trainer durante la sesión
 hotkeys-works-in = ALCANCE
 hotkeys-works-in-hint = en juego: solo con el juego en primer plano
+hotkeys-bind-hint = ESC CANCELAR · BKSP RESTAURAR · DEL QUITAR
+hotkeys-clash = { $keys } ya está en uso en { $name }
+hotkeys-clash-overlay = { $keys } está reservado para el overlay
+hotkeys-keep = MANTENER AMBOS
+hotkeys-rebind = REASIGNAR
+hotkeys-shared-tip = otro mod tiene también este atajo: se activan los dos
 
 ## Trainer
 
