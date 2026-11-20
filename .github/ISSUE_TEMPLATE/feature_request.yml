@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an idea
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](https://github.com/tweak-for-me/impulse#roadmap) first: the idea may be planned already.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: The situation or problem, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What should Impulse do?
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do now?
