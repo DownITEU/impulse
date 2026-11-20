@@ -13,6 +13,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 ### Fixes
 
 - The update check no longer fails with a gzip error from the second check on.
+- A trainer whose cheats send an empty `args` array (Spyro Reignited Trilogy) loads instead of failing with "cannot download the cheat list".
 
 ## [0.1.0] - 2026-11-20
 

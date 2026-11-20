@@ -10,7 +10,10 @@ use std::{
 use anyhow::{Context, Result};
 use blocking::unblock;
 use model::Chord;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize, Deserializer, Serialize,
+    de::{DeserializeOwned, Error as _},
+};
 use serde_json::Value;
 
 use crate::{session::Session, texts, transport::Transport};
@@ -30,7 +33,7 @@ pub struct Trainer {
     pinned_mods: Vec<String>,
     // What running it takes: read by `plan`.
     loader: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "object_or_default")]
     loader_args: LoaderArgs,
     #[serde(default)]
     game_events: Vec<Value>,
@@ -73,7 +76,7 @@ struct Cheat {
     /// Key chords as Windows virtual-key codes.
     #[serde(default)]
     hotkeys: Vec<Vec<u16>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "object_or_default")]
     args: Args,
     instructions: Option<String>,
     description: Option<String>,
@@ -91,6 +94,14 @@ enum Kind {
     Selection,
     #[serde(other)]
     Unknown,
+}
+
+/// Wand sends an empty object as `[]`: anything but an object is the defaults.
+fn object_or_default<'de, D: Deserializer<'de>, T: DeserializeOwned + Default>(deserializer: D) -> Result<T, D::Error> {
+    match Value::deserialize(deserializer)? {
+        object @ Value::Object(_) => T::deserialize(object).map_err(D::Error::custom),
+        _ => Ok(T::default()),
+    }
 }
 
 #[derive(Default, Deserialize)]
@@ -268,6 +279,18 @@ mod tests {
         assert!(cheats[4].kind == model::Kind::Number && !cheats[4].args.button);
         assert!(cheats[5].kind == model::Kind::Slider);
         assert_eq!(pinned, ["b"]);
+    }
+
+    /// Wand sends an empty object as `[]` (Spyro Reignited Trilogy's trainer has cheats with `"args": []`).
+    #[test]
+    fn an_empty_array_where_args_are_expected_means_none() {
+        let json = r#"{
+            "blueprint": {"cheats": [{"uuid": "a", "name": "Health", "category": "player", "type": "toggle", "args": []}]},
+            "loaderArgs": []
+        }"#;
+        let trainer: Trainer = serde_json::from_str(json).unwrap();
+        let cheats = model_cheats(trainer);
+        assert!(cheats.len() == 1 && cheats[0].args.min.is_none() && cheats[0].args.options.is_empty());
     }
 
     #[test]
