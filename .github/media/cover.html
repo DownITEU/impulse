@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impulse cover</title>
+<style>
+    @font-face {
+        font-family: Chakra;
+        src: url('../../crates/shell/assets/fonts/ChakraPetch-Bold.ttf');
+        font-weight: 700;
+    }
+    @font-face {
+        font-family: Chakra;
+        src: url('../../crates/shell/assets/fonts/ChakraPetch-Medium.ttf');
+        font-weight: 500;
+    }
+    @font-face {
+        font-family: JetBrains;
+        src: url('../../crates/shell/assets/fonts/JetBrainsMono-Medium.ttf');
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        color-scheme: dark;
+        color: #f2f5ee;
+        background: #0a0b0a;
+    }
+    .hero {
+        --accent: #c6ff3d;
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        width: 1280px;
+        height: 640px;
+        background:
+            radial-gradient(ellipse at 87% 6%, #263711 0, transparent 49%),
+            radial-gradient(ellipse at 55% 112%, #171f10 0, transparent 51%),
+            #0a0b0a;
+    }
+    .hero::before {
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        content: '';
+        background-image:
+            linear-gradient(to right, #c6ff3d14 1px, transparent 1px),
+            linear-gradient(to bottom, #c6ff3d14 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: linear-gradient(99deg, transparent 8%, #000 81%);
+    }
+    .copy { position: absolute; top: 149px; left: 62px; width: 430px; }
+    .eyebrow, .surface {
+        font: 13px JetBrains, monospace;
+        letter-spacing: .11em;
+    }
+    .eyebrow { display: flex; align-items: center; gap: 11px; color: var(--accent); }
+    .eyebrow::before { width: 11px; height: 11px; background: var(--accent); content: ''; }
+    h1 {
+        margin: 19px 0 9px;
+        font: 700 90px/.94 Chakra, sans-serif;
+        letter-spacing: .015em;
+    }
+    p { margin: 0; color: #c9cfc3; font: 500 26px/1.3 Chakra, sans-serif; }
+    .surfaces { display: flex; gap: 8px; margin-top: 29px; }
+    .surface { padding: 8px 10px; border: 1px solid #a9b0a33d; color: #c9cfc3; }
+    .desktop, .phone { position: absolute; display: block; }
+    .desktop {
+        left: 506px;
+        top: 76px;
+        width: 725px;
+        box-shadow: 0 32px 82px #000c;
+    }
+    .phone {
+        right: 51px;
+        bottom: 54px;
+        width: 187px;
+        box-shadow: 0 22px 60px #000e;
+    }
+    .rail {
+        position: absolute;
+        right: 54px;
+        bottom: 29px;
+        left: 63px;
+        height: 1px;
+        background: linear-gradient(to right, #c6ff3d88, #a9b0a329 28%, #a9b0a329);
+    }
+</style>
+<main class="hero">
+    <div class="copy">
+        <div class="eyebrow">NATIVE WINDOWS CLIENT</div>
+        <h1>IMPULSE</h1>
+        <p>Trainers, maps, and hotkeys.<br>Keep the game on screen.</p>
+        <div class="surfaces" aria-label="Available controls">
+            <span class="surface">DESKTOP</span><span class="surface">OVERLAY</span><span class="surface">PHONE</span>
+        </div>
+    </div>
+    <img class="desktop" src="desktop.webp" alt="Desktop trainer and library">
+    <img class="phone" src="remote-panel.webp" alt="Remote trainer controls on a phone">
+    <div class="rail" aria-hidden="true"></div>
+</main>
+</html>
