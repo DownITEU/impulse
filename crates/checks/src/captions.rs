@@ -40,6 +40,8 @@ const NAMES: &[&str] = &[
     "Chakra Petch",
     // The release list's query, joined to a repository address.
     "/releases?per_page=30",
+    // The bug form's address: its `version` field arrives filled in.
+    "{REPO}/issues/new?template=bug_report.yml&version={VERSION}",
     "Exo 2",
     "JetBrains Mono",
     "Dialog",

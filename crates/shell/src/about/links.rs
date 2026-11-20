@@ -33,10 +33,8 @@ impl Link {
         match self {
             Link::Repo => REPO.into(),
             Link::Discord => "https://discord.gg/GgX29D7Tt".into(),
-            // The form starts with the version and two headings: the first things a fix needs.
-            Link::Bug => format!(
-                "{REPO}/issues/new?body=Impulse%20{VERSION}%0A%0A%23%23%20What%20happened%0A%0A%0A%23%23%20What%20you%20expected%0A%0A"
-            ),
+            // The issue form's `version` field arrives filled in: the first thing a fix needs.
+            Link::Bug => format!("{REPO}/issues/new?template=bug_report.yml&version={VERSION}"),
             Link::Support => "https://buymeacoffee.com/kitbyte".into(),
             Link::Email => format!("mailto:{EMAIL}?subject=Impulse%20{VERSION}"),
         }
@@ -49,8 +47,7 @@ mod tests {
 
     #[test]
     fn a_bug_report_opens_with_the_version() {
-        assert!(Link::Bug.url().starts_with(&format!("{REPO}/issues/new?body=Impulse%20")));
-        assert!(Link::Bug.url().contains(VERSION));
+        assert_eq!(Link::Bug.url(), format!("{REPO}/issues/new?template=bug_report.yml&version={VERSION}"));
     }
 
     #[test]
