@@ -44,10 +44,37 @@ pub fn get(url: &str, etag: Option<&str>) -> Result<Response> {
     let mut response = request.call().with_context(|| format!("GET {url}"))?;
     let etag = etag_of(response.headers());
     let status = response.status().as_u16();
-    // An error's body is never used: one past the limit must not hide its status.
+    // An error's body is never used: one past the limit must not hide its status. A 304 sends none, yet may name an
+    // encoding (GitHub's does): reading it would fail in the decoder.
     let body = match status {
-        400.. => Vec::new(),
+        304 | 400.. => Vec::new(),
         _ => response.body_mut().with_config().limit(MAX_BODY).read_to_vec().with_context(|| format!("read {url}"))?,
     };
     Ok(Response { status, etag, body })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
+
+    use super::*;
+
+    /// GitHub answers a conditional request with a 304 that names an encoding and sends no body.
+    #[test]
+    fn a_not_modified_answer_that_names_an_encoding_has_no_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/feed", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let _ = stream.read(&mut [0; 1024]);
+            stream.write_all(b"HTTP/1.1 304 Not Modified\r\nETag: \"x\"\r\nContent-Encoding: gzip\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        let response = get(&url, Some("x")).unwrap();
+        server.join().unwrap();
+        assert_eq!((response.status, response.etag.as_deref(), response.body.len()), (304, Some("x"), 0));
+    }
 }
