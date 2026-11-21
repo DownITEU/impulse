@@ -3,6 +3,20 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
+## [0.2.0] - 2026-11-21
+
+### Features
+
+- 32-bit games: their trainers load like the 64-bit ones. A trainer made for the game's other build says so.
+- Games run as administrator: Impulse asks for administrator rights (UAC) to attach, as Wand does. Run as administrator itself, it needs no prompt and shows a shield in the title bar. A game whose protection keeps trainers out says so.
+- From the second start, the game list shows at once from the last scan and refreshes in the background, instead of waiting for every launcher after a reboot.
+- The log shows how long each launcher's scan takes.
+
+### Fixes
+
+- Older trainers signed with WeMod's earlier company name (Daring Development, such as Mad Max) load instead of being refused.
+- A UAC prompt or the lock screen no longer leaves an error in the log.
+
 ## [0.1.1] - 2026-11-20
 
 ### Features
