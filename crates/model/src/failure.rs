@@ -14,6 +14,12 @@ pub enum FailureKind {
     SetupNeeded,
     GameNotFound,
     Refused,
+    /// The game runs as administrator and the user did not let the app be one too.
+    Elevation,
+    /// The game's process cannot be opened, even as administrator: its protection keeps trainers out.
+    Protected,
+    /// The trainer is built for the game's other architecture (32 or 64-bit), such as another of its executables.
+    Architecture,
     Internal,
 }
 

@@ -16,6 +16,10 @@ use wand::Wand;
 use self::plugins::Host;
 
 fn main() {
+    // A copy started elevated for a game run as administrator: it loads the DLL and exits.
+    if let Some(code) = agent::serve_elevated(Wand::PUBLISHERS) {
+        std::process::exit(code);
+    }
     // One Impulse at a time: a second start shows the first, which may sit in the tray. An update's restart
     // waits for the one it replaces instead.
     if !tray::claim(updater::restarted()) {

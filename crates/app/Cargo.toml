@@ -16,6 +16,7 @@ default = ["remote"]
 remote = ["dep:remote"]
 
 [dependencies]
+agent.workspace = true
 client.workspace = true
 journal.workspace = true
 log.workspace = true

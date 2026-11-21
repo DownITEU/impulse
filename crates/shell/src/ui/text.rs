@@ -207,6 +207,9 @@ fn kind(kind: FailureKind) -> Key {
         FailureKind::SetupNeeded => key::FAILURE_SETUP_NEEDED,
         FailureKind::GameNotFound => key::FAILURE_GAME_NOT_FOUND,
         FailureKind::Refused => key::FAILURE_REFUSED,
+        FailureKind::Elevation => key::FAILURE_ELEVATION,
+        FailureKind::Protected => key::FAILURE_PROTECTED,
+        FailureKind::Architecture => key::FAILURE_ARCHITECTURE,
         FailureKind::Internal => key::FAILURE_INTERNAL,
     }
 }

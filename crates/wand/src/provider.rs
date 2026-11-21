@@ -52,6 +52,8 @@ pub struct Wand {
 impl Wand {
     /// The source id of everything it mints.
     pub const SOURCE: &str = crate::SOURCE;
+    /// The signers of the DLLs it puts into a game.
+    pub const PUBLISHERS: &[&str] = crate::install::PUBLISHERS;
 
     /// Starts the browser bridge at once: it takes a moment to come up.
     pub fn new(data_dir: PathBuf) -> Self {

@@ -22,6 +22,9 @@ failure-unsupported = henüz desteklenmiyor
 failure-setup-needed = bir ayar eksik. Ayarlar → GENEL bölümüne bak
 failure-game-not-found = oyun bulunamadı
 failure-refused = reddedildi
+failure-elevation = oyun yönetici olarak çalışıyor: bağlanmak için istemi onaylayın
+failure-protected = oyunun koruması trainer'lara izin vermiyor
+failure-architecture = trainer oyunun diğer sürümü için (32 veya 64 bit): desteklenen sürümü başlatın
 failure-internal = bir şeyler ters gitti, ayrıntılar logda
 failure-place = { $why }. Ayarlar → GENEL bölümüne bak
 

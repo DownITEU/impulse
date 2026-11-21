@@ -40,7 +40,7 @@ mod tests {
         super::tophat::{Server, Session},
         *,
     };
-    use crate::install::{PUBLISHER, SERVICE, installs};
+    use crate::install::{PUBLISHERS, binaries, installs};
 
     #[test]
     fn startup_is_the_json_the_service_reads() {
@@ -59,8 +59,8 @@ mod tests {
     #[test]
     #[ignore = "injects the installed tophat_service into a throwaway process"]
     fn the_injected_service_dials_in_and_the_session_ends_cleanly() {
-        let service = installs().first().expect("a Wand install").trainerlib().join(SERVICE);
-        let service = Image::open(&service, PUBLISHER).unwrap();
+        let [service, _] = binaries(&installs().first().expect("a Wand install").trainerlib(), true);
+        let service = Image::open(&service, PUBLISHERS).unwrap();
         let server = Server::start().unwrap();
         let client_id = uuid::Uuid::new_v4().to_string();
         let waiting = server.expect(&client_id);

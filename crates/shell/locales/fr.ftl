@@ -21,6 +21,9 @@ failure-unsupported = pas encore pris en charge
 failure-setup-needed = il manque un réglage : voir Paramètres > App
 failure-game-not-found = le jeu est introuvable
 failure-refused = refusé
+failure-elevation = le jeu tourne en administrateur : acceptez la demande pour vous connecter
+failure-protected = la protection du jeu bloque les trainers
+failure-architecture = le trainer est prévu pour l'autre version du jeu (32 ou 64 bits) : lancez celle qu'il prend en charge
 failure-internal = erreur inattendue : voir le log
 failure-place = { $why } : voir Paramètres > App
 

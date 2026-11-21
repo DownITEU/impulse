@@ -1,4 +1,4 @@
-//! Authenticode: an image reaches a game process only signed by the publisher its caller expects.
+//! Authenticode: an image reaches a game process only signed by a publisher its caller expects.
 
 use std::{os::windows::ffi::OsStrExt, path::Path, ptr};
 
@@ -15,9 +15,9 @@ use windows_sys::Win32::{
     },
 };
 
-/// Fails unless `path` has a valid embedded signature whose signer's display name is `publisher`.
+/// Fails unless `path` has a valid embedded signature whose signer's display name is one of `publishers`.
 /// Revocation is not checked: it needs the network, and a trainer must start offline.
-pub fn check(path: &Path, publisher: &str) -> Result<()> {
+pub fn check(path: &Path, publishers: &[&str]) -> Result<()> {
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
     let mut file =
         WINTRUST_FILE_INFO { cbStruct: size_of::<WINTRUST_FILE_INFO>() as u32, pcwszFilePath: wide.as_ptr(), ..Default::default() };
@@ -41,8 +41,11 @@ pub fn check(path: &Path, publisher: &str) -> Result<()> {
         (status, signer)
     };
     match (status, signer) {
-        (0, Some(name)) if name == publisher => Ok(()),
-        (0, name) => bail!("{} is signed by {}, not by {publisher}", path.display(), name.as_deref().unwrap_or("an unknown publisher")),
+        (0, Some(name)) if publishers.contains(&name.as_str()) => Ok(()),
+        (0, name) => {
+            let signer = name.as_deref().unwrap_or("an unknown publisher");
+            bail!("{} is signed by {signer}, not by {}", path.display(), publishers.join(" or "))
+        }
         (code, _) => bail!("{} has no valid signature ({code:#x})", path.display()),
     }
 }

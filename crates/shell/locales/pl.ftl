@@ -22,6 +22,9 @@ failure-unsupported = na razie brak obsługi
 failure-setup-needed = wymagana konfiguracja (Ustawienia → Ogólne)
 failure-game-not-found = nie znaleziono gry
 failure-refused = odrzucono
+failure-elevation = gra działa jako administrator: zaakceptuj monit, aby się połączyć
+failure-protected = zabezpieczenia gry blokują trainery
+failure-architecture = trainer jest dla innej wersji gry (32 lub 64 bity): uruchom obsługiwaną
 failure-internal = coś poszło nie tak: szczegóły w logu
 failure-place = { $why } (Ustawienia → Ogólne)
 

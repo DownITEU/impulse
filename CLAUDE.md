@@ -20,7 +20,7 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 
 ## Crates
 
-- `app` - the composition root: one instance, the journal, the migration, the registry, the window, the remote panel's server (feature `remote`, on by default).
+- `app` - the composition root: the elevated copy's entry (`agent::serve_elevated`), one instance, the journal, the migration, the registry, the window, the remote panel's server (feature `remote`, on by default).
 - `shell` - the GPUI UI.
 - `client` - the app's logic without GPUI: library, trainer sheet, runs, hotkey choices, map state and the files that keep them.
 - `wand` - everything WeMod/Wand; its one public item is the `Wand` source.

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     binary,
     inject::{self, Startup},
-    install::{PLUGIN, PUBLISHER, SERVICE},
+    install::{PUBLISHERS, binaries},
     tophat::{Event, Run, Server, Session},
 };
 
@@ -33,14 +33,16 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     let exe = &game.process.path;
     let version = pe::header(exe).with_context(|| format!("{} is not a PE image", exe.display()))?.timestamp;
     let (service, plugin, trainer) = {
-        let (service, plugin, trainer) = (trainerlib.join(SERVICE), trainerlib.join(PLUGIN), game.trainer.to_owned());
+        let (trainerlib, trainer) = (trainerlib.to_owned(), game.trainer.to_owned());
         let hash = game.trainer_hash.to_owned();
         unblock(move || {
-            let trainer = Image::open(&trainer, PUBLISHER)?;
+            let trainer = Image::open(&trainer, PUBLISHERS)?;
             // The download was checked earlier; the file may have been swapped before it was locked.
             let found = binary::hash_of(trainer.path()).context("cannot read the trainer")?;
             ensure!(found.eq_ignore_ascii_case(&hash), "the trainer on disk does not match its hash");
-            Ok::<_, anyhow::Error>((Image::open(&service, PUBLISHER)?, Image::open(&plugin, PUBLISHER)?, trainer))
+            // Of the trainer's architecture, as Wand picks them; the injection checks it against the game's.
+            let [service, plugin] = binaries(&trainerlib, trainer.x64());
+            Ok::<_, anyhow::Error>((Image::open(&service, PUBLISHERS)?, Image::open(&plugin, PUBLISHERS)?, trainer))
         })
         .await?
     };

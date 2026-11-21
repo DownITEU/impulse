@@ -7,10 +7,9 @@ use std::{
     time::SystemTime,
 };
 
-pub const SERVICE: &str = "tophat_service_x64.dll";
-pub const PLUGIN: &str = "TrainerLibPlugin_x64.dll";
 /// The signer of the service, the plugin and every trainer DLL.
-pub const PUBLISHER: &str = "WeMod LLC";
+/// WeMod signs as WeMod LLC; older trainers carry its earlier name.
+pub const PUBLISHERS: &[&str] = &["WeMod LLC", "Daring Development Inc."];
 
 const TRAINERLIB: &str = r"resources\app.asar.unpacked\static\unpacked\trainerlib";
 // Wand was WeMod: older installs live under the old name.
@@ -47,6 +46,12 @@ pub fn installs() -> Vec<Install> {
     installs_in(Path::new(&local))
 }
 
+/// Wand's service and plugin in `trainerlib` for a trainer of that architecture.
+pub fn binaries(trainerlib: &Path, x64: bool) -> [PathBuf; 2] {
+    let arch = if x64 { "x64" } else { "x86" };
+    [trainerlib.join(format!("tophat_service_{arch}.dll")), trainerlib.join(format!("TrainerLibPlugin_{arch}.dll"))]
+}
+
 fn installs_in(local: &Path) -> Vec<Install> {
     let mut all: Vec<Install> = BRANDS.iter().flat_map(|brand| versions(&local.join(brand))).collect();
     newest_first(&mut all);
@@ -80,8 +85,7 @@ fn versions(squirrel_root: &Path) -> Vec<Install> {
 
 fn complete(dir: &Path, version: Vec<u32>) -> Option<Install> {
     let install = Install { root: dir.to_owned(), version };
-    let libs = install.trainerlib();
-    (libs.join(SERVICE).is_file() && libs.join(PLUGIN).is_file()).then_some(install)
+    binaries(&install.trainerlib(), true).iter().all(|file| file.is_file()).then_some(install)
 }
 
 /// An update can leave two folders of one version; the later-written one is the live one.
@@ -116,9 +120,10 @@ mod tests {
         let app = root.join(folder);
         let libs = app.join(TRAINERLIB);
         fs::create_dir_all(&libs).unwrap();
-        fs::write(libs.join(SERVICE), b"").unwrap();
+        let [service, plugin] = binaries(&libs, true);
+        fs::write(service, b"").unwrap();
         if complete {
-            fs::write(libs.join(PLUGIN), b"").unwrap();
+            fs::write(plugin, b"").unwrap();
         }
         app
     }

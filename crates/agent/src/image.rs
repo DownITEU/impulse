@@ -1,4 +1,4 @@
-//! A DLL that may enter a game: signed by the expected publisher, x64, and held open against replacement.
+//! A DLL that may enter a game: signed by an expected publisher, x64 or x86, and held open against replacement.
 
 use std::{
     fs::{File, OpenOptions},
@@ -15,12 +15,13 @@ use crate::trust;
 /// The only way to name a file the injector or a loaded service will load.
 pub struct Image {
     path: PathBuf,
+    x64: bool,
     lock: Option<File>,
 }
 
 impl Image {
-    /// `publisher` is the signer's display name the file must carry.
-    pub fn open(path: &Path, publisher: &str) -> Result<Self> {
+    /// `publishers`: the signers' display names the file may carry.
+    pub fn open(path: &Path, publishers: &[&str]) -> Result<Self> {
         // Denies writes and deletes while this value lives: the file checked is the file loaded.
         let lock = OpenOptions::new()
             .read(true)
@@ -33,14 +34,22 @@ impl Image {
         // `LoadLibraryW` appends ".dll" to a name without an extension and would load a sibling.
         let dll = path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("dll"));
         ensure!(dll, "{} is not a .dll", path.display());
-        trust::check(&path, publisher)?;
-        let x64 = pe::header(&path).is_some_and(|header| header.machine == pe::X64);
-        ensure!(x64, "{} is not an x64 image", path.display());
-        Ok(Self { path, lock: Some(lock) })
+        trust::check(&path, publishers)?;
+        let x64 = match pe::header(&path).map(|header| header.machine) {
+            Some(pe::X64) => true,
+            Some(pe::X86) => false,
+            _ => bail!("{} is neither an x64 nor an x86 image", path.display()),
+        };
+        Ok(Self { path, x64, lock: Some(lock) })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// x64, else x86: a process takes only an image of its own architecture.
+    pub fn x64(&self) -> bool {
+        self.x64
     }
 
     /// For a failed load whose remote thread may still open the file: the lock then lasts until exit.
@@ -50,10 +59,15 @@ impl Image {
         }
     }
 
-    /// A path no file backs, for tests that never load it. Never in a normal build.
+    /// An x64 path no file backs, for tests that never load it. Never in a normal build.
     #[cfg(any(test, feature = "test-support"))]
     pub fn unchecked(path: &str) -> Self {
-        Self { path: path.into(), lock: None }
+        Self { path: path.into(), x64: true, lock: None }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn unchecked_x86(path: &str) -> Self {
+        Self { path: path.into(), x64: false, lock: None }
     }
 }
 
@@ -85,17 +99,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_a_dll_signed_by_the_expected_publisher_opens() {
+    fn only_a_dll_signed_by_an_expected_publisher_opens() {
         let kernel32 = Path::new(r"C:\Windows\System32\kernel32.dll");
-        assert!(Image::open(kernel32, "Microsoft Windows").is_ok());
-        let err = Image::open(kernel32, "WeMod LLC").err().unwrap();
-        assert!(err.to_string().contains("not by WeMod LLC"), "{err}");
-        assert!(Image::open(Path::new(r"C:\no\such.dll"), "Microsoft Windows").is_err());
+        assert!(Image::open(kernel32, &["Someone Else", "Microsoft Windows"]).is_ok());
+        let err = Image::open(kernel32, &["Someone Else", "Another Publisher"]).err().unwrap();
+        assert!(err.to_string().contains("not by Someone Else or Another Publisher"), "{err}");
+        assert!(Image::open(Path::new(r"C:\no\such.dll"), &["Microsoft Windows"]).is_err());
     }
 
     #[test]
     fn a_file_without_the_dll_extension_is_refused_by_its_resolved_path() {
-        let err = Image::open(Path::new("Cargo.toml"), "Microsoft Windows").err().unwrap();
+        let err = Image::open(Path::new("Cargo.toml"), &["Microsoft Windows"]).err().unwrap();
         let text = err.to_string();
         assert!(text.contains("is not a .dll") && text.contains(":\\"), "{text}");
     }
