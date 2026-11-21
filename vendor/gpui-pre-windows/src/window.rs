@@ -696,9 +696,10 @@ impl PlatformWindow for WindowsWindow {
         let scale_factor = self.scale_factor();
         let point = unsafe {
             let mut point: POINT = std::mem::zeroed();
-            GetCursorPos(&mut point)
-                .context("unable to get cursor position")
-                .log_err();
+            // Denied while another desktop takes the input (UAC's prompt, the lock screen): not an error.
+            if let Err(e) = GetCursorPos(&mut point) {
+                log::debug!("no cursor position: {e}");
+            }
             ScreenToClient(self.0.hwnd, &mut point).ok().log_err();
             point
         };
