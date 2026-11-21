@@ -182,12 +182,18 @@ fn reply(pending: &Pending, raw: &[u8]) {
     let Ok(reply) = serde_json::from_slice::<Reply>(raw) else {
         return;
     };
-    let result = match reply.status {
-        Some(status) => Ok(Response { status, body: reply.body.unwrap_or_default() }),
-        None => Err(failed(reply.error.as_deref().unwrap_or("browser request failed"), reply.probe_ok)),
-    };
     if let Some(tx) = pending.lock().unwrap().remove(&reply.id) {
-        let _ = tx.send(result);
+        let _ = tx.send(reply.result());
+    }
+}
+
+impl Reply {
+    fn result(self) -> Result<Response> {
+        match (self.status, self.error.as_deref()) {
+            (Some(status), None) => Ok(Response { status, body: self.body.unwrap_or_default() }),
+            (Some(status), Some(error)) => Err(offline(&format!("HTTP {status}: could not read the response body ({error})"))),
+            (None, error) => Err(failed(error.unwrap_or("browser request failed"), self.probe_ok)),
+        }
     }
 }
 
@@ -195,15 +201,23 @@ fn reply(pending: &Pending, raw: &[u8]) {
 mod tests {
     use super::*;
 
+    fn failure(json: &str) -> Failure {
+        let reply: Reply = serde_json::from_str(json).unwrap();
+        Failure::from(reply.result().err().expect("an error reply"))
+    }
+
+    #[test]
+    fn a_body_read_error_keeps_the_status() {
+        let got = failure(r#"{"id":1,"status":502,"error":"TypeError","body":"private"}"#);
+        assert_eq!(got.kind, FailureKind::Offline);
+        assert_eq!(got.detail, "Offline: HTTP 502: could not read the response body (TypeError)");
+    }
+
     #[test]
     fn a_request_without_a_reply_is_worded_by_the_probe() {
-        let failure = |json: &str| {
-            let reply: Reply = serde_json::from_str(json).unwrap();
-            Failure::from(failed("TypeError", reply.probe_ok))
-        };
-        let not_reached = failure(r#"{"id":1,"probe_ok":false}"#);
-        let reached = failure(r#"{"id":1,"probe_ok":true}"#);
-        let unprobed = failure(r#"{"id":1}"#);
+        let not_reached = failure(r#"{"id":1,"error":"TypeError","probe_ok":false}"#);
+        let reached = failure(r#"{"id":1,"error":"TypeError","probe_ok":true}"#);
+        let unprobed = failure(r#"{"id":1,"error":"timed out"}"#);
         assert!([&not_reached, &reached, &unprobed].iter().all(|failure| failure.kind == FailureKind::Offline));
         assert_eq!((not_reached.message, reached.message, unprobed.message), (Some(text(PROBE_FAILED)), Some(text(PROBE_OK)), None));
         assert!(not_reached.detail.contains("origin probe failed"), "{}", not_reached.detail);

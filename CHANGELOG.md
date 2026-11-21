@@ -8,7 +8,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 ### Fixes
 
 - Wand sign-in shows why it failed and gives feedback when you click Try Again.
-- Sign-in errors in the log name the failed API request and distinguish a fresh sign-in from a session refresh. The log includes the HTTP status when WebView2 can read it. A separate connectivity check can report success even if the original request failed.
+- Sign-in errors in the log name the failed API request and distinguish a fresh sign-in from a session refresh. The log includes the HTTP status when WebView2 can read it. The connectivity check reports only whether the probe passed, not why the original request failed.
 
 ## [0.2.0] - 2026-11-21
 

@@ -14,15 +14,16 @@ async function probe(url) {
   }
 }
 window.impulse = async ({ id, method, url, headers, body }) => {
-  let reply;
+  let reply, status;
   try {
     // Bounds the body too: a reply that never comes would leave its caller waiting.
     const res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(120000) });
-    reply = { id, status: res.status, body: await res.text() };
+    status = res.status;
+    reply = { id, status, body: await res.text() };
   } catch (e) {
     const error = e instanceof TypeError ? 'TypeError' : e?.name === 'TimeoutError' ? 'timed out' : 'browser request failed';
-    const probe_ok = error === 'TypeError' ? await probe(url) : undefined;
-    reply = { id, error, probe_ok };
+    const probe_ok = status === undefined && error === 'TypeError' ? await probe(url) : undefined;
+    reply = { id, status, error, probe_ok };
   }
   post('/response', JSON.stringify(reply));
 };
