@@ -1,9 +1,9 @@
 <#
 Checks a release tag against the workspace version and takes its changelog section, the text of the release page.
-A pre-release tag (v0.2.1-pre) reads the section of its version.
+A pre-release tag reads its base version's section. Omit -Output to print the notes.
 
-  scripts\release-notes.ps1 -Tag v0.2.0                              # prints the notes
-  scripts\release-notes.ps1 -Tag v0.2.1-pre -Output release-notes.md
+  # $tag is the workspace version prefixed with v.
+  scripts\release-notes.ps1 -Tag $tag -Output release-notes.md
 #>
 param(
     [Parameter(Mandatory)][string]$Tag,
