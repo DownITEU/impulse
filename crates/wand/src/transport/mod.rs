@@ -73,11 +73,9 @@ impl Transport {
     }
 
     pub async fn fetch(&self, request: Request) -> Result<Response> {
-        // Not the query: a download's may carry a signature.
-        let target = format!("{} {}", request.method, request.url.split(['?', '#']).next().unwrap_or_default());
         let (tx, rx) = oneshot::channel();
         self.proxy.send_event(Cmd::Fetch(request, tx)).map_err(|_| offline("transport is closed"))?;
-        rx.await.map_err(|_| offline("transport dropped the request"))?.with_context(|| target)
+        rx.await.map_err(|_| offline("transport dropped the request"))?
     }
 }
 

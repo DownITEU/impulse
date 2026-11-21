@@ -2,6 +2,17 @@
 <meta charset="utf-8">
 <script>
 const post = (path, body) => fetch('http://impulse.localhost' + path, { method: 'POST', mode: 'no-cors', body });
+// Only a reachability hint: an opaque response tells us nothing about the failed endpoint.
+async function probe(url) {
+  try {
+    await fetch(new URL(url).origin + '/', {
+      mode: 'no-cors', credentials: 'omit', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 window.impulse = async ({ id, method, url, headers, body }) => {
   let reply;
   try {
@@ -9,11 +20,9 @@ window.impulse = async ({ id, method, url, headers, body }) => {
     const res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(120000) });
     reply = { id, status: res.status, body: await res.text() };
   } catch (e) {
-    // A TypeError gives no reason: a plain probe tells no answer from one dropped for want of CORS headers.
-    const answered = e instanceof TypeError
-      ? await fetch(new URL(url).origin + '/', { mode: 'no-cors', signal: AbortSignal.timeout(15000) }).then(() => true, () => false)
-      : undefined;
-    reply = { id, error: String(e), answered };
+    const error = e instanceof TypeError ? 'TypeError' : e?.name === 'TimeoutError' ? 'timed out' : 'browser request failed';
+    const probe_ok = error === 'TypeError' ? await probe(url) : undefined;
+    reply = { id, error, probe_ok };
   }
   post('/response', JSON.stringify(reply));
 };

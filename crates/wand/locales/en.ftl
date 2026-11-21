@@ -35,5 +35,5 @@ category-weapons = WEAPONS
 
 signed-out = Wand is signed out: open Wand and sign in
 not-installed = Wand is not set up on this PC: install it, open it and sign in
-unreachable = Impulse cannot reach Wand's servers: a firewall, antivirus, VPN or proxy may be blocking it
-filtered = Wand's servers answer through a proxy or a check page that Impulse cannot pass: try without the VPN or proxy
+probe-failed = the connection check to Wand also failed. Check your connection, VPN or proxy settings
+probe-ok = the connection check to Wand passed, but the API request failed for an unknown reason

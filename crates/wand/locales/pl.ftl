@@ -35,5 +35,5 @@ category-weapons = BROŃ
 
 signed-out = brak aktywnej sesji w Wand — otwórz aplikację i zaloguj się
 not-installed = Wand nie jest skonfigurowany na tym komputerze: zainstaluj aplikację, otwórz ją i zaloguj się
-unreachable = Impulse nie może połączyć się z serwerami Wand: może to blokować zapora, antywirus, VPN lub proxy
-filtered = serwery Wand odpowiadają przez proxy lub stronę weryfikacji, której Impulse nie może przejść: spróbuj bez VPN lub proxy
+probe-failed = test połączenia z Wand też się nie powiódł. Sprawdź połączenie i ustawienia VPN lub proxy
+probe-ok = test połączenia z Wand się powiódł, ale żądanie do API nie powiodło się z nieznanej przyczyny

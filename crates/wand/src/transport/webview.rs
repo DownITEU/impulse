@@ -21,7 +21,7 @@ use webview2_com::Error::WindowsError;
 use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, http::Response as HttpResponse};
 
 use super::{BRIDGE, Cmd, Request, Response, offline};
-use crate::texts::{FILTERED, UNREACHABLE, text};
+use crate::texts::{PROBE_FAILED, PROBE_OK, text};
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Response>>>>>;
 // Fields drop in order: the WebView closes before its window.
@@ -47,8 +47,7 @@ struct Reply {
     status: Option<u16>,
     body: Option<String>,
     error: Option<String>,
-    /// After a failed request: whether the server answered a plain probe.
-    answered: Option<bool>,
+    probe_ok: Option<bool>,
 }
 
 pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
@@ -170,14 +169,13 @@ fn build(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopP
     Ok((webview, context, window))
 }
 
-/// A request without a reply, worded by the probe: no answer at all, or one the browser drops for want of CORS headers.
-fn failed(error: &str, answered: Option<bool>) -> anyhow::Error {
-    let (why, words) = match answered {
-        Some(false) => ("no usable answer: network, DNS, TLS, a firewall, or a page closed to other sites", UNREACHABLE),
-        Some(true) => ("the server answers without CORS headers: a proxy or a check page", FILTERED),
+fn failed(error: &str, probe_ok: Option<bool>) -> anyhow::Error {
+    let (result, words) = match probe_ok {
+        Some(false) => ("origin probe failed (network or browser policy)", PROBE_FAILED),
+        Some(true) => ("origin probe succeeded; cause of the original failure unknown", PROBE_OK),
         None => return offline(&format!("fetch failed: {error}")),
     };
-    anyhow!("fetch failed: {error}; {why}").context(Failure::new(FailureKind::Offline).saying(text(words)))
+    anyhow!("fetch failed: {error}; {result}").context(Failure::new(FailureKind::Offline).saying(text(words)))
 }
 
 fn reply(pending: &Pending, raw: &[u8]) {
@@ -186,7 +184,7 @@ fn reply(pending: &Pending, raw: &[u8]) {
     };
     let result = match reply.status {
         Some(status) => Ok(Response { status, body: reply.body.unwrap_or_default() }),
-        None => Err(failed(&reply.error.unwrap_or_default(), reply.answered)),
+        None => Err(failed(reply.error.as_deref().unwrap_or("browser request failed"), reply.probe_ok)),
     };
     if let Some(tx) = pending.lock().unwrap().remove(&reply.id) {
         let _ = tx.send(result);
@@ -199,10 +197,16 @@ mod tests {
 
     #[test]
     fn a_request_without_a_reply_is_worded_by_the_probe() {
-        let failure = |answered| Failure::from(failed("TypeError: Failed to fetch", answered));
-        let (none, cors, unprobed) = (failure(Some(false)), failure(Some(true)), failure(None));
-        assert!([&none, &cors, &unprobed].iter().all(|failure| failure.kind == FailureKind::Offline));
-        assert_eq!((none.message, cors.message, unprobed.message), (Some(text(UNREACHABLE)), Some(text(FILTERED)), None));
-        assert!(none.detail.contains("no usable answer"), "{}", none.detail);
+        let failure = |json: &str| {
+            let reply: Reply = serde_json::from_str(json).unwrap();
+            Failure::from(failed("TypeError", reply.probe_ok))
+        };
+        let not_reached = failure(r#"{"id":1,"probe_ok":false}"#);
+        let reached = failure(r#"{"id":1,"probe_ok":true}"#);
+        let unprobed = failure(r#"{"id":1}"#);
+        assert!([&not_reached, &reached, &unprobed].iter().all(|failure| failure.kind == FailureKind::Offline));
+        assert_eq!((not_reached.message, reached.message, unprobed.message), (Some(text(PROBE_FAILED)), Some(text(PROBE_OK)), None));
+        assert!(not_reached.detail.contains("origin probe failed"), "{}", not_reached.detail);
+        assert!(reached.detail.contains("cause of the original failure unknown"), "{}", reached.detail);
     }
 }
