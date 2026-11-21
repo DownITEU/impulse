@@ -16,6 +16,7 @@ mod xbox;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use model::{Game, Installation, Origin, Ref, StoreId};
@@ -39,15 +40,16 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
         }
     }
     let apps = [
-        steam::apps(),
-        epic::apps(),
-        gog::apps(),
-        ubisoft::apps(),
-        xbox::apps(|id| by_store_id.contains_key(&id.to_ascii_lowercase())),
-        rockstar::apps(),
-        ea::apps(games),
-        standalone::apps(games),
+        timed("steam", steam::apps),
+        timed("epic", epic::apps),
+        timed("gog", gog::apps),
+        timed("ubisoft", ubisoft::apps),
+        timed("xbox", || xbox::apps(|id| by_store_id.contains_key(&id.to_ascii_lowercase()))),
+        timed("rockstar", rockstar::apps),
+        timed("ea", || ea::apps(games)),
+        timed("standalone", || standalone::apps(games)),
     ];
+    let builds = Instant::now();
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for app in apps.into_iter().flatten() {
@@ -60,7 +62,16 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
     }
     let by_id: HashMap<&Ref, &Game> = games.iter().map(|game| (&game.id, game)).collect();
     out.extend(custom.iter().filter_map(|picked| custom::install(by_id.get(&picked.game)?, &picked.exe)));
+    log::debug!("builds: {} read in {:?}", out.len(), builds.elapsed());
     out
+}
+
+/// One launcher's records, timed: a slow disk or a scanning antivirus shows in the log.
+fn timed(launcher: &str, apps: impl FnOnce() -> Vec<App>) -> Vec<App> {
+    let started = Instant::now();
+    let apps = apps();
+    log::debug!("{launcher}: {} apps in {:?}", apps.len(), started.elapsed());
+    apps
 }
 
 /// The build is the PE TimeDateStamp of the game's `exe` in the install.

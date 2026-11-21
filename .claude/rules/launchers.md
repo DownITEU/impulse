@@ -32,4 +32,4 @@ paths:
 - `ShellExecuteW` returns a value above 32 on success.
 
 ## New code
-- A new launcher is one module with `apps()`, added to the list in `scan`.
+- A new launcher is one module with `apps()`, added to the list in `scan` through `timed`: each launcher's time and the builds' reads go to the debug log, where a slow scan shows.

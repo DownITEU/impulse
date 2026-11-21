@@ -11,7 +11,6 @@ use blocking::unblock;
 use client::{
     Registry,
     library::{self as listing, Game, GameId, Links, Picked, sources},
-    media::Media,
     storage::Paths,
 };
 use futures::StreamExt;
@@ -47,7 +46,7 @@ pub struct Found {
 pub struct Library {
     registry: Arc<Registry>,
     settings: Entity<Settings>,
-    art: PathBuf,
+    paths: Paths,
     picked: Picked,
     links: Links,
     list: Load<listing::Library>,
@@ -66,7 +65,7 @@ impl Library {
             _listing: listen(&registry, cx),
             registry,
             settings,
-            art: Media::Pictures.dir(paths),
+            paths: paths.clone(),
             picked: Picked::load(paths),
             links: Links::load(paths),
             list: Load::Pending,
@@ -260,30 +259,52 @@ fn listen(registry: &Arc<Registry>, cx: &mut Context<Library>) -> Task<()> {
     })
 }
 
-/// Lists the installed games of `games` anew, with the executables the user picked.
-async fn rescan(library: &WeakEntity<Library>, mut games: Vec<model::Game>, cx: &mut AsyncApp) {
+/// Lists the installed games of `games` anew, with the executables the user picked. A first list shows the last
+/// scan's installs at once: reading the launchers takes minutes on a cold disk with hundreds of games.
+async fn rescan(library: &WeakEntity<Library>, games: Vec<model::Game>, cx: &mut AsyncApp) {
+    let mut games = Arc::new(games);
     loop {
-        let Ok((art, picked, registry)) =
-            library.read_with(cx, |library, _| (library.art.clone(), library.picked.clone(), library.registry.clone()))
-        else {
+        let Ok((picked, paths, registry, first)) = library.read_with(cx, |library, _| {
+            let first = matches!(library.list, Load::Pending);
+            (library.picked.clone(), library.paths.clone(), library.registry.clone(), first)
+        }) else {
             return;
         };
         let version = picked.version();
-        let list = unblock(move || listing::scan(games, &art, &picked)).await;
-        let current = library.update(cx, |library, cx| {
-            let current = library.picked.version() == version;
-            if current {
-                library.set(list, cx);
+        if first {
+            let (all, picked, paths) = (games.clone(), picked.clone(), paths.clone());
+            if let Some(list) = unblock(move || listing::kept(&all, &picked, &paths)).await {
+                library
+                    .update(cx, |library, cx| {
+                        // Another scan's list may have come meanwhile: it is newer.
+                        if matches!(library.list, Load::Pending) && library.picked.version() == version {
+                            library.set(list, cx);
+                        }
+                    })
+                    .ok();
             }
-            current
-        });
-        if !matches!(current, Ok(false)) {
+        }
+        let all = games.clone();
+        let list = unblock(move || listing::scan(&all, &picked, &paths)).await;
+        if show(library, list, version, cx) != Some(false) {
             return;
         }
         // A source changed while it scanned: again, with it.
         let Some(all) = catalog(registry.as_ref()).await else { return };
-        games = all;
+        games = Arc::new(all);
     }
+}
+
+/// Shows `list` unless the picked executables changed while it was made: `Some(false)`.
+fn show(library: &WeakEntity<Library>, list: listing::Library, version: u64, cx: &mut AsyncApp) -> Option<bool> {
+    let shown = library.update(cx, |library, cx| {
+        let current = library.picked.version() == version;
+        if current {
+            library.set(list, cx);
+        }
+        current
+    });
+    shown.ok()
 }
 
 /// The source's games, the disk copy when there is one.

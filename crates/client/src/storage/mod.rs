@@ -34,6 +34,7 @@ entries! {
     hotkeys: "hotkeys.json",
     games: "games.json",
     picked: "picked.json",
+    installs: "installs.json",
     docks: "docks.json",
     overlay: "overlay.json",
     minimap: "minimap.json",

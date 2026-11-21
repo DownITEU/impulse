@@ -4127,6 +4127,7 @@ dependencies = [
  "aes",
  "anyhow",
  "cbc",
+ "log",
  "model",
  "pe",
  "serde",

@@ -1,6 +1,7 @@
 //! The game list: every installed game with what the app shows about it.
 
 mod id;
+mod installs;
 mod links;
 mod picked;
 pub mod sources;
@@ -11,6 +12,7 @@ use std::{
     mem,
     path::Path,
     sync::Arc,
+    time::Instant,
 };
 
 use model::{Installation, Origin, Ref, StoreId};
@@ -19,7 +21,10 @@ pub use id::GameId;
 pub use links::Links;
 pub use picked::Picked;
 
-use crate::media;
+use crate::{
+    media::{self, Media},
+    storage::Paths,
+};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Support {
@@ -106,34 +111,58 @@ pub struct Library {
     pub trainers: usize,
 }
 
-/// Scans the launchers and the picked executables, and joins the result with `all` (blocking).
-pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library {
-    let installed = launchers::scan(&all, &picked.custom());
+/// The list the last scan's installs make, shown while the launchers are read again; `None` before a first scan
+/// (blocking). A kept picked executable counts only while it is still the picked one.
+pub fn kept(all: &[model::Game], picked: &Picked, paths: &Paths) -> Option<Library> {
+    let custom = picked.custom();
+    let still = |install: &Installation| match &install.origin {
+        Origin::Picked(exe) => custom.iter().any(|picked| picked.game == install.game && picked.exe == *exe),
+        Origin::Launcher(_) => true,
+    };
+    let kept: Vec<Installation> = installs::kept(paths).into_iter().filter(still).collect();
+    (!kept.is_empty()).then(|| list(all, kept, picked, paths))
+}
+
+/// Reads the launchers and the picked executables now and keeps their installs for the next start (blocking;
+/// minutes on a cold disk with hundreds of games).
+pub fn scan(all: &[model::Game], picked: &Picked, paths: &Paths) -> Library {
+    let installed = installed(all, picked);
+    installs::keep(paths, &installed);
+    list(all, installed, picked, paths)
+}
+
+fn installed(all: &[model::Game], picked: &Picked) -> Vec<Installation> {
+    let started = Instant::now();
+    let installed = launchers::scan(all, &picked.custom());
+    let mut per_store = BTreeMap::<Option<String>, usize>::new();
+    for found in &installed {
+        *per_store.entry(store(&found.origin)).or_default() += 1;
+        let build = found.build.map_or("?".to_owned(), |v| v.to_string());
+        log::debug!("{} [{:?}] v{build} @ {}", found.game, found.origin, found.location.display());
+    }
+    let stores: Vec<String> = per_store.iter().map(|(s, n)| format!("{} {n}", s.as_deref().unwrap_or("CUSTOM"))).collect();
+    log::info!("Library: {} installed in {:?}: {}", installed.len(), started.elapsed(), stores.join(", "));
+    installed
+}
+
+/// The list `installed` makes with `all`; art known to be missing is a file per game.
+fn list(all: &[model::Game], installed: Vec<Installation>, picked: &Picked, paths: &Paths) -> Library {
+    let art_cache = &Media::Pictures.dir(paths);
     // Steam art also serves an Epic or GOG install when the title has a Steam release.
-    let mut steam_apps = HashMap::<String, u32>::new();
+    let mut steam_apps = HashMap::<&str, u32>::new();
     let mut with_trainer = HashSet::<&str>::new();
-    for game in &all {
+    for game in all {
         if game.trainer.is_some() {
             with_trainer.insert(&game.title_id);
         }
         if let Some(app) = game.store_ids.iter().find_map(StoreId::steam_app) {
-            steam_apps.entry(game.title_id.clone()).or_insert(app);
+            steam_apps.entry(&game.title_id).or_insert(app);
         }
     }
-    let trainers = with_trainer.len();
-    let mut by_id: HashMap<Ref, model::Game> = all.into_iter().map(|game| (game.id.clone(), game)).collect();
-    let mut per_store = BTreeMap::<Option<String>, usize>::new();
+    let by_id: HashMap<&Ref, &model::Game> = all.iter().map(|game| (&game.id, game)).collect();
     let mut games = Vec::<Game>::new();
     let mut at = HashMap::<Ref, usize>::new();
     for found in installed {
-        *per_store.entry(store(&found.origin)).or_default() += 1;
-        log::debug!(
-            "{} [{:?}] v{} @ {}",
-            found.game,
-            found.origin,
-            found.build.map_or("?".to_owned(), |v| v.to_string()),
-            found.location.display()
-        );
         // A launcher's install comes first, a picked executable after it.
         if let Some(&index) = at.get(&found.game) {
             let game = &mut games[index];
@@ -141,18 +170,16 @@ pub fn scan(all: Vec<model::Game>, art_cache: &Path, picked: &Picked) -> Library
             if picked.used(&game.id) {
                 game.switch();
             }
-        } else if let Some(entry) = by_id.remove(&found.game) {
+        } else if let Some(&entry) = by_id.get(&found.game) {
             at.insert(found.game.clone(), games.len());
-            games.push(game(entry, found, &steam_apps, art_cache));
+            games.push(game(entry.clone(), found, &steam_apps, art_cache));
         }
     }
     games.sort_by(|a, b| a.search.cmp(&b.search));
-    let stores: Vec<String> = per_store.iter().map(|(s, n)| format!("{} {n}", s.as_deref().unwrap_or("CUSTOM"))).collect();
-    log::info!("Library: {} installed: {}", games.len(), stores.join(", "));
-    Library { games: games.into_iter().map(Arc::new).collect(), trainers }
+    Library { games: games.into_iter().map(Arc::new).collect(), trainers: with_trainer.len() }
 }
 
-fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<String, u32>, art_cache: &Path) -> Game {
+fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<&str, u32>, art_cache: &Path) -> Game {
     let app = found.origin.store_id().and_then(StoreId::steam_app).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
     let mut game = Game {
         id: GameId::of(&found.game),

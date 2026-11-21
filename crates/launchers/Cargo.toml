@@ -14,6 +14,7 @@ pe.workspace = true
 aes.workspace = true
 anyhow.workspace = true
 cbc = { workspace = true, features = ["alloc"] }
+log.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 windows-registry.workspace = true

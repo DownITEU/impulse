@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use crate::{MapOffer, Origin, Ref, StoreId};
 
 /// A game a source knows; the store releases of one title are separate games.
+#[derive(Clone)]
 pub struct Game {
     pub id: Ref,
     /// Shared by one title's store releases.
@@ -22,6 +23,7 @@ pub struct Game {
 }
 
 /// Where to find a game no store knows.
+#[derive(Clone)]
 pub struct Standalone {
     pub store_id: String,
     /// Relative to a located folder; its presence confirms the install.
@@ -29,6 +31,7 @@ pub struct Standalone {
     pub locators: Vec<Locator>,
 }
 
+#[derive(Clone)]
 pub enum Locator {
     Directory(String),
     /// `HIVE\key\path\ValueName`
@@ -38,6 +41,7 @@ pub enum Locator {
 }
 
 /// What the game list knows about a trainer before it is opened.
+#[derive(Clone)]
 pub struct Offer {
     pub id: Ref,
     pub cheats: u32,
