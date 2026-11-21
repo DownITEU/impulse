@@ -39,6 +39,7 @@ page-search = cerca in { $trainers } trainer
 page-search-none = cerca trainer
 page-search-key = CTRL K
 page-signed-out = SENZA ACCESSO
+page-elevated = In esecuzione come amministratore: i giochi avviati come amministratore si collegano senza richiesta
 page-overlay = OVERLAY
 page-star = Preferito
 page-folder = Apri la cartella del gioco

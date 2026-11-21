@@ -39,6 +39,7 @@ page-search = search { $trainers } trainers
 page-search-none = search trainers
 page-search-key = CTRL K
 page-signed-out = NOT SIGNED IN
+page-elevated = Running as administrator: games run as administrator attach without a prompt
 page-overlay = OVERLAY
 page-star = Star
 page-folder = Open the game's folder

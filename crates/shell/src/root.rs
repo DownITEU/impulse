@@ -27,10 +27,11 @@ impl Root {
         plugins: Arc<client::plugins::Plugins>,
         data_dir: PathBuf,
         serve: Option<Serve>,
+        elevated: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let page = cx.new(|cx| Page::new(registry, plugins, Paths::new(data_dir), serve, window, cx));
+        let page = cx.new(|cx| Page::new(registry, plugins, Paths::new(data_dir), serve, elevated, window, cx));
         let map = page.read(cx).map().clone();
         cx.observe(&map, |_, _, cx| cx.notify()).detach();
         // LINK A MAP opens from the page or the map's toolbar: it is drawn over both.

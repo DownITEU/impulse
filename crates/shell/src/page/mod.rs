@@ -69,6 +69,8 @@ pub struct Page {
     settings_view: Entity<SettingsView>,
     /// None in a build without the remote panel's server.
     remote_view: Option<Entity<RemoteView>>,
+    /// Impulse runs as administrator.
+    elevated: bool,
     _tray: Entity<TrayIcon>,
     layer: Entity<Layer>,
     // Drawn in place of the page while over a game.
@@ -93,6 +95,7 @@ impl Page {
         plugins: Arc<client::plugins::Plugins>,
         paths: Paths,
         serve: Option<Serve>,
+        elevated: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -229,6 +232,7 @@ impl Page {
             settings,
             settings_view,
             remote_view,
+            elevated,
             _tray: tray,
             layer,
             hud,
@@ -324,7 +328,7 @@ impl Render for Page {
             .size_full()
             .bg(rgb(BG))
             .child(grid(32., line(0.025)))
-            .child(header(self.account.read(cx), &self.settings_view, self.remote_view.as_ref(), window, cx))
+            .child(header(self.account.read(cx), &self.settings_view, self.remote_view.as_ref(), self.elevated, window, cx))
             .child(
                 h_flex()
                     .flex_1()

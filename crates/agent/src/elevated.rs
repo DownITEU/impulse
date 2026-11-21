@@ -117,7 +117,8 @@ fn run(exe: &Path, parameters: &str, image: &Image) -> Result<u32> {
     Ok(code)
 }
 
-fn elevated() -> bool {
+/// This process runs as administrator: it loads into a game run as administrator itself.
+pub fn elevated() -> bool {
     let mut token = ptr::null_mut();
     // SAFETY: the pseudo handle of this process needs no closing; the token is closed by its guard.
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {

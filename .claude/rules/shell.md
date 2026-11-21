@@ -8,7 +8,7 @@ paths:
 The GPUI UI crate: window root, page, trainer list, run, hotkey capture, tray, crash stop. Map and overlay have their own rules.
 
 ## Surface
-- `init` (takes the data dir and the `Arc<Registry>`), `Assets`, `Root::new`, `Serve`: all `app` calls (`Root::new` takes `client::plugins::Plugins` and the remote panel's `Serve`, `None` in a build without it). Everything else is private.
+- `init` (takes the data dir and the `Arc<Registry>`), `Assets`, `Root::new`, `Serve`: all `app` calls (`Root::new` takes `client::plugins::Plugins`, the remote panel's `Serve`, `None` in a build without it, and `elevated`: a shield in the title bar). Everything else is private.
 - `Root`: the window root; draws `Page` with `cached`, the open map as a modal over it and LINK A MAP over both.
 - `Page` (`page/`): the combined page, layout only: one `impl Page` in `page/mod.rs` makes the entities and lays out their views; `header` and `status_bar` are components.
 - `Hero` (`page/hero.rs`): the open game's art, title, run button and actions; owns the sources menu (`close`).

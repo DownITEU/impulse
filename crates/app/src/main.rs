@@ -36,6 +36,8 @@ fn main() {
     // Built before the window: its browser bridge takes a moment to come up.
     let wand = Arc::new(Wand::new(data_dir.clone()));
     let registry = Arc::new(Registry::default());
+    // The title bar marks it.
+    let elevated = agent::elevated();
     registry.add(Capabilities {
         accounts: Some(wand.clone()),
         games: Some(wand.clone()),
@@ -66,7 +68,7 @@ fn main() {
         });
         #[cfg(not(feature = "remote"))]
         let serve = None;
-        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(registry, plugins, data_dir, serve, window, cx)))
+        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Root::new(registry, plugins, data_dir, serve, elevated, window, cx)))
             .expect("failed to open window");
         // gpui-pre-windows keeps running after the last window closes.
         cx.on_window_closed(|cx, _| {

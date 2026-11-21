@@ -39,6 +39,7 @@ page-search = { $trainers } trainer içinde ara
 page-search-none = trainer ara
 page-search-key = CTRL K
 page-signed-out = OTURUM YOK
+page-elevated = Yönetici olarak çalışıyor: yönetici olarak çalışan oyunlara onay istenmeden bağlanır
 page-overlay = OVERLAY
 page-star = Favori
 page-folder = Oyunun klasörünü aç

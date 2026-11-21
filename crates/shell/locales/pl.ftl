@@ -44,6 +44,7 @@ page-search = { $count ->
 page-search-none = szukaj trainerów
 page-search-key = CTRL K
 page-signed-out = WYLOGOWANO
+page-elevated = Uruchomiono jako administrator: gry uruchomione jako administrator łączą się bez pytania
 page-overlay = NAKŁADKA
 page-star = Ulubione
 page-folder = Otwórz folder gry

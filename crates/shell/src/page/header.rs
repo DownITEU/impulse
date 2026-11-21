@@ -21,6 +21,7 @@ pub fn header(
     account: &Account,
     settings: &Entity<SettingsView>,
     remote: Option<&Entity<RemoteView>>,
+    elevated: bool,
     window: &Window,
     cx: &App,
 ) -> impl IntoElement {
@@ -87,6 +88,7 @@ pub fn header(
             h_flex()
                 .h_full()
                 .gap(px(14.))
+                .when(elevated, |row| row.child(elevated_mark(cx)))
                 .children(remote.map(|remote| remote_button(remote, cx)))
                 .child(
                     control("settings", Icon::Settings)
@@ -104,6 +106,16 @@ pub fn header(
                         .child(caption("close", Icon::Close, WindowControlArea::Close)),
                 ),
         )
+}
+
+/// A shield while Impulse runs as administrator.
+fn elevated_mark(cx: &App) -> impl IntoElement {
+    let text = t(cx, key::PAGE_ELEVATED);
+    h_flex().id("elevated").occlude().h(px(34.)).px(px(9.)).tooltip(move |window, cx| tip(text.clone(), window, cx)).child(icon(
+        Icon::Shield,
+        16.,
+        rgb(WARN),
+    ))
 }
 
 /// The phone opens the REMOTE PANEL dialog; the mark shows the server is on.

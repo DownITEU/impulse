@@ -13,6 +13,7 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 - `of(pid)`: the identity of one process now (blocking), `None` when it cannot be looked at.
 - `Image::open(path, publishers)`, `Image::path`, `Image::x64` (else x86): the only way to name a DLL that enters a game.
 - `load(&Process, &Image, export, arg)`: runs `LoadLibraryW` in the target, then starts `export` with a copy of `arg`.
+- `elevated()`: this process runs as administrator (`app` marks it in the title bar).
 - `serve_elevated(publishers)`: first thing in the host's `main`. `Some(exit code)` when the command line asks for an elevated load; else makes this executable the one a denied `load` starts elevated.
 - `Image::unchecked`: tests only.
 

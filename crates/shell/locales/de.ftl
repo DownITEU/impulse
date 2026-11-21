@@ -39,6 +39,7 @@ page-search = { $trainers } Trainer durchsuchen
 page-search-none = Trainer durchsuchen
 page-search-key = CTRL+K
 page-signed-out = NICHT ANGEMELDET
+page-elevated = Läuft als Administrator: Spiele mit Administratorrechten werden ohne Nachfrage verbunden
 page-overlay = OVERLAY
 page-star = Favorit
 page-folder = Spielordner öffnen

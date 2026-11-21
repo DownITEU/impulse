@@ -44,6 +44,7 @@ page-search = { $count ->
 page-search-none = поиск трейнеров
 page-search-key = CTRL K
 page-signed-out = ВЫ НЕ ВОШЛИ
+page-elevated = Запущено от имени администратора: игры с правами администратора подключаются без запроса
 page-overlay = ОВЕРЛЕЙ
 page-star = Избранное
 page-folder = Открыть папку игры

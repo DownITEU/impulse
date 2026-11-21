@@ -8,7 +8,7 @@ mod inject;
 mod process;
 mod trust;
 
-pub use elevated::serve_elevated;
+pub use elevated::{elevated, serve_elevated};
 pub use image::Image;
 pub use inject::load;
 pub use process::{find, of, wait};

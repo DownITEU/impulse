@@ -25,6 +25,7 @@ pub const PAGE_SEARCH_NONE: Key = Key("page-search-none");
 #[expect(dead_code, reason = "the header's search is hidden until it works")]
 pub const PAGE_SEARCH_KEY: Key = Key("page-search-key");
 pub const PAGE_SIGNED_OUT: Key = Key("page-signed-out");
+pub const PAGE_ELEVATED: Key = Key("page-elevated");
 pub const PAGE_OVERLAY: Key = Key("page-overlay");
 pub const PAGE_STAR: Key = Key("page-star");
 pub const PAGE_FOLDER: Key = Key("page-folder");
