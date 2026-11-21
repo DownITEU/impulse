@@ -122,7 +122,7 @@ impl model::Accounts for Wand {
             }
             let (session, transport, source) = match session.await {
                 Ok(link) => link,
-                Err(_) => return send(&tx, SignIn::Failed),
+                Err(failure) => return send(&tx, SignIn::Failed(failure)),
             };
             // A new session from Wand may be another account than the one kept.
             if known && !matches!(source, Source::Wand) {
@@ -132,8 +132,9 @@ impl model::Accounts for Wand {
                 Ok(account) => send(&tx, SignIn::Account(Account { name: account.username })),
                 Err(e) => {
                     log::warn!("account: {e:#}");
-                    if e.downcast_ref::<Failure>().is_some_and(|failure| failure.kind == FailureKind::SignedOut) {
-                        send(&tx, SignIn::Failed);
+                    let failure = Failure::from(e);
+                    if failure.kind == FailureKind::SignedOut {
+                        send(&tx, SignIn::Failed(failure));
                     }
                 }
             }

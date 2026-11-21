@@ -50,11 +50,11 @@ pub fn pledge<V: 'static>(
 }
 
 /// A dialog's body: `text` at reading size over `buttons` pressed to the right.
-pub fn message(text: impl Into<SharedString>, buttons: impl IntoIterator<Item = Stateful<Div>>) -> Div {
+pub fn message(text: impl IntoElement, buttons: impl IntoIterator<Item = Stateful<Div>>) -> Div {
     v_flex()
         .gap(px(20.))
         .p(px(20.))
-        .child(div().text_size(px(15.)).line_height(relative(1.5)).text_color(rgb(TEXT)).child(text.into()))
+        .child(div().text_size(px(15.)).line_height(relative(1.5)).text_color(rgb(TEXT)).child(text))
         .child(h_flex().justify_end().gap(px(10.)).children(buttons))
 }
 

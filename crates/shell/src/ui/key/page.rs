@@ -16,6 +16,8 @@ pub const DISCLAIMER_EXIT: Key = Key("disclaimer-exit");
 pub const SIGNED_OUT_TITLE: Key = Key("signed-out-title");
 pub const SIGNED_OUT_BODY: Key = Key("signed-out-body");
 pub const SIGNED_OUT_RETRY: Key = Key("signed-out-retry");
+pub const SIGNED_OUT_WHY: Key = Key("signed-out-why");
+pub const SIGNED_OUT_TRYING: Key = Key("signed-out-trying");
 pub const SIGNED_OUT_CLOSE: Key = Key("signed-out-close");
 
 #[expect(dead_code, reason = "the header's search is hidden until it works")]

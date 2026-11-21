@@ -47,6 +47,8 @@ pub const CATEGORY_VEHICLES: Key = Key("category-vehicles");
 pub const CATEGORY_WEAPONS: Key = Key("category-weapons");
 pub const SIGNED_OUT: Key = Key("signed-out");
 pub const NOT_INSTALLED: Key = Key("not-installed");
+pub const UNREACHABLE: Key = Key("unreachable");
+pub const FILTERED: Key = Key("filtered");
 
 pub fn text(key: Key) -> Text {
     Text::key(&crate::source(), key.0)

@@ -61,6 +61,8 @@ disclaimer-exit = EXIT
 signed-out-title = SIGN-IN FAILED
 signed-out-body = Impulse could not sign in to { $sources }. Make sure it is installed and signed in on this PC and that you are online, then try again. Trainers cannot load until it works.
 signed-out-retry = TRY AGAIN
+signed-out-why = Reason: { $why }
+signed-out-trying = Signing in…
 signed-out-close = CLOSE
 
 ## Library

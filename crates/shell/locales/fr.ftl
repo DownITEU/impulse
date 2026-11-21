@@ -66,6 +66,8 @@ disclaimer-exit = QUITTER
 signed-out-title = CONNEXION IMPOSSIBLE
 signed-out-body = Impulse n'a pas pu se connecter à { $sources }. Vérifiez que l'appli est installée sur ce PC, que vous êtes connecté à votre compte et que vous avez accès à Internet, puis réessayez. Les trainers ne seront disponibles qu'une fois la connexion rétablie.
 signed-out-retry = RÉESSAYER
+signed-out-why = Raison : { $why }
+signed-out-trying = Connexion…
 signed-out-close = FERMER
 
 ## Library

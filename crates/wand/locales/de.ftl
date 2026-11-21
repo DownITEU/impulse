@@ -35,3 +35,5 @@ category-weapons = WAFFEN
 
 signed-out = keine aktive Anmeldung bei Wand. Wand öffnen und anmelden
 not-installed = Wand ist auf diesem PC nicht eingerichtet. Wand installieren, öffnen und anmelden
+unreachable = Impulse erreicht die Server von Wand nicht: eine Firewall, ein Virenschutz, ein VPN oder ein Proxy blockiert es womöglich
+filtered = die Server von Wand antworten über einen Proxy oder eine Prüfseite, die Impulse nicht passieren kann: versuche es ohne VPN oder Proxy

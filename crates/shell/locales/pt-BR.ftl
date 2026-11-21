@@ -69,6 +69,8 @@ disclaimer-exit = SAIR
 signed-out-title = FALHA NO LOGIN
 signed-out-body = O Impulse não conseguiu fazer login em { $sources }. Confira se o app está instalado, se a conta está conectada neste PC e se há conexão com a internet. Depois, tente de novo. Sem login, os trainers não carregam.
 signed-out-retry = TENTAR DE NOVO
+signed-out-why = Motivo: { $why }
+signed-out-trying = Entrando…
 signed-out-close = FECHAR
 
 ## Library

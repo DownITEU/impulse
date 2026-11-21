@@ -66,6 +66,8 @@ disclaimer-exit = ВИЙТИ
 signed-out-title = НЕ ВДАЛОСЯ УВІЙТИ
 signed-out-body = Impulse не зміг увійти в { $sources }. Поки вхід не вдасться, трейнери не завантажаться. Перевірте, чи цю програму встановлено на ПК, чи ви в неї ввійшли та чи є інтернет. Потім спробуйте ще раз.
 signed-out-retry = ЩЕ РАЗ
+signed-out-why = Причина: { $why }
+signed-out-trying = Вхід…
 signed-out-close = ЗАКРИТИ
 
 ## Library

@@ -66,6 +66,8 @@ disclaimer-exit = WYJDŹ
 signed-out-title = BŁĄD LOGOWANIA
 signed-out-body = Nie udało się zalogować do { $sources }. Przed ponowną próbą sprawdź połączenie z internetem i upewnij się, że aplikacja jest zainstalowana na tym komputerze i ma aktywną sesję. Bez logowania Impulse nie może wczytać trainerów.
 signed-out-retry = PONÓW PRÓBĘ
+signed-out-why = Powód: { $why }
+signed-out-trying = Logowanie…
 signed-out-close = ZAMKNIJ
 
 ## Library

@@ -150,7 +150,7 @@ impl Registry {
     /// The first source's account.
     pub fn sign_in(&self) -> BoxStream<'static, SignIn> {
         self.first(|c| c.accounts.as_ref())
-            .map_or_else(|| stream::iter([SignIn::Failed]).boxed(), |(source, ended)| cut(source.sign_in(), ended))
+            .map_or_else(|| stream::iter([SignIn::Failed(unserved("accounts"))]).boxed(), |(source, ended)| cut(source.sign_in(), ended))
     }
 
     /// The first source's catalog.

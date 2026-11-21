@@ -9,7 +9,11 @@ window.impulse = async ({ id, method, url, headers, body }) => {
     const res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(120000) });
     reply = { id, status: res.status, body: await res.text() };
   } catch (e) {
-    reply = { id, error: String(e) };
+    // A TypeError gives no reason: a plain probe tells no answer from one dropped for want of CORS headers.
+    const answered = e instanceof TypeError
+      ? await fetch(new URL(url).origin + '/', { mode: 'no-cors', signal: AbortSignal.timeout(15000) }).then(() => true, () => false)
+      : undefined;
+    reply = { id, error: String(e), answered };
   }
   post('/response', JSON.stringify(reply));
 };

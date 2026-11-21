@@ -106,8 +106,8 @@ pub enum Snapshot<T> {
 pub enum SignIn {
     /// Cached first, then fresh.
     Account(Account),
-    /// No session: signed out, offline or the source cannot start. The source logs why.
-    Failed,
+    /// No session: signed out, offline or the source cannot start; the failure says which.
+    Failed(Failure),
 }
 
 pub struct Account {

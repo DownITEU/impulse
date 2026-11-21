@@ -66,6 +66,8 @@ disclaimer-exit = ВЫЙТИ
 signed-out-title = НЕ УДАЛОСЬ ВОЙТИ
 signed-out-body = Impulse не смог войти в { $sources }. Проверьте, что на этом ПК есть интернет, приложение установлено и вы вошли в аккаунт. Затем попробуйте снова: без входа трейнеры не загрузятся.
 signed-out-retry = ПОВТОРИТЬ
+signed-out-why = Причина: { $why }
+signed-out-trying = Вход…
 signed-out-close = ЗАКРЫТЬ
 
 ## Library

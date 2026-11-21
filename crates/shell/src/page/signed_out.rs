@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use client::Registry;
-use gpui_kit::{App, Context, Entity, FocusHandle, IntoElement, Render, Window, prelude::*};
+use gpui_kit::{App, Context, Entity, FocusHandle, IntoElement, Render, Window, component::v_flex, div, prelude::*, px, rgb};
 use i18n::Arg;
 
 use super::disclaimer::{Disclaimer, account_sources};
@@ -13,7 +13,8 @@ use crate::{
     ui::{
         dialog::{dialog, message},
         key,
-        text::{t, tf},
+        text::{failed, t, tf},
+        theme::{DIM, WARN},
         widgets::button,
     },
 };
@@ -75,7 +76,18 @@ impl Render for SignedOut {
                 .on_click(cx.listener(|view, _, window, cx| view.close(window, cx))),
             button(&t(cx, key::SIGNED_OUT_RETRY)).id("signed-out-retry").on_click(cx.listener(|view, _, _, cx| view.retry(cx))),
         ];
-        let body = message(tf(cx, key::SIGNED_OUT_BODY, &[("sources", Arg::Str(&names))]), buttons);
+        // A retry that fails again changes nothing else: the line shows it was tried.
+        let account = self.account.read(cx);
+        let status = match (account.trying(), account.failure()) {
+            (true, _) => Some((t(cx, key::SIGNED_OUT_TRYING), DIM)),
+            (false, Some(failure)) => Some((failed(cx, key::SIGNED_OUT_WHY, failure), WARN)),
+            (false, None) => None,
+        };
+        let text = v_flex()
+            .gap(px(12.))
+            .child(tf(cx, key::SIGNED_OUT_BODY, &[("sources", Arg::Str(&names))]))
+            .children(status.map(|(line, color)| div().text_color(rgb(color)).child(line)));
+        let body = message(text, buttons);
         dialog("signed-out", t(cx, key::SIGNED_OUT_TITLE), 560., &self.focus, Self::close, body, cx)
     }
 }

@@ -35,3 +35,5 @@ category-weapons = SİLAHLAR
 
 signed-out = Wand'da oturum açık değil. Wand'ı açıp giriş yap
 not-installed = Wand bu bilgisayarda ayarlanmamış. Wand'ı yükleyip aç ve giriş yap
+unreachable = Impulse, Wand sunucularına ulaşamıyor: bir güvenlik duvarı, antivirüs, VPN veya proxy engelliyor olabilir
+filtered = Wand sunucuları, Impulse'un geçemediği bir proxy veya doğrulama sayfası üzerinden yanıt veriyor: VPN veya proxy olmadan deneyin

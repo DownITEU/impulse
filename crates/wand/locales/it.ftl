@@ -35,3 +35,5 @@ category-weapons = ARMI
 
 signed-out = accesso a Wand non effettuato: apri Wand e accedi
 not-installed = Wand non è configurato su questo PC: installalo, aprilo e accedi
+unreachable = Impulse non riesce a raggiungere i server di Wand: un firewall, un antivirus, una VPN o un proxy potrebbe bloccarlo
+filtered = i server di Wand rispondono tramite un proxy o una pagina di verifica che Impulse non può superare: prova senza la VPN o il proxy

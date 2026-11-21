@@ -61,6 +61,8 @@ disclaimer-exit = BEENDEN
 signed-out-title = ANMELDUNG FEHLGESCHLAGEN
 signed-out-body = Impulse konnte sich nicht bei { $sources } anmelden. Die App muss auf diesem PC installiert sein. Dort anmelden, die Internetverbindung prüfen und es erneut versuchen. Erst dann kann Impulse Trainer laden.
 signed-out-retry = NOCH MAL
+signed-out-why = Grund: { $why }
+signed-out-trying = Anmeldung…
 signed-out-close = SCHLIESSEN
 
 ## Library

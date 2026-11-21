@@ -61,6 +61,8 @@ disclaimer-exit = ÇIK
 signed-out-title = GİRİŞ YAPILAMADI
 signed-out-body = Impulse { $sources } hesabına giriş yapamadı. Uygulamanın bu bilgisayarda kurulu olduğunu, oturumunun açık olduğunu ve internete bağlı olduğunu kontrol edip tekrar dene. Giriş yapmadan trainerlar yüklenmez.
 signed-out-retry = YENİDEN DENE
+signed-out-why = Neden: { $why }
+signed-out-trying = Giriş yapılıyor…
 signed-out-close = KAPAT
 
 ## Library

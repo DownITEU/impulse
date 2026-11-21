@@ -35,3 +35,5 @@ category-weapons = ARMAS
 
 signed-out = no hay una sesión abierta en Wand: abre la app e inicia sesión
 not-installed = Wand no está configurado en este PC: instálalo, ábrelo e inicia sesión
+unreachable = Impulse no puede conectar con los servidores de Wand: un firewall, un antivirus, una VPN o un proxy puede estar bloqueándolo
+filtered = los servidores de Wand responden a través de un proxy o una página de verificación que Impulse no puede superar: prueba sin la VPN o el proxy

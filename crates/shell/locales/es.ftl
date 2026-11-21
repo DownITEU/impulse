@@ -67,6 +67,8 @@ disclaimer-exit = SALIR
 signed-out-title = ERROR DE INICIO DE SESIÓN
 signed-out-body = Impulse no pudo iniciar sesión en { $sources }. Comprueba que la app esté instalada en este PC, que hayas iniciado sesión en ella y que tengas conexión. Después, vuelve a intentarlo. Sin sesión no se pueden cargar los trainers.
 signed-out-retry = REINTENTAR
+signed-out-why = Motivo: { $why }
+signed-out-trying = Iniciando sesión…
 signed-out-close = CERRAR
 
 ## Library

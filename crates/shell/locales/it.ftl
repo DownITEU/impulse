@@ -64,6 +64,8 @@ disclaimer-exit = ESCI
 signed-out-title = ACCESSO NON RIUSCITO
 signed-out-body = Impulse non è riuscito ad accedere a { $sources }. Assicurati che l'app sia installata su questo PC. Aprila, accedi al tuo account e verifica di essere online. Poi riprova: senza accesso, Impulse non può caricare i trainer.
 signed-out-retry = RIPROVA
+signed-out-why = Motivo: { $why }
+signed-out-trying = Accesso in corso…
 signed-out-close = CHIUDI
 
 ## Library

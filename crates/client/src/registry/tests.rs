@@ -146,7 +146,7 @@ fn folders_and_caches_list_every_source() {
     assert_eq!(folders, ["a:f", "b:f"]);
     let stores: Vec<_> = block_on(registry.stores()).iter().map(|store| store.id.to_string()).collect();
     assert_eq!(stores, ["a:s", "b:s"]);
-    assert!(matches!(block_on(Registry::default().sign_in().next()), Some(SignIn::Failed)));
+    assert!(matches!(block_on(Registry::default().sign_in().next()), Some(SignIn::Failed(_))));
 }
 
 #[test]

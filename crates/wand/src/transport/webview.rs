@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use futures::channel::oneshot;
+use model::{Failure, FailureKind};
 use serde::{Deserialize, Serialize};
 use tao::{
     event::{Event, StartCause},
@@ -20,6 +21,7 @@ use webview2_com::Error::WindowsError;
 use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, http::Response as HttpResponse};
 
 use super::{BRIDGE, Cmd, Request, Response, offline};
+use crate::texts::{FILTERED, UNREACHABLE, text};
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Response>>>>>;
 // Fields drop in order: the WebView closes before its window.
@@ -45,6 +47,8 @@ struct Reply {
     status: Option<u16>,
     body: Option<String>,
     error: Option<String>,
+    /// After a failed request: whether the server answered a plain probe.
+    answered: Option<bool>,
 }
 
 pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
@@ -166,15 +170,39 @@ fn build(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopP
     Ok((webview, context, window))
 }
 
+/// A request without a reply, worded by the probe: no answer at all, or one the browser drops for want of CORS headers.
+fn failed(error: &str, answered: Option<bool>) -> anyhow::Error {
+    let (why, words) = match answered {
+        Some(false) => ("no usable answer: network, DNS, TLS, a firewall, or a page closed to other sites", UNREACHABLE),
+        Some(true) => ("the server answers without CORS headers: a proxy or a check page", FILTERED),
+        None => return offline(&format!("fetch failed: {error}")),
+    };
+    anyhow!("fetch failed: {error}; {why}").context(Failure::new(FailureKind::Offline).saying(text(words)))
+}
+
 fn reply(pending: &Pending, raw: &[u8]) {
     let Ok(reply) = serde_json::from_slice::<Reply>(raw) else {
         return;
     };
     let result = match reply.status {
         Some(status) => Ok(Response { status, body: reply.body.unwrap_or_default() }),
-        None => Err(offline(&format!("fetch failed: {}", reply.error.unwrap_or_default()))),
+        None => Err(failed(&reply.error.unwrap_or_default(), reply.answered)),
     };
     if let Some(tx) = pending.lock().unwrap().remove(&reply.id) {
         let _ = tx.send(result);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_request_without_a_reply_is_worded_by_the_probe() {
+        let failure = |answered| Failure::from(failed("TypeError: Failed to fetch", answered));
+        let (none, cors, unprobed) = (failure(Some(false)), failure(Some(true)), failure(None));
+        assert!([&none, &cors, &unprobed].iter().all(|failure| failure.kind == FailureKind::Offline));
+        assert_eq!((none.message, cors.message, unprobed.message), (Some(text(UNREACHABLE)), Some(text(FILTERED)), None));
+        assert!(none.detail.contains("no usable answer"), "{}", none.detail);
     }
 }
