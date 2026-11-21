@@ -25,6 +25,7 @@ failure-refused = odrzucono
 failure-elevation = gra działa jako administrator: zaakceptuj monit, aby się połączyć
 failure-protected = zabezpieczenia gry blokują trainery
 failure-architecture = trainer jest dla innej wersji gry (32 lub 64 bity): uruchom obsługiwaną
+failure-restart = gra jest już uruchomiona: zamknij ją, a potem uruchom stąd
 failure-internal = coś poszło nie tak: szczegóły w logu
 failure-place = { $why } (Ustawienia → Ogólne)
 
@@ -104,6 +105,7 @@ cheats-failed-body = Nie udało się pobrać listy modów: { $why }. Impulse spr
 cheats-filter = filtruj mody
 cheats-pinned = PRZYPIĘTE
 cheats-kept = Pobrana lista modów zostaje na dysku.
+cheats-notes = PRZECZYTAJ PRZED GRĄ
 cheats-no-trainer-tag = [ BRAK TRAINERA ]
 cheats-no-trainer = BRAK TRAINERA: { $game }
 cheats-no-trainer-body = Do tej gry nie ma jeszcze trainera. Gdy się pojawi, Impulse oznaczy grę w bibliotece.

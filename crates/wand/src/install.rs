@@ -12,6 +12,7 @@ use std::{
 pub const PUBLISHERS: &[&str] = &["WeMod LLC", "Daring Development Inc."];
 
 const TRAINERLIB: &str = r"resources\app.asar.unpacked\static\unpacked\trainerlib";
+const GAME_LAUNCHER: &str = r"resources\app.asar.unpacked\static\unpacked\auxiliary\GameLauncher.exe";
 // Wand was WeMod: older installs live under the old name.
 const BRANDS: [&str; 2] = ["Wand", "WeMod"];
 // A folder picked inside an install (down to `trainerlib`) still means that install.
@@ -28,6 +29,11 @@ pub struct Install {
 impl Install {
     pub fn trainerlib(&self) -> PathBuf {
         self.root.join(TRAINERLIB)
+    }
+
+    /// The stand-in for an anti-cheat's launcher (`proxy`).
+    pub fn game_launcher(&self) -> PathBuf {
+        self.root.join(GAME_LAUNCHER)
     }
 
     pub fn label(&self) -> String {

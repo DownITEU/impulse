@@ -6,13 +6,14 @@ use agent::Image;
 use anyhow::{Context, Result, ensure};
 use blocking::unblock;
 use futures::channel::mpsc::Receiver;
-use model::Process;
+use model::{Failure, FailureKind, Process};
 use uuid::Uuid;
 
 use crate::{
     binary,
     inject::{self, Startup},
     install::{PUBLISHERS, binaries},
+    texts::{SERVICE_SILENT, text},
     tophat::{Event, Run, Server, Session},
 };
 
@@ -58,7 +59,10 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     .await?;
 
     let dialed = server.runtime.spawn(async move { tokio::time::timeout(DIAL_IN_WITHIN, waiting).await }).await?;
-    let channel = dialed.context("the service did not dial in")?.context("the server dropped the service")?;
+    // Seen with an outdated Wand.
+    let silent = Failure::new(FailureKind::SetupNeeded).saying(text(SERVICE_SILENT));
+    let dialed = dialed.with_context(|| format!("the service from {} did not dial in", trainerlib.display())).context(silent)?;
+    let channel = dialed.context("the server dropped the service")?;
     let (session, events) = Session::open(server.runtime.clone(), channel, &client_id);
     let run = Run { process_id: game.process.pid, game_version: version, trainer, variables: game.variables };
     session.start(plugin, run).await?;

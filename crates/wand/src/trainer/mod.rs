@@ -57,6 +57,9 @@ struct Blueprint {
     // Free-form on purpose: a shape we do not read must not make the trainer unreadable.
     #[serde(default)]
     config: Value,
+    /// What to read before playing, markdown.
+    #[serde(default)]
+    notes: Value,
 }
 
 // Bits of `Blueprint::flags`.
@@ -123,6 +126,7 @@ impl Trainer {
         let flags = self.blueprint.flags;
         let strings = self.strings;
         model::Trainer {
+            notes: notes(&self.blueprint.notes, &strings),
             cheats: self.blueprint.cheats.into_iter().map(|c| cheat(c, &strings)).collect(),
             pinned: self.pinned_mods,
             location: flags & LOCATES != 0,
@@ -140,6 +144,13 @@ fn read(Answer { trainer, i18n }: &Answer) -> Result<Trainer, serde_json::Error>
         trainer.strings = strings.iter().filter_map(text).collect();
     }
     Ok(trainer)
+}
+
+/// The notes in the answer's language; blank ones are none.
+fn notes(notes: &Value, strings: &HashMap<String, String>) -> Option<String> {
+    let notes = notes.as_str()?;
+    let notes = strings.get(notes).map_or(notes, String::as_str).trim();
+    (!notes.is_empty()).then(|| notes.to_owned())
 }
 
 fn cheat(cheat: Cheat, strings: &HashMap<String, String>) -> model::Cheat {
@@ -347,6 +358,16 @@ mod tests {
         assert_eq!((gold.name.as_str(), gold.description.as_deref()), ("Gold", Some("Kept")));
         assert!(health.category_name == Some(texts::text(texts::CATEGORY_PLAYER)));
         assert!(gold.category_name.is_none());
+    }
+
+    #[test]
+    fn notes_come_in_the_answers_language_and_blank_ones_are_none() {
+        let strings = HashMap::from([("Restart after a mission".to_owned(), "Relancez après une mission".to_owned())]);
+        assert_eq!(notes(&Value::from("Restart after a mission"), &strings).as_deref(), Some("Relancez après une mission"));
+        assert_eq!(notes(&Value::from("  Untranslated\n"), &strings).as_deref(), Some("Untranslated"));
+        for blank in [Value::from(" \n"), Value::Null, Value::from(3)] {
+            assert_eq!(notes(&blank, &strings), None, "{blank}");
+        }
     }
 
     #[test]

@@ -210,6 +210,7 @@ fn kind(kind: FailureKind) -> Key {
         FailureKind::Elevation => key::FAILURE_ELEVATION,
         FailureKind::Protected => key::FAILURE_PROTECTED,
         FailureKind::Architecture => key::FAILURE_ARCHITECTURE,
+        FailureKind::Restart => key::FAILURE_RESTART,
         FailureKind::Internal => key::FAILURE_INTERNAL,
     }
 }

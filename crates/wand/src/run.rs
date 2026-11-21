@@ -1,20 +1,22 @@
 //! `model::Runner` for a WeMod trainer: its DLL from the CDN, Wand's service and plugin in the game.
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, PoisonError},
 };
 
 use anyhow::{Context, Result, anyhow};
 use blocking::unblock;
 use futures::{FutureExt, StreamExt, TryFutureExt, future::BoxFuture};
-use model::{Attach, Failure, FailureKind, Live, Process};
+use model::{Attach, Failure, FailureKind, Live, Origin, Process};
 
 use crate::{
     attach::{Game, attach},
     binary,
     folder::Setting,
-    texts::{FOLDER_UNSET, text},
+    install::PUBLISHERS,
+    proxy::{self, Proxy},
+    texts::{ACTIVATE_UNSUPPORTED, FOLDER_UNSET, PROXY_FAILED, PROXY_MISSING, PROXY_RESTART, text},
     tophat::{Event, Outcome, Server, Session},
     trainer::{Binary, Plan},
 };
@@ -35,7 +37,13 @@ impl Host {
     }
 
     pub fn runner(&self, plan: &Plan) -> Arc<dyn model::Runner> {
-        Arc::new(Runner { host: self.clone(), binary: plan.binary.clone(), variables: plan.variables.clone() })
+        Arc::new(Runner {
+            host: self.clone(),
+            binary: plan.binary.clone(),
+            variables: plan.variables.clone(),
+            proxy: plan.proxy.clone(),
+            activate: plan.activate,
+        })
     }
 
     fn server(&self) -> Result<Arc<Server>> {
@@ -53,24 +61,30 @@ struct Runner {
     host: Host,
     binary: Result<Binary, String>,
     variables: Vec<String>,
+    proxy: Result<Option<Proxy>, String>,
+    activate: u64,
 }
 
 impl model::Runner for Runner {
     fn prepare(&self) -> BoxFuture<'_, Answer<Box<dyn Attach>>> {
         async move {
-            let Binary { url, hash } =
-                self.binary.clone().map_err(|why| anyhow!("{why}").context(Failure::new(FailureKind::Unsupported)))?;
+            let unsupported = |why: &String| anyhow!("{why}").context(Failure::new(FailureKind::Unsupported));
+            let Binary { url, hash } = self.binary.clone().map_err(|why| unsupported(&why))?;
+            let proxy = self.proxy.clone().map_err(|why| unsupported(&why))?;
             let folder = self.host.folder.clone();
             let install = unblock(move || folder.install()).await;
             let unset = || Failure::new(FailureKind::SetupNeeded).saying(text(FOLDER_UNSET));
-            let trainerlib = install.context("Wand's folder is not set").context(unset())?.trainerlib();
+            let install = install.context("Wand's folder is not set").context(unset())?;
+            let proxy = proxy.map(|proxy| (proxy, install.game_launcher()));
             let server = self.host.server()?;
             let data_dir = self.host.data_dir.clone();
             let trainer = {
                 let hash = hash.clone();
                 unblock(move || binary::ensure(&data_dir, &url, &hash)).await?
             };
-            let prepared = Prepared { server, trainerlib, trainer, hash, variables: self.variables.clone() };
+            let trainerlib = install.trainerlib();
+            let variables = self.variables.clone();
+            let prepared = Prepared { server, trainerlib, trainer, hash, variables, proxy, activate: self.activate };
             Ok(Box::new(prepared) as Box<dyn Attach>)
         }
         .boxed()
@@ -83,13 +97,50 @@ struct Prepared {
     trainer: PathBuf,
     hash: String,
     variables: Vec<String>,
+    /// With Wand's stand-in for the game's launcher.
+    proxy: Option<(Proxy, PathBuf)>,
+    activate: u64,
 }
 
 impl Attach for Prepared {
+    /// Wand's stand-in for a store's start only: like Wand, a picked executable starts as it is.
+    fn before_start(&self, origin: &Origin, install: &Path) -> BoxFuture<'static, Answer<Option<Box<dyn Send>>>> {
+        let Some((proxy, stand_in)) = self.proxy.clone().filter(|_| matches!(origin, Origin::Launcher(_))) else {
+            return async { Ok(None) }.boxed();
+        };
+        let install = install.to_owned();
+        async move {
+            let mounted = unblock(move || {
+                if !stand_in.is_file() {
+                    let missing = Failure::new(FailureKind::SetupNeeded).saying(text(PROXY_MISSING));
+                    return Err(Failure { detail: format!("{} is missing", stand_in.display()), ..missing });
+                }
+                let mounted = proxy::mount(&stand_in, &install, &proxy, |copy| agent::signed(copy, PUBLISHERS));
+                // Guarded already here: a stop before this future is polled again drops it.
+                mounted.map(|mounted| OffThread(Some(mounted))).map_err(|e| Failure::from(e).saying(text(PROXY_FAILED)))
+            })
+            .await?;
+            Ok(Some(Box::new(mounted) as Box<dyn Send>))
+        }
+        .boxed()
+    }
+
     fn attach(self: Box<Self>, process: Process) -> BoxFuture<'static, Answer<Live>> {
         async move {
             let game = Game { process: &process, trainer: &self.trainer, trainer_hash: &self.hash, variables: &self.variables };
-            let (session, events) = attach(&self.server, &self.trainerlib, game).await?;
+            let (session, events) = attach(&self.server, &self.trainerlib, game).await.map_err(|e| {
+                let failure = Failure::from(e);
+                match failure.kind {
+                    // Started elsewhere, the game runs the anti-cheat our start avoids.
+                    FailureKind::Protected if self.proxy.is_some() => failure.saying(text(PROXY_RESTART)),
+                    // Wand injects this trainer its own way, which may be why it failed.
+                    FailureKind::Internal if self.activate != 0 => {
+                        let detail = format!("{} (activate.flags {})", failure.detail, self.activate);
+                        Failure { detail, ..failure.saying(text(ACTIVATE_UNSUPPORTED)) }
+                    }
+                    _ => failure,
+                }
+            })?;
             let events = events.filter_map(|event| async move {
                 match event {
                     // The trainer logs every position asked for, a line per variable.
@@ -102,6 +153,17 @@ impl Attach for Prepared {
             Ok(Live { session: Box::new(Running(session)), events: events.boxed() })
         }
         .boxed()
+    }
+}
+
+/// Puts the launcher back off the dropping thread, which may be the UI's.
+struct OffThread(Option<proxy::Mounted>);
+
+impl Drop for OffThread {
+    fn drop(&mut self) {
+        if let Some(mounted) = self.0.take() {
+            unblock(move || drop(mounted)).detach();
+        }
     }
 }
 

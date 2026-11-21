@@ -1,7 +1,7 @@
 use std::{fs, sync::Arc, time::Duration};
 
 use futures::future::BoxFuture;
-use model::{Args, Attach, Cheat, Failure, FailureKind, Kind, Plan, Ref, Runner, Trainer};
+use model::{Args, Attach, Cheat, Failure, FailureKind, Kind, Launch, Plan, Ref, Runner, Trainer};
 
 use super::{PINNED, Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, step};
 use crate::{
@@ -108,9 +108,9 @@ fn game(id: &str) -> GameId {
 }
 
 fn sheet_of(build: u32, profile: &TrainerProfile) -> Sheet {
-    let plan = Plan { image: None, minimum_age: Duration::ZERO, launch: false, runner: Arc::new(Idle) };
+    let plan = Plan { image: None, minimum_age: Duration::ZERO, launch: Launch::User, runner: Arc::new(Idle) };
     let cheats = vec![Cheat { category: "player".into(), ..cheat("god", Kind::Toggle, Args::default()) }];
-    let trainer = Trainer { cheats, pinned: Vec::new(), location: false, teleport: false, plan };
+    let trainer = Trainer { cheats, pinned: Vec::new(), location: false, teleport: false, notes: None, plan };
     Sheet::new(trainer, self::trainer(), (None, Some(build)), profile)
 }
 

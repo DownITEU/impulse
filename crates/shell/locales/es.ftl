@@ -25,6 +25,7 @@ failure-refused = solicitud rechazada
 failure-elevation = el juego se ejecuta como administrador: acepta el aviso para conectar
 failure-protected = la protección del juego no admite trainers
 failure-architecture = el trainer es para la otra versión del juego (32 o 64 bits): inicia la compatible
+failure-restart = el juego ya se está ejecutando: ciérralo y luego inícialo desde aquí
 failure-internal = algo salió mal: consulta el log para ver los detalles
 failure-place = { $why }: revisa Ajustes > APP
 
@@ -105,6 +106,7 @@ cheats-failed-body = No se pudo descargar: { $why }. Impulse volverá a intentar
 cheats-filter = filtrar mods
 cheats-pinned = FIJADOS
 cheats-kept = La lista se guarda en el disco con la primera descarga.
+cheats-notes = LEER ANTES DE JUGAR
 cheats-no-trainer-tag = [ SIN TRAINER ]
 cheats-no-trainer = AÚN NO HAY TRAINER PARA { $game }
 cheats-no-trainer-body = Aún no hay trainer para este juego. Impulse te lo indicará en la biblioteca en cuanto salga uno.

@@ -15,8 +15,8 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - `StoreId`: a launcher's id for a game, `<store>:<id>`, the one place that splits one (`store`, `id`, `steam_app`). `Installation`: a game on this machine (`Origin`: a launcher's `StoreId` or the picked executable, location, build).
 - `Chord`, `Held`, `mouse`: a hotkey in Wand's key codes, its names (`Display`), the keys being pressed.
 - `Process`, `Rule`: the game's process and how a trainer says which one to look for.
-- `Trainer`, `Cheat`, `Kind`, `Args`, `Plan`: the cheat list and what running exactly this list takes.
-- `Runner`, `Attach`, `Live`, `Session`, `Event`: a run. `prepare`, then `attach(Process)`, then set values and stop.
+- `Trainer`, `Cheat`, `Kind`, `Args`, `Plan`, `Launch`: the cheat list, its `notes` (markdown, read before playing) and what running exactly this list takes; `Launch` says who starts the game: the user, the run, or the run only (`Required`: a game already running is refused).
+- `Runner`, `Attach`, `Live`, `Session`, `Event`: a run. `prepare`, then `attach(Process)`, then set values and stop. `Attach::before_start(origin, location)` readies the install for a start; dropping its value undoes it without blocking the dropping thread.
 - `Installed`, `Approval`, `Setting`, `SettingKind`, `Value`: an installed plugin as the UI shows and drives it (`plugins` makes them; a setting's texts are its catalog's messages).
 - `Map`, `MapOffer`, `TileSet`, `Tiles`, `Frame`, `Pin`, `Category`, `Group`, `Icon`, `Glyph`, `Region`, `Label`, `Picture`, `Level`, `PIN_LINK`: a game's map.
 

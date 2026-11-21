@@ -9,6 +9,7 @@ pub const CHEATS_FILTER: Key = Key("cheats-filter");
 
 pub const CHEATS_PINNED: Key = Key("cheats-pinned");
 pub const CHEATS_KEPT: Key = Key("cheats-kept");
+pub const CHEATS_NOTES: Key = Key("cheats-notes");
 pub const CHEATS_NO_TRAINER_TAG: Key = Key("cheats-no-trainer-tag");
 pub const CHEATS_NO_TRAINER: Key = Key("cheats-no-trainer");
 pub const CHEATS_NO_TRAINER_BODY: Key = Key("cheats-no-trainer-body");

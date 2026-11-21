@@ -15,6 +15,8 @@ use crate::{
 
 /// The pinned section's id; the others are their category.
 pub const PINNED: &str = "app:pinned";
+/// The notes card's fold id.
+pub const NOTES: &str = "app:notes";
 
 pub struct Sheet {
     /// Its profile's key.
@@ -34,6 +36,8 @@ pub struct Sheet {
     /// Whether a run tells where the player is, and can move them.
     pub location: bool,
     pub teleport: bool,
+    /// Markdown to read before playing.
+    pub notes: Option<String>,
     pub plan: Plan,
 }
 
@@ -48,7 +52,7 @@ pub enum Step {
 
 impl Sheet {
     pub fn new(trainer: Trainer, id: Ref, stamp: Stamp, profile: &TrainerProfile) -> Self {
-        let Trainer { cheats, pinned, location, teleport, plan } = trainer;
+        let Trainer { cheats, pinned, location, teleport, notes, plan } = trainer;
         let slots = |cheat: &Cheat| (0..cheat.kind.slots()).map(|slot| cheat.hotkeys.get(slot).copied().flatten()).collect();
         let mut sheet = Self {
             trainer: id,
@@ -61,6 +65,7 @@ impl Sheet {
             folded: HashSet::new(),
             location,
             teleport,
+            notes,
             plan,
         };
         sheet.restore(profile);

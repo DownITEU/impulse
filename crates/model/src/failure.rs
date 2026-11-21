@@ -20,6 +20,8 @@ pub enum FailureKind {
     Protected,
     /// The trainer is built for the game's other architecture (32 or 64-bit), such as another of its executables.
     Architecture,
+    /// The game runs, but only one the run starts itself may be used: close it and start again.
+    Restart,
     Internal,
 }
 

@@ -25,6 +25,7 @@ failure-refused = запрос отклонён
 failure-elevation = игра запущена от администратора: подтвердите запрос, чтобы подключиться
 failure-protected = защита игры не пускает трейнеры
 failure-architecture = трейнер для другой сборки игры (32 или 64 бит): запустите поддерживаемую
+failure-restart = игра уже запущена: закройте её, затем запустите отсюда
 failure-internal = что-то пошло не так: подробности в логе
 failure-place = { $why }. Проверьте раздел «Общие» в настройках
 
@@ -104,6 +105,7 @@ cheats-failed-body = Не удалось скачать: { $why }. Impulse по�
 cheats-filter = поиск модов
 cheats-pinned = ЗАКРЕПЛЁННЫЕ
 cheats-kept = После первой загрузки список сохранится на диске.
+cheats-notes = ПРОЧТИТЕ ПЕРЕД ИГРОЙ
 cheats-no-trainer-tag = [ НЕТ ТРЕЙНЕРА ]
 cheats-no-trainer = ТРЕЙНЕРА ДЛЯ { $game } ПОКА НЕТ
 cheats-no-trainer-body = Для этой игры пока нет трейнера. Когда он появится, Impulse отметит игру в библиотеке.

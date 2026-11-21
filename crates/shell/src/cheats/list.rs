@@ -60,6 +60,7 @@ impl CheatList {
         column
             .when(game.support == Support::UpdatePending, |column| column.child(update_callout(cx)))
             .when(!running, |column| column.child(run_note(self.runs.read(cx), &game.id, cx)))
+            .when_some(printed.notes.as_ref(), |column, notes| column.child(self.notes(notes, sheet, cx)))
             .child(self.cheat_list(game, sheet, printed, running, cx))
     }
 
@@ -118,7 +119,7 @@ impl CheatList {
             .when(shown == 0, |list| list.child(mono(t(cx, key::CHEATS_NO_MATCH), 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
     }
 
-    fn toggle_fold(&mut self, section: &str, cx: &mut Context<Self>) {
+    pub(super) fn toggle_fold(&mut self, section: &str, cx: &mut Context<Self>) {
         let Some(game) = self.selected(cx) else { return };
         self.trainers.update(cx, |trainers, cx| trainers.toggle_fold(&game, section, cx));
     }

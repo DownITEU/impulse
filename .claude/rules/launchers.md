@@ -22,6 +22,7 @@ paths:
 - Launchers' files and registry are only read. Registry views: launchers write under `WOW6432Node` (`View::Wow32`), packaged apps are in the 64-bit view.
 - A picked executable that cannot be opened, and a game that does not start in time, are `GameNotFound`.
 - play: `run` names no source. Order: `Runner::prepare` first (a trainer that cannot run is refused before any game starts), then `agent::find`, else start and `agent::wait`, then `attach` with the process exactly as found.
+- `Launch::Required`: a running game of any age is refused as `Restart` before any process is opened. Unless the user starts the game, `before_start` comes before the start; its value lives until `run` returns.
 - The wait is 45 s after a launch of ours, 180 s otherwise (the user starts the game, or the store cannot be started from here).
 - Only Steam games (`steam://rungameid/<appid>`) and picked executables (started in their own folder) are started. Any other store returns `false`: the run waits for the user.
 - Only a number reaches a `steam://` URI: the id comes from a remote catalog. A bad id is an error, never a launch.

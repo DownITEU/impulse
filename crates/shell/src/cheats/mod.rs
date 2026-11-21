@@ -4,6 +4,7 @@
 mod collections;
 mod controls;
 mod list;
+mod notes;
 mod printed;
 
 use std::sync::Arc;

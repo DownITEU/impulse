@@ -10,6 +10,8 @@ pub struct Trainer {
     /// Whether a run of it tells where the player is, and can move the player.
     pub location: bool,
     pub teleport: bool,
+    /// What to read before playing, markdown.
+    pub notes: Option<String>,
     pub plan: Plan,
 }
 
@@ -19,9 +21,19 @@ pub struct Plan {
     pub image: Option<String>,
     /// A younger process is still starting.
     pub minimum_age: Duration,
-    /// Whether to start the game; `false` waits for the user to start it.
-    pub launch: bool,
+    pub launch: Launch,
     pub runner: Arc<dyn Runner>,
+}
+
+/// Who starts the game when it is not running.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Launch {
+    /// The user; the run waits.
+    User,
+    /// The run.
+    Start,
+    /// The run only: a game started otherwise runs what this start avoids (an anti-cheat), so it is refused.
+    Required,
 }
 
 pub struct Cheat {
