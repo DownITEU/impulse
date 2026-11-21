@@ -42,7 +42,7 @@ dependencies = [
 
 [[package]]
 name = "sdk"
-version = "0.2.1-pre"
+version = "0.2.1-pre.1"
 dependencies = [
  "serde",
  "serde_json",

@@ -39,12 +39,12 @@ jobs:
         run: cargo build --release
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
-          body_path: release-notes.md
-          files: target/release/Impulse.exe
-          fail_on_unmatched_files: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          make_latest: ${{ !contains(github.ref_name, '-') }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $flags = @('--latest')
+          if ($tag.Contains('-')) { $flags = @('--prerelease', '--latest=false') }
+          # gh uploads assets to a draft before publishing the immutable release.
+          gh release create $tag target/release/Impulse.exe --verify-tag --title $tag --notes-file release-notes.md @flags

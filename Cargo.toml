@@ -4,7 +4,7 @@ exclude = ["vendor"]
 resolver = "3"
 
 [workspace.package]
-version = "0.2.1-pre"
+version = "0.2.1-pre.1"
 edition = "2024"
 publish = false
 
