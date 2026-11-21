@@ -3,10 +3,19 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
-## [0.2.1] - 2026-11-21
+## [0.2.1] - 2026-11-22
+
+### Features
+
+- Games with an anti-cheat launcher start the way Wand starts them: through Wand's own launcher, so the trainer can attach. The game's launcher is put back right after. When the trainer must start the game itself and the game already runs, Impulse asks to close it first.
+- A trainer's notes show above its cheats as READ BEFORE PLAYING, folded like a section.
 
 ### Fixes
 
+- For these games Impulse attaches to the game itself, never to the anti-cheat's launcher.
+- An attach the game's protection blocks says so, instead of a bare "Access is denied".
+- A trainer that needs Wand's own way of loading says so when its attach fails, and the log names how.
+- When Wand's service does not answer, Impulse asks to update Wand.
 - Wand sign-in shows why it failed and gives feedback when you click Try Again.
 - Sign-in errors in the log name the failed API request and distinguish a fresh sign-in from a session refresh. The log includes the HTTP status when WebView2 can read it. The connectivity check reports only whether the probe passed, not why the original request failed.
 
