@@ -42,4 +42,4 @@ proxy-failed = could not prepare the game to start without its anti-cheat
 proxy-restart = the game's anti-cheat is running: close the game and start it with the trainer
 service-silent = Wand's service did not answer, update Wand or set its current folder
 activate-unsupported = this trainer needs Wand's own way of loading it, which is not supported yet
-trainer-gone = WeMod no longer serves this trainer file: open the game again to load the current one
+trainer-file-missing = the trainer file was not found (404): open the game again or run the trainer once in Wand

@@ -42,4 +42,4 @@ proxy-failed = oyun hile koruması olmadan başlayacak şekilde hazırlanamadı
 proxy-restart = oyunun hile koruması çalışıyor: oyunu kapat ve trainer ile başlat
 service-silent = Wand hizmeti yanıt vermedi, Wand'ı güncelle ya da geçerli klasörünü ayarla
 activate-unsupported = bu trainer Wand'ın kendi yükleme yöntemini gerektiriyor, bu henüz desteklenmiyor
-trainer-gone = WeMod bu trainer dosyasını artık sunmuyor: güncel olanı yüklemek için oyunu yeniden aç
+trainer-file-missing = trainer dosyası bulunamadı (404): oyunu yeniden aç ya da trainer'ı bir kez Wand'da çalıştır

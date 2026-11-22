@@ -80,7 +80,7 @@ impl model::Runner for Runner {
             let data_dir = self.host.data_dir.clone();
             let trainer = {
                 let hash = hash.clone();
-                unblock(move || binary::ensure(&data_dir, &url, &hash)).await?
+                unblock(move || binary::ensure(&data_dir, &crate::install::trainer_caches(), &url, &hash)).await?
             };
             let trainerlib = install.trainerlib();
             let variables = self.variables.clone();
