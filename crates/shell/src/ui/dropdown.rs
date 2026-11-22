@@ -1,11 +1,14 @@
 //! A trigger that opens a list of options under itself. Its view keeps which of its menus is open, one at a time.
 
+use std::{cell::Cell, rc::Rc};
+
 use gpui_kit::{
-    Context, Div, ElementId, MouseButton, SharedString, Stateful, Window,
+    Anchor, Bounds, Context, Div, ElementId, MouseButton, Pixels, SharedString, Stateful, Window, anchored,
+    base::ElementExt,
     component::{h_flex, v_flex},
-    deferred,
+    deferred, point,
     prelude::*,
-    px, relative, rgb,
+    px, rgb,
 };
 
 use super::{
@@ -17,8 +20,8 @@ use super::{
 /// Where a view keeps its open menu.
 pub type Slot<V, M> = fn(&mut V) -> &mut Option<M>;
 
-/// Makes `trigger` open `options` under itself, set across by `place`; `open`: `menu` is the open one.
-#[expect(clippy::too_many_arguments, reason = "a menu's trigger, its slot, options, placement and pick")]
+/// Makes `trigger` open `options` under its right edge, at least `width` wide, inside the window; `open`: `menu` is the open one.
+#[expect(clippy::too_many_arguments, reason = "a menu's trigger, its slot, options, width and pick")]
 pub fn dropdown<V: 'static, M: Copy + PartialEq + 'static>(
     trigger: Stateful<Div>,
     menu: M,
@@ -26,7 +29,7 @@ pub fn dropdown<V: 'static, M: Copy + PartialEq + 'static>(
     open: bool,
     options: Vec<SharedString>,
     current: usize,
-    place: fn(Div) -> Div,
+    width: Pixels,
     cx: &Context<V>,
     pick: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Copy + 'static,
 ) -> Stateful<Div> {
@@ -38,16 +41,31 @@ pub fn dropdown<V: 'static, M: Copy + PartialEq + 'static>(
             cx.notify();
         }))
         .on_mouse_down_out(cx.listener(move |view, _, _, cx| close(view, slot, menu, cx)))
-        .when(open && !options.is_empty(), |trigger| trigger.child(deferred(place(picks(options, current, slot, cx, pick)))))
+        .when(open && !options.is_empty(), |trigger| {
+            let under = Rc::new(Cell::new(Bounds::default()));
+            let fitted = anchored()
+                .attach_tracked(under.clone(), Anchor::BottomRight)
+                .anchor(Anchor::TopRight)
+                .offset(point(px(1.), px(4.)))
+                .snap_to_window_with_margin(px(8.));
+            let view = cx.weak_entity();
+            trigger
+                .on_prepaint(move |bounds, window, cx| {
+                    under.set(bounds);
+                    if !window.content_mask().bounds.intersects(&bounds) {
+                        cx.defer(move |cx| drop(view.update(cx, |view, cx| close(view, slot, menu, cx))));
+                    }
+                })
+                .child(deferred(fitted.child(picks(options, current, slot, cx, pick).min_w(width))))
+        })
 }
 
 /// A closed list: its current option and a chevron.
 pub fn trigger(id: impl Into<ElementId>, current: impl Into<SharedString>) -> Stateful<Div> {
-    mono(current, 12.)
+    h_flex()
         .id(id)
         .h(px(26.))
-        .flex()
-        .items_center()
+        .gap(px(6.))
         .justify_between()
         .pl(px(10.))
         .pr(px(8.))
@@ -55,6 +73,7 @@ pub fn trigger(id: impl Into<ElementId>, current: impl Into<SharedString>) -> St
         .border_color(line(0.2))
         .bg(rgb(SUNKEN))
         .cursor_pointer()
+        .child(mono(current, 12.).min_w_0().truncate())
         .child(icon(Icon::ChevronDown, 11., rgb(DIM)))
 }
 
@@ -66,19 +85,29 @@ pub fn close<V: 'static, M: PartialEq>(view: &mut V, slot: Slot<V, M>, menu: M, 
     }
 }
 
-/// An open menu's list, under what opened it; the caller places it across.
+/// An open menu's list; the caller places it.
 pub fn picks<V: 'static, M: 'static>(
     options: Vec<SharedString>,
     current: usize,
     slot: Slot<V, M>,
     cx: &Context<V>,
     pick: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Copy + 'static,
-) -> Div {
+) -> Stateful<Div> {
     let accent = rgb(accent(cx));
-    v_flex().occlude().absolute().top(relative(1.)).mt(px(3.)).py(px(4.)).border_1().border_color(line(0.2)).bg(rgb(PANEL)).children(
-        options.into_iter().enumerate().map(|(at, option)| {
+    v_flex()
+        .id("picks")
+        .occlude()
+        .max_w(px(320.))
+        .max_h(px(300.))
+        .overflow_y_scroll()
+        .py(px(4.))
+        .border_1()
+        .border_color(line(0.2))
+        .bg(rgb(PANEL))
+        .children(options.into_iter().enumerate().map(|(at, option)| {
             h_flex()
                 .id(("option", at))
+                .flex_none()
                 .h(px(28.))
                 .px(px(10.))
                 .cursor_pointer()
@@ -93,12 +122,6 @@ pub fn picks<V: 'static, M: 'static>(
                         cx.notify();
                     }),
                 )
-                .child(mono(option, 12.))
-        }),
-    )
-}
-
-/// A dropdown's list across its trigger, borders included.
-pub fn span(list: Div) -> Div {
-    list.left(px(-1.)).right(px(-1.))
+                .child(mono(option, 12.).min_w_0().truncate())
+        }))
 }

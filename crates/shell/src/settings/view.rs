@@ -15,7 +15,7 @@ use i18n::{Key, LANGUAGES, Language};
 use super::{Folders, Lead, Panels, Prefs, Settings, Shown};
 use crate::ui::{
     dialog::dialog,
-    dropdown::{dropdown, span, trigger},
+    dropdown::{dropdown, trigger},
     key,
     text::t,
     theme::*,
@@ -143,9 +143,10 @@ impl SettingsView {
         let names: Vec<SharedString> =
             languages().map(|ours| ours.map_or_else(|| t(cx, key::LANGUAGE_SYSTEM), |ours| ours.name.into())).collect();
         let current = languages().position(|ours| ours == prefs.chosen()).unwrap_or_default();
-        let shown = trigger("language", names[current].clone()).w(px(160.));
+        let width = px(160.);
+        let shown = trigger("language", names[current].clone()).w(width);
         let open = self.menu == Some(Menu::Language);
-        let language = dropdown(shown, Menu::Language, open_menu, open, names, current, span, cx, |view, at, _, cx| {
+        let language = dropdown(shown, Menu::Language, open_menu, open, names, current, width, cx, |view, at, _, cx| {
             let tag = languages().nth(at).flatten().map(|ours| ours.tag.to_owned());
             view.edit_prefs(|prefs| prefs.language = tag, cx);
         });

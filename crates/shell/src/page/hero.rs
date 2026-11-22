@@ -99,8 +99,7 @@ impl Hero {
             .when(!self.runs.read(cx).holds(&game.id), |bar| {
                 let (options, current) = source_options(game, cx);
                 let more = icon_button("source", t(cx, key::PAGE_SOURCE)).child(icon(Icon::More, 15., rgb(MUTED)));
-                let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
-                bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, place, cx, |hero, at, _, cx| {
+                bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, px(200.), cx, |hero, at, _, cx| {
                     if let Some(game) = hero.library.read(cx).opened().cloned() {
                         pick_source(&hero.library, &game, at, cx);
                     }
