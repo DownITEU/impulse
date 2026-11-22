@@ -48,3 +48,29 @@ jobs:
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ !contains(github.ref_name, '-') }}
+
+  # A release made with GITHUB_TOKEN triggers no other workflow, so the Discord post lives here.
+  discord:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Post the patch notes to Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json name,url,body,isPrerelease > release.json
+          # Headings become bold (embeds render them unreliably); an embed description caps at 4096.
+          jq '. as $r | {
+            embeds: [{
+              title: $r.name,
+              url: $r.url,
+              description: ($r.body | gsub("\r"; "") | gsub("(?m)^#{1,6} +(?<h>.+)$"; "**\(.h)**")
+                | if length > 3800 then .[:3800] + "\n\n[Read the rest on GitHub](\($r.url))" else . end),
+              color: (if $r.isPrerelease then 16756768 else 13041469 end)
+            }],
+            allowed_mentions: {parse: []}
+          }' release.json > payload.json
+          curl -sSf -X POST -H 'Content-Type: application/json' -d @payload.json "$WEBHOOK"
