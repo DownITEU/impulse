@@ -5,9 +5,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use model::{Failure, FailureKind};
 use sha2::{Digest, Sha256};
+
+use crate::texts::{TRAINER_GONE, text};
 
 // Not under `trainers`: that folder is the metadata's, and dropping it must not reach here.
 const DIR: &str = "trainer-binaries";
@@ -33,6 +35,11 @@ pub fn ensure(data_dir: &Path, url: &str, hash: &str) -> Result<PathBuf> {
         return Ok(path);
     }
     let response = fetch::get(url, None).context(Failure::new(FailureKind::Offline))?;
+    if response.status == 404 {
+        // A cached trainer names a build the CDN has dropped.
+        let gone = Failure::new(FailureKind::NotFound).saying(text(TRAINER_GONE));
+        return Err(anyhow!("GET {url}: status 404").context(gone));
+    }
     ensure!(response.status == 200, "GET {url}: status {}", response.status);
     ensure!(sha256(&response.body) == hash, "the downloaded trainer does not match its hash");
     disk::replace(&path, &response.body)?;

@@ -42,3 +42,4 @@ proxy-failed = das Spiel konnte nicht für den Start ohne seinen Anti-Cheat vorb
 proxy-restart = der Anti-Cheat des Spiels läuft: Spiel schließen und mit dem Trainer starten
 service-silent = der Wand-Dienst hat nicht geantwortet, Wand aktualisieren oder den aktuellen Ordner festlegen
 activate-unsupported = dieser Trainer braucht Wands eigene Ladeart, die noch nicht unterstützt wird
+trainer-gone = WeMod stellt diese Trainer-Datei nicht mehr bereit: Spiel erneut öffnen, um die aktuelle zu laden

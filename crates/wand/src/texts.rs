@@ -54,6 +54,7 @@ pub const PROXY_FAILED: Key = Key("proxy-failed");
 pub const PROXY_RESTART: Key = Key("proxy-restart");
 pub const SERVICE_SILENT: Key = Key("service-silent");
 pub const ACTIVATE_UNSUPPORTED: Key = Key("activate-unsupported");
+pub const TRAINER_GONE: Key = Key("trainer-gone");
 
 pub fn text(key: Key) -> Text {
     Text::key(&crate::source(), key.0)
