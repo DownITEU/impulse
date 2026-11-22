@@ -83,3 +83,23 @@ impl Transport {
 fn offline(why: &str) -> anyhow::Error {
     anyhow!("{why}").context(Failure::new(FailureKind::Offline))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "reaches api.wemod.com"]
+    async fn the_token_endpoint_answers_the_bridge() {
+        let dir = std::env::temp_dir().join(format!("impulse-bridge-test-{}", std::process::id()));
+        let request = Request {
+            method: "POST".into(),
+            url: "https://api.wemod.com/auth/token".into(),
+            headers: vec![("Content-Type".into(), "application/x-www-form-urlencoded".into())],
+            body: Some("grant_type=tiny_code&code=fake&client_id=overlay".into()),
+        };
+        let response = Transport::spawn(dir).unwrap().fetch(request).await.unwrap();
+        assert_eq!(response.status, 400);
+        assert!(response.body.contains("`code`"), "the 400 is not about the code");
+    }
+}
