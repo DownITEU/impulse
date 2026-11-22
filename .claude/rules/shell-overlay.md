@@ -28,7 +28,7 @@ The overlay slice, `layer/` (an `overlay` module would shadow the crate): `Layer
 ## Traps
 - `MINIMAP_DOCK` is `DOCKS[3]`: keep the order. A new dock is a `Spec` in `DOCKS` and an arm in `Hud::render`.
 - Windows refuses `SetForegroundWindow` to a process without the last input: `take_input` shares the front window's input with `AttachThreadInput` for the call. The registered hotkey's press (not a hook's) lets the process take the foreground.
-- Raise only after GPUI's fullscreen switch, or the layer's rect is saved for the way back. Unminimize first: a minimized window has no rect. `lower` never goes behind a topmost window, or it turns topmost.
+- Raise only after GPUI's fullscreen switch, or the layer's rect is saved for the way back. Restore first (`overlay::restore`): a minimized or hidden window has no rect, and GPUI's fullscreen switch skips a hidden one. The switch is set, never toggled blind: a toggle against a window that is not where Impulse thinks leaves it fullscreen with dead caption buttons. `lower` never goes behind a topmost window, or it turns topmost.
 - Do not read the foreground from a foreground event: it may be late; `switch` reads `overlay::foreground()` itself.
 - `give_back` restores a minimized game with `ShowWindowAsync`: a hung game must not hang the caller.
 - Windows skips a process's keyboard hook while it is in front if the process registered raw input: tao's raw input stays off (`DeviceEventFilter::Always` in `wand`'s webview).

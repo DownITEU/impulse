@@ -69,6 +69,11 @@ impl TrayIcon {
         }
         cx.spawn_in(window, async move |icon, cx| {
             while let Some(event) = received.next().await {
+                // Outside an update: showing the window runs GPUI's callbacks at once, and an update refuses them.
+                if matches!(event, Event::Open) {
+                    tray::show(hwnd);
+                    continue;
+                }
                 icon.update(cx, |icon, cx| icon.clicked(event, hwnd, cx)).ok();
             }
         })
@@ -83,7 +88,7 @@ impl TrayIcon {
 
     fn clicked(&mut self, event: Event, hwnd: isize, cx: &mut Context<Self>) {
         match event {
-            Event::Open => tray::show(hwnd),
+            Event::Open => {}
             Event::Stop => self.runs.update(cx, |runs, cx| runs.stop(cx)),
             Event::Overlay => self.layer.read(cx).toggle(),
             Event::Quit => self.quit(hwnd, cx),

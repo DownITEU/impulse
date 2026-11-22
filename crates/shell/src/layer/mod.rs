@@ -304,13 +304,16 @@ async fn enter(layer: &WeakEntity<Layer>, hwnd: isize, game: isize, cx: &mut Asy
     // Asked before our window covers the game: it would change the answer.
     let exclusive = overlay::exclusive(game);
     overlay::cloak(hwnd, true);
-    // Fullscreen saves the window's rect for the way back, and a minimized one has none.
-    overlay::unminimize(hwnd);
+    // Fullscreen saves the window's rect for the way back, and a minimized or hidden one has none.
+    overlay::restore(hwnd);
     layer.update_in(cx, |layer, window, cx| {
         layer.exclusive = exclusive;
         layer.set(Mode::Over { game }, cx);
         see_through(true, window, cx);
-        window.toggle_fullscreen();
+        // Set, not toggled: a blind toggle inverts a window that is already there.
+        if !window.is_fullscreen() {
+            window.toggle_fullscreen();
+        }
     })?;
     // Raised before GPUI's fullscreen, the layer's rect would be saved for the way back.
     fullscreen(true, cx).await?;
@@ -327,7 +330,9 @@ async fn leave(layer: &WeakEntity<Layer>, hwnd: isize, below: isize, armed: Opti
         layer.exclusive = false;
         layer.set(Mode::Window { armed }, cx);
         see_through(false, window, cx);
-        window.toggle_fullscreen();
+        if window.is_fullscreen() {
+            window.toggle_fullscreen();
+        }
     })?;
     fullscreen(false, cx).await?;
     if armed.is_none() {
