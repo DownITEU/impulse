@@ -2,7 +2,7 @@
 
 mod cache;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{Context, Result};
 use model::{Game, Locator, MapOffer, Offer, Ref, Standalone, StoreId};
@@ -14,7 +14,8 @@ pub(crate) const ART_CDN: &str = "https://api-cdn.wemod.com";
 
 #[derive(Deserialize)]
 struct Catalog {
-    games: HashMap<String, Entry>,
+    /// Ordered, so a title's releases list the same way at every start.
+    games: BTreeMap<String, Entry>,
     titles: HashMap<String, Title>,
     platforms: Platforms,
     #[serde(default)]
