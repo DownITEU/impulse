@@ -3,6 +3,15 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
+## [0.3.1] - 2026-11-22
+
+### Fixes
+
+- A trainer file the download server does not give is taken from Wand's own copy of it, when Wand has downloaded it. (#15)
+- A missing trainer file says "not found (404)" instead of a generic error, and the log names the server that answered. (#15)
+- The window no longer stays fullscreen with dead close and minimize buttons after the overlay was used while it was hidden in the tray.
+- Opening the window from the tray icon no longer drops its first frame.
+
 ## [0.3.0] - 2026-11-22
 
 ### Features
