@@ -41,6 +41,9 @@ page-search = { $count ->
 }
 page-search-none = rechercher un trainer
 page-search-key = CTRL K
+page-add-game = AJOUTER UN JEU
+page-get-on = OBTENIR SUR { $store }
+page-add-manually = AJOUTER LE JEU MANUELLEMENT...
 page-signed-out = NON CONNECTÉ
 page-elevated = Exécuté en administrateur : les jeux lancés en administrateur se connectent sans demande
 page-overlay = OVERLAY
@@ -100,7 +103,9 @@ picker-in-library = { $store }  EN BIBLIOTHÈQUE
 picker-prompt = Choisir le fichier .EXE du jeu
 picker-trainer-title = CHOISIR UN TRAINER
 picker-trainer = SES AUTRES BOUTIQUES D'ABORD, PUIS PAR NOM : UN TRAINER D'UNE AUTRE VERSION PEUT NE PAS CONVENIR
-picker-in-use = { $store }  UTILISÉ
+picker-in-use = UTILISÉ
+picker-find-title = TROUVER UN JEU
+picker-find = TOUS LES TRAINERS PAR NOM · ↑ ↓ POUR CHOISIR, ENTRÉE POUR OUVRIR
 
 ## Cheats
 
@@ -117,6 +122,7 @@ cheats-no-trainer-body = Dès qu'un trainer sortira pour ce jeu, Impulse l'indiq
 cheats-other-store = Il n'y en a pas encore pour cette boutique, mais la version { $store } du jeu en a un. Les versions peuvent différer d'une boutique à l'autre, il se peut donc qu'il ne convienne pas à la vôtre.
 cheats-use-trainer = UTILISER LE TRAINER { $store }
 cheats-other-trainer = AUTRE TRAINER...
+cheats-not-installed = NON INSTALLÉ · AJOUTEZ LE JEU POUR UTILISER SES MODS
 cheats-loading-tag = [ CHARGEMENT ]
 cheats-loading = CHARGEMENT DES MODS
 cheats-shown = { $count ->
@@ -179,6 +185,7 @@ trainer-mods = { $count ->
 trainer-from = TRAINER { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = VERSION INCONNUE
+trainer-not-installed = NON INSTALLÉ
 trainer-update-pending = MAJ EN ATTENTE
 trainer-sessions = { $count ->
     [one] { $count } SESSION

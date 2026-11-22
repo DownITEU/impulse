@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{Context, Result};
 use model::{Game, Locator, MapOffer, Offer, Ref, Standalone, StoreId};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use serde_json::value::RawValue;
 
 pub use cache::{cached, forget, refresh, size};
 
@@ -30,6 +31,8 @@ struct Entry {
     #[serde(default)]
     correlation_ids: Vec<String>,
     version_path: Option<String>,
+    #[serde(default, deserialize_with = "strings")]
+    purchase_uris: Vec<String>,
     trainer: Option<Trainer>,
 }
 
@@ -46,6 +49,8 @@ struct Trainer {
 #[derive(Deserialize)]
 struct Title {
     name: String,
+    #[serde(default, deserialize_with = "strings")]
+    terms: Vec<String>,
     /// CDN path with a `{size}` placeholder.
     thumbnail: Option<String>,
 }
@@ -115,6 +120,7 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
         let standalone = entry.correlation_ids.iter().filter_map(|id| standalone.get(&id.to_ascii_lowercase()));
         Some(Game {
             name: title.name.clone(),
+            terms: title.terms.clone(),
             standalone: standalone
                 .map(|app| Standalone {
                     store_id: format!("standalone:{}", app.id),
@@ -136,9 +142,18 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
             title_id: entry.title_id,
             store_ids: entry.correlation_ids.iter().filter_map(|id| StoreId::parse(id)).collect(),
             exe: entry.version_path,
+            purchase: entry.purchase_uris,
         })
     });
     Ok(games.collect())
+}
+
+/// The strings of a list; anything else, a null or an item of another kind, is skipped. Read as raw text first: no
+/// value is parsed before it is known to be a string.
+fn strings<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
+    let raw = Box::<RawValue>::deserialize(deserializer)?;
+    let items: Vec<Box<RawValue>> = serde_json::from_str(raw.get()).unwrap_or_default();
+    Ok(items.iter().filter_map(|item| serde_json::from_str(item.get()).ok()).collect())
 }
 
 fn locator(raw: &RawLocator) -> Option<Locator> {
@@ -160,9 +175,11 @@ mod tests {
         let games = parse(
             br#"{"games":{
                 "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App","standalone:other"],"versionPath":"a.exe",
+                     "purchaseUris":["steam://store/1"],
                      "trainer":{"cheatCount":3,"supportedVersions":[7],"updatedAt":"u"}},
-                "2":{"id":"2","titleId":"gone"}},
-              "titles":{"t":{"name":"Game","thumbnail":"/t/{size}.jpg"}},
+                "2":{"id":"2","titleId":"gone","purchaseUris":null},
+                "3":{"id":"3","titleId":"gone","purchaseUris":[1e400,"steam://store/3"]}},
+              "titles":{"t":{"name":"Game","terms":["gm"],"thumbnail":"/t/{size}.jpg"}},
               "maps":[{"id":"1","titleId":"t","externalId":"x1","name":"First","thumbnail":"/m/1.webp","updatedAt":"r1"},
                        {"id":"2","titleId":"t","externalId":"x2","name":"Second"},
                        {"id":"3","titleId":"other","externalId":"x3","name":"Elsewhere"}],
@@ -172,7 +189,8 @@ mod tests {
         )
         .unwrap();
         let [game] = &games[..] else { panic!("one game with a title") };
-        assert_eq!((game.name.as_str(), game.exe.as_deref()), ("Game", Some("a.exe")));
+        assert_eq!(game.purchase, ["steam://store/1"]);
+        assert_eq!((game.name.as_str(), game.exe.as_deref(), &game.terms[..]), ("Game", Some("a.exe"), &["gm".to_owned()][..]));
         let maps: Vec<_> =
             game.maps.iter().map(|m| (m.id.to_string(), m.name.as_str(), m.thumbnail.as_deref(), m.revision.as_deref())).collect();
         assert_eq!(game.id.to_string(), "wand:1");

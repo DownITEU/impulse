@@ -55,12 +55,17 @@ impl CheatList {
         let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == game.id) else { return column };
         column
             .when(game.support == Support::UpdatePending, |column| column.child(update_callout(cx)))
-            .when(!running, |column| column.child(run_note(self.runs.read(cx), &game.id, cx)))
+            .when(!running, |column| {
+                column.child(match game.installed() {
+                    true => run_note(self.runs.read(cx), &game.id, cx),
+                    false => mono(t(cx, key::CHEATS_NOT_INSTALLED), 11.).text_color(rgb(DIM)),
+                })
+            })
             .when_some(printed.notes.as_ref(), |column, notes| column.child(self.notes(notes, sheet, cx)))
             .child(self.cheat_list(game, sheet, printed, running, cx))
     }
 
-    /// Offers the trainers of the title's other releases and the picker for any other.
+    /// Offers the trainers of the title's other releases and the picker for any other, to an installed game.
     fn no_trainer(&self, game: &Game, cx: &Context<Self>) -> Div {
         let body = match game.others.first() {
             Some(other) => tf(cx, key::CHEATS_OTHER_STORE, &[("store", Arg::Str(&other.store))]),
@@ -77,7 +82,7 @@ impl CheatList {
             .id("other-trainer")
             .on_click(cx.listener(move |list, _, window, cx| list.picker.update(cx, |picker, cx| picker.trainer(&id, window, cx))));
         notice(t(cx, key::CHEATS_NO_TRAINER_TAG), tf(cx, key::CHEATS_NO_TRAINER, &[("game", Arg::Str(&game.name))]), body)
-            .child(h_flex().flex_wrap().justify_center().gap(px(8.)).children(uses).child(other))
+            .when(game.installed(), |card| card.child(h_flex().flex_wrap().justify_center().gap(px(8.)).children(uses).child(other)))
     }
 
     fn cheat_list(&self, game: &Game, sheet: &Sheet, printed: &Printed, running: bool, cx: &Context<Self>) -> impl IntoElement {

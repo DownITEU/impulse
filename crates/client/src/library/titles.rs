@@ -9,7 +9,8 @@ use super::Game;
 /// The first title sharing a store id with the game's record or its active install. Another release of the title
 /// (a sibling record) does not count.
 pub fn matched<'a>(game: &Game, titles: &'a [Title]) -> Option<&'a Title> {
-    let keys: Vec<&StoreId> = game.source.store_ids.iter().chain(game.install.origin.store_id()).collect();
+    let keys: Vec<&StoreId> =
+        game.source.store_ids.iter().chain(game.install.as_ref().and_then(|install| install.origin.store_id())).collect();
     titles.iter().find(|title| title.stores.iter().any(|store| keys.contains(&store)))
 }
 
@@ -41,7 +42,7 @@ pub fn likeness<'a>(name: &str, names: impl IntoIterator<Item = &'a str>) -> Vec
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, path::Path};
+    use std::path::Path;
 
     use model::{Installation, Origin, Ref};
 
@@ -58,8 +59,10 @@ mod tests {
             id: id.clone(),
             title_id: "t".into(),
             name: "Night City".into(),
+            terms: Vec::new(),
             store_ids: stores.iter().map(|store| StoreId::parse(store).unwrap()).collect(),
             exe: None,
+            purchase: Vec::new(),
             standalone: Vec::new(),
             cover: None,
             thumbnail: None,
@@ -68,7 +71,7 @@ mod tests {
         };
         let origin = Origin::Launcher(StoreId::parse(installed).unwrap());
         let install = Installation { game: id, origin, location: "c:/games".into(), build: None };
-        super::super::game(record, install, &HashMap::new(), Path::new("."))
+        super::super::game(record, Some(install), None, Path::new("."))
     }
 
     #[test]

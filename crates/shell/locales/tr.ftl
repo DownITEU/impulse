@@ -39,6 +39,9 @@ picker-filter = oyun adı
 page-search = { $trainers } trainer içinde ara
 page-search-none = trainer ara
 page-search-key = CTRL K
+page-add-game = OYUN EKLE
+page-get-on = { $store } ÜZERİNDEN AL
+page-add-manually = OYUNU ELLE EKLE...
 page-signed-out = OTURUM YOK
 page-elevated = Yönetici olarak çalışıyor: yönetici olarak çalışan oyunlara onay istenmeden bağlanır
 page-overlay = OVERLAY
@@ -95,7 +98,9 @@ picker-in-library = { $store }  KÜTÜPHANEDE
 picker-prompt = Oyunun .exe dosyasını seç
 picker-trainer-title = TRAİNER SEÇ
 picker-trainer = ÖNCE DİĞER MAĞAZALAR, SONRA ADA GÖRE: BAŞKA SÜRÜM İÇİN TRAİNER UYMAYABİLİR
-picker-in-use = { $store }  KULLANIMDA
+picker-in-use = KULLANIMDA
+picker-find-title = OYUN BUL
+picker-find = TÜM TRAİNERLAR ADA GÖRE · ↑ ↓ SEÇ, ENTER İLE AÇ
 
 ## Cheats
 
@@ -112,6 +117,7 @@ cheats-no-trainer-body = Bu oyun için henüz trainer yok. Çıktığında küt�
 cheats-other-store = Bu mağaza için henüz yok, ama { $store } sürümünde var. Sürümler mağazalar arasında farklı olabilir, bu yüzden seninkine uymayabilir.
 cheats-use-trainer = { $store } TRAİNER'INI KULLAN
 cheats-other-trainer = BAŞKA TRAİNER...
+cheats-not-installed = KURULU DEĞİL · HİLELERİ KULLANMAK İÇİN OYUNU EKLE
 cheats-loading-tag = [ YÜKLENİYOR ]
 cheats-loading = HİLE LİSTESİ YÜKLENİYOR
 cheats-shown = { $shown } HİLE
@@ -162,6 +168,7 @@ trainer-mods = { $count } HİLE
 trainer-from = { $store } TRAİNER
 trainer-version = V{ $version }
 trainer-version-unknown = SÜRÜM BİLİNMİYOR
+trainer-not-installed = KURULU DEĞİL
 trainer-update-pending = GÜNCELLEME BEKLİYOR
 trainer-sessions = { $count ->
     [one] { $count } OTURUM

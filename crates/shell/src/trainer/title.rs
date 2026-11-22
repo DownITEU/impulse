@@ -37,9 +37,10 @@ fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
             tf(cx, key::TRAINER_MODS, &[("count", Arg::Num(count as f64))])
         }
     };
-    let version = match game.install.build {
-        Some(version) => tf(cx, key::TRAINER_VERSION, &[("version", Arg::Num(version.into()))]),
-        None => t(cx, key::TRAINER_VERSION_UNKNOWN),
+    let version = match game.install.as_ref().map(|install| install.build) {
+        Some(Some(version)) => tf(cx, key::TRAINER_VERSION, &[("version", Arg::Num(version.into()))]),
+        Some(None) => t(cx, key::TRAINER_VERSION_UNKNOWN),
+        None => t(cx, key::TRAINER_NOT_INSTALLED),
     };
     let profile = trainers.game_profile(&game.id);
     h_flex()

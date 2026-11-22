@@ -44,6 +44,9 @@ page-search = { $count ->
 }
 page-search-none = пошук трейнерів
 page-search-key = CTRL K
+page-add-game = ДОДАТИ ГРУ
+page-get-on = ОТРИМАТИ В { $store }
+page-add-manually = ДОДАТИ ГРУ ВРУЧНУ...
 page-signed-out = ВИ НЕ ВВІЙШЛИ
 page-elevated = Запущено від імені адміністратора: ігри з правами адміністратора підключаються без запиту
 page-overlay = ОВЕРЛЕЙ
@@ -100,7 +103,9 @@ picker-in-library = { $store }  У БІБЛІОТЕЦІ
 picker-prompt = Виберіть .exe гри
 picker-trainer-title = ОБЕРІТЬ ТРЕЙНЕР
 picker-trainer = СПОЧАТКУ ІНШІ МАГАЗИНИ, ПОТІМ ЗА НАЗВОЮ: ТРЕЙНЕР ДЛЯ ІНШОЇ ВЕРСІЇ МОЖЕ НЕ ПІДІЙТИ
-picker-in-use = { $store }  ВИКОРИСТОВУЄТЬСЯ
+picker-in-use = ВИКОРИСТОВУЄТЬСЯ
+picker-find-title = ЗНАЙТИ ГРУ
+picker-find = УСІ ТРЕЙНЕРИ ЗА НАЗВОЮ · ↑ ↓ ОБРАТИ, ENTER ВІДКРИТИ
 
 ## Cheats
 
@@ -117,6 +122,7 @@ cheats-no-trainer-body = Для цієї гри ще немає трейнера
 cheats-other-store = Для цього магазину трейнера ще немає, але він є у версії з { $store }. Версії в різних магазинах можуть відрізнятися, тож він може не підійти.
 cheats-use-trainer = ВИКОРИСТАТИ ТРЕЙНЕР { $store }
 cheats-other-trainer = ІНШИЙ ТРЕЙНЕР...
+cheats-not-installed = НЕ ВСТАНОВЛЕНА · ДОДАЙТЕ ГРУ, ЩОБ КОРИСТУВАТИСЯ МОДАМИ
 cheats-loading-tag = [ ЗАВАНТАЖЕННЯ ]
 cheats-loading = ЗАВАНТАЖУЄМО СПИСОК ЧИТІВ
 cheats-shown = { $count ->
@@ -182,6 +188,7 @@ trainer-mods = { $count ->
 trainer-from = ТРЕЙНЕР { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = ВЕРСІЯ НЕВІДОМА
+trainer-not-installed = НЕ ВСТАНОВЛЕНА
 trainer-update-pending = ОНОВЛЕННЯ ЩЕ НЕМАЄ
 trainer-sessions = { $count ->
     [one] { $count } СЕСІЯ

@@ -39,6 +39,9 @@ picker-filter = game name
 page-search = search { $trainers } trainers
 page-search-none = search trainers
 page-search-key = CTRL K
+page-add-game = ADD GAME
+page-get-on = GET ON { $store }
+page-add-manually = ADD GAME MANUALLY...
 page-signed-out = NOT SIGNED IN
 page-elevated = Running as administrator: games run as administrator attach without a prompt
 page-overlay = OVERLAY
@@ -95,7 +98,9 @@ picker-in-library = { $store }  IN LIBRARY
 picker-prompt = Select the game's .exe
 picker-trainer-title = CHOOSE A TRAINER
 picker-trainer = ITS OTHER STORES FIRST, THEN BY NAME: A TRAINER FOR ANOTHER BUILD MAY NOT FIT
-picker-in-use = { $store }  IN USE
+picker-in-use = IN USE
+picker-find-title = FIND A GAME
+picker-find = EVERY TRAINER BY NAME · ↑ ↓ TO CHOOSE, ENTER TO OPEN
 
 ## Cheats
 
@@ -112,6 +117,7 @@ cheats-no-trainer-body = There is no trainer for this game yet. Impulse will fla
 cheats-other-store = There is none for this store yet, but its { $store } release has one. Builds can differ between stores, so it may not fit yours.
 cheats-use-trainer = USE THE { $store } TRAINER
 cheats-other-trainer = OTHER TRAINER...
+cheats-not-installed = NOT INSTALLED · ADD THE GAME TO USE ITS MODS
 cheats-loading-tag = [ LOADING ]
 cheats-loading = LOADING THE CHEAT LIST
 cheats-shown = { $shown } MODS
@@ -162,6 +168,7 @@ trainer-mods = { $count } MODS
 trainer-from = { $store } TRAINER
 trainer-version = V{ $version }
 trainer-version-unknown = VERSION UNKNOWN
+trainer-not-installed = NOT INSTALLED
 trainer-update-pending = UPDATE PENDING
 trainer-sessions = { $count ->
     [one] { $count } SESSION

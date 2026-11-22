@@ -4,7 +4,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use futures::{future::BoxFuture, stream::BoxStream};
 
-use crate::{Failure, Game, Installation, Locale, Map, MapOffer, Offer, Ref, SourceId, StoreId, Text, Trainer};
+use crate::{Failure, Game, Locale, Map, MapOffer, Offer, Ref, SourceId, StoreId, Text, Trainer};
 
 pub trait Source: Send + Sync {
     /// The source of every `Ref` it mints, and the domain of its texts.
@@ -32,7 +32,8 @@ pub trait Games: Source {
 }
 
 pub trait Trainers: Source {
-    fn trainer(&self, offer: &Offer, install: &Installation, locale: &Locale) -> BoxStream<'static, Snapshot<Trainer>>;
+    /// `build`: the installed one; `None` when unknown or not installed.
+    fn trainer(&self, offer: &Offer, build: Option<u32>, locale: &Locale) -> BoxStream<'static, Snapshot<Trainer>>;
 }
 
 pub trait Maps: Source {

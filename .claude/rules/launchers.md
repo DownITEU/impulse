@@ -11,6 +11,7 @@ paths:
 - `launchers::scan(&[Game], &[Custom])`: every install, then the picked executables (blocking).
 - `launchers::owners`, `launchers::install`, `Custom`: the games a picked executable belongs to, and the install it gives a game (blocking).
 - `launchers::page(&StoreId)`: the launcher's name and the URI of the game's page.
+- `launchers::store_link(&[String])`: the page to open for a game the user does not have (blocking: the registry); `store_name`: a store id's prefix as the app prints it (XBOX, EA, UBISOFT, else upper case).
 - `launchers::start(&Origin)`: starts a Steam app or a picked executable (blocking).
 - `play::run`, `Request`, `Stage`: one run; `Stage` is Preparing, Launching, WaitingForGame, Attaching.
 
@@ -18,6 +19,7 @@ paths:
 - launchers: each launcher module's `apps()` returns `App` (the store id it mints, location) from local records. `scan` maps them to games by lower-cased store id (editions share one) and keeps one launcher install per game, its picked one after it.
 - Every `Installation` is made by `installation`: the build is the PE timestamp of `location\exe`, `None` when unreadable.
 - Only plain ids reach a URI in `page`: digits for Steam and GOG, letters, digits and `._-` for UWP. Ids come from local records.
+- `store_link` takes links from a remote catalog: a store app's page route (`APP_PAGES`) only while Windows has a handler for its scheme (`HKCR\<scheme>` with `URL Protocol`), else an `https://` page on a store's host (`WEB_STORES`); never another scheme, route or host, nor one with a space, a quote, a backtick or any of `<>\^{|}`.
 - Only `xbox`, `ea` and `standalone` read the games. The others work from local records alone.
 - Launchers' files and registry are only read. Registry views: launchers write under `WOW6432Node` (`View::Wow32`), packaged apps are in the 64-bit view.
 - A picked executable that cannot be opened, and a game that does not start in time, are `GameNotFound`.

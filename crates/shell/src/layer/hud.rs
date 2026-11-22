@@ -359,7 +359,7 @@ impl Render for Hud {
                             t(cx, key::OVERLAY_NO_LIVE_MAP_HINT),
                         ))
                         .into_any_element(),
-                    (SESSION, Some(game)) => div().p(px(16.)).child(self.session(game, cx)).into_any_element(),
+                    (SESSION, Some(game)) if game.installed() => div().p(px(16.)).child(self.session(game, cx)).into_any_element(),
                     _ => return None,
                 };
                 Some((spec, content))

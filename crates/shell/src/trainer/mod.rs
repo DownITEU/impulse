@@ -110,6 +110,10 @@ impl Trainers {
         self.profiles.game(game)
     }
 
+    pub fn favorites(&self) -> impl Iterator<Item = &GameId> {
+        self.profiles.favorites()
+    }
+
     /// The shown copy's trainer profile; a blank one without a copy.
     pub fn trainer_profile(&self, game: &GameId) -> &TrainerProfile {
         self.shelf.sheet(game).map_or(TrainerProfile::blank(), |sheet| self.profiles.trainer(&sheet.trainer))
@@ -264,7 +268,7 @@ impl Trainers {
             return;
         }
         let (id, stamp, trainer_id, locale) = (game.id.clone(), game.stamp.clone(), offer.id.clone(), content_locale(cx));
-        let mut snapshots = self.registry.trainer(offer, &game.install, &locale);
+        let mut snapshots = self.registry.trainer(offer, game.install.as_ref().and_then(|install| install.build), &locale);
         cx.spawn(async move |trainers, cx| {
             while let Some(snapshot) = snapshots.next().await {
                 trainers
@@ -320,7 +324,9 @@ impl Trainers {
 
     /// Another trainer than `trainer` is in use for `game` now.
     fn superseded(&self, game: &GameId, trainer: &Ref, cx: &App) -> bool {
-        self.library.read(cx).game(game).is_some_and(|game| game.stamp.trainer.as_ref() != Some(trainer))
+        let library = self.library.read(cx);
+        let current = library.opened().filter(|open| open.id == *game).or_else(|| library.game(game));
+        current.is_some_and(|game| game.stamp.trainer.as_ref() != Some(trainer))
     }
 
     /// Drops `game`'s copy of a trainer it no longer uses, unless a run holds it; whether a shown one went.

@@ -22,7 +22,7 @@ use crate::{
         key,
         text::{t, why},
         theme::*,
-        widgets::{action, icon, mono, square, tracked},
+        widgets::{action, icon, mono, primary_action, square, tracked},
     },
 };
 
@@ -49,7 +49,7 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
     };
     let stoppable = starting.is_some() || matches!(state, State::Live);
     let stopping = matches!(state, State::Stopping);
-    let launchable = run.can_start(&game.id, cx);
+    let launchable = run.can_start(game, cx);
     let stopping_text = t(cx, key::RUN_STOPPING);
     let stop_text = t(cx, key::RUN_STOP);
     let launch_text = t(cx, key::RUN_LAUNCH);
@@ -72,17 +72,10 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
         })
         .when(launchable, |bar| {
             bar.child(
-                h_flex()
-                    .id("launch")
-                    .occlude()
-                    .h(px(38.))
+                primary_action("launch", cx)
                     .pl(px(16.))
                     .pr(px(10.))
                     .gap(px(12.))
-                    .bg(accent)
-                    .text_color(rgb(BG))
-                    .font_weight(FontWeight::BOLD)
-                    .cursor_pointer()
                     .on_click(move |_, _, cx| start.update(cx, |runs, cx| runs.start(id.clone(), cx)))
                     .child(icon(Icon::Play, 13., rgb(BG)))
                     .child(tracked(&launch_text, 12.5, 0.14))

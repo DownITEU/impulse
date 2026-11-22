@@ -1,5 +1,6 @@
 //! The game list: every installed game with what the app shows about it.
 
+mod find;
 mod id;
 mod installs;
 mod links;
@@ -17,6 +18,7 @@ use std::{
 
 use model::{Installation, Offer, Origin, Ref, StoreId};
 
+pub use find::{Find, rank};
 pub use id::GameId;
 pub use links::Links;
 pub use picked::Picked;
@@ -66,15 +68,21 @@ pub struct Game {
     pub trainer_from: Option<Release>,
     /// The title's other releases with a trainer, one per trainer, other than its own's.
     pub others: Vec<Release>,
-    /// The install in use: a launcher's, or an executable the user picked.
-    pub install: Installation,
+    /// The install in use: a launcher's, or an executable the user picked; `None` for a catalog game (`browse`).
+    pub install: Option<Installation>,
     /// The other one, when the game has both.
     pub other: Option<Installation>,
     /// The install's page in its launcher: the launcher's name and the URI.
     pub page: Option<(&'static str, String)>,
+    /// Where to get a game not installed: a store as printed and its page, one per store of the title (`browse`).
+    pub stores: Vec<(String, String)>,
 }
 
 impl Game {
+    pub fn installed(&self) -> bool {
+        self.install.is_some()
+    }
+
     /// The trainer in use: the chosen record's, else its own.
     pub fn offer(&self) -> Option<&Offer> {
         self.trained_by()?.trainer.as_ref()
@@ -92,24 +100,24 @@ impl Game {
     }
 
     pub fn switch(&mut self) {
-        if let Some(other) = &mut self.other {
-            mem::swap(&mut self.install, other);
+        if let (Some(install), Some(other)) = (&mut self.install, &mut self.other) {
+            mem::swap(install, other);
             self.judge();
         }
     }
 
     /// Uses `picked`, an executable the user picked; the launcher's install stays as the other.
     pub fn pick(&mut self, picked: Installation) {
-        let previous = [Some(mem::replace(&mut self.install, picked)), self.other.take()];
+        let previous = [self.install.replace(picked), self.other.take()];
         self.other = previous.into_iter().flatten().find(|install| sources::exe(install).is_none());
         self.judge();
     }
 
     /// Forgets the picked executable. `false`: it was the only install.
     pub fn unpick(&mut self) -> bool {
-        if sources::exe(&self.install).is_some() {
+        if self.install.as_ref().and_then(sources::exe).is_some() {
             let Some(launcher) = self.other.take() else { return false };
-            self.install = launcher;
+            self.install = Some(launcher);
             self.judge();
         }
         self.other = None;
@@ -118,7 +126,8 @@ impl Game {
 
     /// What follows from the install and the trainer in use: the store, the build's support, the mods, the stamp.
     fn judge(&mut self) {
-        let (offer, build, borrowed) = (self.offer(), self.install.build, self.trainer_from.is_some());
+        let build = self.install.as_ref().and_then(|install| install.build);
+        let (offer, borrowed) = (self.offer(), self.trainer_from.is_some());
         let support = match (offer, build) {
             (None, _) => Support::NoTrainer,
             (Some(offer), Some(build)) if offer.builds.contains(&build) => Support::Ready,
@@ -130,8 +139,9 @@ impl Game {
         self.stamp =
             Stamp { trainer: offer.map(|offer| offer.id.clone()), revision: offer.and_then(|offer| offer.revision.clone()), build };
         (self.support, self.mods) = (support, mods);
-        self.store = store(&self.install.origin);
-        self.page = self.install.origin.store_id().and_then(launchers::page);
+        let origin = self.install.as_ref().map(|install| &install.origin);
+        self.store = origin.map_or_else(|| Some(store_of(&self.source)), store);
+        self.page = origin.and_then(Origin::store_id).and_then(launchers::page);
     }
 }
 
@@ -191,7 +201,7 @@ fn trainer_id(record: &model::Game) -> Option<&Ref> {
 
 /// A record's first store in upper case, as the app prints it.
 pub fn store_of(record: &model::Game) -> String {
-    record.store_ids.first().map_or(String::new(), |id| id.store().to_uppercase())
+    record.store_ids.first().map_or(String::new(), |id| launchers::store_name(id.store()))
 }
 
 /// The list the last scan's installs make, shown while the launchers are read again; `None` before a first scan
@@ -255,7 +265,8 @@ fn list(all: &Arc<Vec<model::Game>>, installed: Vec<Installation>, picked: &Pick
             }
         } else if let Some(&entry) = by_id.get(&found.game) {
             at.insert(found.game.clone(), games.len());
-            let mut listed = game(entry.clone(), found, &steam_apps, art_cache);
+            let title_app = steam_apps.get(entry.title_id.as_str()).copied();
+            let mut listed = game(entry.clone(), Some(found), title_app, art_cache);
             for &other in with_trainer.get(entry.title_id.as_str()).map_or(&[][..], Vec::as_slice) {
                 let trainer = trainer_id(&all[other]);
                 if trainer != trainer_id(entry) && listed.others.iter().all(|seen| trainer_id(&seen.record) != trainer) {
@@ -269,10 +280,27 @@ fn list(all: &Arc<Vec<model::Game>>, installed: Vec<Installation>, picked: &Pick
     Library { games: games.into_iter().map(Arc::new).collect(), trainers: with_trainer.len(), catalog: all.clone() }
 }
 
-fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<&str, u32>, art_cache: &Path) -> Game {
-    let app = found.origin.store_id().and_then(StoreId::steam_app).or_else(|| steam_apps.get(entry.title_id.as_str()).copied());
+/// The catalog record `id` as a game not installed, with its title's stores (blocking: the art known to be missing is
+/// a file per game, the store apps are in the registry); `None` once the record is gone.
+pub fn browse(all: &[model::Game], id: &Ref, paths: &Paths) -> Option<Game> {
+    let entry = all.iter().find(|record| record.id == *id)?;
+    let siblings = || all.iter().filter(|record| record.title_id == entry.title_id);
+    let title_app = siblings().flat_map(|record| &record.store_ids).find_map(StoreId::steam_app);
+    let mut game = game(entry.clone(), None, title_app, &Media::Pictures.dir(paths));
+    for record in siblings() {
+        let store = store_of(record);
+        if let Some(link) = launchers::store_link(&record.purchase).filter(|_| game.stores.iter().all(|(seen, _)| *seen != store)) {
+            game.stores.push((store, link.to_owned()));
+        }
+    }
+    Some(game)
+}
+
+/// `title_app`: the Steam app of the title, whose art serves any of its records.
+fn game(entry: model::Game, install: Option<Installation>, title_app: Option<u32>, art_cache: &Path) -> Game {
+    let app = install.as_ref().and_then(|install| install.origin.store_id()).and_then(StoreId::steam_app).or(title_app);
     let mut game = Game {
-        id: GameId::of(&found.game),
+        id: GameId::of(&entry.id),
         name: entry.name.to_uppercase().into(),
         search: entry.name.to_lowercase(),
         store: None,
@@ -285,9 +313,10 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<&str, u32>
         source: Arc::new(entry),
         trainer_from: None,
         others: Vec::new(),
-        install: found,
+        install,
         other: None,
         page: None,
+        stores: Vec::new(),
     };
     game.judge();
     game
@@ -295,7 +324,7 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<&str, u32>
 
 /// The launcher's name; `None` for a picked executable.
 fn store(origin: &Origin) -> Option<String> {
-    origin.store_id().map(|id| id.store().to_uppercase())
+    origin.store_id().map(|id| launchers::store_name(id.store()))
 }
 
 #[cfg(test)]
@@ -309,8 +338,10 @@ mod tests {
             id,
             title_id: title.into(),
             name: "Chained Echoes".into(),
+            terms: Vec::new(),
             store_ids: vec![StoreId::parse(store).unwrap()],
             exe: None,
+            purchase: Vec::new(),
             standalone: Vec::new(),
             cover: None,
             thumbnail: None,
@@ -319,9 +350,13 @@ mod tests {
         }
     }
 
+    fn paths() -> Paths {
+        Paths::new(std::env::temp_dir().join(format!("impulse-library-{}", std::process::id())))
+    }
+
     /// The first record, installed from GOG at `build`.
     fn listed(catalog: Vec<model::Game>, build: Option<u32>) -> Library {
-        let paths = Paths::new(std::env::temp_dir().join(format!("impulse-library-{}", std::process::id())));
+        let paths = paths();
         let origin = Origin::Launcher(StoreId::parse("gog:1").unwrap());
         let install = Installation { game: catalog[0].id.clone(), origin, location: "c:/games/echoes".into(), build };
         list(&Arc::new(catalog), vec![install], &Picked::load(&paths), &paths)
@@ -378,6 +413,28 @@ mod tests {
             list.relink(link(to));
             assert!(list.games[0].trainer_from.is_none() && list.games[0].support == Support::NoTrainer, "{to}");
         }
+    }
+
+    #[test]
+    fn a_catalog_game_has_no_install_and_its_trainer_is_unverified() {
+        let mut all = catalog();
+        all[0].purchase = vec!["https://www.gog.com/game/echoes".into()];
+        all[1].purchase = vec!["steam://run/2".into(), "https://store.steampowered.com/app/2".into()];
+        let game = browse(&all, &Ref::parse("wand:2").unwrap(), &paths()).unwrap();
+        assert!(!game.installed() && game.support == Support::Unverified && game.stamp.build.is_none() && game.page.is_none());
+        assert_eq!((game.id.as_str(), game.store.as_deref(), game.mods), ("wand:2", Some("STEAM"), 24));
+        let stores: Vec<_> = game.stores.iter().map(|(store, link)| (store.as_str(), link.as_str())).collect();
+        assert_eq!(stores, [("GOG", "https://www.gog.com/game/echoes"), ("STEAM", "https://store.steampowered.com/app/2")]);
+        assert!(browse(&catalog(), &Ref::parse("wand:9").unwrap(), &paths()).is_none());
+    }
+
+    #[test]
+    fn the_search_holds_the_listed_games_and_a_record_per_other_title_with_a_trainer_steams_first() {
+        let mut all = catalog();
+        all.extend([record("wand:6", "x", "epic:6", Some(&[1])), record("wand:7", "x", "steam:7", Some(&[1]))]);
+        let list = listed(all, None);
+        let finds: Vec<_> = list.finds().iter().map(|find| (list.catalog[find.at].id.to_string(), find.listed)).collect();
+        assert_eq!(finds, [("wand:1".to_owned(), true), ("wand:3".to_owned(), false), ("wand:7".to_owned(), false)]);
     }
 
     #[test]

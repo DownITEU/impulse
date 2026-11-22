@@ -36,7 +36,7 @@ pub enum Label {
 /// The menu: the launcher's install first, then the picked executable, then what to do with one, then the trainer's
 /// choice; and the entry in use.
 pub fn entries(game: &Game) -> (Vec<(Entry, Label)>, usize) {
-    let mut sources: Vec<(bool, &Installation)> = [(false, Some(&game.install)), (true, game.other.as_ref())]
+    let mut sources: Vec<(bool, &Installation)> = [(false, game.install.as_ref()), (true, game.other.as_ref())]
         .into_iter()
         .filter_map(|(other, install)| Some((other, install?)))
         .collect();
@@ -48,7 +48,7 @@ pub fn entries(game: &Game) -> (Vec<(Entry, Label)>, usize) {
         .map(|(other, install)| {
             let label = match &install.origin {
                 Origin::Picked(exe) => Label::Exe(exe.file_name().unwrap_or_default().to_string_lossy().into_owned()),
-                Origin::Launcher(id) => Label::Store(id.store().to_uppercase()),
+                Origin::Launcher(id) => Label::Store(launchers::store_name(id.store())),
             };
             (Entry::Use(other), label)
         })
@@ -104,8 +104,10 @@ mod tests {
             id: id(),
             title_id: String::new(),
             name: "G".into(),
+            terms: Vec::new(),
             store_ids: Vec::new(),
             exe: None,
+            purchase: Vec::new(),
             standalone: Vec::new(),
             cover: None,
             thumbnail: None,
@@ -128,9 +130,10 @@ mod tests {
             source: Arc::new(record()),
             trainer_from: None,
             others: Vec::new(),
-            install,
+            install: Some(install),
             other,
             page: None,
+            stores: Vec::new(),
         }
     }
 

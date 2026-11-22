@@ -37,8 +37,8 @@ use super::{
 #[derive(Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Lead {
-    #[default]
     Number,
+    #[default]
     Thumbnail,
 }
 
@@ -193,10 +193,10 @@ mod tests {
 
     #[test]
     fn missing_fields_and_unknown_accents_mean_the_defaults() {
-        let prefs: Prefs = serde_json::from_str(r#"{"accent":"PINK","lead":"thumbnail"}"#).unwrap();
-        assert!(prefs.accent() == ACCENTS[0].1 && prefs.lead == Lead::Thumbnail && prefs.panels == Panels::Top);
+        let prefs: Prefs = serde_json::from_str(r#"{"accent":"PINK","lead":"number"}"#).unwrap();
+        assert!(prefs.accent() == ACCENTS[0].1 && prefs.lead == Lead::Number && prefs.panels == Panels::Top);
         let mut cyan: Prefs = serde_json::from_str(r#"{"accent":"CYAN"}"#).unwrap();
-        assert_eq!(cyan.accent(), ACCENTS[2].1);
+        assert!(cyan.accent() == ACCENTS[2].1 && cyan.lead == Lead::Thumbnail);
         cyan.set_accent(ACCENTS[1].1);
         assert_eq!(cyan.accent, "AMBER");
     }

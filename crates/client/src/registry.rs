@@ -15,8 +15,8 @@ use futures::{
     stream::{self, BoxStream},
 };
 use model::{
-    Accounts, Caches, Downloads, Failure, FailureKind, Files, Folder, Folders, Game, Games, Installation, Locale, Map, MapOffer, Maps,
-    Offer, Ref, SignIn, Snapshot, Source, SourceId, Store, Text, Title, Titles, Trainer, Trainers,
+    Accounts, Caches, Downloads, Failure, FailureKind, Files, Folder, Folders, Game, Games, Locale, Map, MapOffer, Maps, Offer, Ref,
+    SignIn, Snapshot, Source, SourceId, Store, Text, Title, Titles, Trainer, Trainers,
 };
 
 /// One source's capabilities, added and removed together; each is that source's own.
@@ -158,9 +158,9 @@ impl Registry {
         self.first(|c| c.games.as_ref()).map_or_else(|| missing("games"), |(source, ended)| cut(source.games(), ended))
     }
 
-    pub fn trainer(&self, offer: &Offer, install: &Installation, locale: &Locale) -> BoxStream<'static, Snapshot<Trainer>> {
+    pub fn trainer(&self, offer: &Offer, build: Option<u32>, locale: &Locale) -> BoxStream<'static, Snapshot<Trainer>> {
         let routed = self.route(offer.id.source(), |c| c.trainers.as_ref());
-        routed.map_or_else(|| missing(&offer.id), |(source, ended)| cut(source.trainer(offer, install, locale), ended))
+        routed.map_or_else(|| missing(&offer.id), |(source, ended)| cut(source.trainer(offer, build, locale), ended))
     }
 
     pub fn map(&self, offer: &MapOffer, locale: &Locale) -> BoxStream<'static, Snapshot<Map>> {

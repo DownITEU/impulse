@@ -3,6 +3,7 @@
 use std::{
     mem,
     ops::BitOr,
+    sync::Arc,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -106,7 +107,7 @@ impl Remote {
             }
         }
         if dirty.has(Dirty::TRAINER | Dirty::VALUES) {
-            let open = library.read(cx).open_id();
+            let open = listed_open(library.read(cx)).map(|game| &game.id);
             let values = open.and_then(|game| trainers.read(cx).sheet(game)).map(|sheet| sheet.values.clone()).unwrap_or_default();
             send(&mut shown.values, View::Values { sheet: shown.sheet, values });
         }
@@ -130,7 +131,7 @@ fn games(handles: &mut Handles, library: &Entity<Library>, trainers: &Entity<Tra
         favorite: trainers.game_profile(&game.id).favorite,
         open: library.open_id() == Some(&game.id),
         live: runs.is_live(&game.id),
-        startable: runs.can_start(&game.id, cx),
+        startable: runs.can_start(game, cx),
         art: game.thumbnail.is_some(),
     });
     View::Library { games: games.collect() }
@@ -138,7 +139,9 @@ fn games(handles: &mut Handles, library: &Entity<Library>, trainers: &Entity<Tra
 
 /// The open game's trainer as the panel shows it.
 fn trainer(generation: u32, handles: &mut Handles, library: &Entity<Library>, trainers: &Entity<Trainers>, cx: &App) -> View {
-    let Some(game) = library.read(cx).opened() else { return View::Trainer { sheet: generation, game: None, trainer: api::Sheet::None } };
+    let Some(game) = listed_open(library.read(cx)) else {
+        return View::Trainer { sheet: generation, game: None, trainer: api::Sheet::None };
+    };
     let trainers = trainers.read(cx);
     let sheet = match trainers.get(&game.id) {
         Some(Load::Ready(sheet)) => ready(sheet, trainers.trainer_profile(&game.id).collections.iter(), cx),
@@ -148,6 +151,11 @@ fn trainer(generation: u32, handles: &mut Handles, library: &Entity<Library>, tr
         None => api::Sheet::None,
     };
     View::Trainer { sheet: generation, game: Some(handles.of(&game.id)), trainer: sheet }
+}
+
+/// The open game while it is listed: a catalog game the desktop browses is not the panel's.
+pub(super) fn listed_open(library: &Library) -> Option<&Arc<client::library::Game>> {
+    library.open_id().and_then(|id| library.game(id))
 }
 
 fn ready<'a>(sheet: &Sheet, collections: impl Iterator<Item = &'a client::profile::Collection>, cx: &App) -> api::Sheet {

@@ -11,7 +11,7 @@ use std::{
 };
 
 use client::{
-    library::GameId,
+    library::{Game, GameId},
     profile::Values,
     run::{self, Request, Stage},
     trainer::Step,
@@ -161,9 +161,9 @@ impl Runs {
         self.is_active() && self.game() == Some(game)
     }
 
-    /// Nothing runs before the cheat list is there, and one run at a time.
-    pub fn can_start(&self, game: &GameId, cx: &App) -> bool {
-        !self.is_active() && self.trainers.read(cx).sheet(game).is_some()
+    /// Nothing runs before the cheat list is there or for a game not installed, and one run at a time.
+    pub fn can_start(&self, game: &Game, cx: &App) -> bool {
+        !self.is_active() && game.installed() && self.trainers.read(cx).sheet(&game.id).is_some()
     }
 
     pub fn state(&self, game: &GameId) -> State<'_> {
@@ -302,7 +302,8 @@ impl Runs {
         let listed = self.library.read(cx).game(game).ok_or(Failure::new(FailureKind::GameNotFound))?;
         let no_cheats = || Failure::new(FailureKind::NotFound).saying(app_text(key::RUN_NO_CHEATS));
         let sheet = self.trainers.read(cx).sheet(game).ok_or_else(no_cheats)?;
-        Ok(run::request(&listed.install, &sheet.plan))
+        let install = listed.install.as_ref().ok_or(Failure::new(FailureKind::GameNotFound))?;
+        Ok(run::request(install, &sheet.plan))
     }
 
     fn staged(&mut self, stage: Stage, cx: &mut Context<Self>) {
