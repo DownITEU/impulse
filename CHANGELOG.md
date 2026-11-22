@@ -3,6 +3,20 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
+## [0.4.0] - 2026-11-23
+
+### Features
+
+- Search every trainer by name with Ctrl+K or the search box in the title bar. A game you have opens as usual; any other opens with its mods, marked NOT INSTALLED.
+- A game you do not have shows ADD GAME: GET ON a store opens its page (in the store's app when it is installed), and ADD GAME MANUALLY adds it from its executable.
+- A game you do not have can be starred: it shows under FAVORITES, marked NOT INSTALLED.
+- A game with no trainer for its store can use the trainer of its release on another store: USE THE STEAM TRAINER on the NO TRAINER card, or any trainer through OTHER TRAINER... and CHANGE TRAINER... in the game's menu. Builds can differ between stores, so it may not fit. (#7)
+- The game list shows thumbnails by default.
+
+### Fixes
+
+- A game's releases on different stores list in the same order at every start.
+
 ## [0.3.1] - 2026-11-22
 
 ### Fixes
