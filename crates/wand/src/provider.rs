@@ -13,9 +13,7 @@ use futures::{
     future::{self, BoxFuture, Shared},
     stream::{self, BoxStream},
 };
-use model::{
-    Account, Clear, Failure, FailureKind, Folder, Game, Installation, Locale, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store,
-};
+use model::{Account, Clear, Failure, FailureKind, Folder, Game, Locale, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
 
 use crate::{
     binary, catalog,
@@ -122,7 +120,7 @@ impl model::Accounts for Wand {
             }
             let (session, transport, source) = match session.await {
                 Ok(link) => link,
-                Err(_) => return send(&tx, SignIn::Failed),
+                Err(failure) => return send(&tx, SignIn::Failed(failure)),
             };
             // A new session from Wand may be another account than the one kept.
             if known && !matches!(source, Source::Wand) {
@@ -132,8 +130,9 @@ impl model::Accounts for Wand {
                 Ok(account) => send(&tx, SignIn::Account(Account { name: account.username })),
                 Err(e) => {
                     log::warn!("account: {e:#}");
-                    if e.downcast_ref::<Failure>().is_some_and(|failure| failure.kind == FailureKind::SignedOut) {
-                        send(&tx, SignIn::Failed);
+                    let failure = Failure::from(e);
+                    if failure.kind == FailureKind::SignedOut {
+                        send(&tx, SignIn::Failed(failure));
                     }
                 }
             }
@@ -168,8 +167,8 @@ impl model::Games for Wand {
 
 impl model::Trainers for Wand {
     /// The API is asked only when the disk copy is missing or was fetched for another trainer, build or locale.
-    fn trainer(&self, offer: &Offer, install: &Installation, locale: &Locale) -> BoxStream<'static, Snapshot<model::Trainer>> {
-        let stamp = Stamp { updated_at: offer.revision.clone(), version: install.build, locale: locale::served(locale).to_owned() };
+    fn trainer(&self, offer: &Offer, build: Option<u32>, locale: &Locale) -> BoxStream<'static, Snapshot<model::Trainer>> {
+        let stamp = Stamp { updated_at: offer.revision.clone(), version: build, locale: locale::served(locale).to_owned() };
         // A trainer's id is its game's.
         let (dir, id, session, host) = (self.data_dir.clone(), offer.id.id().to_owned(), self.session(), self.host.clone());
         let hotkeys = self.hotkeys.clone();

@@ -35,3 +35,11 @@ category-weapons = BROŃ
 
 signed-out = brak aktywnej sesji w Wand — otwórz aplikację i zaloguj się
 not-installed = Wand nie jest skonfigurowany na tym komputerze: zainstaluj aplikację, otwórz ją i zaloguj się
+probe-failed = test połączenia z Wand też się nie powiódł. Sprawdź połączenie i ustawienia VPN lub proxy
+probe-ok = test połączenia z Wand się powiódł, ale żądanie do API nie powiodło się z nieznanej przyczyny
+proxy-missing = w folderze Wand nie ma pliku GameLauncher.exe, zaktualizuj Wand lub ustaw jego bieżący folder
+proxy-failed = nie udało się przygotować gry do uruchomienia bez jej systemu anti-cheat
+proxy-restart = system anti-cheat gry jest uruchomiony: zamknij grę i uruchom ją z trainerem
+service-silent = usługa Wand nie odpowiedziała, zaktualizuj Wand lub ustaw jego bieżący folder
+activate-unsupported = ten trainer wymaga własnego sposobu ładowania Wand, który nie jest jeszcze obsługiwany
+trainer-file-missing = nie znaleziono pliku trainera (404): otwórz grę ponownie lub uruchom trainer raz w Wand

@@ -1,8 +1,10 @@
 //! A trainer running in a game process, whoever provides it.
 
-use futures::{future::BoxFuture, stream::BoxStream};
+use std::path::Path;
 
-use crate::{Failure, Process};
+use futures::{FutureExt, future::BoxFuture, stream::BoxStream};
+
+use crate::{Failure, Origin, Process};
 
 type Result<T> = std::result::Result<T, Failure>;
 
@@ -13,6 +15,12 @@ pub trait Runner: Send + Sync {
 }
 
 pub trait Attach: Send {
+    /// Readies the install for a start the run makes or waits for, as the source decides from how it starts;
+    /// dropping the value returned undoes it, without blocking the thread that drops it.
+    fn before_start(&self, _origin: &Origin, _install: &Path) -> BoxFuture<'static, Result<Option<Box<dyn Send>>>> {
+        async { Ok(None) }.boxed()
+    }
+
     /// `process` as found: an attach refuses a process that is no longer this one.
     fn attach(self: Box<Self>, process: Process) -> BoxFuture<'static, Result<Live>>;
 }

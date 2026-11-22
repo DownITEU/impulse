@@ -16,7 +16,7 @@ use client::{
     storage::Paths,
 };
 use gpui_kit::{
-    AnyElement, App, Context, Div, Entity, IntoElement, Render, Window,
+    AnyElement, App, Context, Div, Entity, IntoElement, KeystrokeEvent, Modifiers, Render, Window,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div,
     prelude::*,
@@ -46,7 +46,7 @@ use crate::{
     update::{UpdatePanel, Updates},
 };
 use disclaimer::Disclaimer;
-use header::header;
+use header::{header, search_box};
 use hero::Hero;
 use signed_out::SignedOut;
 use status::status_bar;
@@ -147,20 +147,25 @@ impl Page {
                 live: runs.read(cx).is_live(game),
             }
         };
+        let starred = {
+            let trainers = trainers.clone();
+            move |cx: &App| trainers.read(cx).favorites().cloned().collect()
+        };
         let sidebar = cx.new(|cx| {
-            // What `marks` reads.
+            // What `marks` and `starred` read.
             cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
             cx.observe(&runs, |_, _, cx| cx.notify()).detach();
-            Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, window, cx)
+            Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, starred, window, cx)
         });
         let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, window, cx));
-        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), cx));
+        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), picker.clone(), cx));
         // The overlay's and the minimap's hotkeys are not the trainer's to take.
         let reserved = layer.downgrade();
         let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
         let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), reserved, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
-        let cheat_list = cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), window, cx));
+        let cheat_list =
+            cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), picker.clone(), window, cx));
         cx.observe(&cheat_list, |_, _, cx| cx.notify()).detach();
         let cues = cx.new(|cx| Cues::new(&runs, &trainers, &settings, cx));
         let updates = cx.new(|cx| Updates::new(settings.clone(), runs.clone(), &paths, cx));
@@ -203,6 +208,7 @@ impl Page {
                 maps.clone(),
                 map.clone(),
                 cheat_list.clone(),
+                picker.clone(),
                 &settings,
                 &paths,
                 window,
@@ -212,6 +218,7 @@ impl Page {
         cx.observe(&layer, |_, _, cx| cx.notify()).detach();
         cx.subscribe(&hud, |page, _, _: &Entered, cx| {
             page.hero.update(cx, |hero, cx| hero.close(cx));
+            page.picker.update(cx, |picker, cx| picker.dismiss(cx));
             page.settings_view.update(cx, |view, cx| view.close(cx));
             if let Some(remote) = &page.remote_view {
                 remote.update(cx, |view, cx| view.close(cx));
@@ -220,6 +227,7 @@ impl Page {
             cx.notify();
         })
         .detach();
+        cx.observe_keystrokes(Self::search).detach();
         let tray = cx.new(|cx| TrayIcon::new(library.clone(), runs.clone(), layer.clone(), settings.clone(), window, cx));
         Self {
             hotkeys,
@@ -283,14 +291,17 @@ impl Page {
         };
         let cheats = self.cheat_list.clone().into_any_element();
         let mapped = paneled(&self.map, cx);
+        // A game not installed has no session.
+        let installed = game.installed();
         let body = div().flex().gap(px(20.)).px(px(24.)).pt(px(20.)).pb(px(28.));
         let body = match self.settings.read(cx).prefs().panels {
             // Without a map the session takes the row alone, as a strip.
-            Panels::Top if !mapped => body.flex_col().child(self.session(&game, true, cx)).child(cheats),
+            Panels::Top if !mapped => body.flex_col().when(installed, |body| body.child(self.session(&game, true, cx))).child(cheats),
             Panels::Top => {
-                let session = self.session(&game, false, cx).w(px(SESSION_WIDTH)).flex_none();
                 let map = map_panel(&self.map, &game, cx).flex_1().min_w_0();
-                body.flex_col().child(h_flex().items_stretch().gap(px(16.)).child(map).child(session)).child(cheats)
+                let row = h_flex().items_stretch().gap(px(16.)).child(map);
+                let row = row.when(installed, |row| row.child(self.session(&game, false, cx).w(px(SESSION_WIDTH)).flex_none()));
+                body.flex_col().child(row).child(cheats)
             }
             Panels::Side => {
                 let wide = window.viewport_size().width >= px(SIDEBAR_WIDTH + WIDE_PANE);
@@ -298,14 +309,36 @@ impl Page {
                     true => v_flex().flex_none(),
                     false => h_flex().items_start(),
                 };
-                let session = self.session(&game, false, cx).when(!wide, |panel| panel.flex_1());
-                body.when(!wide, |body| body.flex_col())
-                    .when(wide, |body| body.items_start())
-                    .child(cheats)
-                    .child(side.gap(px(16.)).child(map_panel(&self.map, &game, cx).w(px(SIDE_WIDTH)).flex_none()).child(session))
+                let side = side.gap(px(16.)).child(map_panel(&self.map, &game, cx).w(px(SIDE_WIDTH)).flex_none());
+                let side = side.when(installed, |side| side.child(self.session(&game, false, cx).when(!wide, |panel| panel.flex_1())));
+                body.when(!wide, |body| body.flex_col()).when(wide, |body| body.items_start()).child(cheats).child(side)
             }
         };
         v_flex().id("pane").flex_1().min_w_0().h_full().child(self.hero.clone()).child(body).overflow_y_scrollbar().into_any_element()
+    }
+
+    /// Ctrl+K, seen whatever has the focus (a key nobody binds reaches no element then); not over the game or a
+    /// dialog.
+    fn search(&mut self, event: &KeystrokeEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let keystroke = &event.keystroke;
+        if keystroke.key != "k" || keystroke.modifiers != Modifiers::control() {
+            return;
+        }
+        let remote = self.remote_view.as_ref().is_some_and(|view| view.read(cx).is_open());
+        let covered = remote
+            || self.layer.read(cx).is_over()
+            || self.map_modal(cx)
+            || self.map.read(cx).linker().read(cx).is_open()
+            || self.picker.read(cx).is_open()
+            || self.settings_view.read(cx).is_open()
+            || self.cheat_list.read(cx).editor().is_some()
+            || self.log.read(cx).is_open()
+            || self.disclaimer.read(cx).is_open(cx)
+            || self.signed_out.read(cx).is_open(cx)
+            || self.update_notice.read(cx).is_open(cx);
+        if !covered {
+            self.picker.update(cx, |picker, cx| picker.find(window, cx));
+        }
     }
 
     fn session(&self, game: &Game, strip: bool, cx: &App) -> Div {
@@ -328,7 +361,15 @@ impl Render for Page {
             .size_full()
             .bg(rgb(BG))
             .child(grid(32., line(0.025)))
-            .child(header(self.account.read(cx), &self.settings_view, self.remote_view.as_ref(), self.elevated, window, cx))
+            .child(header(
+                search_box(self.library.read(cx), &self.picker, cx),
+                self.account.read(cx),
+                &self.settings_view,
+                self.remote_view.as_ref(),
+                self.elevated,
+                window,
+                cx,
+            ))
             .child(
                 h_flex()
                     .flex_1()

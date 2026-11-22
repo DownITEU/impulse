@@ -2,9 +2,11 @@
 
 use std::{collections::HashSet, time::Duration};
 
+use model::Launch;
 use serde_json::Value;
 
 use super::Trainer;
+use crate::proxy::Proxy;
 
 // Wand's default: a process younger than this is still starting up.
 const MINIMUM_AGE: Duration = Duration::from_secs(8);
@@ -28,19 +30,37 @@ pub struct Plan {
     /// Path suffix of the game's executable, `*` allowed. Without it the install folder decides.
     pub image: Option<String>,
     pub minimum_age: Duration,
-    /// Whether to start the game. `false`: the user starts it.
-    pub launch: bool,
+    pub launch: Launch,
+    /// The stand-in for the game's launcher at a start; `Err` says why the trainer cannot run.
+    pub proxy: Result<Option<Proxy>, String>,
+    /// `activate.flags`: how Wand injects it (suspended, hidden threads, masked modules, an external host). Not
+    /// done here; a failed attach names them.
+    pub activate: u64,
 }
 
 impl Trainer {
     pub fn plan(&self) -> Plan {
         let config = &self.blueprint.config;
+        let launch = &config["launch"];
+        let proxy = Proxy::parse(launch);
+        for unread in ["bypass", "cliArgs"].into_iter().filter(|field| !launch[field].is_null()) {
+            log::debug!("launch.{unread} is not supported");
+        }
+        // A proxy's game is the process to look for, never its launcher.
+        let image = config["target"]["image"].as_str().map(str::to_owned);
+        let image = image.or_else(|| proxy.as_ref().ok().and_then(Option::as_ref).map(Proxy::game));
         Plan {
             variables: self.variables(),
             binary: self.binary(),
-            image: config["target"]["image"].as_str().map(str::to_owned),
+            image,
             minimum_age: config["target"]["minimumAge"].as_u64().map_or(MINIMUM_AGE, Duration::from_millis),
-            launch: config["launch"] != Value::Bool(false),
+            launch: match launch {
+                Value::Bool(false) => Launch::User,
+                _ if launch["required"] == Value::Bool(true) => Launch::Required,
+                _ => Launch::Start,
+            },
+            proxy,
+            activate: config["activate"]["flags"].as_u64().unwrap_or(0),
         }
     }
 
@@ -96,7 +116,7 @@ mod tests {
         assert_eq!(plan.binary, Ok(Binary { url: "https://cdn.example/bin/1".into(), hash: HASH.into() }));
         assert_eq!(plan.image.as_deref(), Some("enshrouded.exe"));
         assert_eq!(plan.minimum_age, Duration::from_secs(3));
-        assert!(plan.launch);
+        assert_eq!((plan.launch, plan.proxy), (Launch::Start, Ok(None)));
     }
 
     #[test]
@@ -105,8 +125,28 @@ mod tests {
             let plan = trainer(extra).plan();
             assert_eq!(plan.image, None, "{extra}");
             assert_eq!(plan.minimum_age, MINIMUM_AGE, "{extra}");
-            assert_eq!(plan.launch, !extra.contains("false"), "{extra}");
+            let launch = if extra.contains("false") { Launch::User } else { Launch::Start };
+            assert_eq!((plan.launch, plan.proxy), (launch, Ok(None)), "{extra}");
         }
+    }
+
+    #[test]
+    fn an_anti_cheat_proxy_names_the_game_to_look_for_and_who_starts_it() {
+        let ace_combat = r#", "config": {"launch": {"proxy": {"gameExe": "Game\\Binaries\\Win64\\AceCombat8.exe",
+            "launcher": "start_protected_game.exe"}, "required": true}}"#;
+        let plan = trainer(ace_combat).plan();
+        assert_eq!((plan.image.as_deref(), plan.launch, plan.activate), (Some(r"Game\Binaries\Win64\AceCombat8.exe"), Launch::Required, 0));
+        assert!(matches!(plan.proxy, Ok(Some(_))));
+
+        let elden_ring = r#", "config": {"launch": {"proxy": {"gameExe": "eldenring.exe", "launcher": "Game\\start_protected_game.exe"}},
+            "target": {"image": "Game\\eldenring.exe"}, "activate": {"flags": 16}}"#;
+        let plan = trainer(elden_ring).plan();
+        assert_eq!((plan.image.as_deref(), plan.launch, plan.activate), (Some(r"Game\eldenring.exe"), Launch::Start, 16));
+
+        let escaping = r#", "config": {"launch": {"proxy": {"gameExe": "..\\..\\x.exe", "launcher": "start_protected_game.exe"}}}"#;
+        let plan = trainer(escaping).plan();
+        assert_eq!(plan.image, None);
+        assert!(plan.proxy.unwrap_err().contains("gameExe"));
     }
 
     #[test]

@@ -25,6 +25,7 @@ failure-refused = solicitud rechazada
 failure-elevation = el juego se ejecuta como administrador: acepta el aviso para conectar
 failure-protected = la protección del juego no admite trainers
 failure-architecture = el trainer es para la otra versión del juego (32 o 64 bits): inicia la compatible
+failure-restart = el juego ya se está ejecutando: ciérralo y luego inícialo desde aquí
 failure-internal = algo salió mal: consulta el log para ver los detalles
 failure-place = { $why }: revisa Ajustes > APP
 
@@ -41,6 +42,9 @@ page-search = { $count ->
 }
 page-search-none = buscar trainers
 page-search-key = CTRL K
+page-add-game = AÑADIR JUEGO
+page-get-on = CONSEGUIR EN { $store }
+page-add-manually = AÑADIR JUEGO MANUALMENTE...
 page-signed-out = SIN SESIÓN
 page-elevated = Ejecutándose como administrador: los juegos con permisos de administrador se conectan sin preguntar
 page-overlay = OVERLAY
@@ -67,6 +71,8 @@ disclaimer-exit = SALIR
 signed-out-title = ERROR DE INICIO DE SESIÓN
 signed-out-body = Impulse no pudo iniciar sesión en { $sources }. Comprueba que la app esté instalada en este PC, que hayas iniciado sesión en ella y que tengas conexión. Después, vuelve a intentarlo. Sin sesión no se pueden cargar los trainers.
 signed-out-retry = REINTENTAR
+signed-out-why = Motivo: { $why }
+signed-out-trying = Iniciando sesión…
 signed-out-close = CERRAR
 
 ## Library
@@ -86,6 +92,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + AÑADIR .EXE
 library-source-change = CAMBIAR .EXE
 library-source-remove = QUITAR .EXE
+library-source-trainer = CAMBIAR TRAINER...
+library-source-own-trainer = SU PROPIO TRAINER
 
 ## Picker
 
@@ -94,6 +102,11 @@ picker-owned = ¿CUÁL DE ESTOS JUEGOS QUIERES AÑADIR?
 picker-unowned = SIN COINCIDENCIAS EN EL CATÁLOGO: BUSCA POR NOMBRE
 picker-in-library = { $store }  EN BIBLIOTECA
 picker-prompt = Selecciona el archivo .exe del juego
+picker-trainer-title = ELEGIR UN TRAINER
+picker-trainer = PRIMERO SUS OTRAS TIENDAS, LUEGO POR NOMBRE: UN TRAINER DE OTRA VERSIÓN PUEDE NO ENCAJAR
+picker-in-use = EN USO
+picker-find-title = BUSCAR UN JUEGO
+picker-find = TODOS LOS TRAINERS POR NOMBRE · ↑ ↓ PARA ELEGIR, ENTER PARA ABRIR
 
 ## Cheats
 
@@ -103,9 +116,14 @@ cheats-failed-body = No se pudo descargar: { $why }. Impulse volverá a intentar
 cheats-filter = filtrar mods
 cheats-pinned = FIJADOS
 cheats-kept = La lista se guarda en el disco con la primera descarga.
+cheats-notes = LEER ANTES DE JUGAR
 cheats-no-trainer-tag = [ SIN TRAINER ]
 cheats-no-trainer = AÚN NO HAY TRAINER PARA { $game }
 cheats-no-trainer-body = Aún no hay trainer para este juego. Impulse te lo indicará en la biblioteca en cuanto salga uno.
+cheats-other-store = Aún no hay ninguno para esta tienda, pero la versión de { $store } sí tiene. Las versiones pueden variar entre tiendas, así que puede que no encaje con la tuya.
+cheats-use-trainer = USAR EL TRAINER DE { $store }
+cheats-other-trainer = OTRO TRAINER...
+cheats-not-installed = NO INSTALADO · AÑADE EL JUEGO PARA USAR SUS MODS
 cheats-loading-tag = [ CARGANDO ]
 cheats-loading = CARGANDO MODS
 cheats-shown = { $count ->
@@ -165,8 +183,10 @@ trainer-mods = { $count ->
     [one] { $count } MOD
    *[other] { $count } MODS
 }
+trainer-from = TRAINER DE { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = VERSIÓN DESCONOCIDA
+trainer-not-installed = NO INSTALADO
 trainer-update-pending = ACTUALIZACIÓN PENDIENTE
 trainer-sessions = { $count ->
     [one] { $count } SESIÓN

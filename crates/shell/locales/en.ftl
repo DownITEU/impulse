@@ -25,6 +25,7 @@ failure-refused = refused
 failure-elevation = the game runs as administrator: accept the prompt to attach
 failure-protected = the game's protection keeps trainers out
 failure-architecture = the trainer is for the game's other build (32 or 64-bit): start the one it supports
+failure-restart = the game is already running: close it, then start it from here
 failure-internal = something went wrong: the log has the details
 failure-place = { $why }: see Settings, APP
 
@@ -38,6 +39,9 @@ picker-filter = game name
 page-search = search { $trainers } trainers
 page-search-none = search trainers
 page-search-key = CTRL K
+page-add-game = ADD GAME
+page-get-on = GET ON { $store }
+page-add-manually = ADD GAME MANUALLY...
 page-signed-out = NOT SIGNED IN
 page-elevated = Running as administrator: games run as administrator attach without a prompt
 page-overlay = OVERLAY
@@ -61,6 +65,8 @@ disclaimer-exit = EXIT
 signed-out-title = SIGN-IN FAILED
 signed-out-body = Impulse could not sign in to { $sources }. Make sure it is installed and signed in on this PC and that you are online, then try again. Trainers cannot load until it works.
 signed-out-retry = TRY AGAIN
+signed-out-why = Reason: { $why }
+signed-out-trying = Signing in…
 signed-out-close = CLOSE
 
 ## Library
@@ -80,6 +86,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + ADD .EXE
 library-source-change = CHANGE .EXE
 library-source-remove = REMOVE .EXE
+library-source-trainer = CHANGE TRAINER...
+library-source-own-trainer = ITS OWN TRAINER
 
 ## Picker
 
@@ -88,6 +96,11 @@ picker-owned = MORE THAN ONE GAME MATCHES: WHICH ONE IS IT?
 picker-unowned = NO CATALOG GAME MATCHES: FIND IT BY NAME
 picker-in-library = { $store }  IN LIBRARY
 picker-prompt = Select the game's .exe
+picker-trainer-title = CHOOSE A TRAINER
+picker-trainer = ITS OTHER STORES FIRST, THEN BY NAME: A TRAINER FOR ANOTHER BUILD MAY NOT FIT
+picker-in-use = IN USE
+picker-find-title = FIND A GAME
+picker-find = EVERY TRAINER BY NAME · ↑ ↓ TO CHOOSE, ENTER TO OPEN
 
 ## Cheats
 
@@ -97,9 +110,14 @@ cheats-failed-body = It could not be downloaded: { $why }. Impulse tries again w
 cheats-filter = filter mods
 cheats-pinned = PINNED
 cheats-kept = It is kept on disk after the first download.
+cheats-notes = READ BEFORE PLAYING
 cheats-no-trainer-tag = [ NO TRAINER ]
 cheats-no-trainer = NO TRAINER FOR { $game } YET
 cheats-no-trainer-body = There is no trainer for this game yet. Impulse will flag it in your library as soon as one ships.
+cheats-other-store = There is none for this store yet, but its { $store } release has one. Builds can differ between stores, so it may not fit yours.
+cheats-use-trainer = USE THE { $store } TRAINER
+cheats-other-trainer = OTHER TRAINER...
+cheats-not-installed = NOT INSTALLED · ADD THE GAME TO USE ITS MODS
 cheats-loading-tag = [ LOADING ]
 cheats-loading = LOADING THE CHEAT LIST
 cheats-shown = { $shown } MODS
@@ -147,8 +165,10 @@ hotkeys-shared-tip = another cheat has this hotkey too: both fire
 
 trainer-none = NO TRAINER
 trainer-mods = { $count } MODS
+trainer-from = { $store } TRAINER
 trainer-version = V{ $version }
 trainer-version-unknown = VERSION UNKNOWN
+trainer-not-installed = NOT INSTALLED
 trainer-update-pending = UPDATE PENDING
 trainer-sessions = { $count ->
     [one] { $count } SESSION

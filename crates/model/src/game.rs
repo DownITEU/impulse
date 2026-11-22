@@ -9,7 +9,11 @@ pub struct Game {
     /// Shared by one title's store releases.
     pub title_id: String,
     pub name: String,
+    /// The title's other names, for a search.
+    pub terms: Vec<String>,
     pub store_ids: Vec<StoreId>,
+    /// The record's pages in its store, an app's link or a web one; remote data.
+    pub purchase: Vec<String>,
     /// The executable, relative to the install, whose PE timestamp is the build.
     pub exe: Option<String>,
     /// One per `standalone:` store id.

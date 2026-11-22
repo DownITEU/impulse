@@ -4,6 +4,7 @@
 mod collections;
 mod controls;
 mod list;
+mod notes;
 mod printed;
 
 use std::sync::Arc;
@@ -13,7 +14,7 @@ use gpui_kit::{App, Context, Entity, EventEmitter, IntoElement, Render, Task, Wi
 
 use crate::{
     bindings::Hotkeys,
-    library::{Library, LibraryEvent},
+    library::{GamePicker, Library, LibraryEvent},
     run::{RunEvent, Runs},
     trainer::{TrainerEvent, Trainers},
     ui::{key, text::Texts, widgets},
@@ -37,6 +38,7 @@ pub struct CheatList {
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
     hotkeys: Entity<Hotkeys>,
+    picker: Entity<GamePicker>,
     printed: Option<Printed>,
     filter: Entity<InputState>,
     menu: Option<Menu>,
@@ -53,6 +55,7 @@ impl CheatList {
         trainers: Entity<Trainers>,
         runs: Entity<Runs>,
         hotkeys: Entity<Hotkeys>,
+        picker: Entity<GamePicker>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -61,7 +64,7 @@ impl CheatList {
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         cx.subscribe_in(&library, window, |list, _, event: &LibraryEvent, window, cx| {
-            if matches!(event, LibraryEvent::Opened) {
+            if matches!(event, LibraryEvent::Opened | LibraryEvent::Retrained(_)) {
                 // Another trainer's names: the old filter would hide them.
                 list.filter.update(cx, |filter, cx| filter.set_value("", window, cx));
                 list.drop_state();
@@ -82,7 +85,7 @@ impl CheatList {
         .detach();
         let (filter, typed) = widgets::filter_input(key::CHEATS_FILTER, window, cx);
         typed.detach();
-        Self { library, trainers, runs, hotkeys, printed: None, filter, menu: None, flashed: None, editor: None }
+        Self { library, trainers, runs, hotkeys, picker, printed: None, filter, menu: None, flashed: None, editor: None }
     }
 
     /// The collection being named, drawn over the window.

@@ -102,6 +102,11 @@ impl Profiles {
         self.kept.trainers.get(trainer).unwrap_or(&BLANK_TRAINER)
     }
 
+    /// The games the user starred, installed or not, in no order.
+    pub fn favorites(&self) -> impl Iterator<Item = &GameId> {
+        self.kept.games.iter().filter(|(_, profile)| profile.favorite).map(|(id, _)| id)
+    }
+
     /// Changes a game's profile and saves.
     pub fn edit_game<R>(&mut self, game: &GameId, change: impl FnOnce(&mut GameProfile) -> R) -> R {
         self.kept.edit(|kept| change(kept.games.entry(game.clone()).or_default()))

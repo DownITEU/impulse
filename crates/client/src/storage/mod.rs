@@ -41,6 +41,7 @@ entries! {
     resources: "resources.json",
     remote_devices: "remote.json",
     map_links: "map-links.json",
+    trainer_links: "trainer-links.json",
     map_state: "map-state",
     pictures: "art",
     tiles: "tiles",

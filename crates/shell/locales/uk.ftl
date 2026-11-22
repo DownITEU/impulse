@@ -25,6 +25,7 @@ failure-refused = відмовлено
 failure-elevation = гру запущено від адміністратора: підтвердьте запит, щоб під'єднатися
 failure-protected = захист гри не пускає трейнери
 failure-architecture = трейнер для іншої збірки гри (32 або 64 біт): запустіть підтримувану
+failure-restart = гру вже запущено: закрийте її, потім запустіть звідси
 failure-internal = щось пішло не так: деталі в розділі «ЛОГ»
 failure-place = { $why } — перевірте вкладку «ПРОГРАМА» в налаштуваннях
 
@@ -43,6 +44,9 @@ page-search = { $count ->
 }
 page-search-none = пошук трейнерів
 page-search-key = CTRL K
+page-add-game = ДОДАТИ ГРУ
+page-get-on = ОТРИМАТИ В { $store }
+page-add-manually = ДОДАТИ ГРУ ВРУЧНУ...
 page-signed-out = ВИ НЕ ВВІЙШЛИ
 page-elevated = Запущено від імені адміністратора: ігри з правами адміністратора підключаються без запиту
 page-overlay = ОВЕРЛЕЙ
@@ -66,6 +70,8 @@ disclaimer-exit = ВИЙТИ
 signed-out-title = НЕ ВДАЛОСЯ УВІЙТИ
 signed-out-body = Impulse не зміг увійти в { $sources }. Поки вхід не вдасться, трейнери не завантажаться. Перевірте, чи цю програму встановлено на ПК, чи ви в неї ввійшли та чи є інтернет. Потім спробуйте ще раз.
 signed-out-retry = ЩЕ РАЗ
+signed-out-why = Причина: { $why }
+signed-out-trying = Вхід…
 signed-out-close = ЗАКРИТИ
 
 ## Library
@@ -85,6 +91,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + ДОДАТИ .EXE
 library-source-change = ЗМІНИТИ .EXE
 library-source-remove = ВІДВ'ЯЗАТИ .EXE
+library-source-trainer = ЗМІНИТИ ТРЕЙНЕР...
+library-source-own-trainer = СВІЙ ТРЕЙНЕР
 
 ## Picker
 
@@ -93,6 +101,11 @@ picker-owned = ЗНАЙДЕНО КІЛЬКА ІГОР. ВИБЕРІТЬ СВОЮ
 picker-unowned = У КАТАЛОЗІ НЕМАЄ ЗБІГІВ. ПОШУКАЙТЕ ЗА НАЗВОЮ
 picker-in-library = { $store }  У БІБЛІОТЕЦІ
 picker-prompt = Виберіть .exe гри
+picker-trainer-title = ОБЕРІТЬ ТРЕЙНЕР
+picker-trainer = СПОЧАТКУ ІНШІ МАГАЗИНИ, ПОТІМ ЗА НАЗВОЮ: ТРЕЙНЕР ДЛЯ ІНШОЇ ВЕРСІЇ МОЖЕ НЕ ПІДІЙТИ
+picker-in-use = ВИКОРИСТОВУЄТЬСЯ
+picker-find-title = ЗНАЙТИ ГРУ
+picker-find = УСІ ТРЕЙНЕРИ ЗА НАЗВОЮ · ↑ ↓ ОБРАТИ, ENTER ВІДКРИТИ
 
 ## Cheats
 
@@ -102,9 +115,14 @@ cheats-failed-body = Не вдалося завантажити список: { 
 cheats-filter = пошук модів
 cheats-pinned = ЗАКРІПЛЕНІ
 cheats-kept = Після першого завантаження список залишиться на диску.
+cheats-notes = ПРОЧИТАЙТЕ ПЕРЕД ГРОЮ
 cheats-no-trainer-tag = [ БЕЗ ТРЕЙНЕРА ]
 cheats-no-trainer = ДЛЯ { $game } ЩЕ НЕМАЄ ТРЕЙНЕРА
 cheats-no-trainer-body = Для цієї гри ще немає трейнера. Щойно він з'явиться, Impulse позначить гру в бібліотеці.
+cheats-other-store = Для цього магазину трейнера ще немає, але він є у версії з { $store }. Версії в різних магазинах можуть відрізнятися, тож він може не підійти.
+cheats-use-trainer = ВИКОРИСТАТИ ТРЕЙНЕР { $store }
+cheats-other-trainer = ІНШИЙ ТРЕЙНЕР...
+cheats-not-installed = НЕ ВСТАНОВЛЕНА · ДОДАЙТЕ ГРУ, ЩОБ КОРИСТУВАТИСЯ МОДАМИ
 cheats-loading-tag = [ ЗАВАНТАЖЕННЯ ]
 cheats-loading = ЗАВАНТАЖУЄМО СПИСОК ЧИТІВ
 cheats-shown = { $count ->
@@ -167,8 +185,10 @@ trainer-mods = { $count ->
     [many] { $count } МОДІВ
    *[other] { $count } МОДА
 }
+trainer-from = ТРЕЙНЕР { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = ВЕРСІЯ НЕВІДОМА
+trainer-not-installed = НЕ ВСТАНОВЛЕНА
 trainer-update-pending = ОНОВЛЕННЯ ЩЕ НЕМАЄ
 trainer-sessions = { $count ->
     [one] { $count } СЕСІЯ

@@ -2,22 +2,26 @@
 
 use crate::{
     account::Account,
+    library::{GamePicker, Library},
     remote::RemoteView,
     settings::SettingsView,
     ui::{
         assets::Icon,
         key,
-        text::t,
+        text::{digits, t, tf},
         theme::*,
-        widgets::{icon, icon_button, square, tip, tracked},
+        widgets::{icon, icon_button, mono, square, tip, tracked},
     },
 };
+use client::Load;
 use gpui_kit::{
     App, Div, Entity, FontWeight, IntoElement, SharedString, Stateful, Window, WindowControlArea, component::h_flex, div, prelude::*, px,
     rgb,
 };
+use i18n::Arg;
 
 pub fn header(
+    search: impl IntoElement,
     account: &Account,
     settings: &Entity<SettingsView>,
     remote: Option<&Entity<RemoteView>>,
@@ -27,17 +31,6 @@ pub fn header(
 ) -> impl IntoElement {
     let accent = rgb(accent(cx));
     let maximize = if window.is_maximized() { Icon::WinRestore } else { Icon::WinMax };
-    /* The command search, hidden until it works (restore the `search` child below, `library: &Library` as the
-    first param and the imports `Load`, `Arg`, `digits`, `tf`, `mono`, `Library`):
-    let search = match library.list() {
-        Load::Ready(library) => {
-            let count = library.trainers;
-            let trainers = digits(cx, &format!("{},{:03}", count / 1000, count % 1000));
-            tf(cx, key::PAGE_SEARCH, &[("trainers", Arg::Str(&trainers)), ("count", Arg::Num(count as f64))])
-        }
-        _ => t(cx, key::PAGE_SEARCH_NONE),
-    };
-    */
     // A kept name is no session.
     let name = match (account.signed_out(), account.user()) {
         (true, _) => t(cx, key::PAGE_SIGNED_OUT),
@@ -55,34 +48,7 @@ pub fn header(
         .bg(alpha(BG, 0.94))
         .window_control_area(WindowControlArea::Drag)
         .child(h_flex().gap(px(10.)).child(square(9., accent)).child(tracked("IMPULSE", 16., 0.22).font_weight(FontWeight::BOLD)))
-        /* .child(
-            h_flex()
-                .id("search")
-                .occlude()
-                .w(px(380.))
-                .min_w(px(220.))
-                .h(px(34.))
-                .pl(px(12.))
-                .pr(px(8.))
-                .gap(px(10.))
-                .rounded(px(2.))
-                .bg(rgb(SUNKEN))
-                .border_1()
-                .border_color(line(0.12))
-                .cursor_pointer()
-                .text_color(rgb(DIM))
-                .child(mono(">", 13.).font_weight(FontWeight::BOLD).text_color(accent))
-                .child(mono(search, 13.).font_weight(FontWeight::NORMAL).flex_1())
-                .child(
-                    mono(t(cx, key::PAGE_SEARCH_KEY), 10.5)
-                        .px(px(6.))
-                        .py(px(2.))
-                        .rounded(px(2.))
-                        .border_1()
-                        .border_color(line(0.16))
-                        .text_color(rgb(MUTED)),
-                ),
-        ) */
+        .child(search)
         .child(div().flex_1())
         .child(
             h_flex()
@@ -105,6 +71,46 @@ pub fn header(
                         .child(caption("maximize", maximize, WindowControlArea::Max))
                         .child(caption("close", Icon::Close, WindowControlArea::Close)),
                 ),
+        )
+}
+
+/// `> SEARCH 3,654 TRAINERS  CTRL K`: opens the picker's search.
+pub fn search_box(library: &Library, picker: &Entity<GamePicker>, cx: &App) -> impl IntoElement {
+    let search = match library.list() {
+        Load::Ready(library) => {
+            let count = library.trainers;
+            let trainers = digits(cx, &format!("{},{:03}", count / 1000, count % 1000));
+            tf(cx, key::PAGE_SEARCH, &[("trainers", Arg::Str(&trainers)), ("count", Arg::Num(count as f64))])
+        }
+        _ => t(cx, key::PAGE_SEARCH_NONE),
+    };
+    let picker = picker.clone();
+    h_flex()
+        .id("search")
+        .occlude()
+        .w(px(380.))
+        .min_w(px(220.))
+        .h(px(34.))
+        .pl(px(12.))
+        .pr(px(8.))
+        .gap(px(10.))
+        .rounded(px(2.))
+        .bg(rgb(SUNKEN))
+        .border_1()
+        .border_color(line(0.12))
+        .cursor_pointer()
+        .text_color(rgb(DIM))
+        .on_click(move |_, window, cx| picker.update(cx, |picker, cx| picker.find(window, cx)))
+        .child(mono(">", 13.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx))))
+        .child(mono(search, 13.).font_weight(FontWeight::NORMAL).flex_1())
+        .child(
+            mono(t(cx, key::PAGE_SEARCH_KEY), 10.5)
+                .px(px(6.))
+                .py(px(2.))
+                .rounded(px(2.))
+                .border_1()
+                .border_color(line(0.16))
+                .text_color(rgb(MUTED)),
         )
 }
 

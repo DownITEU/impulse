@@ -35,3 +35,11 @@ category-weapons = SİLAHLAR
 
 signed-out = Wand'da oturum açık değil. Wand'ı açıp giriş yap
 not-installed = Wand bu bilgisayarda ayarlanmamış. Wand'ı yükleyip aç ve giriş yap
+probe-failed = Wand bağlantı testi de başarısız oldu. Bağlantını ve VPN veya proxy ayarlarını kontrol et
+probe-ok = Wand bağlantı testi başarılı oldu, ancak API isteği bilinmeyen bir nedenle başarısız oldu
+proxy-missing = Wand klasöründe GameLauncher.exe yok, Wand'ı güncelle ya da geçerli klasörünü ayarla
+proxy-failed = oyun hile koruması olmadan başlayacak şekilde hazırlanamadı
+proxy-restart = oyunun hile koruması çalışıyor: oyunu kapat ve trainer ile başlat
+service-silent = Wand hizmeti yanıt vermedi, Wand'ı güncelle ya da geçerli klasörünü ayarla
+activate-unsupported = bu trainer Wand'ın kendi yükleme yöntemini gerektiriyor, bu henüz desteklenmiyor
+trainer-file-missing = trainer dosyası bulunamadı (404): oyunu yeniden aç ya da trainer'ı bir kez Wand'da çalıştır

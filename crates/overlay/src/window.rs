@@ -136,12 +136,12 @@ unsafe fn take_input(window: HWND) {
     }
 }
 
-/// Restores `window` from the taskbar without taking the input.
-pub fn unminimize(window: isize) {
+/// Shows `window` again from the taskbar or the tray, without taking the input.
+pub fn restore(window: isize) {
     let window = window as HWND;
     // SAFETY: a gone window fails them.
     unsafe {
-        if IsIconic(window) != 0 {
+        if IsIconic(window) != 0 || IsWindowVisible(window) == 0 {
             ShowWindow(window, SW_SHOWNOACTIVATE);
         }
     }

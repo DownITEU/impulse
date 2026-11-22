@@ -40,7 +40,7 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 - `Stored<T>`: a typed JSON file (`client`'s and `plugins`' alike; `client::storage` re-exports it): missing means the defaults, not JSON moves aside, an object carries `VERSION` and one of another version is never written. `edit` logs a failed save and keeps the change; `try_edit` (`T: Clone`) saves a copy first, publishes it only when saved, and errors on a store that does not save. `read`, `write` for files kept by hand.
 
 ## fetch
-- `get(url, etag)`: blocking GET for public CDNs only (they send no CORS headers). The WeMod API goes through `wand`'s bridge. Body capped at 64 MiB and left unread on a 304 (it sends none, and GitHub's names an encoding the decoder would fail on) or a 4xx or 5xx, 120 s timeout. Run it off the UI thread.
+- `get(url, etag)`: blocking GET for public CDNs only (they send no CORS headers). The WeMod API goes through `wand`'s bridge. Body capped at 64 MiB and left unread on a 304 (it sends none, and GitHub's names an encoding the decoder would fail on) or a 4xx or 5xx (their `edge`: `server`, `cf-ray` and `cf-cache-status`, names who answered), 120 s timeout. Run it off the UI thread.
 - `guarded(url, allowed, limit, timeout)` for plugins: https only, every hop (5 redirects at most, followed by hand) must pass `allowed(host)`, public addresses only (the resolver drops the rest; IPv6 is global unicast, mapped and NAT64 follow their IPv4), no proxy, no headers but the user agent. An out-of-scope URL, hop or host, or a body past `limit`, is an error carrying `Refused` (`downcast_ref`).
 
 ## updater

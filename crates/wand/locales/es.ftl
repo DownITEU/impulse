@@ -35,3 +35,11 @@ category-weapons = ARMAS
 
 signed-out = no hay una sesión abierta en Wand: abre la app e inicia sesión
 not-installed = Wand no está configurado en este PC: instálalo, ábrelo e inicia sesión
+probe-failed = la prueba de conexión con Wand también falló. Revisa tu conexión y la configuración de la VPN o del proxy
+probe-ok = la prueba de conexión con Wand funcionó, pero la solicitud a la API falló por un motivo desconocido
+proxy-missing = la carpeta de Wand no tiene GameLauncher.exe, actualiza Wand o indica su carpeta actual
+proxy-failed = no se pudo preparar el juego para iniciarlo sin su anticheat
+proxy-restart = el anticheat del juego está en ejecución: cierra el juego e inícialo con el trainer
+service-silent = el servicio de Wand no respondió, actualiza Wand o indica su carpeta actual
+activate-unsupported = este trainer necesita la forma de carga propia de Wand, que aún no es compatible
+trainer-file-missing = archivo del trainer no encontrado (404): abre el juego de nuevo o ejecuta el trainer una vez en Wand

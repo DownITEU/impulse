@@ -9,7 +9,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use blocking::unblock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
@@ -100,7 +100,7 @@ async fn from_wand(t: &Transport) -> Result<Session> {
 async fn sign_in(t: &Transport, wand: WandToken) -> Result<Session> {
     let Code { code } = api::call(t, "POST", "/v3/auth/overlay_code", Some(wand.expose()), None, 201).await?;
     let form = [("grant_type", "tiny_code"), ("code", code.as_str()), ("client_id", CLIENT_ID)];
-    let token: Token = api::call(t, "POST", "/auth/token", None, Some(&form), 200).await?;
+    let token: Token = api::call(t, "POST", "/auth/token", None, Some(&form), 200).await.context("exchange Wand sign-in code")?;
     Ok(token.into())
 }
 
@@ -111,7 +111,7 @@ impl Session {
 
     async fn refresh(&self, t: &Transport) -> Result<Self> {
         let form = [("grant_type", "refresh_token"), ("refresh_token", self.refresh_token.as_str()), ("client_id", CLIENT_ID)];
-        let token: Token = api::call(t, "POST", "/auth/token", None, Some(&form), 200).await?;
+        let token: Token = api::call(t, "POST", "/auth/token", None, Some(&form), 200).await.context("refresh Impulse session")?;
         Ok(token.into())
     }
 

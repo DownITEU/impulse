@@ -14,3 +14,6 @@ model.workspace = true
 
 anyhow.workspace = true
 blocking.workspace = true
+
+[dev-dependencies]
+futures.workspace = true

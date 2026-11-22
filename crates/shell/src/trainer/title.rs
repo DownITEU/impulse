@@ -37,9 +37,10 @@ fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
             tf(cx, key::TRAINER_MODS, &[("count", Arg::Num(count as f64))])
         }
     };
-    let version = match game.install.build {
-        Some(version) => tf(cx, key::TRAINER_VERSION, &[("version", Arg::Num(version.into()))]),
-        None => t(cx, key::TRAINER_VERSION_UNKNOWN),
+    let version = match game.install.as_ref().map(|install| install.build) {
+        Some(Some(version)) => tf(cx, key::TRAINER_VERSION, &[("version", Arg::Num(version.into()))]),
+        Some(None) => t(cx, key::TRAINER_VERSION_UNKNOWN),
+        None => t(cx, key::TRAINER_NOT_INSTALLED),
     };
     let profile = trainers.game_profile(&game.id);
     h_flex()
@@ -60,6 +61,9 @@ fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
         )
         .child(slash())
         .child(mono(game.store.clone().map_or_else(|| t(cx, key::PAGE_CUSTOM), Into::into), 12.))
+        .when_some(game.trainer_from.as_ref(), |meta, from| {
+            meta.child(slash()).child(mono(tf(cx, key::TRAINER_FROM, &[("store", Arg::Str(&from.store))]), 12.))
+        })
         .when(profile.sessions > 0, |meta| {
             let sessions = tf(cx, key::TRAINER_SESSIONS, &[("count", Arg::Num(profile.sessions as f64))]);
             meta.child(slash()).child(mono(played(profile.played, cx), 12.)).child(slash()).child(mono(sessions, 12.))

@@ -10,6 +10,7 @@ mod install;
 mod locale;
 mod map;
 mod provider;
+mod proxy;
 mod run;
 mod session;
 mod store;

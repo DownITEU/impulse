@@ -71,7 +71,7 @@ pub(crate) fn load(target: &Process, image: &Image, export: &str, arg: &[u8]) ->
     let pid = target.pid;
     match run(exe, &format!("{FLAG} {}", request.encode()), image)? {
         LOADED => Ok(()),
-        DENIED => Err(anyhow!("process {pid} cannot be opened even as administrator").context(Failure::new(FailureKind::Protected))),
+        DENIED => Err(anyhow!("process {pid} denies the load even as administrator").context(Failure::new(FailureKind::Protected))),
         ARCHITECTURE => {
             Err(anyhow!("process {pid} and {} differ in architecture", image.path().display())
                 .context(Failure::new(FailureKind::Architecture)))

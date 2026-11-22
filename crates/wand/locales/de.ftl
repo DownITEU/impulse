@@ -35,3 +35,11 @@ category-weapons = WAFFEN
 
 signed-out = keine aktive Anmeldung bei Wand. Wand öffnen und anmelden
 not-installed = Wand ist auf diesem PC nicht eingerichtet. Wand installieren, öffnen und anmelden
+probe-failed = auch der Verbindungstest zu Wand ist fehlgeschlagen. Prüfe deine Verbindung sowie deine VPN- oder Proxy-Einstellungen
+probe-ok = der Verbindungstest zu Wand war erfolgreich, aber die API-Anfrage ist aus unbekanntem Grund fehlgeschlagen
+proxy-missing = im Wand-Ordner fehlt GameLauncher.exe, Wand aktualisieren oder den aktuellen Ordner festlegen
+proxy-failed = das Spiel konnte nicht für den Start ohne seinen Anti-Cheat vorbereitet werden
+proxy-restart = der Anti-Cheat des Spiels läuft: Spiel schließen und mit dem Trainer starten
+service-silent = der Wand-Dienst hat nicht geantwortet, Wand aktualisieren oder den aktuellen Ordner festlegen
+activate-unsupported = dieser Trainer braucht Wands eigene Ladeart, die noch nicht unterstützt wird
+trainer-file-missing = Trainer-Datei nicht gefunden (404): Spiel erneut öffnen oder den Trainer einmal in Wand starten

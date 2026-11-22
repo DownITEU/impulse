@@ -47,6 +47,14 @@ pub const CATEGORY_VEHICLES: Key = Key("category-vehicles");
 pub const CATEGORY_WEAPONS: Key = Key("category-weapons");
 pub const SIGNED_OUT: Key = Key("signed-out");
 pub const NOT_INSTALLED: Key = Key("not-installed");
+pub const PROBE_FAILED: Key = Key("probe-failed");
+pub const PROBE_OK: Key = Key("probe-ok");
+pub const PROXY_MISSING: Key = Key("proxy-missing");
+pub const PROXY_FAILED: Key = Key("proxy-failed");
+pub const PROXY_RESTART: Key = Key("proxy-restart");
+pub const SERVICE_SILENT: Key = Key("service-silent");
+pub const ACTIVATE_UNSUPPORTED: Key = Key("activate-unsupported");
+pub const TRAINER_FILE_MISSING: Key = Key("trainer-file-missing");
 
 pub fn text(key: Key) -> Text {
     Text::key(&crate::source(), key.0)

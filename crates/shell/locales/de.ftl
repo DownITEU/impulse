@@ -25,6 +25,7 @@ failure-refused = abgelehnt
 failure-elevation = das Spiel läuft als Administrator: bestätige die Abfrage, um dich zu verbinden
 failure-protected = der Schutz des Spiels lässt keine Trainer zu
 failure-architecture = der Trainer ist für die andere Version des Spiels (32 oder 64 Bit): starte die unterstützte
+failure-restart = das Spiel läuft bereits: schließe es und starte es dann von hier
 failure-internal = etwas ist schiefgelaufen (Details im Log)
 failure-place = { $why } (Einstellungen > APP)
 
@@ -38,6 +39,9 @@ picker-filter = Spielname
 page-search = { $trainers } Trainer durchsuchen
 page-search-none = Trainer durchsuchen
 page-search-key = CTRL+K
+page-add-game = SPIEL HINZUFÜGEN
+page-get-on = BEI { $store } HOLEN
+page-add-manually = SPIEL MANUELL HINZUFÜGEN...
 page-signed-out = NICHT ANGEMELDET
 page-elevated = Läuft als Administrator: Spiele mit Administratorrechten werden ohne Nachfrage verbunden
 page-overlay = OVERLAY
@@ -61,6 +65,8 @@ disclaimer-exit = BEENDEN
 signed-out-title = ANMELDUNG FEHLGESCHLAGEN
 signed-out-body = Impulse konnte sich nicht bei { $sources } anmelden. Die App muss auf diesem PC installiert sein. Dort anmelden, die Internetverbindung prüfen und es erneut versuchen. Erst dann kann Impulse Trainer laden.
 signed-out-retry = NOCH MAL
+signed-out-why = Grund: { $why }
+signed-out-trying = Anmeldung…
 signed-out-close = SCHLIESSEN
 
 ## Library
@@ -80,6 +86,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + .EXE
 library-source-change = .EXE ÄNDERN
 library-source-remove = .EXE ENTFERNEN
+library-source-trainer = TRAINER WECHSELN...
+library-source-own-trainer = EIGENER TRAINER
 
 ## Picker
 
@@ -88,6 +96,11 @@ picker-owned = MEHRERE TREFFER. WELCHES SPIEL IST ES?
 picker-unowned = KEIN TREFFER IM KATALOG. NACH SPIELNAME SUCHEN
 picker-in-library = { $store } · IN BIBLIOTHEK
 picker-prompt = .exe des Spiels wählen
+picker-trainer-title = TRAINER WÄHLEN
+picker-trainer = ZUERST ANDERE STORES, DANN NACH NAME: EIN TRAINER FÜR EINE ANDERE VERSION PASST MÖGLICHERWEISE NICHT
+picker-in-use = IN VERWENDUNG
+picker-find-title = SPIEL FINDEN
+picker-find = ALLE TRAINER NACH NAME · ↑ ↓ ZUM WÄHLEN, ENTER ZUM ÖFFNEN
 
 ## Cheats
 
@@ -97,9 +110,14 @@ cheats-failed-body = Der Download ist fehlgeschlagen: { $why }. Impulse versucht
 cheats-filter = Mods filtern
 cheats-pinned = ANGEHEFTET
 cheats-kept = Nach dem ersten Download ist die Liste lokal gespeichert.
+cheats-notes = VOR DEM SPIELEN LESEN
 cheats-no-trainer-tag = [ KEIN TRAINER ]
 cheats-no-trainer = NOCH KEIN TRAINER FÜR { $game }
 cheats-no-trainer-body = Für dieses Spiel gibt es noch keinen Trainer. Sobald einer verfügbar ist, markiert Impulse das Spiel in der Bibliothek.
+cheats-other-store = Für diesen Store gibt es noch keinen, aber die { $store }-Version hat einen. Versionen können sich zwischen Stores unterscheiden, daher passt er eventuell nicht zu deiner.
+cheats-use-trainer = DEN { $store }-TRAINER VERWENDEN
+cheats-other-trainer = ANDERER TRAINER...
+cheats-not-installed = NICHT INSTALLIERT · SPIEL HINZUFÜGEN, UM SEINE MODS ZU NUTZEN
 cheats-loading-tag = [ LADEN ]
 cheats-loading = CHEATLISTE WIRD GELADEN
 cheats-shown = { $count ->
@@ -156,8 +174,10 @@ trainer-mods = { $count ->
     [one] { $count } MOD
    *[other] { $count } MODS
 }
+trainer-from = { $store }-TRAINER
 trainer-version = V{ $version }
 trainer-version-unknown = VERSION UNBEKANNT
+trainer-not-installed = NICHT INSTALLIERT
 trainer-update-pending = UPDATE AUSSTEHEND
 trainer-sessions = { $count ->
     [one] { $count } SITZUNG

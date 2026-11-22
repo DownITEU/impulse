@@ -14,8 +14,8 @@ use client::{
     trainer::{Sheet, Shelf},
 };
 use futures::{StreamExt, channel::oneshot};
-use gpui_kit::{Context, Entity, EventEmitter};
-use model::{Chord, Locale, Snapshot};
+use gpui_kit::{App, Context, Entity, EventEmitter};
+use model::{Chord, Locale, Ref, Snapshot};
 
 use crate::{
     account::{Account, SignedIn},
@@ -47,7 +47,8 @@ pub struct Trainers {
     library: Entity<Library>,
     profiles: Profiles,
     shelf: Shelf,
-    loading: HashSet<GameId>,
+    /// The games' loads, by the trainer each asks for.
+    loading: HashSet<(GameId, Ref)>,
     // What the copies were asked in: a new `Texts` in the same language (a source's catalogs) reloads nothing.
     locale: Locale,
 }
@@ -62,11 +63,15 @@ impl Trainers {
         account: &Entity<Account>,
         cx: &mut Context<Self>,
     ) -> Self {
-        cx.subscribe(&library, |trainers, _, event: &LibraryEvent, cx| {
+        cx.subscribe(&library, |trainers, _, event: &LibraryEvent, cx| match event {
             // A map link is not the trainer's.
-            if !matches!(event, LibraryEvent::Linked) {
+            LibraryEvent::Linked => {}
+            LibraryEvent::Retrained(game) => {
+                trainers.shelf.forget(game);
                 trainers.open(cx);
+                cx.notify();
             }
+            _ => trainers.open(cx),
         })
         .detach();
         // The session is back: the open game's trainer that failed for want of it asks again.
@@ -98,11 +103,15 @@ impl Trainers {
     }
 
     pub fn is_loading(&self, game: &GameId) -> bool {
-        self.loading.contains(game)
+        self.loading.iter().any(|(loading, _)| loading == game)
     }
 
     pub fn game_profile(&self, game: &GameId) -> &GameProfile {
         self.profiles.game(game)
+    }
+
+    pub fn favorites(&self) -> impl Iterator<Item = &GameId> {
+        self.profiles.favorites()
     }
 
     /// The shown copy's trainer profile; a blank one without a copy.
@@ -127,7 +136,11 @@ impl Trainers {
             trainers
                 .update(cx, |trainers, cx| {
                     if trainers.shelf.release(&game, &trainers.profiles) {
-                        trainers.installed(game, cx);
+                        trainers.installed(game.clone(), cx);
+                    }
+                    // A trainer chosen while held may have had no copy waiting.
+                    if trainers.drop_other(&game, cx) && trainers.library.read(cx).open_id() == Some(&game) {
+                        trainers.open(cx);
                     }
                 })
                 .ok();
@@ -245,20 +258,25 @@ impl Trainers {
     /// The open game's trainer. Nothing is downloaded for a game the user did not open.
     fn open(&mut self, cx: &mut Context<Self>) {
         let Some(game) = self.library.read(cx).opened().cloned() else { return };
-        let Some(offer) = game.source.trainer.as_ref() else { return };
+        self.drop_other(&game.id, cx);
+        let Some(offer) = game.offer() else { return };
         if game.support == Support::NoTrainer || self.shelf.is_current(&game.id, &game.stamp) {
             return;
         }
-        // One task per game: a second open while it runs changes nothing.
-        if !self.loading.insert(game.id.clone()) {
+        // One task per game and trainer: a second open while it runs changes nothing.
+        if !self.loading.insert((game.id.clone(), offer.id.clone())) {
             return;
         }
         let (id, stamp, trainer_id, locale) = (game.id.clone(), game.stamp.clone(), offer.id.clone(), content_locale(cx));
-        let mut snapshots = self.registry.trainer(offer, &game.install, &locale);
+        let mut snapshots = self.registry.trainer(offer, game.install.as_ref().and_then(|install| install.build), &locale);
         cx.spawn(async move |trainers, cx| {
             while let Some(snapshot) = snapshots.next().await {
                 trainers
                     .update(cx, |trainers, cx| {
+                        // Its copies would show over the trainer chosen meanwhile.
+                        if trainers.superseded(&id, &trainer_id, cx) {
+                            return;
+                        }
                         match snapshot {
                             Snapshot::Cached(Some(trainer)) | Snapshot::Fresh(Ok(trainer)) => {
                                 let sheet = Sheet::new(trainer, trainer_id.clone(), stamp.clone(), trainers.profiles.trainer(&trainer_id));
@@ -282,7 +300,11 @@ impl Trainers {
             }
             trainers
                 .update(cx, |trainers, cx| {
-                    trainers.loading.remove(&id);
+                    trainers.loading.remove(&(id.clone(), trainer_id.clone()));
+                    // The trainer chosen meanwhile has its own load.
+                    if trainers.superseded(&id, &trainer_id, cx) {
+                        return;
+                    }
                     cx.emit(TrainerEvent::Changed(id.clone()));
                     // The language changed while it loaded: this copy is in the old one.
                     let relocalized = content_locale(cx) != locale;
@@ -298,6 +320,23 @@ impl Trainers {
                 .ok();
         })
         .detach();
+    }
+
+    /// Another trainer than `trainer` is in use for `game` now.
+    fn superseded(&self, game: &GameId, trainer: &Ref, cx: &App) -> bool {
+        let library = self.library.read(cx);
+        let current = library.opened().filter(|open| open.id == *game).or_else(|| library.game(game));
+        current.is_some_and(|game| game.stamp.trainer.as_ref() != Some(trainer))
+    }
+
+    /// Drops `game`'s copy of a trainer it no longer uses, unless a run holds it; whether a shown one went.
+    fn drop_other(&mut self, game: &GameId, cx: &mut Context<Self>) -> bool {
+        let other = self.shelf.trainer(game).is_some_and(|trainer| self.superseded(game, trainer, cx));
+        let dropped = other && self.shelf.forget(game);
+        if dropped {
+            cx.emit(TrainerEvent::Changed(game.clone()));
+        }
+        dropped
     }
 
     fn installed(&mut self, game: GameId, cx: &mut Context<Self>) {

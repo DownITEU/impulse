@@ -11,7 +11,7 @@ use gpui_kit::{App, Context};
 use i18n::Key;
 use model::{Cheat, Kind};
 
-use super::{Remote, State};
+use super::{Remote, State, views::listed_open};
 use crate::{
     cheats::DEFAULT_ICON,
     run::State as Play,
@@ -46,7 +46,7 @@ impl Remote {
             }
             Command::Start { game } => {
                 let game = self.game(game, cx)?;
-                if !self.runs.read(cx).can_start(&game, cx) {
+                if !self.library.read(cx).game(&game).is_some_and(|listed| self.runs.read(cx).can_start(listed, cx)) {
                     return Err(key::REMOTE_NOTE_BUSY);
                 }
                 // The window follows the panel.
@@ -114,7 +114,7 @@ impl Remote {
     /// The open game and its sheet, when `sheet` is the trainer view the panel was last sent.
     fn sheet<'a>(&self, sheet: u32, cx: &'a App) -> Result<(GameId, &'a Sheet), Key> {
         let State::On(on) = &self.state else { return Err(CHANGED) };
-        let game = self.library.read(cx).open_id().filter(|_| on.shown.sheet == sheet).ok_or(CHANGED)?;
+        let game = listed_open(self.library.read(cx)).map(|game| &game.id).filter(|_| on.shown.sheet == sheet).ok_or(CHANGED)?;
         let sheet = self.trainers.read(cx).sheet(game).ok_or(CHANGED)?;
         Ok((game.clone(), sheet))
     }

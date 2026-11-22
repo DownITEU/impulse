@@ -27,4 +27,4 @@ pub use source::{
 };
 pub use store::{Origin, StoreId};
 pub use text::{Arg, Locale, Text};
-pub use trainer::{Args, Cheat, Kind, Plan, Trainer};
+pub use trainer::{Args, Cheat, Kind, Launch, Plan, Trainer};

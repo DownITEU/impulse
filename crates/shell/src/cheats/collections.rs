@@ -16,7 +16,7 @@ use gpui_kit::{
     },
     deferred, div,
     prelude::*,
-    px, rgb,
+    px, relative, rgb,
 };
 
 use i18n::Arg;
@@ -136,7 +136,7 @@ impl CheatList {
                     0 => list.edit_collection(Some(at), window, cx),
                     _ => list.delete_collection(at, cx),
                 });
-                chip.child(deferred(actions.left(px(-1.)).min_w(px(110.))))
+                chip.child(deferred(actions.absolute().top(relative(1.)).mt(px(3.)).left(px(-1.)).min_w(px(110.))))
             })
     }
 

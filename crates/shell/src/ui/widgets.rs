@@ -79,6 +79,11 @@ pub fn action(id: &'static str) -> Stateful<Div> {
         .hover(|style| style.bg(rgb(RAISED_HOVER)))
 }
 
+/// The hero's main button: 38 px tall, filled with the accent.
+pub fn primary_action(id: &'static str, cx: &App) -> Stateful<Div> {
+    h_flex().id(id).occlude().h(px(38.)).bg(rgb(accent(cx))).text_color(rgb(BG)).font_weight(FontWeight::BOLD).cursor_pointer()
+}
+
 pub fn square(side: f32, color: impl Into<Hsla>) -> Div {
     div().size(px(side)).flex_none().bg(color.into())
 }

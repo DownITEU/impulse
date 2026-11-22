@@ -122,12 +122,16 @@ pub(crate) fn marked(error: &anyhow::Error, kind: FailureKind) -> bool {
 fn write<'a>(process: &'a Handle, data: &[u8]) -> Result<Remote<'a>> {
     // SAFETY: plain Win32 call; a null result is checked below.
     let ptr = unsafe { VirtualAllocEx(process.0, ptr::null(), data.len(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
-    ensure!(!ptr.is_null(), "cannot allocate in the process: {}", io::Error::last_os_error());
+    if ptr.is_null() {
+        return Err(guarded("cannot allocate in the process"));
+    }
     let remote = Remote { process, ptr };
     let mut written = 0;
     // SAFETY: the buffer is valid for `data.len()` bytes and the target block was sized for it.
     let copied = unsafe { WriteProcessMemory(process.0, ptr, data.as_ptr().cast(), data.len(), &mut written) } != 0;
-    ensure!(copied && written == data.len(), "cannot write to the process: {}", io::Error::last_os_error());
+    if !copied || written != data.len() {
+        return Err(guarded("cannot write to the process"));
+    }
     Ok(remote)
 }
 
@@ -136,8 +140,19 @@ fn spawn(process: &Handle, start: ThreadStart, arg: *mut c_void) -> Result<Handl
     // SAFETY: `start` is a function of the target taking one pointer (its kernel32's `LoadLibraryW`, or
     // base plus RVA for the loaded image), and `arg` points into the target.
     let thread = unsafe { CreateRemoteThread(process.0, ptr::null(), 0, Some(start), arg, 0, ptr::null_mut()) };
-    ensure!(!thread.is_null(), "cannot start a thread in the process: {}", io::Error::last_os_error());
+    if thread.is_null() {
+        return Err(guarded("cannot start a thread in the process"));
+    }
     Ok(Handle(thread))
+}
+
+/// The last error of a step on a process that opened: a denial there is its protection (an anti-cheat strips the
+/// handle's rights), which elevation does not lift.
+fn guarded(what: &str) -> anyhow::Error {
+    let error = io::Error::last_os_error();
+    let denied = error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32);
+    let error = anyhow!("{what}: {error}");
+    if denied { error.context(Failure::new(FailureKind::Protected)) } else { error }
 }
 
 fn wait(thread: &Handle) -> Result<()> {

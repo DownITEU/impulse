@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use model::Failure;
+use model::{Failure, Ref};
 
 use super::Sheet;
 use crate::{
@@ -37,6 +37,11 @@ impl Shelf {
 
     pub fn sheets(&self) -> impl Iterator<Item = &Sheet> {
         self.shown.values().filter_map(ready)
+    }
+
+    /// The newest copy's trainer, waiting or shown.
+    pub fn trainer(&self, game: &GameId) -> Option<&Ref> {
+        self.waiting.get(game).or_else(|| self.sheet(game)).map(|sheet| &sheet.trainer)
     }
 
     /// The newest copy, waiting or shown, is of `stamp` and needs no refresh.
@@ -81,6 +86,12 @@ impl Shelf {
         for (_, sheet) in shown.chain(self.waiting.iter_mut()).filter(|(id, _)| game.is_none_or(|game| game == *id)) {
             sheet.stale = true;
         }
+    }
+
+    /// Another trainer was chosen for `game`: its copies go, but a run's held one stays. Whether a shown one went.
+    pub fn forget(&mut self, game: &GameId) -> bool {
+        self.waiting.remove(game);
+        !self.held.contains(game) && self.shown.remove(game).is_some()
     }
 
     pub fn hold(&mut self, game: GameId) {

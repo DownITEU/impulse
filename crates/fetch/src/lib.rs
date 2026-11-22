@@ -29,10 +29,20 @@ pub struct Response {
     pub status: u16,
     pub etag: Option<String>,
     pub body: Vec<u8>,
+    /// Who answered an error (`server`, `cf-ray`, `cf-cache-status`), for the log; empty for a success.
+    pub edge: String,
 }
 
 pub(crate) fn etag_of(headers: &ureq::http::HeaderMap) -> Option<String> {
     headers.get("etag").and_then(|v| v.to_str().ok()).map(|v| v.trim_start_matches("W/").trim_matches('"').to_owned())
+}
+
+pub(crate) fn edge_of(status: u16, headers: &ureq::http::HeaderMap) -> String {
+    if status < 400 {
+        return String::new();
+    }
+    let named = |name| headers.get(name).and_then(|v| v.to_str().ok()).map(|v| format!("{name} {v}"));
+    ["server", "cf-ray", "cf-cache-status"].into_iter().filter_map(named).collect::<Vec<_>>().join(", ")
 }
 
 /// Blocking GET; `etag` makes it conditional (304 has an empty body).
@@ -44,13 +54,14 @@ pub fn get(url: &str, etag: Option<&str>) -> Result<Response> {
     let mut response = request.call().with_context(|| format!("GET {url}"))?;
     let etag = etag_of(response.headers());
     let status = response.status().as_u16();
+    let edge = edge_of(status, response.headers());
     // An error's body is never used: one past the limit must not hide its status. A 304 sends none, yet may name an
     // encoding (GitHub's does): reading it would fail in the decoder.
     let body = match status {
         304 | 400.. => Vec::new(),
         _ => response.body_mut().with_config().limit(MAX_BODY).read_to_vec().with_context(|| format!("read {url}"))?,
     };
-    Ok(Response { status, etag, body })
+    Ok(Response { status, etag, body, edge })
 }
 
 #[cfg(test)]

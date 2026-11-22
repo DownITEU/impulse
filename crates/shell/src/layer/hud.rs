@@ -19,7 +19,7 @@ use super::{
 use crate::{
     bindings::{Hotkeys, hotkeys_scope},
     cheats::{CheatList, EditorClosed},
-    library::{Library, LibraryEvent, vacant},
+    library::{GamePicker, Library, LibraryEvent, vacant},
     map::{MapView, Maps, Minimap},
     run::{Runs, run_button, session_panel},
     settings::Settings,
@@ -127,6 +127,8 @@ pub struct Hud {
     maps: Entity<Maps>,
     map: Entity<MapView>,
     cheat_list: Entity<CheatList>,
+    /// The NO TRAINER card's OTHER TRAINER opens it here too.
+    picker: Entity<GamePicker>,
     docks: Entity<Docks>,
     minimap: Entity<Minimap>,
     // The HUD window over the game while Impulse is behind it.
@@ -149,6 +151,7 @@ impl Hud {
         maps: Entity<Maps>,
         map: Entity<MapView>,
         cheat_list: Entity<CheatList>,
+        picker: Entity<GamePicker>,
         settings: &Entity<Settings>,
         paths: &Paths,
         window: &mut Window,
@@ -213,6 +216,14 @@ impl Hud {
             }
         })
         .detach();
+        // Nor in the gone picker.
+        cx.observe_in(&picker, window, |hud, picker, window, cx| {
+            if hud.over && !picker.read(cx).is_open() {
+                hud.focus.focus(window, cx);
+            }
+            cx.notify();
+        })
+        .detach();
         let hud = Self {
             layer,
             library,
@@ -222,6 +233,7 @@ impl Hud {
             maps,
             map,
             cheat_list,
+            picker,
             docks,
             minimap,
             _glance: glance,
@@ -347,7 +359,7 @@ impl Render for Hud {
                             t(cx, key::OVERLAY_NO_LIVE_MAP_HINT),
                         ))
                         .into_any_element(),
-                    (SESSION, Some(game)) => div().p(px(16.)).child(self.session(game, cx)).into_any_element(),
+                    (SESSION, Some(game)) if game.installed() => div().p(px(16.)).child(self.session(game, cx)).into_any_element(),
                     _ => return None,
                 };
                 Some((spec, content))
@@ -414,6 +426,7 @@ impl Render for Hud {
             .children(frames)
             .child(docks::input(&self.docks))
             .children(self.cheat_list.read(cx).editor().cloned())
+            .children(Some(self.picker.clone()).filter(|picker| picker.read(cx).is_open()))
             .children(Some(self.warning.clone()).filter(|warning| warning.read(cx).is_open()))
     }
 }

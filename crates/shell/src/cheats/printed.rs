@@ -31,6 +31,8 @@ pub struct Printed {
     /// The control column's least width: the widest control here, so the caps sit next to it. A longer button text widens
     /// its own row instead of running over the caps.
     pub control_width: f32,
+    /// The trainer's notes, markdown.
+    pub notes: Option<SharedString>,
 }
 
 impl Printed {
@@ -61,6 +63,7 @@ impl Printed {
                 .collect(),
             control_width: sheet.cheats.iter().map(control_width).fold(0., f32::max),
             inputs,
+            notes: sheet.notes.clone().map(SharedString::from),
         }
     }
 

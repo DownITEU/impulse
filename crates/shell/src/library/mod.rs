@@ -5,7 +5,7 @@ mod picker;
 mod sidebar;
 mod source_menu;
 
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use blocking::unblock;
 use client::{
@@ -30,15 +30,15 @@ pub enum LibraryEvent {
     Switched,
     /// The user linked a game to a title for its maps, or took the link away.
     Linked,
+    /// The user chose another record's trainer for the game, or its own again.
+    Retrained(GameId),
 }
 
 /// What `+ ADD` found for an executable.
 pub struct Found {
     pub exe: PathBuf,
     /// The catalog: the list is scanned again with it.
-    pub games: Vec<model::Game>,
-    /// Lower case, for the filter.
-    pub names: Vec<String>,
+    pub games: Arc<Vec<model::Game>>,
     /// Indices into `games` of those that keep their executable where `exe` is.
     pub owners: Vec<usize>,
 }
@@ -49,8 +49,17 @@ pub struct Library {
     paths: Paths,
     picked: Picked,
     links: Links,
+    trainer_links: Links,
     list: Load<listing::Library>,
+    /// The listed game open, kept in the prefs.
     open: Option<GameId>,
+    /// A catalog game open in its place, not installed.
+    browsed: Option<Arc<Game>>,
+    /// The record of the browse under way, until it shows, and whether it opens (else it refreshes the one shown): a
+    /// list made meanwhile asks again with its catalog.
+    wanted: Option<(Ref, bool)>,
+    // Replaced by the next browse, dropped by an open: a late one never lands.
+    _browsing: Option<Task<()>>,
     // Dropped by a reload.
     _listing: Task<()>,
 }
@@ -67,17 +76,30 @@ impl Library {
             settings,
             paths: paths.clone(),
             picked: Picked::load(paths),
-            links: Links::load(paths),
+            links: Links::maps(paths),
+            trainer_links: Links::trainers(paths),
             list: Load::Pending,
             open,
+            browsed: None,
+            wanted: None,
+            _browsing: None,
         }
     }
 
-    /// Lists anew after the source's caches were cleared.
+    /// Lists anew after the source's caches were cleared; a browsed game goes with its catalog.
     pub fn reload(&mut self, cx: &mut Context<Self>) {
         self.list = Load::Pending;
         self._listing = listen(&self.registry, cx);
+        if self.stop_browsing() {
+            cx.emit(LibraryEvent::Opened);
+        }
         cx.notify();
+    }
+
+    /// Drops the browsed game and the browse under way; `true` when one was shown.
+    fn stop_browsing(&mut self) -> bool {
+        (self.wanted, self._browsing) = (None, None);
+        self.browsed.take().is_some()
     }
 
     pub fn list(&self) -> &Load<listing::Library> {
@@ -95,28 +117,70 @@ impl Library {
         self.games().iter().find(|game| game.id == *id)
     }
 
+    /// The catalog records of `ids`, listed or not, in one pass and catalog order.
+    pub fn records(&self, ids: &[GameId]) -> Vec<&model::Game> {
+        let Load::Ready(list) = &self.list else { return Vec::new() };
+        let ids: HashSet<Ref> = ids.iter().filter_map(GameId::game).collect();
+        list.catalog.iter().filter(|record| ids.contains(&record.id)).collect()
+    }
+
     /// The open game's id; before the list comes, the one open at the last start.
     pub fn open_id(&self) -> Option<&GameId> {
-        self.open.as_ref()
+        self.browsed.as_ref().map(|game| &game.id).or(self.open.as_ref())
     }
 
+    /// The open game: a listed one, or a catalog game the user browses.
     pub fn opened(&self) -> Option<&Arc<Game>> {
-        self.game(self.open.as_ref()?)
+        self.browsed.as_ref().or_else(|| self.game(self.open.as_ref()?))
     }
 
-    /// The user opens a game: it is open at the next start too.
+    /// The user opens a listed game: it is open at the next start too.
     pub fn open(&mut self, id: GameId, cx: &mut Context<Self>) {
-        self.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.game = Some(id.clone()), cx));
-        self.open = Some(id);
+        self.stop_browsing();
+        self.keep_open(id, cx);
         cx.emit(LibraryEvent::Opened);
         cx.notify();
+    }
+
+    fn keep_open(&mut self, id: GameId, cx: &mut Context<Self>) {
+        self.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.game = Some(id.clone()), cx));
+        self.open = Some(id);
+    }
+
+    /// Opens the catalog record `record`, a listed game as it is. Not kept: the next start opens the last listed game.
+    pub fn browse(&mut self, record: Ref, cx: &mut Context<Self>) {
+        let id = GameId::of(&record);
+        if self.game(&id).is_some() {
+            return self.open(id, cx);
+        }
+        self.load_browsed(record, true, cx);
+    }
+
+    /// Makes the catalog game `record` off the UI thread, then shows it: `Opened` when it `opens`, else `Switched` (a
+    /// new copy of the one shown); one gone from the catalog gives the listed game back. Only the latest lands: an
+    /// open, another browse or a list of a new catalog drops it.
+    fn load_browsed(&mut self, record: Ref, opens: bool, cx: &mut Context<Self>) {
+        let Load::Ready(list) = &self.list else { return };
+        let (catalog, paths, asked) = (list.catalog.clone(), self.paths.clone(), record.clone());
+        self.wanted = Some((record, opens));
+        self._browsing = Some(cx.spawn(async move |library, cx| {
+            let game = unblock(move || listing::browse(&catalog, &asked, &paths)).await;
+            library
+                .update(cx, |library, cx| {
+                    let event = if opens || game.is_none() { LibraryEvent::Opened } else { LibraryEvent::Switched };
+                    (library.browsed, library.wanted) = (game.map(Arc::new), None);
+                    cx.emit(event);
+                    cx.notify();
+                })
+                .ok();
+        }));
     }
 
     /// Uses the game's other install.
     pub fn switch(&mut self, id: &GameId, cx: &mut Context<Self>) {
         let Some(game) = self.game_mut(id) else { return };
         game.switch();
-        let used = sources::exe(&game.install).is_some();
+        let used = game.install.as_ref().and_then(sources::exe).is_some();
         self.picked.set_used(id, used);
         switched(cx);
     }
@@ -138,6 +202,24 @@ impl Library {
             cx.emit(LibraryEvent::Linked);
             cx.notify();
         }
+    }
+
+    /// The user's choice of the catalog record whose trainer `id` uses; `None` or its own record is its own.
+    pub fn set_trainer(&mut self, id: &GameId, record: Option<Ref>, cx: &mut Context<Self>) {
+        // A list replaced meanwhile may have let the game go.
+        let Some((own, was)) = self.game(id).map(|game| (game.source.id.clone(), game.stamp.trainer.clone())) else { return };
+        match record.filter(|record| *record != own) {
+            Some(record) => self.trainer_links.set(id, &record),
+            None => drop(self.trainer_links.clear(id)),
+        }
+        if let Load::Ready(list) = &mut self.list {
+            list.relink(|game| self.trainer_links.get(game));
+        }
+        // The trainer in use picked again reloads nothing.
+        if self.game(id).is_some_and(|game| game.stamp.trainer != was) {
+            cx.emit(LibraryEvent::Retrained(id.clone()));
+        }
+        cx.notify();
     }
 
     /// Makes `exe` the source of a listed game.
@@ -166,10 +248,11 @@ impl Library {
         if game.unpick() {
             return switched(cx);
         }
-        if let Load::Ready(mut list) = mem::replace(&mut self.list, Load::Pending) {
-            list.games.retain(|game| game.id != *id);
-            self.set(list, cx);
-        }
+        let Load::Ready(list) = &self.list else { return };
+        // The same catalog: a browse under way goes on.
+        let games = list.games.iter().filter(|game| game.id != *id).cloned().collect();
+        let list = listing::Library { games, trainers: list.trainers, catalog: list.catalog.clone() };
+        self.set(list, cx);
     }
 
     /// The catalog and the games `exe` may belong to.
@@ -182,15 +265,14 @@ impl Library {
             };
             let found = unblock(move || {
                 let owners = sources::owners(&games, &exe);
-                let names = games.iter().map(|game| game.name.to_lowercase()).collect();
-                Found { exe, games, names, owners }
+                Found { exe, games: Arc::new(games), owners }
             });
             Some(found.await)
         })
     }
 
     /// Adds `games[at]` with its executable and opens it; a listed game takes it as its source.
-    pub fn add(&mut self, exe: PathBuf, games: Vec<model::Game>, at: usize, cx: &mut Context<Self>) {
+    pub fn add(&mut self, exe: PathBuf, games: Arc<Vec<model::Game>>, at: usize, cx: &mut Context<Self>) {
         let id = GameId::of(&games[at].id);
         if self.game(&id).is_some() {
             self.pick(id.clone(), exe, cx);
@@ -211,18 +293,45 @@ impl Library {
         .detach();
     }
 
+    /// Adds `exe` as the catalog record `record` of the list shown now: a list made meanwhile may hold it elsewhere.
+    pub fn add_as(&mut self, exe: PathBuf, record: &Ref, cx: &mut Context<Self>) {
+        let Load::Ready(list) = &self.list else { return };
+        let Some(at) = list.catalog.iter().position(|game| game.id == *record) else { return };
+        let games = list.catalog.clone();
+        self.add(exe, games, at, cx);
+    }
+
     fn game_mut(&mut self, id: &GameId) -> Option<&mut Game> {
         let Load::Ready(list) = &mut self.list else { return None };
         list.games.iter_mut().find(|game| game.id == *id).map(Arc::make_mut)
     }
 
-    fn set(&mut self, list: listing::Library, cx: &mut Context<Self>) {
-        let listed = self.open.as_ref().is_some_and(|id| list.games.iter().any(|game| game.id == *id));
-        if !listed {
+    /// Shows `list` with the trainers chosen now: a scan that ran meanwhile has the old choice.
+    /// The catalog game asked for last, else the one shown, is open as listed once installed, else made again from a
+    /// new catalog.
+    fn set(&mut self, mut list: listing::Library, cx: &mut Context<Self>) {
+        list.relink(|game| self.trainer_links.get(game));
+        let was = self.open_id().cloned();
+        let has = |id: &GameId| list.games.iter().any(|game| game.id == *id);
+        let target = self.wanted.clone().or_else(|| self.browsed.as_ref().map(|game| (game.source.id.clone(), false)));
+        let installed = target.as_ref().map(|(record, _)| GameId::of(record)).filter(|id| has(id));
+        let opened = installed.is_some();
+        if let Some(id) = installed {
+            self.stop_browsing();
+            self.keep_open(id, cx);
+        }
+        if !self.open.as_ref().is_some_and(has) {
             self.open = list.games.first().map(|game| game.id.clone());
         }
+        let new_catalog = match &self.list {
+            Load::Ready(old) => !Arc::ptr_eq(&old.catalog, &list.catalog),
+            _ => true,
+        };
         self.list = Load::Ready(list);
-        if !listed {
+        if let Some((record, opens)) = target.filter(|_| !opened && new_catalog) {
+            self.load_browsed(record, opens, cx);
+        }
+        if opened || self.open_id() != was.as_ref() {
             cx.emit(LibraryEvent::Opened);
         }
         cx.emit(LibraryEvent::Listed);
@@ -243,7 +352,7 @@ fn listen(registry: &Arc<Registry>, cx: &mut Context<Library>) -> Task<()> {
             match snapshot {
                 Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => {
                     have_copy = true;
-                    rescan(&library, all, cx).await;
+                    rescan(&library, Arc::new(all), cx).await;
                 }
                 Snapshot::Fresh(Err(e)) if !have_copy => {
                     library
@@ -261,8 +370,7 @@ fn listen(registry: &Arc<Registry>, cx: &mut Context<Library>) -> Task<()> {
 
 /// Lists the installed games of `games` anew, with the executables the user picked. A first list shows the last
 /// scan's installs at once: reading the launchers takes minutes on a cold disk with hundreds of games.
-async fn rescan(library: &WeakEntity<Library>, games: Vec<model::Game>, cx: &mut AsyncApp) {
-    let mut games = Arc::new(games);
+async fn rescan(library: &WeakEntity<Library>, mut games: Arc<Vec<model::Game>>, cx: &mut AsyncApp) {
     loop {
         let Ok((picked, paths, registry, first)) = library.read_with(cx, |library, _| {
             let first = matches!(library.list, Load::Pending);

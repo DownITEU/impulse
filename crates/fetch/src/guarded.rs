@@ -18,7 +18,7 @@ use ureq::{
 };
 use url::Url;
 
-use crate::{Response, etag_of};
+use crate::{Response, edge_of, etag_of};
 
 const MAX_REDIRECTS: usize = 5;
 
@@ -95,6 +95,7 @@ pub fn guarded(url: &str, allowed: &dyn Fn(&str) -> bool, limit: u64, timeout: D
             continue;
         }
         let etag = etag_of(response.headers());
+        let edge = edge_of(status, response.headers());
         let body = match status {
             200..=299 => response.body_mut().with_config().limit(limit).read_to_vec().map_err(|e| match e {
                 ureq::Error::BodyExceedsLimit(_) => anyhow::Error::new(Refused).context(format!("{host}: a body past {limit} bytes")),
@@ -102,7 +103,7 @@ pub fn guarded(url: &str, allowed: &dyn Fn(&str) -> bool, limit: u64, timeout: D
             })?,
             _ => Vec::new(),
         };
-        return Ok(Response { status, etag, body });
+        return Ok(Response { status, etag, body, edge });
     }
     bail!("too many redirects")
 }

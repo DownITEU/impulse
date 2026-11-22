@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use futures::channel::oneshot;
+use model::{Failure, FailureKind};
 use serde::{Deserialize, Serialize};
 use tao::{
     event::{Event, StartCause},
@@ -16,10 +17,15 @@ use tao::{
     platform::windows::{EventLoopBuilderExtWindows, WindowBuilderExtWindows},
     window::{Window, WindowBuilder},
 };
-use webview2_com::Error::WindowsError;
-use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, http::Response as HttpResponse};
+use webview2_com::{Error::WindowsError, Microsoft::Web::WebView2::Win32::ICoreWebView2Settings2, take_pwstr};
+use windows::core::{HSTRING, Interface, PWSTR};
+use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, WebViewExtWindows, http::Response as HttpResponse};
 
 use super::{BRIDGE, Cmd, Request, Response, offline};
+use crate::{
+    install,
+    texts::{PROBE_FAILED, PROBE_OK, text},
+};
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Response>>>>>;
 // Fields drop in order: the WebView closes before its window.
@@ -45,6 +51,7 @@ struct Reply {
     status: Option<u16>,
     body: Option<String>,
     error: Option<String>,
+    probe_ok: Option<bool>,
 }
 
 pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
@@ -56,6 +63,7 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
     // while Impulse is in front.
     event_loop.set_device_event_filter(DeviceEventFilter::Always);
     let data_dir = data_dir.to_owned();
+    let wand = install::installs().first().map_or_else(|| "Wand".to_owned(), |install| format!("Wand/{}", install.label()));
 
     let mut bridge: Option<Bridge> = None;
     let (mut ready, mut queue, mut next_id, mut last) = (false, Vec::new(), 0u64, Instant::now());
@@ -64,7 +72,7 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
             Event::UserEvent(Cmd::Ready) => ready = true,
             Event::UserEvent(Cmd::Fetch(request, tx)) => {
                 let new = bridge.is_none();
-                let built = bridge.take().map_or_else(|| build_retrying(&data_dir, target, proxy.clone(), pending.clone()), Ok);
+                let built = bridge.take().map_or_else(|| build_retrying(&data_dir, &wand, target, proxy.clone(), pending.clone()), Ok);
                 // After the build, as its retries can outlast the idle time; a page still loading keeps its deadline.
                 if new || ready {
                     last = Instant::now();
@@ -115,12 +123,18 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
 }
 
 // After some hard kills WebView2 keeps the profile busy for about 50 s; a clean exit frees it at once.
-fn build_retrying(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopProxy<Cmd>, pending: Pending) -> Result<Bridge> {
+fn build_retrying(
+    data_dir: &Path,
+    wand: &str,
+    target: &EventLoopWindowTarget<Cmd>,
+    proxy: EventLoopProxy<Cmd>,
+    pending: Pending,
+) -> Result<Bridge> {
     const ERROR_BUSY: i32 = 0x800700AA_u32 as i32;
     let deadline = Instant::now() + Duration::from_secs(90);
     let mut busy = false;
     loop {
-        match build(data_dir, target, proxy.clone(), pending.clone()) {
+        match build(data_dir, wand, target, proxy.clone(), pending.clone()) {
             Err(e)
                 if Instant::now() < deadline
                     && matches!(e.downcast_ref(), Some(wry::Error::WebView2Error(WindowsError(w))) if w.code().0 == ERROR_BUSY) =>
@@ -143,7 +157,7 @@ fn build_retrying(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: E
 }
 
 // COM: WebViewBuilder::build runs CoInitializeEx(STA) on this thread, and tao skips OLE with drag and drop off.
-fn build(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopProxy<Cmd>, pending: Pending) -> Result<Bridge> {
+fn build(data_dir: &Path, wand: &str, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopProxy<Cmd>, pending: Pending) -> Result<Bridge> {
     // Written for each build: a page removed since the last one would never load.
     std::fs::write(data_dir.join("bridge.html"), BRIDGE)?;
     let window = WindowBuilder::new().with_visible(false).with_drag_and_drop(false).build(target)?;
@@ -160,21 +174,78 @@ fn build(data_dir: &Path, target: &EventLoopWindowTarget<Cmd>, proxy: EventLoopP
             }
             HttpResponse::builder().status(204).header("Access-Control-Allow-Origin", "*").body(Cow::Borrowed(&[][..])).unwrap()
         })
-        .with_url(url.as_str())
         .with_additional_browser_args(BROWSER_ARGS)
         .build(&window)?;
+    if let Err(e) = name_wand(&webview, wand) {
+        log::warn!("bridge User-Agent not set, signing in may fail: {e}");
+    }
+    webview.load_url(url.as_str())?;
     Ok((webview, context, window))
+}
+
+fn name_wand(webview: &WebView, wand: &str) -> windows::core::Result<()> {
+    // SAFETY: the WebView was built on this thread and outlives the call.
+    let settings = unsafe { webview.webview().Settings() }?.cast::<ICoreWebView2Settings2>()?;
+    let mut agent = PWSTR::null();
+    // SAFETY: WebView2 allocates the string, `take_pwstr` frees it.
+    unsafe { settings.UserAgent(&mut agent) }?;
+    let agent = HSTRING::from(format!("{} {wand}", take_pwstr(agent)));
+    // SAFETY: as for `Settings`.
+    unsafe { settings.SetUserAgent(&agent) }
+}
+
+fn failed(error: &str, probe_ok: Option<bool>) -> anyhow::Error {
+    let (result, words) = match probe_ok {
+        Some(false) => ("origin probe failed (network or browser policy)", PROBE_FAILED),
+        Some(true) => ("origin probe succeeded; cause of the original failure unknown", PROBE_OK),
+        None => return offline(&format!("fetch failed: {error}")),
+    };
+    anyhow!("fetch failed: {error}; {result}").context(Failure::new(FailureKind::Offline).saying(text(words)))
 }
 
 fn reply(pending: &Pending, raw: &[u8]) {
     let Ok(reply) = serde_json::from_slice::<Reply>(raw) else {
         return;
     };
-    let result = match reply.status {
-        Some(status) => Ok(Response { status, body: reply.body.unwrap_or_default() }),
-        None => Err(offline(&format!("fetch failed: {}", reply.error.unwrap_or_default()))),
-    };
     if let Some(tx) = pending.lock().unwrap().remove(&reply.id) {
-        let _ = tx.send(result);
+        let _ = tx.send(reply.result());
+    }
+}
+
+impl Reply {
+    fn result(self) -> Result<Response> {
+        match (self.status, self.error.as_deref()) {
+            (Some(status), None) => Ok(Response { status, body: self.body.unwrap_or_default() }),
+            (Some(status), Some(error)) => Err(offline(&format!("HTTP {status}: could not read the response body ({error})"))),
+            (None, error) => Err(failed(error.unwrap_or("browser request failed"), self.probe_ok)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn failure(json: &str) -> Failure {
+        let reply: Reply = serde_json::from_str(json).unwrap();
+        Failure::from(reply.result().err().expect("an error reply"))
+    }
+
+    #[test]
+    fn a_body_read_error_keeps_the_status() {
+        let got = failure(r#"{"id":1,"status":502,"error":"TypeError","body":"private"}"#);
+        assert_eq!(got.kind, FailureKind::Offline);
+        assert_eq!(got.detail, "Offline: HTTP 502: could not read the response body (TypeError)");
+    }
+
+    #[test]
+    fn a_request_without_a_reply_is_worded_by_the_probe() {
+        let not_reached = failure(r#"{"id":1,"error":"TypeError","probe_ok":false}"#);
+        let reached = failure(r#"{"id":1,"error":"TypeError","probe_ok":true}"#);
+        let unprobed = failure(r#"{"id":1,"error":"timed out"}"#);
+        assert!([&not_reached, &reached, &unprobed].iter().all(|failure| failure.kind == FailureKind::Offline));
+        assert_eq!((not_reached.message, reached.message, unprobed.message), (Some(text(PROBE_FAILED)), Some(text(PROBE_OK)), None));
+        assert!(not_reached.detail.contains("origin probe failed"), "{}", not_reached.detail);
+        assert!(reached.detail.contains("cause of the original failure unknown"), "{}", reached.detail);
     }
 }

@@ -9,7 +9,7 @@ use i18n::Arg;
 
 use crate::{
     layer::{Layer, overlay_hotkey},
-    library::{Library, pick_source, source_options},
+    library::{GamePicker, Library, pick_source, source_options},
     run::{Runs, run_button},
     trainer::{Trainers, title},
     ui::{
@@ -18,7 +18,7 @@ use crate::{
         key,
         text::{t, tf},
         theme::*,
-        widgets::{action, icon, tip, tracked},
+        widgets::{action, icon, primary_action, tip, tracked},
     },
 };
 
@@ -27,6 +27,7 @@ pub struct Hero {
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
     layer: Entity<Layer>,
+    picker: Entity<GamePicker>,
     /// The sources menu is open.
     menu: Option<()>,
 }
@@ -37,13 +38,14 @@ impl Hero {
         trainers: Entity<Trainers>,
         runs: Entity<Runs>,
         layer: Entity<Layer>,
+        picker: Entity<GamePicker>,
         cx: &mut Context<Self>,
     ) -> Self {
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
         cx.observe(&layer, |_, _, cx| cx.notify()).detach();
-        Self { library, trainers, runs, layer, menu: None }
+        Self { library, trainers, runs, layer, picker, menu: None }
     }
 
     pub fn close(&mut self, cx: &mut Context<Self>) {
@@ -51,17 +53,44 @@ impl Hero {
         cx.notify();
     }
 
-    fn actions(&self, game: &Game, cx: &Context<Self>) -> impl IntoElement {
+    /// ADD GAME: GET ON each store of the title, then the executable by hand, as the catalog record open.
+    fn add_game(&self, game: &Game, cx: &Context<Self>) -> Stateful<Div> {
+        let get = game.stores.iter().map(|(store, _)| tf(cx, key::PAGE_GET_ON, &[("store", Arg::Str(store))]));
+        let options = get.chain([t(cx, key::PAGE_ADD_MANUALLY)]).collect();
+        let trigger = primary_action("add-game", cx).px(px(16.)).gap(px(10.)).child(icon(Icon::Plus, 13., rgb(BG))).child(tracked(
+            &t(cx, key::PAGE_ADD_GAME),
+            12.5,
+            0.14,
+        ));
+        dropdown(trigger, (), open_menu, self.menu.is_some(), options, usize::MAX, px(220.), cx, |hero, at, window, cx| {
+            let Some(game) = hero.library.read(cx).opened().cloned() else { return };
+            match game.stores.get(at) {
+                Some((_, link)) => cx.open_url(link),
+                None => hero.picker.update(cx, |picker, cx| picker.add_to(game.source.id.clone(), window, cx)),
+            }
+        })
+    }
+
+    /// A catalog game has ADD GAME and the star only: no run, folder or source.
+    fn actions(&self, game: &Game, cx: &Context<Self>) -> Div {
         let accent = rgb(accent(cx));
         let running = self.runs.read(cx).is_live(&game.id);
         let favorite = self.trainers.read(cx).game_profile(&game.id).favorite;
-        let (id, location) = (game.id.clone(), game.install.location.clone());
+        let id = game.id.clone();
+        let star = icon_button("favorite", t(cx, key::PAGE_STAR))
+            .on_click(cx.listener(move |hero, _, _, cx| {
+                hero.trainers.update(cx, |trainers, cx| trainers.toggle_favorite(&id, cx));
+            }))
+            .child(match favorite {
+                true => icon(Icon::StarFill, 16., accent),
+                false => icon(Icon::Star, 16., rgb(MUTED)),
+            });
+        let bar = h_flex().relative().justify_end().gap(px(8.));
+        let Some(location) = game.install.as_ref().map(|install| install.location.clone()) else {
+            return bar.child(self.add_game(game, cx)).child(star);
+        };
         let layer = self.layer.clone();
-        h_flex()
-            .relative()
-            .justify_end()
-            .gap(px(8.))
-            .child(run_button(&self.runs, game, cx))
+        bar.child(run_button(&self.runs, game, cx))
             // Over the running game; the mode and the hotkey are in Settings.
             .when(running, |bar| {
                 bar.child(
@@ -73,16 +102,7 @@ impl Hero {
                         .child(tracked(&overlay_hotkey(self.layer.read(cx)), 12.5, 0.14).text_color(rgb(FAINT))),
                 )
             })
-            .child(
-                icon_button("favorite", t(cx, key::PAGE_STAR))
-                    .on_click(cx.listener(move |hero, _, _, cx| {
-                        hero.trainers.update(cx, |trainers, cx| trainers.toggle_favorite(&id, cx));
-                    }))
-                    .child(match favorite {
-                        true => icon(Icon::StarFill, 16., accent),
-                        false => icon(Icon::Star, 16., rgb(MUTED)),
-                    }),
-            )
+            .child(star)
             .child(icon_button("folder", t(cx, key::PAGE_FOLDER)).on_click(move |_, _, cx| cx.open_with_system(&location)).child(icon(
                 Icon::Folder,
                 15.,
@@ -99,10 +119,9 @@ impl Hero {
             .when(!self.runs.read(cx).holds(&game.id), |bar| {
                 let (options, current) = source_options(game, cx);
                 let more = icon_button("source", t(cx, key::PAGE_SOURCE)).child(icon(Icon::More, 15., rgb(MUTED)));
-                let place = |list: Div| list.right(px(-1.)).min_w(px(200.));
-                bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, place, cx, |hero, at, _, cx| {
+                bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, px(200.), cx, |hero, at, window, cx| {
                     if let Some(game) = hero.library.read(cx).opened().cloned() {
-                        pick_source(&hero.library, &game, at, cx);
+                        pick_source(&hero.library, &hero.picker, &game, at, window, cx);
                     }
                 }))
             })

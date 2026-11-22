@@ -9,6 +9,7 @@ mod rockstar;
 mod standalone;
 mod start;
 mod steam;
+mod store;
 mod ubisoft;
 mod vdf;
 mod xbox;
@@ -23,6 +24,7 @@ use model::{Game, Installation, Origin, Ref, StoreId};
 
 pub use custom::{Custom, install, owners};
 pub use start::start;
+pub use store::{store_link, store_name};
 
 struct App {
     store_id: String,
@@ -113,8 +115,10 @@ pub(crate) mod tests {
             id: Ref::new(&SourceId::new("t").unwrap(), id),
             title_id: String::new(),
             name: String::new(),
+            terms: Vec::new(),
             store_ids: store_ids.iter().filter_map(|id| StoreId::parse(id)).collect(),
             exe: exe.map(str::to_owned),
+            purchase: Vec::new(),
             standalone: Vec::new(),
             cover: None,
             thumbnail: None,

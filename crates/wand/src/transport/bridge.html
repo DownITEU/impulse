@@ -2,14 +2,28 @@
 <meta charset="utf-8">
 <script>
 const post = (path, body) => fetch('http://impulse.localhost' + path, { method: 'POST', mode: 'no-cors', body });
+// Only a reachability hint: an opaque response tells us nothing about the failed endpoint.
+async function probe(url) {
+  try {
+    await fetch(new URL(url).origin + '/', {
+      mode: 'no-cors', credentials: 'omit', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 window.impulse = async ({ id, method, url, headers, body }) => {
-  let reply;
+  let reply, status;
   try {
     // Bounds the body too: a reply that never comes would leave its caller waiting.
     const res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(120000) });
-    reply = { id, status: res.status, body: await res.text() };
+    status = res.status;
+    reply = { id, status, body: await res.text() };
   } catch (e) {
-    reply = { id, error: String(e) };
+    const error = e instanceof TypeError ? 'TypeError' : e?.name === 'TimeoutError' ? 'timed out' : 'browser request failed';
+    const probe_ok = status === undefined && error === 'TypeError' ? await probe(url) : undefined;
+    reply = { id, status, error, probe_ok };
   }
   post('/response', JSON.stringify(reply));
 };

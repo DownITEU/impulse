@@ -1,12 +1,12 @@
 use std::{fs, sync::Arc, time::Duration};
 
 use futures::future::BoxFuture;
-use model::{Args, Attach, Cheat, Failure, FailureKind, Kind, Plan, Ref, Runner, Trainer};
+use model::{Args, Attach, Cheat, Failure, FailureKind, Kind, Launch, Plan, Ref, Runner, Trainer};
 
 use super::{PINNED, Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, step};
 use crate::{
     Load,
-    library::GameId,
+    library::{GameId, Stamp},
     profile::{Profiles, TrainerProfile},
     storage::Paths,
 };
@@ -103,15 +103,19 @@ fn trainer() -> Ref {
     Ref::parse("s:t").unwrap()
 }
 
+fn stamp(build: u32) -> Stamp {
+    Stamp { build: Some(build), ..Stamp::default() }
+}
+
 fn game(id: &str) -> GameId {
     GameId::of(&Ref::parse(&format!("s:{id}")).unwrap())
 }
 
 fn sheet_of(build: u32, profile: &TrainerProfile) -> Sheet {
-    let plan = Plan { image: None, minimum_age: Duration::ZERO, launch: false, runner: Arc::new(Idle) };
+    let plan = Plan { image: None, minimum_age: Duration::ZERO, launch: Launch::User, runner: Arc::new(Idle) };
     let cheats = vec![Cheat { category: "player".into(), ..cheat("god", Kind::Toggle, Args::default()) }];
-    let trainer = Trainer { cheats, pinned: Vec::new(), location: false, teleport: false, plan };
-    Sheet::new(trainer, self::trainer(), (None, Some(build)), profile)
+    let trainer = Trainer { cheats, pinned: Vec::new(), location: false, teleport: false, notes: None, plan };
+    Sheet::new(trainer, self::trainer(), stamp(build), profile)
 }
 
 fn sheet(build: u32) -> Sheet {
@@ -137,16 +141,16 @@ fn a_held_game_shows_its_newer_copy_once_every_hold_is_released() {
     shelf.hold(g.clone());
     shelf.hold(g.clone());
     assert!(!shelf.put(g.clone(), sheet(2)));
-    assert_eq!(shelf.sheet(&g).unwrap().stamp, (None, Some(1)));
+    assert_eq!(shelf.sheet(&g).unwrap().stamp, stamp(1));
     let pinned = profiles("held", true);
     shelf.hold(h.clone());
     assert!(!shelf.put(h.clone(), sheet(3)));
     assert!(!shelf.release(&g, &pinned));
     assert!(shelf.release(&h, &pinned));
-    assert_eq!(shelf.sheet(&g).unwrap().stamp, (None, Some(1)));
+    assert_eq!(shelf.sheet(&g).unwrap().stamp, stamp(1));
     assert!(shelf.release(&g, &pinned));
     let shown = shelf.sheet(&g).unwrap();
-    assert!(shown.stamp == (None, Some(2)) && shown.pinned.contains(&0));
+    assert!(shown.stamp == stamp(2) && shown.pinned.contains(&0));
     assert!(!shelf.release(&g, &pinned));
 }
 
@@ -158,7 +162,7 @@ fn a_failed_refresh_keeps_a_copy_stale_and_fails_without_one() {
     shelf.hold(g.clone());
     shelf.put(g.clone(), sheet(2));
     shelf.failed(g.clone(), Failure::new(FailureKind::Offline));
-    assert!(!shelf.is_current(&g, &(None, Some(1))));
+    assert!(!shelf.is_current(&g, &stamp(1)));
     shelf.release(&g, &profiles("stale", false));
     assert!(shelf.sheet(&g).is_some_and(|sheet| sheet.stale));
     shelf.pending(h.clone());
@@ -176,11 +180,24 @@ fn another_language_outdates_every_copy_shown_or_waiting() {
     shelf.put(h.clone(), sheet(2));
     shelf.outdate(Some(&g));
     // The waiting copy is the newest: it decides.
-    assert!(!shelf.is_current(&g, &(None, Some(1))) && shelf.is_current(&h, &(None, Some(2))));
+    assert!(!shelf.is_current(&g, &stamp(1)) && shelf.is_current(&h, &stamp(2)));
     shelf.outdate(None);
-    assert!(!shelf.is_current(&h, &(None, Some(2))));
+    assert!(!shelf.is_current(&h, &stamp(2)));
     shelf.release(&h, &profiles("outdated", false));
-    assert!(shelf.sheet(&h).is_some_and(|sheet| sheet.stale && sheet.stamp == (None, Some(2))));
+    assert!(shelf.sheet(&h).is_some_and(|sheet| sheet.stale && sheet.stamp == stamp(2)));
+}
+
+#[test]
+fn another_trainer_drops_the_copies_but_a_held_one() {
+    let mut shelf = Shelf::default();
+    let (g, h) = (game("g"), game("h"));
+    shelf.put(g.clone(), sheet(1));
+    shelf.put(h.clone(), sheet(1));
+    shelf.hold(h.clone());
+    shelf.put(h.clone(), sheet(2));
+    assert!(shelf.forget(&g) && !shelf.forget(&h));
+    assert!(shelf.get(&g).is_none());
+    assert!(shelf.is_current(&h, &stamp(1)) && !shelf.release(&h, &profiles("forgotten", false)));
 }
 
 #[test]

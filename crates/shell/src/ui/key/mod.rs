@@ -33,5 +33,6 @@ pub const FAILURE_REFUSED: Key = Key("failure-refused");
 pub const FAILURE_ELEVATION: Key = Key("failure-elevation");
 pub const FAILURE_PROTECTED: Key = Key("failure-protected");
 pub const FAILURE_ARCHITECTURE: Key = Key("failure-architecture");
+pub const FAILURE_RESTART: Key = Key("failure-restart");
 pub const FAILURE_INTERNAL: Key = Key("failure-internal");
 pub const FAILURE_PLACE: Key = Key("failure-place");

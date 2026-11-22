@@ -9,9 +9,14 @@ pub const CHEATS_FILTER: Key = Key("cheats-filter");
 
 pub const CHEATS_PINNED: Key = Key("cheats-pinned");
 pub const CHEATS_KEPT: Key = Key("cheats-kept");
+pub const CHEATS_NOTES: Key = Key("cheats-notes");
 pub const CHEATS_NO_TRAINER_TAG: Key = Key("cheats-no-trainer-tag");
 pub const CHEATS_NO_TRAINER: Key = Key("cheats-no-trainer");
 pub const CHEATS_NO_TRAINER_BODY: Key = Key("cheats-no-trainer-body");
+pub const CHEATS_OTHER_STORE: Key = Key("cheats-other-store");
+pub const CHEATS_USE_TRAINER: Key = Key("cheats-use-trainer");
+pub const CHEATS_OTHER_TRAINER: Key = Key("cheats-other-trainer");
+pub const CHEATS_NOT_INSTALLED: Key = Key("cheats-not-installed");
 pub const CHEATS_LOADING_TAG: Key = Key("cheats-loading-tag");
 pub const CHEATS_LOADING: Key = Key("cheats-loading");
 pub const CHEATS_SHOWN: Key = Key("cheats-shown");
@@ -55,8 +60,10 @@ pub const HOTKEYS_SHARED_TIP: Key = Key("hotkeys-shared-tip");
 
 pub const TRAINER_NONE: Key = Key("trainer-none");
 pub const TRAINER_MODS: Key = Key("trainer-mods");
+pub const TRAINER_FROM: Key = Key("trainer-from");
 pub const TRAINER_VERSION: Key = Key("trainer-version");
 pub const TRAINER_VERSION_UNKNOWN: Key = Key("trainer-version-unknown");
+pub const TRAINER_NOT_INSTALLED: Key = Key("trainer-not-installed");
 pub const TRAINER_UPDATE_PENDING: Key = Key("trainer-update-pending");
 pub const TRAINER_SESSIONS: Key = Key("trainer-sessions");
 pub const TRAINER_PLAYED_MIN: Key = Key("trainer-played-min");

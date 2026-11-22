@@ -25,6 +25,7 @@ failure-refused = odrzucono
 failure-elevation = gra działa jako administrator: zaakceptuj monit, aby się połączyć
 failure-protected = zabezpieczenia gry blokują trainery
 failure-architecture = trainer jest dla innej wersji gry (32 lub 64 bity): uruchom obsługiwaną
+failure-restart = gra jest już uruchomiona: zamknij ją, a potem uruchom stąd
 failure-internal = coś poszło nie tak: szczegóły w logu
 failure-place = { $why } (Ustawienia → Ogólne)
 
@@ -43,6 +44,9 @@ page-search = { $count ->
 }
 page-search-none = szukaj trainerów
 page-search-key = CTRL K
+page-add-game = DODAJ GRĘ
+page-get-on = ZDOBĄDŹ NA { $store }
+page-add-manually = DODAJ GRĘ RĘCZNIE...
 page-signed-out = WYLOGOWANO
 page-elevated = Uruchomiono jako administrator: gry uruchomione jako administrator łączą się bez pytania
 page-overlay = NAKŁADKA
@@ -66,6 +70,8 @@ disclaimer-exit = WYJDŹ
 signed-out-title = BŁĄD LOGOWANIA
 signed-out-body = Nie udało się zalogować do { $sources }. Przed ponowną próbą sprawdź połączenie z internetem i upewnij się, że aplikacja jest zainstalowana na tym komputerze i ma aktywną sesję. Bez logowania Impulse nie może wczytać trainerów.
 signed-out-retry = PONÓW PRÓBĘ
+signed-out-why = Powód: { $why }
+signed-out-trying = Logowanie…
 signed-out-close = ZAMKNIJ
 
 ## Library
@@ -85,6 +91,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + DODAJ .EXE
 library-source-change = ZMIEŃ .EXE
 library-source-remove = USUŃ .EXE
+library-source-trainer = ZMIEŃ TRAINER...
+library-source-own-trainer = WŁASNY TRAINER
 
 ## Picker
 
@@ -93,6 +101,11 @@ picker-owned = PASUJE KILKA GIER: KTÓRA TO?
 picker-unowned = NIE ROZPOZNANO GRY. SZUKAJ W KATALOGU PO NAZWIE.
 picker-in-library = { $store }  W BIBLIOTECE
 picker-prompt = Wybierz plik .exe gry
+picker-trainer-title = WYBIERZ TRAINER
+picker-trainer = NAJPIERW INNE SKLEPY, POTEM WG NAZWY: TRAINER DO INNEJ WERSJI MOŻE NIE PASOWAĆ
+picker-in-use = W UŻYCIU
+picker-find-title = ZNAJDŹ GRĘ
+picker-find = KAŻDY TRAINER WG NAZWY · ↑ ↓ ABY WYBRAĆ, ENTER ABY OTWORZYĆ
 
 ## Cheats
 
@@ -102,9 +115,14 @@ cheats-failed-body = Nie udało się pobrać listy modów: { $why }. Impulse spr
 cheats-filter = filtruj mody
 cheats-pinned = PRZYPIĘTE
 cheats-kept = Pobrana lista modów zostaje na dysku.
+cheats-notes = PRZECZYTAJ PRZED GRĄ
 cheats-no-trainer-tag = [ BRAK TRAINERA ]
 cheats-no-trainer = BRAK TRAINERA: { $game }
 cheats-no-trainer-body = Do tej gry nie ma jeszcze trainera. Gdy się pojawi, Impulse oznaczy grę w bibliotece.
+cheats-other-store = Dla tego sklepu jeszcze go nie ma, ale wersja z { $store } ma trainer. Wersje mogą się różnić między sklepami, więc może nie pasować do twojej.
+cheats-use-trainer = UŻYJ TRAINERA Z { $store }
+cheats-other-trainer = INNY TRAINER...
+cheats-not-installed = NIEZAINSTALOWANA · DODAJ GRĘ, ABY UŻYWAĆ JEJ MODÓW
 cheats-loading-tag = [ ŁADOWANIE ]
 cheats-loading = ŁADOWANIE LISTY MODÓW
 cheats-shown = { $count ->
@@ -167,8 +185,10 @@ trainer-mods = { $count ->
     [many] { $count } MODÓW
    *[other] { $count } MODA
 }
+trainer-from = TRAINER { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = NIEZNANA WERSJA
+trainer-not-installed = NIEZAINSTALOWANA
 trainer-update-pending = DO AKTUALIZACJI
 trainer-sessions = { $count ->
     [one] { $count } SESJA

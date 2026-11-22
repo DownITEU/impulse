@@ -1,18 +1,24 @@
-//! The game list at the left: favorites first, a filter, `+ ADD`; and the pane's notice before there is a game.
+//! The game list at the left: favorites first (those not installed after them), a filter, `+ ADD`; and the pane's
+//! notice before there is a game.
 
-use std::time::Duration;
+use std::{
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use client::{
     Load,
     library::{Game, GameId, Support},
 };
 use gpui_kit::{
-    Animation, AnimationExt, App, Context, Entity, FontWeight, IntoElement, ObjectFit, Render, SharedString, Window,
+    Animation, AnimationExt, App, Context, Div, Entity, FontWeight, IntoElement, ObjectFit, Render, SharedString, Stateful, Window,
     component::{h_flex, input::InputState, scroll::ScrollableElement, v_flex},
     div, img,
     prelude::*,
     px, rgb,
 };
+
+use model::Ref;
 
 use super::{GamePicker, Library};
 use crate::{
@@ -35,6 +41,17 @@ pub struct Marks {
 }
 
 type MarksOf = Box<dyn Fn(&GameId, &App) -> Marks>;
+type Starred = Box<dyn Fn(&App) -> Vec<GameId>>;
+
+/// A starred catalog game not installed.
+struct Away {
+    id: GameId,
+    record: Ref,
+    name: SharedString,
+    /// Lower case, for the filter.
+    search: String,
+    thumbnail: Option<String>,
+}
 
 pub struct Sidebar {
     library: Entity<Library>,
@@ -42,6 +59,12 @@ pub struct Sidebar {
     picker: Entity<GamePicker>,
     filter: Entity<InputState>,
     marks: MarksOf,
+    /// The starred games, installed or not.
+    starred: Starred,
+    /// The starred games the list does not hold, by name; made again only when they or the catalog change.
+    away: Vec<Away>,
+    /// What `away` was made of: the catalog and the ids, sorted.
+    away_of: (Weak<Vec<model::Game>>, Vec<GameId>),
 }
 
 impl Sidebar {
@@ -50,6 +73,7 @@ impl Sidebar {
         settings: Entity<Settings>,
         picker: Entity<GamePicker>,
         marks: impl Fn(&GameId, &App) -> Marks + 'static,
+        starred: impl Fn(&App) -> Vec<GameId> + 'static,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -57,14 +81,57 @@ impl Sidebar {
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
         let (filter, typed) = filter_input(key::LIBRARY_FILTER, window, cx);
         typed.detach();
-        Self { library, settings, picker, filter, marks: Box::new(marks) }
+        let (marks, starred) = (Box::new(marks), Box::new(starred));
+        Self { library, settings, picker, filter, marks, starred, away: Vec::new(), away_of: (Weak::new(), Vec::new()) }
     }
 
-    fn game_row(&self, index: usize, number: usize, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Makes `away` again when the starred games the list does not hold, or the catalog, changed.
+    fn refresh_away(&mut self, cx: &App) {
+        let library = self.library.read(cx);
+        let catalog = match library.list() {
+            Load::Ready(list) => Arc::downgrade(&list.catalog),
+            _ => Weak::new(),
+        };
+        let mut ids: Vec<GameId> = (self.starred)(cx).into_iter().filter(|id| library.game(id).is_none()).collect();
+        ids.sort();
+        if catalog.ptr_eq(&self.away_of.0) && ids == self.away_of.1 {
+            return;
+        }
+        self.away = library
+            .records(&ids)
+            .into_iter()
+            .map(|record| Away {
+                id: GameId::of(&record.id),
+                record: record.id.clone(),
+                name: record.name.to_uppercase().into(),
+                search: record.name.to_lowercase(),
+                thumbnail: record.thumbnail.clone(),
+            })
+            .collect();
+        self.away.sort_by(|a, b| a.search.cmp(&b.search));
+        self.away_of = (catalog, ids);
+    }
+
+    fn game_row(&self, number: usize, game: &Game, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = game.id.clone();
+        self.row(number, &game.id, SharedString::from(&game.name), game.thumbnail.clone(), game.support == Support::NoTrainer, cx)
+            .on_click(cx.listener(move |view, _, _, cx| view.library.update(cx, |library, cx| library.open(id.clone(), cx))))
+            .when((self.marks)(&game.id, cx).live, |row| row.child(live_label(cx)))
+            .when(game.support == Support::UpdatePending, |row| row.child(icon(Icon::Warn, 14., rgb(WARN))))
+    }
+
+    fn away_row(&self, number: usize, away: &Away, cx: &mut Context<Self>) -> impl IntoElement {
+        let record = away.record.clone();
+        self.row(number, &away.id, away.name.clone(), away.thumbnail.clone(), true, cx)
+            .on_click(cx.listener(move |view, _, _, cx| view.library.update(cx, |library, cx| library.browse(record.clone(), cx))))
+            .child(mono(t(cx, key::TRAINER_NOT_INSTALLED), 10.).flex_none().text_color(rgb(GHOST)))
+    }
+
+    /// A row's mark, lead and name; `faint`: no trainer, or not installed.
+    fn row(&self, number: usize, game: &GameId, name: SharedString, thumbnail: Option<String>, faint: bool, cx: &App) -> Stateful<Div> {
         let accent = rgb(accent(cx));
-        let current = Some(&game.id) == self.library.read(cx).open_id();
-        let no_trainer = game.support == Support::NoTrainer;
-        let name_color = match (current, no_trainer) {
+        let current = Some(game) == self.library.read(cx).open_id();
+        let name_color = match (current, faint) {
             (true, _) => accent,
             (false, true) => rgb(FAINT),
             (false, false) => rgb(TEXT_2),
@@ -79,13 +146,11 @@ impl Sidebar {
                 .size(px(22.))
                 .flex_none()
                 .bg(rgb(AVATAR))
-                .when_some(game.thumbnail.clone(), |lead, url| {
-                    lead.child(img(url).size_full().object_fit(ObjectFit::Cover).grayscale(no_trainer))
-                })
+                .when_some(thumbnail, |lead, url| lead.child(img(url).size_full().object_fit(ObjectFit::Cover).grayscale(faint)))
                 .into_any_element(),
         };
         h_flex()
-            .id(("game", index))
+            .id(("game", number))
             .h(px(36.))
             .flex_none()
             .pl(px(16.))
@@ -96,24 +161,11 @@ impl Sidebar {
                 true => row.bg(rgb(ROW_SELECTED)),
                 false => row.hover(|style| style.bg(rgb(ROW_HOVER))),
             })
-            .on_click(cx.listener({
-                let id = game.id.clone();
-                move |view, _, _, cx| view.library.update(cx, |library, cx| library.open(id.clone(), cx))
-            }))
             .child(div().w(px(8.)).flex_none().when(current, |cell| cell.child(square(6., accent))))
             .child(lead)
             .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_size(px(13.))
-                    .text_color(name_color)
-                    .child(SharedString::from(&game.name)),
+                div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_size(px(13.)).text_color(name_color).child(name),
             )
-            .when((self.marks)(&game.id, cx).live, |row| row.child(live_label(cx)))
-            .when(game.support == Support::UpdatePending, |row| row.child(icon(Icon::Warn, 14., rgb(WARN))))
     }
 }
 
@@ -122,23 +174,27 @@ impl Render for Sidebar {
         let query = self.filter.read(cx).value().to_lowercase();
         let games = self.library.read(cx).games().to_vec();
         // Favorites first; the numbers follow that order and stay through the filter.
-        let (starred, rest): (Vec<_>, Vec<_>) = games.iter().enumerate().partition(|(_, game)| (self.marks)(&game.id, cx).favorite);
-        let sectioned = !starred.is_empty();
+        let (starred, rest): (Vec<_>, Vec<_>) = games.iter().partition(|game| (self.marks)(&game.id, cx).favorite);
+        self.refresh_away(cx);
+        let away = &self.away;
+        let sectioned = !starred.is_empty() || !away.is_empty();
         let mut number = 0;
         let mut rows = Vec::new();
-        for (title, section) in [(t(cx, key::LIBRARY_FAVORITES), starred), (t(cx, key::LIBRARY_GAMES), rest)] {
-            let shown: Vec<_> = section
-                .into_iter()
-                .map(|found| {
-                    number += 1;
-                    (number, found)
-                })
-                .filter(|(_, (_, game))| game.search.contains(&query))
-                .collect();
-            if sectioned && !shown.is_empty() {
-                rows.push(section_title(title, shown.len()).into_any_element());
+        for (title, section, away) in [(t(cx, key::LIBRARY_FAVORITES), starred, &away[..]), (t(cx, key::LIBRARY_GAMES), rest, &[])] {
+            // Numbers follow the order and stay through the filter.
+            let mut next = || {
+                number += 1;
+                number
+            };
+            let shown: Vec<_> = section.into_iter().map(|game| (next(), game)).collect();
+            let away: Vec<_> = away.iter().map(|away| (next(), away)).collect();
+            let shown: Vec<_> = shown.into_iter().filter(|(_, game)| game.search.contains(&query)).collect();
+            let away: Vec<_> = away.into_iter().filter(|(_, away)| away.search.contains(&query)).collect();
+            if sectioned && shown.len() + away.len() > 0 {
+                rows.push(section_title(title, shown.len() + away.len()).into_any_element());
             }
-            rows.extend(shown.into_iter().map(|(number, (index, game))| self.game_row(index, number, game, cx).into_any_element()));
+            rows.extend(shown.into_iter().map(|(number, game)| self.game_row(number, game, cx).into_any_element()));
+            rows.extend(away.into_iter().map(|(number, away)| self.away_row(number, away, cx).into_any_element()));
         }
         if rows.is_empty() && !games.is_empty() {
             rows.push(mono(t(cx, key::LIBRARY_NO_MATCH), 11.).px(px(16.)).py(px(10.)).text_color(rgb(FAINT)).into_any_element());

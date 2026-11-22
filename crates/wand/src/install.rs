@@ -1,4 +1,5 @@
-//! Where Wand keeps its trainer binaries. They are read from there, never copied or shipped.
+//! Where Wand keeps its binaries. The service and plugin are read from there, never copied or shipped; a trainer DLL
+//! Wand downloaded is read when the CDN cannot give it (`binary`).
 
 use std::{
     cmp::Reverse,
@@ -12,6 +13,7 @@ use std::{
 pub const PUBLISHERS: &[&str] = &["WeMod LLC", "Daring Development Inc."];
 
 const TRAINERLIB: &str = r"resources\app.asar.unpacked\static\unpacked\trainerlib";
+const GAME_LAUNCHER: &str = r"resources\app.asar.unpacked\static\unpacked\auxiliary\GameLauncher.exe";
 // Wand was WeMod: older installs live under the old name.
 const BRANDS: [&str; 2] = ["Wand", "WeMod"];
 // A folder picked inside an install (down to `trainerlib`) still means that install.
@@ -30,6 +32,11 @@ impl Install {
         self.root.join(TRAINERLIB)
     }
 
+    /// The stand-in for an anti-cheat's launcher (`proxy`).
+    pub fn game_launcher(&self) -> PathBuf {
+        self.root.join(GAME_LAUNCHER)
+    }
+
     pub fn label(&self) -> String {
         match self.version.is_empty() {
             true => self.root.file_name().unwrap_or_default().to_string_lossy().into_owned(),
@@ -44,6 +51,14 @@ pub fn installs() -> Vec<Install> {
         return Vec::new();
     };
     installs_in(Path::new(&local))
+}
+
+/// The folders where Wand keeps the trainer DLLs it downloaded, one per brand.
+pub fn trainer_caches() -> Vec<PathBuf> {
+    let Some(roaming) = env::var_os("APPDATA") else {
+        return Vec::new();
+    };
+    BRANDS.iter().map(|brand| Path::new(&roaming).join(brand).join(r"App\trainers")).collect()
 }
 
 /// Wand's service and plugin in `trainerlib` for a trainer of that architecture.
@@ -114,6 +129,13 @@ mod tests {
         let root = env::temp_dir().join(format!("impulse-wand-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         root
+    }
+
+    #[test]
+    fn wands_trainer_downloads_are_under_each_brands_roaming_folder() {
+        let caches = trainer_caches();
+        assert_eq!(caches.len(), BRANDS.len());
+        assert!(caches.iter().zip(BRANDS).all(|(dir, brand)| dir.ends_with(Path::new(brand).join(r"App\trainers"))));
     }
 
     fn install(root: &Path, folder: &str, complete: bool) -> PathBuf {

@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cell::Cell, cmp::Ordering, rc::Rc};
 
 use smallvec::SmallVec;
 
@@ -22,6 +22,7 @@ pub struct Anchored {
     placement: Placement,
     position_mode: AnchoredPositionMode,
     offset: Option<Point<Pixels>>,
+    tracked: Option<Rc<Cell<Bounds<Pixels>>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -44,6 +45,7 @@ pub fn anchored() -> Anchored {
         placement: Placement::InPlace,
         position_mode: AnchoredPositionMode::Window,
         offset: None,
+        tracked: None,
     }
 }
 
@@ -71,6 +73,15 @@ impl Anchored {
     /// [`AnchoredFitMode::SwitchAnchor`] has no effect here.
     pub fn attach(mut self, target: Bounds<Pixels>, corner: Anchor) -> Self {
         self.placement = Placement::Attached { target, corner };
+        self.tracked = None;
+        self
+    }
+
+    /// [`Anchored::attach`] to bounds read at prepaint, such as a trigger's set by its own
+    /// prepaint earlier in the frame: a deferred element prepaints after the rest.
+    pub fn attach_tracked(mut self, target: Rc<Cell<Bounds<Pixels>>>, corner: Anchor) -> Self {
+        self = self.attach(target.get(), corner);
+        self.tracked = Some(target);
         self
     }
 
@@ -156,6 +167,11 @@ impl Element for Anchored {
     ) {
         if request_layout.child_layout_ids.is_empty() {
             return;
+        }
+        if let (Some(tracked), Placement::Attached { target, .. }) =
+            (&self.tracked, &mut self.placement)
+        {
+            *target = tracked.get();
         }
 
         let children_bounds = request_layout
