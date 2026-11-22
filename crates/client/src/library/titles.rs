@@ -13,17 +13,17 @@ pub fn matched<'a>(game: &Game, titles: &'a [Title]) -> Option<&'a Title> {
     titles.iter().find(|title| title.stores.iter().any(|store| keys.contains(&store)))
 }
 
-/// The picker's order for a game named `name`: the same name first, then a name holding the other, then by the
-/// words they share; ties by name.
-pub fn likeness(name: &str, titles: &[Title]) -> Vec<usize> {
+/// A picker's order of `names` for a game named `name`, by index: the same name first, then a name holding the other,
+/// then by the words they share; ties by name.
+pub fn likeness<'a>(name: &str, names: impl IntoIterator<Item = &'a str>) -> Vec<usize> {
     let plain = |text: &str| text.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace()).collect::<String>().to_lowercase();
     let wanted = plain(name);
     let words: HashSet<&str> = wanted.split_whitespace().collect();
-    let mut order: Vec<(u8, Reverse<usize>, String, usize)> = titles
-        .iter()
+    let mut order: Vec<(u8, Reverse<usize>, String, usize)> = names
+        .into_iter()
         .enumerate()
-        .map(|(at, title)| {
-            let have = plain(&title.name);
+        .map(|(at, name)| {
+            let have = plain(name);
             let rank = if have == wanted {
                 0
             } else if !have.is_empty() && (have.contains(&wanted) || wanted.contains(&have)) {
@@ -84,7 +84,10 @@ mod tests {
     fn the_picker_puts_the_same_name_first_then_a_name_holding_it_then_shared_words() {
         let titles =
             [title("a", "Far Cry", &[]), title("b", "Night City Wire", &[]), title("c", "Night City", &[]), title("d", "City Lights", &[])];
-        let order: Vec<_> = likeness("NIGHT CITY", &titles).into_iter().map(|at| titles[at].id.id().to_owned()).collect();
+        let order: Vec<_> = likeness("NIGHT CITY", titles.iter().map(|title| title.name.as_str()))
+            .into_iter()
+            .map(|at| titles[at].id.id().to_owned())
+            .collect();
         assert_eq!(order, ["c", "b", "d", "a"]);
     }
 }

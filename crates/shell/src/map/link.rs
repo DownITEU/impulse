@@ -75,7 +75,7 @@ impl TitlePicker {
     fn order(&mut self, cx: &mut Context<Self>) {
         let Some(open) = &mut self.open else { return };
         let all = self.titles.read(cx).all();
-        open.order = likeness(&open.name, all);
+        open.order = likeness(&open.name, all.iter().map(|title| title.name.as_str()));
         open.names = all.iter().map(|title| title.name.to_lowercase()).collect();
         cx.notify();
     }

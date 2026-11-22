@@ -4,11 +4,11 @@ use client::library::{
     Game,
     sources::{Entry, Label, entries},
 };
-use gpui_kit::{App, Entity, SharedString};
+use gpui_kit::{App, Entity, SharedString, Window};
 use i18n::Arg;
 
 use super::{
-    Library,
+    GamePicker, Library,
     picker::{picked_file, prompt},
 };
 use crate::ui::{
@@ -29,10 +29,12 @@ fn caption(label: &Label, cx: &App) -> SharedString {
         Label::Add => t(cx, key::LIBRARY_SOURCE_ADD),
         Label::Change => t(cx, key::LIBRARY_SOURCE_CHANGE),
         Label::Remove => t(cx, key::LIBRARY_SOURCE_REMOVE),
+        Label::Trainer => t(cx, key::LIBRARY_SOURCE_TRAINER),
+        Label::OwnTrainer => t(cx, key::LIBRARY_SOURCE_OWN_TRAINER),
     }
 }
 
-pub fn pick_source(library: &Entity<Library>, game: &Game, at: usize, cx: &mut App) {
+pub fn pick_source(library: &Entity<Library>, picker: &Entity<GamePicker>, game: &Game, at: usize, window: &mut Window, cx: &mut App) {
     let (id, entry) = (game.id.clone(), entries(game).0.get(at).map(|(entry, _)| *entry));
     match entry {
         Some(Entry::Use(true)) => library.update(cx, |library, cx| library.switch(&id, cx)),
@@ -46,6 +48,8 @@ pub fn pick_source(library: &Entity<Library>, game: &Game, at: usize, cx: &mut A
             .detach();
         }
         Some(Entry::Forget) => library.update(cx, |library, cx| library.forget(&id, cx)),
+        Some(Entry::Trainer) => picker.update(cx, |picker, cx| picker.trainer(&id, window, cx)),
+        Some(Entry::OwnTrainer) => library.update(cx, |library, cx| library.set_trainer(&id, None, cx)),
         Some(Entry::Use(false)) | None => {}
     }
 }

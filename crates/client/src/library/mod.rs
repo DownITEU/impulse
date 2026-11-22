@@ -8,14 +8,14 @@ pub mod sources;
 pub mod titles;
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     mem,
     path::Path,
     sync::Arc,
     time::Instant,
 };
 
-use model::{Installation, Origin, Ref, StoreId};
+use model::{Installation, Offer, Origin, Ref, StoreId};
 
 pub use id::GameId;
 pub use links::Links;
@@ -36,8 +36,15 @@ pub enum Support {
     NoTrainer,
 }
 
-/// The offer's revision and the installed build: a trainer is asked for again when they change.
-pub type Stamp = (Option<String>, Option<u32>);
+/// What a trainer copy was asked for: it is asked for again when any of it changes.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Stamp {
+    /// The trainer in use, its own record's or the one the user chose.
+    pub trainer: Option<Ref>,
+    pub revision: Option<String>,
+    /// The installed build.
+    pub build: Option<u32>,
+}
 
 #[derive(Clone)]
 pub struct Game {
@@ -55,6 +62,10 @@ pub struct Game {
     pub thumbnail: Option<String>,
     /// As the source knows it, for asking for the trainer and the maps.
     pub source: Arc<model::Game>,
+    /// The release whose trainer is used instead of its own, as the user chose (`Library::relink`).
+    pub trainer_from: Option<Release>,
+    /// The title's other releases with a trainer, one per trainer, other than its own's.
+    pub others: Vec<Release>,
     /// The install in use: a launcher's, or an executable the user picked.
     pub install: Installation,
     /// The other one, when the game has both.
@@ -64,6 +75,22 @@ pub struct Game {
 }
 
 impl Game {
+    /// The trainer in use: the chosen record's, else its own.
+    pub fn offer(&self) -> Option<&Offer> {
+        self.trained_by()?.trainer.as_ref()
+    }
+
+    /// The record whose trainer is in use; `None` without one.
+    pub fn trained_by(&self) -> Option<&model::Game> {
+        Some(self.trainer_from.as_ref().map_or(&*self.source, |from| &*from.record)).filter(|record| record.trainer.is_some())
+    }
+
+    /// Uses `from`'s trainer, or with `None` its own.
+    pub fn retrain(&mut self, from: Option<Release>) {
+        self.trainer_from = from;
+        self.judge();
+    }
+
     pub fn switch(&mut self) {
         if let Some(other) = &mut self.other {
             mem::swap(&mut self.install, other);
@@ -89,17 +116,21 @@ impl Game {
         true
     }
 
-    /// What follows from the install: the store, the build's support, the trainer's stamp.
+    /// What follows from the install and the trainer in use: the store, the build's support, the mods, the stamp.
     fn judge(&mut self) {
-        let (offer, build) = (&self.source.trainer, self.install.build);
-        self.store = store(&self.install.origin);
-        self.support = match (offer, build) {
+        let (offer, build, borrowed) = (self.offer(), self.install.build, self.trainer_from.is_some());
+        let support = match (offer, build) {
             (None, _) => Support::NoTrainer,
             (Some(offer), Some(build)) if offer.builds.contains(&build) => Support::Ready,
-            (Some(_), Some(_)) => Support::UpdatePending,
-            (Some(_), None) => Support::Unverified,
+            // Another store's builds are not an update of this one.
+            (Some(_), Some(_)) if !borrowed => Support::UpdatePending,
+            (Some(_), _) => Support::Unverified,
         };
-        self.stamp = (offer.as_ref().and_then(|offer| offer.revision.clone()), build);
+        let mods = offer.map_or(0, |offer| offer.cheats);
+        self.stamp =
+            Stamp { trainer: offer.map(|offer| offer.id.clone()), revision: offer.and_then(|offer| offer.revision.clone()), build };
+        (self.support, self.mods) = (support, mods);
+        self.store = store(&self.install.origin);
         self.page = self.install.origin.store_id().and_then(launchers::page);
     }
 }
@@ -109,11 +140,63 @@ pub struct Library {
     pub games: Vec<Arc<Game>>,
     /// Titles with a trainer among all the source's games.
     pub trainers: usize,
+    /// The source's games the list was made of: where a game may take another record's trainer from.
+    pub catalog: Arc<Vec<model::Game>>,
+}
+
+/// Another record of a game's title, whose trainer the game may use instead of its own.
+#[derive(Clone)]
+pub struct Release {
+    pub record: Arc<model::Game>,
+    /// Its store, as the app prints it.
+    pub store: Arc<str>,
+}
+
+impl Release {
+    fn of(record: &model::Game) -> Self {
+        Self { store: store_of(record).into(), record: Arc::new(record.clone()) }
+    }
+}
+
+impl Library {
+    /// Gives each game the trainer its `link` chose; a link to a record gone, without a trainer or its own means its own.
+    pub fn relink(&mut self, link: impl Fn(&GameId) -> Option<Ref>) {
+        let catalog = &self.catalog;
+        for game in &mut self.games {
+            let chosen = link(&game.id).filter(|id| *id != game.source.id).and_then(|id| trainer_record(catalog, &id));
+            if game.trainer_from.as_ref().map(|from| &from.record.id) != chosen.map(|record| &record.id) {
+                Arc::make_mut(game).retrain(chosen.map(Release::of));
+            }
+        }
+    }
+
+    /// The catalog's records with a trainer, by index, in the trainer picker's order: `game`'s title first, then the
+    /// likest to its name.
+    pub fn trainer_records(&self, game: &Game) -> Vec<usize> {
+        let with: Vec<usize> = (0..self.catalog.len()).filter(|&at| self.catalog[at].trainer.is_some()).collect();
+        let likest = titles::likeness(&game.name, with.iter().map(|&at| self.catalog[at].name.as_str())).into_iter().map(|at| with[at]);
+        let (mut order, rest): (Vec<usize>, Vec<usize>) = likest.partition(|&at| self.catalog[at].title_id == game.source.title_id);
+        order.extend(rest);
+        order
+    }
+}
+
+fn trainer_record<'a>(catalog: &'a [model::Game], id: &Ref) -> Option<&'a model::Game> {
+    catalog.iter().find(|record| record.id == *id && record.trainer.is_some())
+}
+
+fn trainer_id(record: &model::Game) -> Option<&Ref> {
+    record.trainer.as_ref().map(|offer| &offer.id)
+}
+
+/// A record's first store in upper case, as the app prints it.
+pub fn store_of(record: &model::Game) -> String {
+    record.store_ids.first().map_or(String::new(), |id| id.store().to_uppercase())
 }
 
 /// The list the last scan's installs make, shown while the launchers are read again; `None` before a first scan
 /// (blocking). A kept picked executable counts only while it is still the picked one.
-pub fn kept(all: &[model::Game], picked: &Picked, paths: &Paths) -> Option<Library> {
+pub fn kept(all: &Arc<Vec<model::Game>>, picked: &Picked, paths: &Paths) -> Option<Library> {
     let custom = picked.custom();
     let still = |install: &Installation| match &install.origin {
         Origin::Picked(exe) => custom.iter().any(|picked| picked.game == install.game && picked.exe == *exe),
@@ -125,7 +208,7 @@ pub fn kept(all: &[model::Game], picked: &Picked, paths: &Paths) -> Option<Libra
 
 /// Reads the launchers and the picked executables now and keeps their installs for the next start (blocking;
 /// minutes on a cold disk with hundreds of games).
-pub fn scan(all: &[model::Game], picked: &Picked, paths: &Paths) -> Library {
+pub fn scan(all: &Arc<Vec<model::Game>>, picked: &Picked, paths: &Paths) -> Library {
     let installed = installed(all, picked);
     installs::keep(paths, &installed);
     list(all, installed, picked, paths)
@@ -146,14 +229,14 @@ fn installed(all: &[model::Game], picked: &Picked) -> Vec<Installation> {
 }
 
 /// The list `installed` makes with `all`; art known to be missing is a file per game.
-fn list(all: &[model::Game], installed: Vec<Installation>, picked: &Picked, paths: &Paths) -> Library {
+fn list(all: &Arc<Vec<model::Game>>, installed: Vec<Installation>, picked: &Picked, paths: &Paths) -> Library {
     let art_cache = &Media::Pictures.dir(paths);
     // Steam art also serves an Epic or GOG install when the title has a Steam release.
     let mut steam_apps = HashMap::<&str, u32>::new();
-    let mut with_trainer = HashSet::<&str>::new();
-    for game in all {
+    let mut with_trainer = HashMap::<&str, Vec<usize>>::new();
+    for (at, game) in all.iter().enumerate() {
         if game.trainer.is_some() {
-            with_trainer.insert(&game.title_id);
+            with_trainer.entry(&game.title_id).or_default().push(at);
         }
         if let Some(app) = game.store_ids.iter().find_map(StoreId::steam_app) {
             steam_apps.entry(&game.title_id).or_insert(app);
@@ -172,11 +255,18 @@ fn list(all: &[model::Game], installed: Vec<Installation>, picked: &Picked, path
             }
         } else if let Some(&entry) = by_id.get(&found.game) {
             at.insert(found.game.clone(), games.len());
-            games.push(game(entry.clone(), found, &steam_apps, art_cache));
+            let mut listed = game(entry.clone(), found, &steam_apps, art_cache);
+            for &other in with_trainer.get(entry.title_id.as_str()).map_or(&[][..], Vec::as_slice) {
+                let trainer = trainer_id(&all[other]);
+                if trainer != trainer_id(entry) && listed.others.iter().all(|seen| trainer_id(&seen.record) != trainer) {
+                    listed.others.push(Release::of(&all[other]));
+                }
+            }
+            games.push(listed);
         }
     }
     games.sort_by(|a, b| a.search.cmp(&b.search));
-    Library { games: games.into_iter().map(Arc::new).collect(), trainers: with_trainer.len() }
+    Library { games: games.into_iter().map(Arc::new).collect(), trainers: with_trainer.len(), catalog: all.clone() }
 }
 
 fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<&str, u32>, art_cache: &Path) -> Game {
@@ -187,12 +277,14 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<&str, u32>
         search: entry.name.to_lowercase(),
         store: None,
         support: Support::NoTrainer,
-        mods: entry.trainer.as_ref().map_or(0, |offer| offer.cheats),
-        stamp: (None, None),
+        mods: 0,
+        stamp: Stamp::default(),
         // Not every Steam app has hero art.
         hero: app.map(media::steam_hero).filter(|url| !media::known_missing(art_cache, url)).or_else(|| entry.cover.clone()),
         thumbnail: entry.thumbnail.clone(),
         source: Arc::new(entry),
+        trainer_from: None,
+        others: Vec::new(),
         install: found,
         other: None,
         page: None,
@@ -204,4 +296,93 @@ fn game(entry: model::Game, found: Installation, steam_apps: &HashMap<&str, u32>
 /// The launcher's name; `None` for a picked executable.
 fn store(origin: &Origin) -> Option<String> {
     origin.store_id().map(|id| id.store().to_uppercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(id: &str, title: &str, store: &str, builds: Option<&[u32]>) -> model::Game {
+        let id = Ref::parse(id).unwrap();
+        let trainer = builds.map(|builds| Offer { id: id.clone(), cheats: 24, builds: builds.to_vec(), revision: Some("r".into()) });
+        model::Game {
+            id,
+            title_id: title.into(),
+            name: "Chained Echoes".into(),
+            store_ids: vec![StoreId::parse(store).unwrap()],
+            exe: None,
+            standalone: Vec::new(),
+            cover: None,
+            thumbnail: None,
+            maps: Vec::new(),
+            trainer,
+        }
+    }
+
+    /// The first record, installed from GOG at `build`.
+    fn listed(catalog: Vec<model::Game>, build: Option<u32>) -> Library {
+        let paths = Paths::new(std::env::temp_dir().join(format!("impulse-library-{}", std::process::id())));
+        let origin = Origin::Launcher(StoreId::parse("gog:1").unwrap());
+        let install = Installation { game: catalog[0].id.clone(), origin, location: "c:/games/echoes".into(), build };
+        list(&Arc::new(catalog), vec![install], &Picked::load(&paths), &paths)
+    }
+
+    fn catalog() -> Vec<model::Game> {
+        // An Xbox release with the Steam release's trainer.
+        let mut shared = record("wand:5", "t", "xbox:5", Some(&[5]));
+        shared.trainer.as_mut().unwrap().id = Ref::parse("wand:2").unwrap();
+        vec![
+            record("wand:1", "t", "gog:1", None),
+            record("wand:2", "t", "steam:2", Some(&[5])),
+            record("wand:3", "other", "steam:3", Some(&[5])),
+            record("wand:4", "t", "epic:4", None),
+            shared,
+        ]
+    }
+
+    /// The listed game's link.
+    fn link(to: &'static str) -> impl Fn(&GameId) -> Option<Ref> {
+        move |_| Ref::parse(to)
+    }
+
+    #[test]
+    fn a_game_without_a_trainer_offers_one_release_per_trainer_of_its_title() {
+        let list = listed(catalog(), Some(7));
+        let game = &list.games[0];
+        assert!(game.support == Support::NoTrainer && game.offer().is_none());
+        let others: Vec<_> = game.others.iter().map(|other| (other.record.id.to_string(), &*other.store)).collect();
+        assert_eq!(others, [("wand:2".to_owned(), "STEAM")]);
+    }
+
+    #[test]
+    fn a_link_lends_another_records_trainer_and_the_game_keeps_its_own_install() {
+        let mut list = listed(catalog(), Some(7));
+        list.relink(link("wand:2"));
+        let game = &list.games[0];
+        assert_eq!(game.offer().map(|offer| offer.id.to_string()).as_deref(), Some("wand:2"));
+        assert_eq!((game.id.as_str(), game.store.as_deref(), game.mods), ("wand:1", Some("GOG"), 24));
+        assert!(game.support == Support::Unverified, "another store's build is not an update");
+        assert_eq!(game.stamp.trainer.as_ref().map(Ref::to_string).as_deref(), Some("wand:2"));
+
+        let mut fits = listed(catalog(), Some(5));
+        fits.relink(link("wand:2"));
+        assert!(fits.games[0].support == Support::Ready);
+        fits.relink(|_| None);
+        assert!(fits.games[0].support == Support::NoTrainer && fits.games[0].trainer_from.is_none());
+    }
+
+    #[test]
+    fn a_link_to_a_record_gone_without_a_trainer_or_its_own_means_its_own() {
+        for to in ["wand:9", "wand:4", "wand:1"] {
+            let mut list = listed(catalog(), Some(7));
+            list.relink(link(to));
+            assert!(list.games[0].trainer_from.is_none() && list.games[0].support == Support::NoTrainer, "{to}");
+        }
+    }
+
+    #[test]
+    fn the_trainer_picker_lists_records_with_a_trainer_its_titles_first() {
+        let list = listed(catalog(), None);
+        assert_eq!(list.trainer_records(&list.games[0]), [1, 4, 2]);
+    }
 }

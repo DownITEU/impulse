@@ -83,6 +83,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + ADD .EXE
 library-source-change = CHANGE .EXE
 library-source-remove = REMOVE .EXE
+library-source-trainer = CHANGE TRAINER...
+library-source-own-trainer = ITS OWN TRAINER
 
 ## Picker
 
@@ -91,6 +93,9 @@ picker-owned = MORE THAN ONE GAME MATCHES: WHICH ONE IS IT?
 picker-unowned = NO CATALOG GAME MATCHES: FIND IT BY NAME
 picker-in-library = { $store }  IN LIBRARY
 picker-prompt = Select the game's .exe
+picker-trainer-title = CHOOSE A TRAINER
+picker-trainer = ITS OTHER STORES FIRST, THEN BY NAME: A TRAINER FOR ANOTHER BUILD MAY NOT FIT
+picker-in-use = { $store }  IN USE
 
 ## Cheats
 
@@ -104,6 +109,9 @@ cheats-notes = READ BEFORE PLAYING
 cheats-no-trainer-tag = [ NO TRAINER ]
 cheats-no-trainer = NO TRAINER FOR { $game } YET
 cheats-no-trainer-body = There is no trainer for this game yet. Impulse will flag it in your library as soon as one ships.
+cheats-other-store = There is none for this store yet, but its { $store } release has one. Builds can differ between stores, so it may not fit yours.
+cheats-use-trainer = USE THE { $store } TRAINER
+cheats-other-trainer = OTHER TRAINER...
 cheats-loading-tag = [ LOADING ]
 cheats-loading = LOADING THE CHEAT LIST
 cheats-shown = { $shown } MODS
@@ -151,6 +159,7 @@ hotkeys-shared-tip = another cheat has this hotkey too: both fire
 
 trainer-none = NO TRAINER
 trainer-mods = { $count } MODS
+trainer-from = { $store } TRAINER
 trainer-version = V{ $version }
 trainer-version-unknown = VERSION UNKNOWN
 trainer-update-pending = UPDATE PENDING

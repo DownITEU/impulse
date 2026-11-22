@@ -9,7 +9,7 @@ use i18n::Arg;
 
 use crate::{
     layer::{Layer, overlay_hotkey},
-    library::{Library, pick_source, source_options},
+    library::{GamePicker, Library, pick_source, source_options},
     run::{Runs, run_button},
     trainer::{Trainers, title},
     ui::{
@@ -27,6 +27,7 @@ pub struct Hero {
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
     layer: Entity<Layer>,
+    picker: Entity<GamePicker>,
     /// The sources menu is open.
     menu: Option<()>,
 }
@@ -37,13 +38,14 @@ impl Hero {
         trainers: Entity<Trainers>,
         runs: Entity<Runs>,
         layer: Entity<Layer>,
+        picker: Entity<GamePicker>,
         cx: &mut Context<Self>,
     ) -> Self {
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
         cx.observe(&layer, |_, _, cx| cx.notify()).detach();
-        Self { library, trainers, runs, layer, menu: None }
+        Self { library, trainers, runs, layer, picker, menu: None }
     }
 
     pub fn close(&mut self, cx: &mut Context<Self>) {
@@ -99,9 +101,9 @@ impl Hero {
             .when(!self.runs.read(cx).holds(&game.id), |bar| {
                 let (options, current) = source_options(game, cx);
                 let more = icon_button("source", t(cx, key::PAGE_SOURCE)).child(icon(Icon::More, 15., rgb(MUTED)));
-                bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, px(200.), cx, |hero, at, _, cx| {
+                bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, px(200.), cx, |hero, at, window, cx| {
                     if let Some(game) = hero.library.read(cx).opened().cloned() {
-                        pick_source(&hero.library, &game, at, cx);
+                        pick_source(&hero.library, &hero.picker, &game, at, window, cx);
                     }
                 }))
             })

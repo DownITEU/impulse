@@ -83,6 +83,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + .EXE EKLE
 library-source-change = .EXE DEĞİŞTİR
 library-source-remove = .EXE KALDIR
+library-source-trainer = TRAİNER DEĞİŞTİR...
+library-source-own-trainer = KENDİ TRAİNER'I
 
 ## Picker
 
@@ -91,6 +93,9 @@ picker-owned = BİRDEN FAZLA OYUN BULUNDU. HANGİSİ?
 picker-unowned = KATALOGDA EŞLEŞME YOK. OYUN ADIYLA ARA
 picker-in-library = { $store }  KÜTÜPHANEDE
 picker-prompt = Oyunun .exe dosyasını seç
+picker-trainer-title = TRAİNER SEÇ
+picker-trainer = ÖNCE DİĞER MAĞAZALAR, SONRA ADA GÖRE: BAŞKA SÜRÜM İÇİN TRAİNER UYMAYABİLİR
+picker-in-use = { $store }  KULLANIMDA
 
 ## Cheats
 
@@ -104,6 +109,9 @@ cheats-notes = OYNAMADAN ÖNCE OKU
 cheats-no-trainer-tag = [ TRAİNER YOK ]
 cheats-no-trainer = { $game } İÇİN HENÜZ TRAİNER YOK
 cheats-no-trainer-body = Bu oyun için henüz trainer yok. Çıktığında kütüphanende görürsün.
+cheats-other-store = Bu mağaza için henüz yok, ama { $store } sürümünde var. Sürümler mağazalar arasında farklı olabilir, bu yüzden seninkine uymayabilir.
+cheats-use-trainer = { $store } TRAİNER'INI KULLAN
+cheats-other-trainer = BAŞKA TRAİNER...
 cheats-loading-tag = [ YÜKLENİYOR ]
 cheats-loading = HİLE LİSTESİ YÜKLENİYOR
 cheats-shown = { $shown } HİLE
@@ -151,6 +159,7 @@ hotkeys-shared-tip = başka bir hilede de bu kısayol var: ikisi de çalışır
 
 trainer-none = TRAİNER YOK
 trainer-mods = { $count } HİLE
+trainer-from = { $store } TRAİNER
 trainer-version = V{ $version }
 trainer-version-unknown = SÜRÜM BİLİNMİYOR
 trainer-update-pending = GÜNCELLEME BEKLİYOR

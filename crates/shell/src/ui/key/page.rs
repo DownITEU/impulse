@@ -58,9 +58,14 @@ pub const LIBRARY_SOURCE_EXE: Key = Key("library-source-exe");
 pub const LIBRARY_SOURCE_ADD: Key = Key("library-source-add");
 pub const LIBRARY_SOURCE_CHANGE: Key = Key("library-source-change");
 pub const LIBRARY_SOURCE_REMOVE: Key = Key("library-source-remove");
+pub const LIBRARY_SOURCE_TRAINER: Key = Key("library-source-trainer");
+pub const LIBRARY_SOURCE_OWN_TRAINER: Key = Key("library-source-own-trainer");
 
 pub const PICKER_TITLE: Key = Key("picker-title");
 pub const PICKER_OWNED: Key = Key("picker-owned");
 pub const PICKER_UNOWNED: Key = Key("picker-unowned");
 pub const PICKER_IN_LIBRARY: Key = Key("picker-in-library");
 pub const PICKER_PROMPT: Key = Key("picker-prompt");
+pub const PICKER_TRAINER_TITLE: Key = Key("picker-trainer-title");
+pub const PICKER_TRAINER: Key = Key("picker-trainer");
+pub const PICKER_IN_USE: Key = Key("picker-in-use");

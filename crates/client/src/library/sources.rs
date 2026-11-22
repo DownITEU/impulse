@@ -1,4 +1,4 @@
-//! The game source menu offers the launcher's install and an executable the user picked.
+//! The game source menu offers the launcher's install and an executable the user picked, and another record's trainer.
 
 use std::{collections::HashSet, path::Path};
 
@@ -13,6 +13,10 @@ pub enum Entry {
     Use(bool),
     Pick,
     Forget,
+    /// Another record's trainer, picked by name.
+    Trainer,
+    /// Back to its own record's trainer.
+    OwnTrainer,
 }
 
 /// What an entry of the menu says; the shell words it.
@@ -25,10 +29,12 @@ pub enum Label {
     Add,
     Change,
     Remove,
+    Trainer,
+    OwnTrainer,
 }
 
-/// The menu: the launcher's install first, then the picked executable, then what to do with one; and the
-/// entry in use.
+/// The menu: the launcher's install first, then the picked executable, then what to do with one, then the trainer's
+/// choice; and the entry in use.
 pub fn entries(game: &Game) -> (Vec<(Entry, Label)>, usize) {
     let mut sources: Vec<(bool, &Installation)> = [(false, Some(&game.install)), (true, game.other.as_ref())]
         .into_iter()
@@ -50,6 +56,10 @@ pub fn entries(game: &Game) -> (Vec<(Entry, Label)>, usize) {
     entries.push((Entry::Pick, if picked { Label::Change } else { Label::Add }));
     if picked {
         entries.push((Entry::Forget, Label::Remove));
+    }
+    entries.push((Entry::Trainer, Label::Trainer));
+    if game.trainer_from.is_some() {
+        entries.push((Entry::OwnTrainer, Label::OwnTrainer));
     }
     (entries, current)
 }
@@ -89,8 +99,8 @@ mod tests {
         Installation { game: id(), origin, location: Default::default(), build: None }
     }
 
-    fn game(install: Installation, other: Option<Installation>) -> Game {
-        let source = model::Game {
+    fn record() -> model::Game {
+        model::Game {
             id: id(),
             title_id: String::new(),
             name: "G".into(),
@@ -101,7 +111,10 @@ mod tests {
             thumbnail: None,
             maps: Vec::new(),
             trainer: None,
-        };
+        }
+    }
+
+    fn game(install: Installation, other: Option<Installation>) -> Game {
         Game {
             id: GameId::of(&id()),
             name: "G".into(),
@@ -109,10 +122,12 @@ mod tests {
             store: None,
             support: Support::NoTrainer,
             mods: 0,
-            stamp: (None, None),
+            stamp: Default::default(),
             hero: None,
             thumbnail: None,
-            source: Arc::new(source),
+            source: Arc::new(record()),
+            trainer_from: None,
+            others: Vec::new(),
             install,
             other,
             page: None,
@@ -124,7 +139,8 @@ mod tests {
         let steam = install(Origin::Launcher(StoreId::parse("steam:1").unwrap()));
         let exe = install(Origin::Picked(r"C:\g\game.exe".into()));
         let (only, current) = entries(&game(steam.clone(), None));
-        assert_eq!((only, current), (vec![(Entry::Use(false), Label::Store("STEAM".into())), (Entry::Pick, Label::Add)], 0));
+        let store = (Entry::Use(false), Label::Store("STEAM".into()));
+        assert_eq!((only, current), (vec![store, (Entry::Pick, Label::Add), (Entry::Trainer, Label::Trainer)], 0));
         let (both, current) = entries(&game(exe, Some(steam)));
         assert_eq!(current, 1);
         assert_eq!(
@@ -133,8 +149,16 @@ mod tests {
                 (Entry::Use(true), Label::Store("STEAM".into())),
                 (Entry::Use(false), Label::Exe("game.exe".into())),
                 (Entry::Pick, Label::Change),
-                (Entry::Forget, Label::Remove)
+                (Entry::Forget, Label::Remove),
+                (Entry::Trainer, Label::Trainer)
             ]
         );
+    }
+
+    #[test]
+    fn a_game_on_another_records_trainer_can_go_back_to_its_own() {
+        let mut linked = game(install(Origin::Launcher(StoreId::parse("gog:1").unwrap())), None);
+        linked.trainer_from = Some(crate::library::Release::of(&record()));
+        assert_eq!(entries(&linked).0.last(), Some(&(Entry::OwnTrainer, Label::OwnTrainer)));
     }
 }

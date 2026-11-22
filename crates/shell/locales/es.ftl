@@ -89,6 +89,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + AÑADIR .EXE
 library-source-change = CAMBIAR .EXE
 library-source-remove = QUITAR .EXE
+library-source-trainer = CAMBIAR TRAINER...
+library-source-own-trainer = SU PROPIO TRAINER
 
 ## Picker
 
@@ -97,6 +99,9 @@ picker-owned = ¿CUÁL DE ESTOS JUEGOS QUIERES AÑADIR?
 picker-unowned = SIN COINCIDENCIAS EN EL CATÁLOGO: BUSCA POR NOMBRE
 picker-in-library = { $store }  EN BIBLIOTECA
 picker-prompt = Selecciona el archivo .exe del juego
+picker-trainer-title = ELEGIR UN TRAINER
+picker-trainer = PRIMERO SUS OTRAS TIENDAS, LUEGO POR NOMBRE: UN TRAINER DE OTRA VERSIÓN PUEDE NO ENCAJAR
+picker-in-use = { $store }  EN USO
 
 ## Cheats
 
@@ -110,6 +115,9 @@ cheats-notes = LEER ANTES DE JUGAR
 cheats-no-trainer-tag = [ SIN TRAINER ]
 cheats-no-trainer = AÚN NO HAY TRAINER PARA { $game }
 cheats-no-trainer-body = Aún no hay trainer para este juego. Impulse te lo indicará en la biblioteca en cuanto salga uno.
+cheats-other-store = Aún no hay ninguno para esta tienda, pero la versión de { $store } sí tiene. Las versiones pueden variar entre tiendas, así que puede que no encaje con la tuya.
+cheats-use-trainer = USAR EL TRAINER DE { $store }
+cheats-other-trainer = OTRO TRAINER...
 cheats-loading-tag = [ CARGANDO ]
 cheats-loading = CARGANDO MODS
 cheats-shown = { $count ->
@@ -169,6 +177,7 @@ trainer-mods = { $count ->
     [one] { $count } MOD
    *[other] { $count } MODS
 }
+trainer-from = TRAINER DE { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = VERSIÓN DESCONOCIDA
 trainer-update-pending = ACTUALIZACIÓN PENDIENTE

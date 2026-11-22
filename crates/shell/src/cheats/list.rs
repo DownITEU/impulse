@@ -24,7 +24,7 @@ use crate::{
         key,
         text::{failed, t, tf},
         theme::*,
-        widgets::{filter, fitted, icon, icon_button, mono, notice, tip, tracked},
+        widgets::{button, filter, fitted, icon, icon_button, mono, notice, tip, tracked},
     },
 };
 
@@ -33,11 +33,7 @@ impl CheatList {
         let column = v_flex().flex_1().min_w_0().gap(px(12.));
         let Some(game) = game else { return column };
         if game.support == Support::NoTrainer {
-            return column.child(notice(
-                t(cx, key::CHEATS_NO_TRAINER_TAG),
-                tf(cx, key::CHEATS_NO_TRAINER, &[("game", Arg::Str(&game.name))]),
-                t(cx, key::CHEATS_NO_TRAINER_BODY),
-            ));
+            return column.child(self.no_trainer(game, cx));
         }
         let running = self.is_running(cx);
         let trainers = self.trainers.read(cx);
@@ -62,6 +58,26 @@ impl CheatList {
             .when(!running, |column| column.child(run_note(self.runs.read(cx), &game.id, cx)))
             .when_some(printed.notes.as_ref(), |column, notes| column.child(self.notes(notes, sheet, cx)))
             .child(self.cheat_list(game, sheet, printed, running, cx))
+    }
+
+    /// Offers the trainers of the title's other releases and the picker for any other.
+    fn no_trainer(&self, game: &Game, cx: &Context<Self>) -> Div {
+        let body = match game.others.first() {
+            Some(other) => tf(cx, key::CHEATS_OTHER_STORE, &[("store", Arg::Str(&other.store))]),
+            None => t(cx, key::CHEATS_NO_TRAINER_BODY),
+        };
+        let uses = game.others.iter().enumerate().map(|(at, other)| {
+            let (id, from) = (game.id.clone(), other.record.id.clone());
+            button(&tf(cx, key::CHEATS_USE_TRAINER, &[("store", Arg::Str(&other.store))])).id(("use-trainer", at)).on_click(
+                cx.listener(move |list, _, _, cx| list.library.update(cx, |library, cx| library.set_trainer(&id, Some(from.clone()), cx))),
+            )
+        });
+        let id = game.id.clone();
+        let other = button(&t(cx, key::CHEATS_OTHER_TRAINER))
+            .id("other-trainer")
+            .on_click(cx.listener(move |list, _, window, cx| list.picker.update(cx, |picker, cx| picker.trainer(&id, window, cx))));
+        notice(t(cx, key::CHEATS_NO_TRAINER_TAG), tf(cx, key::CHEATS_NO_TRAINER, &[("game", Arg::Str(&game.name))]), body)
+            .child(h_flex().flex_wrap().justify_center().gap(px(8.)).children(uses).child(other))
     }
 
     fn cheat_list(&self, game: &Game, sheet: &Sheet, printed: &Printed, running: bool, cx: &Context<Self>) -> impl IntoElement {

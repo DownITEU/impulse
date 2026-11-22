@@ -154,13 +154,14 @@ impl Page {
             Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, window, cx)
         });
         let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, window, cx));
-        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), cx));
+        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), picker.clone(), cx));
         // The overlay's and the minimap's hotkeys are not the trainer's to take.
         let reserved = layer.downgrade();
         let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
         let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), reserved, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
-        let cheat_list = cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), window, cx));
+        let cheat_list =
+            cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), picker.clone(), window, cx));
         cx.observe(&cheat_list, |_, _, cx| cx.notify()).detach();
         let cues = cx.new(|cx| Cues::new(&runs, &trainers, &settings, cx));
         let updates = cx.new(|cx| Updates::new(settings.clone(), runs.clone(), &paths, cx));
@@ -203,6 +204,7 @@ impl Page {
                 maps.clone(),
                 map.clone(),
                 cheat_list.clone(),
+                picker.clone(),
                 &settings,
                 &paths,
                 window,
@@ -212,6 +214,7 @@ impl Page {
         cx.observe(&layer, |_, _, cx| cx.notify()).detach();
         cx.subscribe(&hud, |page, _, _: &Entered, cx| {
             page.hero.update(cx, |hero, cx| hero.close(cx));
+            page.picker.update(cx, |picker, cx| picker.dismiss(cx));
             page.settings_view.update(cx, |view, cx| view.close(cx));
             if let Some(remote) = &page.remote_view {
                 remote.update(cx, |view, cx| view.close(cx));

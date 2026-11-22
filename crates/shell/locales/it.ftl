@@ -86,6 +86,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + FILE .EXE
 library-source-change = CAMBIA .EXE
 library-source-remove = RIMUOVI .EXE
+library-source-trainer = CAMBIA TRAINER...
+library-source-own-trainer = IL SUO TRAINER
 
 ## Picker
 
@@ -94,6 +96,9 @@ picker-owned = PIÙ RISULTATI: QUAL È IL GIOCO?
 picker-unowned = GIOCO NON RICONOSCIUTO: CERCALO PER NOME
 picker-in-library = { $store }  IN LIBRERIA
 picker-prompt = Seleziona il file .exe del gioco
+picker-trainer-title = SCEGLI UN TRAINER
+picker-trainer = PRIMA GLI ALTRI STORE, POI PER NOME: UN TRAINER PER UN'ALTRA VERSIONE POTREBBE NON ADATTARSI
+picker-in-use = { $store }  IN USO
 
 ## Cheats
 
@@ -107,6 +112,9 @@ cheats-notes = DA LEGGERE PRIMA DI GIOCARE
 cheats-no-trainer-tag = [ NESSUN TRAINER ]
 cheats-no-trainer = NESSUN TRAINER PER { $game }
 cheats-no-trainer-body = Non c'è ancora un trainer per questo gioco. Appena ne esce uno, Impulse te lo segnala in libreria.
+cheats-other-store = Per questo store non ce n'è ancora uno, ma la versione { $store } ne ha uno. Le versioni possono differire da uno store all'altro, quindi potrebbe non adattarsi alla tua.
+cheats-use-trainer = USA IL TRAINER { $store }
+cheats-other-trainer = ALTRO TRAINER...
 cheats-loading-tag = [ CARICAMENTO ]
 cheats-loading = CARICAMENTO ELENCO MOD
 cheats-shown = { $shown } MOD
@@ -157,6 +165,7 @@ hotkeys-shared-tip = anche un altro mod ha questa hotkey: scattano entrambi
 
 trainer-none = NESSUN TRAINER
 trainer-mods = { $count } MOD
+trainer-from = TRAINER { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = VERSIONE SCONOSCIUTA
 trainer-update-pending = IN ATTESA DI PATCH

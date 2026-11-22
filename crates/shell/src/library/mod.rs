@@ -30,15 +30,15 @@ pub enum LibraryEvent {
     Switched,
     /// The user linked a game to a title for its maps, or took the link away.
     Linked,
+    /// The user chose another record's trainer for the game, or its own again.
+    Retrained(GameId),
 }
 
 /// What `+ ADD` found for an executable.
 pub struct Found {
     pub exe: PathBuf,
     /// The catalog: the list is scanned again with it.
-    pub games: Vec<model::Game>,
-    /// Lower case, for the filter.
-    pub names: Vec<String>,
+    pub games: Arc<Vec<model::Game>>,
     /// Indices into `games` of those that keep their executable where `exe` is.
     pub owners: Vec<usize>,
 }
@@ -49,6 +49,7 @@ pub struct Library {
     paths: Paths,
     picked: Picked,
     links: Links,
+    trainer_links: Links,
     list: Load<listing::Library>,
     open: Option<GameId>,
     // Dropped by a reload.
@@ -67,7 +68,8 @@ impl Library {
             settings,
             paths: paths.clone(),
             picked: Picked::load(paths),
-            links: Links::load(paths),
+            links: Links::maps(paths),
+            trainer_links: Links::trainers(paths),
             list: Load::Pending,
             open,
         }
@@ -140,6 +142,24 @@ impl Library {
         }
     }
 
+    /// The user's choice of the catalog record whose trainer `id` uses; `None` or its own record is its own.
+    pub fn set_trainer(&mut self, id: &GameId, record: Option<Ref>, cx: &mut Context<Self>) {
+        // A list replaced meanwhile may have let the game go.
+        let Some((own, was)) = self.game(id).map(|game| (game.source.id.clone(), game.stamp.trainer.clone())) else { return };
+        match record.filter(|record| *record != own) {
+            Some(record) => self.trainer_links.set(id, &record),
+            None => drop(self.trainer_links.clear(id)),
+        }
+        if let Load::Ready(list) = &mut self.list {
+            list.relink(|game| self.trainer_links.get(game));
+        }
+        // The trainer in use picked again reloads nothing.
+        if self.game(id).is_some_and(|game| game.stamp.trainer != was) {
+            cx.emit(LibraryEvent::Retrained(id.clone()));
+        }
+        cx.notify();
+    }
+
     /// Makes `exe` the source of a listed game.
     pub fn pick(&mut self, id: GameId, exe: PathBuf, cx: &mut Context<Self>) {
         let Some(game) = self.game(&id) else { return };
@@ -182,15 +202,14 @@ impl Library {
             };
             let found = unblock(move || {
                 let owners = sources::owners(&games, &exe);
-                let names = games.iter().map(|game| game.name.to_lowercase()).collect();
-                Found { exe, games, names, owners }
+                Found { exe, games: Arc::new(games), owners }
             });
             Some(found.await)
         })
     }
 
     /// Adds `games[at]` with its executable and opens it; a listed game takes it as its source.
-    pub fn add(&mut self, exe: PathBuf, games: Vec<model::Game>, at: usize, cx: &mut Context<Self>) {
+    pub fn add(&mut self, exe: PathBuf, games: Arc<Vec<model::Game>>, at: usize, cx: &mut Context<Self>) {
         let id = GameId::of(&games[at].id);
         if self.game(&id).is_some() {
             self.pick(id.clone(), exe, cx);
@@ -216,7 +235,9 @@ impl Library {
         list.games.iter_mut().find(|game| game.id == *id).map(Arc::make_mut)
     }
 
-    fn set(&mut self, list: listing::Library, cx: &mut Context<Self>) {
+    /// Shows `list` with the trainers chosen now: a scan that ran meanwhile has the old choice.
+    fn set(&mut self, mut list: listing::Library, cx: &mut Context<Self>) {
+        list.relink(|game| self.trainer_links.get(game));
         let listed = self.open.as_ref().is_some_and(|id| list.games.iter().any(|game| game.id == *id));
         if !listed {
             self.open = list.games.first().map(|game| game.id.clone());
@@ -243,7 +264,7 @@ fn listen(registry: &Arc<Registry>, cx: &mut Context<Library>) -> Task<()> {
             match snapshot {
                 Snapshot::Cached(Some(all)) | Snapshot::Fresh(Ok(all)) => {
                     have_copy = true;
-                    rescan(&library, all, cx).await;
+                    rescan(&library, Arc::new(all), cx).await;
                 }
                 Snapshot::Fresh(Err(e)) if !have_copy => {
                     library
@@ -261,8 +282,7 @@ fn listen(registry: &Arc<Registry>, cx: &mut Context<Library>) -> Task<()> {
 
 /// Lists the installed games of `games` anew, with the executables the user picked. A first list shows the last
 /// scan's installs at once: reading the launchers takes minutes on a cold disk with hundreds of games.
-async fn rescan(library: &WeakEntity<Library>, games: Vec<model::Game>, cx: &mut AsyncApp) {
-    let mut games = Arc::new(games);
+async fn rescan(library: &WeakEntity<Library>, mut games: Arc<Vec<model::Game>>, cx: &mut AsyncApp) {
     loop {
         let Ok((picked, paths, registry, first)) = library.read_with(cx, |library, _| {
             let first = matches!(library.list, Load::Pending);

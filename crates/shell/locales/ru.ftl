@@ -88,6 +88,8 @@ library-source-exe = EXE  { $file }
 library-source-add = + .EXE
 library-source-change = СМЕНИТЬ .EXE
 library-source-remove = УБРАТЬ .EXE
+library-source-trainer = СМЕНИТЬ ТРЕЙНЕР...
+library-source-own-trainer = СВОЙ ТРЕЙНЕР
 
 ## Picker
 
@@ -96,6 +98,9 @@ picker-owned = НАШЛОСЬ НЕСКОЛЬКО ИГР. ВЫБЕРИТЕ СВО
 picker-unowned = ИГРА НЕ НАШЛАСЬ В КАТАЛОГЕ. ВВЕДИТЕ НАЗВАНИЕ
 picker-in-library = { $store }  В БИБЛИОТЕКЕ
 picker-prompt = Выберите .exe игры
+picker-trainer-title = ВЫБЕРИТЕ ТРЕЙНЕР
+picker-trainer = СНАЧАЛА ДРУГИЕ МАГАЗИНЫ, ПОТОМ ПО НАЗВАНИЮ: ТРЕЙНЕР ДЛЯ ДРУГОЙ ВЕРСИИ МОЖЕТ НЕ ПОДОЙТИ
+picker-in-use = { $store }  ИСПОЛЬЗУЕТСЯ
 
 ## Cheats
 
@@ -109,6 +114,9 @@ cheats-notes = ПРОЧТИТЕ ПЕРЕД ИГРОЙ
 cheats-no-trainer-tag = [ НЕТ ТРЕЙНЕРА ]
 cheats-no-trainer = ТРЕЙНЕРА ДЛЯ { $game } ПОКА НЕТ
 cheats-no-trainer-body = Для этой игры пока нет трейнера. Когда он появится, Impulse отметит игру в библиотеке.
+cheats-other-store = Для этого магазина трейнера пока нет, но он есть у версии из { $store }. Версии в разных магазинах могут отличаться, поэтому он может не подойти.
+cheats-use-trainer = ИСПОЛЬЗОВАТЬ ТРЕЙНЕР { $store }
+cheats-other-trainer = ДРУГОЙ ТРЕЙНЕР...
 cheats-loading-tag = [ ЗАГРУЗКА ]
 cheats-loading = ЗАГРУЗКА СПИСКА ЧИТОВ
 cheats-shown = { $count ->
@@ -171,6 +179,7 @@ trainer-mods = { $count ->
     [many] { $count } МОДОВ
    *[other] { $count } МОДА
 }
+trainer-from = ТРЕЙНЕР { $store }
 trainer-version = V{ $version }
 trainer-version-unknown = ВЕРСИЯ НЕИЗВЕСТНА
 trainer-update-pending = НУЖНО ОБНОВЛЕНИЕ
