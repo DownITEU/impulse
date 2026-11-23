@@ -14,7 +14,7 @@ use gpui_kit::{
 use super::{
     assets::Icon,
     theme::*,
-    widgets::{icon, mono},
+    widgets::{icon, list_row, mono},
 };
 
 /// Where a view keeps its open menu.
@@ -73,7 +73,7 @@ pub fn trigger(id: impl Into<ElementId>, current: impl Into<SharedString>) -> St
         .border_color(line(0.2))
         .bg(rgb(SUNKEN))
         .cursor_pointer()
-        .child(mono(current, 12.).min_w_0().truncate())
+        .child(mono(current, TYPE_SMALL).min_w_0().truncate())
         .child(icon(Icon::ChevronDown, 11., rgb(DIM)))
 }
 
@@ -105,14 +105,11 @@ pub fn picks<V: 'static, M: 'static>(
         .border_color(line(0.2))
         .bg(rgb(PANEL))
         .children(options.into_iter().enumerate().map(|(at, option)| {
-            h_flex()
-                .id(("option", at))
+            list_row(("option", at), false)
                 .flex_none()
                 .h(px(28.))
                 .px(px(10.))
-                .cursor_pointer()
                 .text_color(if at == current { accent } else { rgb(TEXT_2) })
-                .hover(|style| style.bg(rgb(ROW_HOVER)))
                 // Mouse down, not click: the outside-press close removes the list first.
                 .on_mouse_down(
                     MouseButton::Left,
@@ -122,6 +119,6 @@ pub fn picks<V: 'static, M: 'static>(
                         cx.notify();
                     }),
                 )
-                .child(mono(option, 12.).min_w_0().truncate())
+                .child(mono(option, TYPE_SMALL).min_w_0().truncate())
         }))
 }

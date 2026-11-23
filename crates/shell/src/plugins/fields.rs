@@ -148,7 +148,7 @@ pub fn rows(view: &PluginsView, plugin: &Installed, next: &mut usize, cx: &mut C
                                 .border_1()
                                 .border_color(line(0.14))
                                 .bg(rgb(SUNKEN))
-                                .child(Input::new(state).appearance(false).px_0().font_family(MONO).text_size(px(12.5))),
+                                .child(Input::new(state).appearance(false).px_0().font_family(MONO).text_size(px(TYPE_FIELD))),
                         )
                         .into_any_element(),
                     None => row.into_any_element(),

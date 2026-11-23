@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use blocking::unblock;
-use client::Registry;
+use client::{Registry, media};
 use gpui_kit::{Context, Task};
 use image::{RgbaImage, imageops};
 use model::{Icon, Map};
@@ -60,7 +60,7 @@ impl Icons {
 
 /// `cells` of the sheet at `url` (blocking); a group whose sheet or cell is unusable keeps the default mark.
 fn cut(cache: &Path, url: &str, cells: Cells, registry: &Registry) -> Vec<((usize, usize), RgbaImage)> {
-    let sheet = match art::load(cache, url, registry).and_then(|bytes| art::picture(&bytes, SHEET)) {
+    let sheet = match media::load(cache, url, registry).and_then(|bytes| art::picture(&bytes, SHEET)) {
         Ok(sheet) => sheet.into_rgba8(),
         Err(e) => {
             log::debug!("icon sheet {url}: {e:#}");

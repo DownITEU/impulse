@@ -84,7 +84,9 @@ impl CheatList {
                     .min_w_0()
                     .h_full()
                     .gap(px(6.))
-                    .when(collections.is_empty(), |bar| bar.child(mono(t(cx, key::CHEATS_NO_COLLECTIONS), 10.5).text_color(rgb(GHOST))))
+                    .when(collections.is_empty(), |bar| {
+                        bar.child(mono(t(cx, key::CHEATS_NO_COLLECTIONS), TYPE_CAPTION).text_color(rgb(GHOST)))
+                    })
                     .children(chips)
                     // The kit's scroller: inside the pane's, a plain one never gets the wheel.
                     .overflow_x_scrollbar(),
@@ -116,7 +118,7 @@ impl CheatList {
             .bg(rgb(RAISED))
             .text_color(color)
             .child(icon(listed(&collection.icon).1, 13., color))
-            .child(mono(collection.name.to_uppercase(), 10.5))
+            .child(mono(collection.name.to_uppercase(), TYPE_CAPTION))
             .when(running, |chip| {
                 chip.cursor_pointer()
                     .hover(|style| style.bg(rgb(RAISED_HOVER)))
@@ -265,7 +267,7 @@ impl Render for CollectionEditor {
             .border_1()
             .border_color(line(0.14))
             .bg(rgb(SUNKEN))
-            .child(Input::new(&self.name).appearance(false).px_0().font_family(MONO).text_size(px(12.5)));
+            .child(Input::new(&self.name).appearance(false).px_0().font_family(MONO).text_size(px(TYPE_FIELD)));
         let buttons = h_flex()
             .gap(px(8.))
             .child(
@@ -289,7 +291,7 @@ impl Render for CollectionEditor {
             .gap(px(16.))
             .child(part(t(cx, key::CHEATS_NAME)).child(field))
             .child(part(t(cx, key::CHEATS_ICON)).child(h_flex().flex_wrap().gap(px(TILE_GAP)).children(tiles)))
-            .child(h_flex().justify_between().child(mono(mods, 10.5).text_color(rgb(FAINT))).child(buttons));
+            .child(h_flex().justify_between().child(mono(mods, TYPE_CAPTION).text_color(rgb(FAINT))).child(buttons));
         let title = t(cx, if self.was.is_some() { key::CHEATS_EDIT_COLLECTION } else { key::CHEATS_NEW_COLLECTION });
         // Six tiles across, inside the padding and the borders.
         let width = 6. * TILE + 5. * TILE_GAP + 34.;
@@ -299,5 +301,5 @@ impl Render for CollectionEditor {
 
 /// A captioned part of the editor.
 fn part(caption: SharedString) -> Div {
-    v_flex().gap(px(8.)).child(mono(caption, 10.5).text_color(rgb(DIM)))
+    v_flex().gap(px(8.)).child(mono(caption, TYPE_CAPTION).text_color(rgb(DIM)))
 }

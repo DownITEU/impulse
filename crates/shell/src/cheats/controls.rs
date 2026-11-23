@@ -20,7 +20,7 @@ use crate::ui::{
     key,
     text::{t, tf},
     theme::*,
-    widgets::{button, flash_button, mono, tip, toggle},
+    widgets::{button, flash_button, mono, switch, tip, toggle},
 };
 
 impl CheatList {
@@ -61,9 +61,7 @@ impl CheatList {
         let value = sheet.values[index];
         let value_color = if live { rgb(accent(cx)) } else { rgb(DIM) };
         match cheat.kind {
-            Kind::Toggle => div()
-                .id(("toggle", index))
-                .cursor_pointer()
+            Kind::Toggle => switch(("toggle", index), live, cx)
                 .on_click({
                     let game = printed.game.clone();
                     cx.listener(move |list, _, _, cx| {
@@ -73,12 +71,11 @@ impl CheatList {
                         }
                     })
                 })
-                .child(toggle(live, cx))
                 .into_any_element(),
             Kind::Slider => h_flex()
                 .gap(px(5.))
                 .child(self.ticks(&printed.game, sheet, index, running, live, cx))
-                .child(mono(number(value), 12.5).w(px(38.)).flex().justify_end().text_color(value_color))
+                .child(mono(number(value), TYPE_FIELD).w(px(38.)).flex().justify_end().text_color(value_color))
                 .into_any_element(),
             Kind::Number if cheat.args.button => h_flex()
                 .gap(px(8.))
@@ -91,7 +88,7 @@ impl CheatList {
                                 .px(px(8.))
                                 .text_center()
                                 .font_family(MONO)
-                                .text_size(px(12.5)),
+                                .text_size(px(TYPE_FIELD)),
                         ),
                     )
                 })
@@ -101,7 +98,7 @@ impl CheatList {
                 let step = cheat.args.stride();
                 let nudge = |id: &'static str, label: &'static str, by: f64| {
                     let game = printed.game.clone();
-                    button(label).id((id, index)).w(px(26.)).px_0().font_family(MONO).text_size(px(14.)).on_click(cx.listener(
+                    button(label).id((id, index)).w(px(26.)).px_0().font_family(MONO).text_size(px(TYPE_LEAD)).on_click(cx.listener(
                         move |list, _, _, cx| {
                             if running {
                                 list.change_value(&game, index, |cheat, now| cheat.args.clamp(now + by), cx);
@@ -238,7 +235,7 @@ impl CheatList {
                         let Some(game) = list.selected(cx) else { return };
                         list.trainers.update(cx, |trainers, cx| trainers.set_save_mods(&game, !save, cx));
                     }))
-                    .child(mono(label, 10.5).text_color(rgb(if save { MUTED } else { GHOST })))
+                    .child(mono(label, TYPE_CAPTION).text_color(rgb(if save { MUTED } else { GHOST })))
                     .child(toggle(save, cx)),
             )
             .child(
@@ -252,5 +249,5 @@ impl CheatList {
 }
 
 fn value_box(value: impl Into<SharedString>) -> Div {
-    mono(value, 12.5).h(px(26.)).flex().items_center().border_1().border_color(line(0.14)).bg(rgb(SUNKEN))
+    mono(value, TYPE_FIELD).h(px(26.)).flex().items_center().border_1().border_color(line(0.14)).bg(rgb(SUNKEN))
 }

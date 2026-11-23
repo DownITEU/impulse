@@ -5,7 +5,7 @@ mod command;
 mod view;
 mod views;
 
-use std::{collections::HashMap, fs, io, iter, net::SocketAddr, path::PathBuf, sync::Arc, time::Instant};
+use std::{collections::HashMap, io, iter, net::SocketAddr, path::PathBuf, sync::Arc, time::Instant};
 
 use client::{
     api::{Ask, ServerSide, Views, coalesce, link},
@@ -217,17 +217,16 @@ impl Remote {
             Ask::Device { token, reply } => drop(reply.send(self.devices.find(&token))),
             Ask::Command { device, command } => self.command(device, command, cx),
             Ask::Art { game, reply } => {
-                let file = self.art(game, cx);
+                let (pictures, url) = (self.pictures.clone(), self.art(game, cx));
                 // From the cache only: the panel shows no art rather than download it.
-                let read = blocking::unblock(move || file.and_then(|file| fs::read(file).ok()).filter(|bytes| !bytes.is_empty()));
+                let read = blocking::unblock(move || media::cached(&pictures, &url?));
                 cx.background_spawn(async move { drop(reply.send(read.await)) }).detach();
             }
         }
     }
 
-    fn art(&self, handle: u32, cx: &App) -> Option<PathBuf> {
-        let game = self.library.read(cx).game(self.handles.game(handle)?)?;
-        game.thumbnail.as_deref().map(|url| media::file(&self.pictures, url))
+    fn art(&self, handle: u32, cx: &App) -> Option<String> {
+        self.library.read(cx).game(self.handles.game(handle)?)?.thumbnail.clone()
     }
 }
 

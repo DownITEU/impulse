@@ -113,7 +113,7 @@ pub fn keycap(id: impl Into<ElementId>, text: SharedString) -> Stateful<Div> {
         .text_color(rgb(MUTED))
         .font_family(MONO)
         .font_weight(FontWeight::MEDIUM)
-        .text_size(px(10.5))
+        .text_size(px(TYPE_CAPTION))
         .truncate()
         .child(fitted("text", text))
 }
@@ -131,7 +131,7 @@ pub fn tip(text: SharedString, window: &mut Window, cx: &mut App) -> AnyView {
 }
 
 pub fn segment(label: impl Into<SharedString>, fill: Option<u32>, color: u32) -> Div {
-    mono(label, 10.)
+    mono(label, TYPE_CAPTION)
         .font_weight(FontWeight::BOLD)
         .h_full()
         .flex()
@@ -169,6 +169,14 @@ pub fn switch(id: impl Into<ElementId>, on: bool, cx: &App) -> Stateful<Div> {
     div().id(id).cursor_pointer().child(toggle(on, cx))
 }
 
+/// A clickable list row: filled while `selected`, else lit on hover; the caller adds the click.
+pub fn list_row(id: impl Into<ElementId>, selected: bool) -> Stateful<Div> {
+    h_flex().id(id).cursor_pointer().map(|row| match selected {
+        true => row.bg(rgb(ROW_SELECTED)),
+        false => row.hover(|style| style.bg(rgb(ROW_HOVER))),
+    })
+}
+
 pub fn icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyph_size: f32) -> Stateful<Div> {
     tinted_icon_button(id, glyph, side, glyph_size, DIM)
 }
@@ -191,7 +199,7 @@ pub fn tinted_icon_button(id: impl Into<ElementId>, glyph: Icon, side: f32, glyp
 
 /// A small outlined tag in `color`, for a state worth noticing.
 pub fn badge(label: impl Into<SharedString>, color: u32) -> Div {
-    mono(label, 9.5)
+    mono(label, TYPE_TAG)
         .font_weight(FontWeight::BOLD)
         .flex_none()
         .px(px(6.))
@@ -213,13 +221,13 @@ pub fn notice(tag: impl Into<SharedString>, title: impl Into<SharedString>, text
         .border_dashed()
         .border_color(line(0.2))
         .bg(alpha(BG, 0.7))
-        .child(mono(tag, 11.).text_color(rgb(DIM)))
-        .child(tracked(&title.into(), 22., 0.1).justify_center().font_weight(FontWeight::BOLD))
+        .child(mono(tag, TYPE_LABEL).text_color(rgb(DIM)))
+        .child(tracked(&title.into(), TYPE_BRAND, 0.1).justify_center().font_weight(FontWeight::BOLD))
         .child(div().max_w(px(420.)).text_center().text_color(rgb(MUTED)).child(text.into()))
 }
 
 pub fn button(label: &str) -> Div {
-    button_frame().child(tracked(label, 11., 0.12))
+    button_frame().child(tracked(label, TYPE_LABEL, 0.12))
 }
 
 /// A press-only button's confirmation: `done` in the accent color while `flashed`.
@@ -233,8 +241,8 @@ pub fn flash_button(label: &str, done: &str, flashed: bool, cx: &App) -> Div {
         .border_color(rgb(accent(cx)))
         .text_color(rgb(accent(cx)))
         // The hidden label keeps the button's width.
-        .child(tracked(label, 11., 0.12).invisible())
-        .child(overlay.justify_center().child(tracked(done, 11., 0.12)))
+        .child(tracked(label, TYPE_LABEL, 0.12).invisible())
+        .child(overlay.justify_center().child(tracked(done, TYPE_LABEL, 0.12)))
 }
 
 /// Runs `clear` once the confirmation has been shown; dropping the task cancels it.
@@ -299,8 +307,8 @@ pub fn filter(state: &Entity<InputState>, cx: &App) -> Div {
     h_flex()
         .gap(px(8.))
         .bg(rgb(SUNKEN))
-        .child(mono("/", 12.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx))))
-        .child(div().flex_1().min_w_0().child(Input::new(state).appearance(false).px_0().font_family(MONO).text_size(px(12.5))))
+        .child(mono("/", TYPE_SMALL).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx))))
+        .child(div().flex_1().min_w_0().child(Input::new(state).appearance(false).px_0().font_family(MONO).text_size(px(TYPE_FIELD))))
 }
 
 /// 1 px background grid, painted because GPUI has no repeating backgrounds.

@@ -33,7 +33,7 @@ pub fn status_bar(
     let open = log.read(cx).is_open();
     let log = log.clone();
     let problem = |count: usize, color: u32| {
-        h_flex().gap(px(6.)).child(square(7., rgb(color))).child(mono(count.to_string(), 11.).text_color(rgb(color)))
+        h_flex().gap(px(6.)).child(square(7., rgb(color))).child(mono(count.to_string(), TYPE_LABEL).text_color(rgb(color)))
     };
     let accent = rgb(accent(cx));
     let running = runs.live().and_then(|live| library.game(live));
@@ -50,11 +50,14 @@ pub fn status_bar(
         .map(|bar| match running {
             Some(game) => {
                 let (active, total) = trainers.sheet(&game.id).map_or((0, 0), |sheet| (sheet.active(), sheet.cheats.len()));
-                bar.child(h_flex().gap(px(8.)).child(square(7., accent)).child(mono(t(cx, key::PAGE_LIVE), 11.).text_color(accent)))
-                    .child(mono(game.name.clone(), 11.))
-                    .child(mono(tf(cx, key::PAGE_ACTIVE, &[("active", Arg::Num(active as f64)), ("total", Arg::Num(total as f64))]), 11.))
+                bar.child(h_flex().gap(px(8.)).child(square(7., accent)).child(mono(t(cx, key::PAGE_LIVE), TYPE_LABEL).text_color(accent)))
+                    .child(mono(game.name.clone(), TYPE_LABEL))
+                    .child(mono(
+                        tf(cx, key::PAGE_ACTIVE, &[("active", Arg::Num(active as f64)), ("total", Arg::Num(total as f64))]),
+                        TYPE_LABEL,
+                    ))
             }
-            None => bar.child(mono(t(cx, key::PAGE_IDLE), 11.)),
+            None => bar.child(mono(t(cx, key::PAGE_IDLE), TYPE_LABEL)),
         })
         .child(div().flex_1())
         .children(chip(updates, cx))
@@ -67,7 +70,7 @@ pub fn status_bar(
                 .hover(|style| style.text_color(rgb(TEXT)))
                 .when(open, |item| item.text_color(rgb(TEXT)))
                 .on_click(move |_, window, cx| log.update(cx, |log, cx| log.toggle(window, cx)))
-                .child(mono(t(cx, key::PAGE_LOG), 11.))
+                .child(mono(t(cx, key::PAGE_LOG), TYPE_LABEL))
                 .when(errors > 0, |item| item.child(problem(errors, DANGER)))
                 .when(warnings > 0, |item| item.child(problem(warnings, WARN))),
         )
@@ -84,7 +87,7 @@ fn version(updates: &Entity<Updates>) -> impl IntoElement {
         .text_color(rgb(GHOST))
         .hover(|style| style.text_color(rgb(DIM)))
         .on_click(move |_, _, cx| updates.update(cx, |updates, cx| updates.present(Mode::Changelog, cx)))
-        .child(mono(concat!("IMPULSE ", env!("CARGO_PKG_VERSION")), 11.))
+        .child(mono(concat!("IMPULSE ", env!("CARGO_PKG_VERSION")), TYPE_LABEL))
 }
 
 /// The project's places, one click from anywhere; support rests in the accent.
@@ -109,10 +112,10 @@ fn hotkeys_status(hotkeys: &Hotkeys, cx: &App) -> Div {
     // A cheat's slot has its keys in a popover over its cap.
     if let Some(Target::Key { required, .. }) = hotkeys.capturing() {
         let keys = t(cx, if *required { key::PAGE_BINDING } else { key::PAGE_BINDING_UNBIND });
-        return mono(keys, 11.).text_color(rgb(accent(cx)));
+        return mono(keys, TYPE_LABEL).text_color(rgb(accent(cx)));
     }
     match hotkeys.is_armed() {
-        true => mono(t(cx, key::PAGE_HOTKEYS_ON), 11.),
-        false => mono(t(cx, key::PAGE_HOTKEYS_OFF), 11.).text_color(rgb(GHOST)),
+        true => mono(t(cx, key::PAGE_HOTKEYS_ON), TYPE_LABEL),
+        false => mono(t(cx, key::PAGE_HOTKEYS_OFF), TYPE_LABEL).text_color(rgb(GHOST)),
     }
 }

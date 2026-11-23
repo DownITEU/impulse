@@ -58,7 +58,7 @@ impl CheatList {
             .when(!running, |column| {
                 column.child(match game.installed() {
                     true => run_note(self.runs.read(cx), &game.id, cx),
-                    false => mono(t(cx, key::CHEATS_NOT_INSTALLED), 11.).text_color(rgb(DIM)),
+                    false => mono(t(cx, key::CHEATS_NOT_INSTALLED), TYPE_LABEL).text_color(rgb(DIM)),
                 })
             })
             .when_some(printed.notes.as_ref(), |column, notes| column.child(self.notes(notes, sheet, cx)))
@@ -133,11 +133,13 @@ impl CheatList {
                     .gap(px(10.))
                     .border_b_1()
                     .border_color(line(0.09))
-                    .child(mono(shown_text(shown, cx), 10.5).flex_none().text_color(rgb(GHOST)))
+                    .child(mono(shown_text(shown, cx), TYPE_CAPTION).flex_none().text_color(rgb(GHOST)))
                     .child(self.saved_bar(&game.id, sheet, running, cx)),
             )
             .children(rows)
-            .when(shown == 0, |list| list.child(mono(t(cx, key::CHEATS_NO_MATCH), 11.).px(px(14.)).py(px(16.)).text_color(rgb(FAINT))))
+            .when(shown == 0, |list| {
+                list.child(mono(t(cx, key::CHEATS_NO_MATCH), TYPE_LABEL).px(px(14.)).py(px(16.)).text_color(rgb(FAINT)))
+            })
     }
 
     pub(super) fn toggle_fold(&mut self, section: &str, cx: &mut Context<Self>) {
@@ -171,8 +173,8 @@ impl CheatList {
             .when(divided, |header| header.border_t_1())
             .border_color(line(0.08))
             .when(id == PINNED, |header| header.child(icon(Icon::Pin, 13., rgb(accent(cx)))))
-            .child(tracked(&title, 13., 0.16).font_weight(FontWeight::BOLD))
-            .child(mono(format!("{count:02}"), 11.).text_color(rgb(FAINT)))
+            .child(tracked(&title, TYPE_BODY, 0.16).font_weight(FontWeight::BOLD))
+            .child(mono(format!("{count:02}"), TYPE_LABEL).text_color(rgb(FAINT)))
             .child(div().flex_1())
             .child(icon_button(("fold", at), chevron, 26., 13.).on_click(cx.listener(move |list, _, _, cx| list.toggle_fold(&id, cx))))
     }
@@ -218,7 +220,7 @@ impl CheatList {
                         true => dot.bg(accent).border_color(accent),
                         false => dot.border_color(line(0.25)),
                     }))
-                    .child(mono(format!("{number:02}"), 11.5).text_color(if live { accent } else { rgb(FAINT) })),
+                    .child(mono(format!("{number:02}"), TYPE_LABEL).text_color(if live { accent } else { rgb(FAINT) })),
             )
             .child(
                 // Shrinks with the caps, in proportion to their widths.
@@ -231,7 +233,7 @@ impl CheatList {
                             .min_w_0()
                             .truncate()
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_size(px(13.5))
+                            .text_size(px(TYPE_LEAD))
                             .text_color(rgb(name_color))
                             .child(fitted("name", row.name.clone())),
                     )
@@ -292,7 +294,7 @@ fn update_callout(cx: &Context<CheatList>) -> impl IntoElement {
         .child(
             v_flex()
                 .gap(px(3.))
-                .child(tracked(&t(cx, key::CHEATS_UPDATED), 12.5, 0.14).font_weight(FontWeight::BOLD).text_color(rgb(WARN)))
-                .child(div().text_size(px(13.5)).text_color(rgb(TEXT_2)).child(t(cx, key::CHEATS_UPDATED_BODY))),
+                .child(tracked(&t(cx, key::CHEATS_UPDATED), TYPE_FIELD, 0.14).font_weight(FontWeight::BOLD).text_color(rgb(WARN)))
+                .child(div().text_size(px(TYPE_LEAD)).text_color(rgb(TEXT_2)).child(t(cx, key::CHEATS_UPDATED_BODY))),
         )
 }

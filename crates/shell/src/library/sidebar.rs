@@ -28,7 +28,7 @@ use crate::{
         key,
         text::{failed, t},
         theme::*,
-        widgets::{filter, filter_input, icon, mono, notice, square},
+        widgets::{filter, filter_input, icon, list_row, mono, notice, square},
     },
 };
 
@@ -124,7 +124,7 @@ impl Sidebar {
         let record = away.record.clone();
         self.row(number, &away.id, away.name.clone(), away.thumbnail.clone(), true, cx)
             .on_click(cx.listener(move |view, _, _, cx| view.library.update(cx, |library, cx| library.browse(record.clone(), cx))))
-            .child(mono(t(cx, key::TRAINER_NOT_INSTALLED), 10.).flex_none().text_color(rgb(GHOST)))
+            .child(mono(t(cx, key::TRAINER_NOT_INSTALLED), TYPE_CAPTION).flex_none().text_color(rgb(GHOST)))
     }
 
     /// A row's mark, lead and name; `faint`: no trainer, or not installed.
@@ -137,7 +137,7 @@ impl Sidebar {
             (false, false) => rgb(TEXT_2),
         };
         let lead = match self.settings.read(cx).prefs().lead {
-            Lead::Number => mono(format!("{number:02}"), 11.)
+            Lead::Number => mono(format!("{number:02}"), TYPE_LABEL)
                 .w(px(22.))
                 .flex_none()
                 .text_color(if current { accent } else { rgb(FAINT) })
@@ -149,22 +149,23 @@ impl Sidebar {
                 .when_some(thumbnail, |lead, url| lead.child(img(url).size_full().object_fit(ObjectFit::Cover).grayscale(faint)))
                 .into_any_element(),
         };
-        h_flex()
-            .id(("game", number))
+        list_row(("game", number), current)
             .h(px(36.))
             .flex_none()
             .pl(px(16.))
             .pr(px(14.))
             .gap(px(10.))
-            .cursor_pointer()
-            .map(|row| match current {
-                true => row.bg(rgb(ROW_SELECTED)),
-                false => row.hover(|style| style.bg(rgb(ROW_HOVER))),
-            })
             .child(div().w(px(8.)).flex_none().when(current, |cell| cell.child(square(6., accent))))
             .child(lead)
             .child(
-                div().flex_1().min_w_0().truncate().font_weight(FontWeight::SEMIBOLD).text_size(px(13.)).text_color(name_color).child(name),
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_size(px(TYPE_BODY))
+                    .text_color(name_color)
+                    .child(name),
             )
     }
 }
@@ -197,7 +198,7 @@ impl Render for Sidebar {
             rows.extend(away.into_iter().map(|(number, away)| self.away_row(number, away, cx).into_any_element()));
         }
         if rows.is_empty() && !games.is_empty() {
-            rows.push(mono(t(cx, key::LIBRARY_NO_MATCH), 11.).px(px(16.)).py(px(10.)).text_color(rgb(FAINT)).into_any_element());
+            rows.push(mono(t(cx, key::LIBRARY_NO_MATCH), TYPE_LABEL).px(px(16.)).py(px(10.)).text_color(rgb(FAINT)).into_any_element());
         }
         v_flex()
             .w(px(WIDTH))
@@ -210,9 +211,9 @@ impl Render for Sidebar {
                 h_flex().h(px(44.)).flex_none().pl(px(16.)).pr(px(10.)).justify_between().border_b_1().border_color(line(0.07)).child(
                     h_flex()
                         .gap(px(7.))
-                        .child(mono(t(cx, key::LIBRARY_GAMES), 11.).text_color(rgb(DIM)))
-                        .child(mono("/", 11.).text_color(rgb(GHOST)))
-                        .child(mono(games.len().to_string(), 11.).text_color(rgb(TEXT_2))),
+                        .child(mono(t(cx, key::LIBRARY_GAMES), TYPE_LABEL).text_color(rgb(DIM)))
+                        .child(mono("/", TYPE_LABEL).text_color(rgb(GHOST)))
+                        .child(mono(games.len().to_string(), TYPE_LABEL).text_color(rgb(TEXT_2))),
                 ), // Hidden until reordering works (needs `icon_button`): .child(icon_button("sort", Icon::Sort, 30., 15.))
             )
             .child(
@@ -239,13 +240,13 @@ impl Render for Sidebar {
                     .text_color(rgb(DIM))
                     .hover(|style| style.text_color(rgb(TEXT)))
                     .on_click(cx.listener(|view, _, window, cx| view.picker.update(cx, |picker, cx| picker.add(window, cx))))
-                    .child(mono(t(cx, key::LIBRARY_ADD), 11.)),
+                    .child(mono(t(cx, key::LIBRARY_ADD), TYPE_LABEL)),
             )
     }
 }
 
 fn live_label(cx: &App) -> impl IntoElement {
-    let label = mono(t(cx, key::LIBRARY_LIVE), 10.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx)));
+    let label = mono(t(cx, key::LIBRARY_LIVE), TYPE_CAPTION).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx)));
     label
         .with_animation("live", Animation::new(Duration::from_millis(1200)).repeat(), |label, t| {
             label.opacity(if t < 0.5 { 1. } else { 0.35 })
@@ -259,8 +260,8 @@ fn section_title(title: SharedString, count: usize) -> impl IntoElement {
         .flex_none()
         .px(px(16.))
         .gap(px(7.))
-        .child(mono(title, 10.).text_color(rgb(DIM)))
-        .child(mono(format!("{count:02}"), 10.).text_color(rgb(GHOST)))
+        .child(mono(title, TYPE_CAPTION).text_color(rgb(DIM)))
+        .child(mono(format!("{count:02}"), TYPE_CAPTION).text_color(rgb(GHOST)))
 }
 
 /// The pane before there is a game to open.

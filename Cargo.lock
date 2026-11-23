@@ -949,6 +949,7 @@ version = "0.4.0"
 dependencies = [
  "anyhow",
  "disk",
+ "fetch",
  "futures",
  "getrandom 0.4.3",
  "launchers",
@@ -6940,7 +6941,6 @@ dependencies = [
  "blocking",
  "client",
  "disk",
- "fetch",
  "futures",
  "gpui-kit",
  "hotkeys",

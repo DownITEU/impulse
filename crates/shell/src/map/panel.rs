@@ -59,9 +59,9 @@ pub fn map_panel(view: &Entity<MapView>, game: &Arc<Game>, cx: &App) -> Div {
                     h_flex()
                         .gap(px(6.))
                         .text_color(rgb(MUTED))
-                        .child(mono(t(cx, key::MAP_TITLE), 10.5))
-                        .child(mono("/", 10.5).text_color(rgb(GHOST)))
-                        .child(mono(offer.map_or("-".into(), |offer| offer.name.to_uppercase()), 10.5)),
+                        .child(mono(t(cx, key::MAP_TITLE), TYPE_CAPTION))
+                        .child(mono("/", TYPE_CAPTION).text_color(rgb(GHOST)))
+                        .child(mono(offer.map_or("-".into(), |offer| offer.name.to_uppercase()), TYPE_CAPTION)),
                 )
                 .when(offer.is_some(), |header| header.child(icon_button("map", Icon::Expand, 26., 13.).on_click(opens(view)))),
         )
@@ -89,7 +89,7 @@ pub fn map_panel(view: &Entity<MapView>, game: &Arc<Game>, cx: &App) -> Div {
                 .justify_center()
                 .text_center()
                 .text_color(rgb(FAINT))
-                .child(mono(t(cx, key::MAP_NONE), 11.))
+                .child(mono(t(cx, key::MAP_NONE), TYPE_LABEL))
                 .when(linkable(maps, cx), |empty| {
                     empty.child(button(&t(cx, key::MAP_LINK)).id("map-link").on_click(links(view.read(cx).linker(), game)))
                 })

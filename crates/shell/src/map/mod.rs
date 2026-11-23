@@ -153,7 +153,7 @@ impl MapView {
                 .border_1()
                 .border_color(if chosen { rgb(accent) } else { line(0.16) })
                 .text_color(rgb(if chosen { TEXT_BRIGHT } else { DIM }))
-                .child(mono(offer.name.to_uppercase(), 11.))
+                .child(mono(offer.name.to_uppercase(), TYPE_LABEL))
                 .on_click(cx.listener(move |view, _, _, cx| {
                     if view.maps.read(cx).chosen() != index {
                         view.maps.update(cx, |maps, cx| maps.choose(index, cx));
@@ -176,7 +176,7 @@ impl MapView {
                 }
                 cx.notify();
             })))
-            .child(mono(t(cx, key::MAP_TITLE), 10.5).text_color(rgb(DIM)))
+            .child(mono(t(cx, key::MAP_TITLE), TYPE_CAPTION).text_color(rgb(DIM)))
             .child(
                 h_flex()
                     .id("map-tabs")

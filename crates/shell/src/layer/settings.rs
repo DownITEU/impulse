@@ -84,7 +84,7 @@ impl OverlaySettings {
         keycap(id, text)
             // A long preview while binding truncates instead of covering the label.
             .max_w(px(220.))
-            .text_size(px(12.))
+            .text_size(px(TYPE_SMALL))
             .px(px(10.))
             .py(px(5.))
             .cursor_pointer()

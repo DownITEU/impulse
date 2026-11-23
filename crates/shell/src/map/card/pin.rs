@@ -25,7 +25,7 @@ use crate::{
         key,
         text::{t, tf},
         theme::*,
-        widgets::{button, flash, icon, icon_button, mono},
+        widgets::{button, flash, icon, icon_button, list_row, mono},
     },
 };
 
@@ -87,8 +87,8 @@ impl Card {
             .flex_1()
             .min_w_0()
             .gap(px(3.))
-            .child(div().font_weight(FontWeight::BOLD).text_size(px(16.)).text_color(rgb(TEXT_BRIGHT)).child(pin.name.clone()))
-            .child(mono(kind(map, pin), 10.).text_color(rgb(DIM)));
+            .child(div().font_weight(FontWeight::BOLD).text_size(px(TYPE_TITLE)).text_color(rgb(TEXT_BRIGHT)).child(pin.name.clone()))
+            .child(mono(kind(map, pin), TYPE_CAPTION).text_color(rgb(DIM)));
         let head = h_flex().items_end().gap(px(12.)).px(px(14.)).child(badge).child(title);
         let head = match &shown {
             Some(_) => head.mt(px(-BADGE / 2.)),
@@ -108,8 +108,8 @@ impl Card {
                 .border_color(line(0.14))
                 .bg(rgb(SUNKEN))
                 .hover(|style| style.border_color(line(0.3)))
-                .child(mono(text, 10.5).flex_1().text_color(rgb(MUTED)))
-                .child(mono(t(cx, if self.copied { key::MAP_COPIED } else { key::MAP_COPY }), 9.5).text_color(if self.copied {
+                .child(mono(text, TYPE_CAPTION).flex_1().text_color(rgb(MUTED)))
+                .child(mono(t(cx, if self.copied { key::MAP_COPIED } else { key::MAP_COPY }), TYPE_TAG).text_color(if self.copied {
                     accent
                 } else {
                     rgb(DIM)
@@ -159,7 +159,7 @@ impl Card {
             .cursor_pointer()
             .text_color(rgb(FAINT))
             .hover(|style| style.text_color(rgb(MUTED)))
-            .child(mono(hide_text, 9.5))
+            .child(mono(hide_text, TYPE_TAG))
             .on_click(cx.listener(move |card, _, _, cx| {
                 card.board.update(cx, |board, cx| {
                     board.filter(
@@ -188,7 +188,7 @@ impl Card {
                         None => {}
                     }
                 });
-                card.child(div().px(px(14.)).text_size(px(13.)).text_color(rgb(TEXT_2)).child(text))
+                card.child(div().px(px(14.)).text_size(px(TYPE_BODY)).text_color(rgb(TEXT_2)).child(text))
             })
             .child(h_flex().gap(px(8.)).px(px(14.)).child(mark).children(go))
             .children(self.nearby(map, board, window, cx))
@@ -207,21 +207,21 @@ impl Card {
             .map(|&other| {
                 let pin = &map.pins[other];
                 let color = legible(map.categories[pin.group.0].color);
-                h_flex()
-                    .id(("pin-nearby", other))
+                list_row(("pin-nearby", other), false)
                     .px(px(14.))
                     .py(px(4.))
                     .gap(px(10.))
-                    .cursor_pointer()
-                    .hover(|style| style.bg(rgb(ROW_HOVER)))
                     .child(self.images.glyph(board.icon(pin.group, cx), pin.group, color, 14., window, cx))
-                    .child(div().flex_1().min_w_0().truncate().text_size(px(12.)).text_color(rgb(TEXT_2)).child(pin.name.clone()))
-                    .child(mono(group(map, pin).name.to_uppercase(), 9.).text_color(rgb(FAINT)))
+                    .child(div().flex_1().min_w_0().truncate().text_size(px(TYPE_SMALL)).text_color(rgb(TEXT_2)).child(pin.name.clone()))
+                    .child(mono(group(map, pin).name.to_uppercase(), TYPE_TAG).text_color(rgb(FAINT)))
                     .on_click(cx.listener(move |card, _, _, cx| card.board.update(cx, |board, cx| board.select(other, true, cx))))
             })
             .collect();
         Some(
-            v_flex().child(mono(t(cx, key::MAP_NEARBY), 10.).text_color(rgb(DIM)).px(px(14.)).pb(px(4.))).children(rows).into_any_element(),
+            v_flex()
+                .child(mono(t(cx, key::MAP_NEARBY), TYPE_CAPTION).text_color(rgb(DIM)).px(px(14.)).pb(px(4.)))
+                .children(rows)
+                .into_any_element(),
         )
     }
 }

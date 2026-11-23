@@ -99,5 +99,5 @@ pub(super) fn chip(cx: &App) -> impl IntoElement {
         .border_color(alpha(WARN, 0.45))
         .bg(alpha(BG, 0.85))
         .child(icon(Icon::Warn, 12., rgb(WARN)).flex_none())
-        .child(mono(t(cx, key::OVERLAY_EXCLUSIVE_CHIP), 10.5).line_height(relative(1.)).truncate().text_color(rgb(WARN)))
+        .child(mono(t(cx, key::OVERLAY_EXCLUSIVE_CHIP), TYPE_CAPTION).line_height(relative(1.)).truncate().text_color(rgb(WARN)))
 }

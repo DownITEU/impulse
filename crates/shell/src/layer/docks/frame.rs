@@ -59,7 +59,7 @@ pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, wi
                         .border_color(line(0.09))
                         .on_mouse_down(MouseButton::Left, grab(spec, false))
                         .child(square(7., rgb(accent(cx))))
-                        .child(tracked(&t(cx, spec.title), 11., 0.2).font_weight(FontWeight::BOLD))
+                        .child(tracked(&t(cx, spec.title), TYPE_LABEL, 0.2).font_weight(FontWeight::BOLD))
                         .child(div().flex_1())
                         // Occluding, it keeps its press from the header's drag.
                         .child(

@@ -71,7 +71,7 @@ impl Card {
         let index = board.mark?;
         let mark = board.saved.marks.get(index)?;
         let (at, color) = (mark.at, mark.color);
-        let field = || div().px(px(8.)).py(px(4.)).border_1().border_color(line(0.14)).bg(rgb(SUNKEN)).text_size(px(13.));
+        let field = || div().px(px(8.)).py(px(4.)).border_1().border_color(line(0.14)).bg(rgb(SUNKEN)).text_size(px(TYPE_BODY));
         let swatches = PALETTE.iter().enumerate().map(|(slot, &swatch)| {
             div()
                 .id(("mark-color", slot))
@@ -103,7 +103,7 @@ impl Card {
         let head = h_flex()
             .gap(px(10.))
             .child(div().size(px(14.)).flex_none().bg(rgb(color)))
-            .child(mono(t(cx, key::MAP_MY_PIN), 10.).flex_1().text_color(rgb(DIM)))
+            .child(mono(t(cx, key::MAP_MY_PIN), TYPE_CAPTION).flex_1().text_color(rgb(DIM)))
             .child(close);
         let card = self
             .panel("mark-card")

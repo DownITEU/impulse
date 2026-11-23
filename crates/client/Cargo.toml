@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 disk.workspace = true
+fetch.workspace = true
 launchers.workspace = true
 model.workspace = true
 play.workspace = true

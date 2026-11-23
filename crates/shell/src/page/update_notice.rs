@@ -113,14 +113,14 @@ impl Render for UpdateNotice {
             tf(cx, key::UPDATE_FROM_TO, &[("current", Arg::Str(&current)), ("latest", Arg::Str(&latest.version.to_string()))])
         });
         let notes = match notes.is_empty() {
-            true => mono(t(cx, key::UPDATE_NO_NOTES), 11.).text_color(rgb(FAINT)).into_any_element(),
+            true => mono(t(cx, key::UPDATE_NO_NOTES), TYPE_LABEL).text_color(rgb(FAINT)).into_any_element(),
             false => TextView::markdown(("update-notes", mode as usize), notes).into_any_element(),
         };
         let busy = matches!(status, Status::Ready(_)) && !updates.can_restart(cx);
         let body = v_flex()
             .flex_1()
             .min_h_0()
-            .when_some(route, |body, route| body.child(mono(route, 11.).text_color(accent).px(px(20.)).pt(px(14.))))
+            .when_some(route, |body, route| body.child(mono(route, TYPE_LABEL).text_color(accent).px(px(20.)).pt(px(14.))))
             .child(
                 v_flex()
                     .id("update-notes")
@@ -129,12 +129,12 @@ impl Render for UpdateNotice {
                     .max_h(px(420.))
                     .px(px(20.))
                     .py(px(14.))
-                    .text_size(px(13.))
+                    .text_size(px(TYPE_BODY))
                     .text_color(rgb(TEXT_2))
                     .overflow_y_scrollbar()
                     .child(notes),
             )
-            .when(busy, |body| body.child(mono(t(cx, key::UPDATE_BUSY), 11.).text_color(rgb(WARN)).px(px(20.)).pb(px(10.))))
+            .when(busy, |body| body.child(mono(t(cx, key::UPDATE_BUSY), TYPE_LABEL).text_color(rgb(WARN)).px(px(20.)).pb(px(10.))))
             .child(h_flex().justify_end().gap(px(10.)).p(px(20.)).pt(px(6.)).children(self.buttons(mode, &status, cx)));
         dialog("update", title, 640., &self.focus, Self::close, body, cx)
     }

@@ -385,7 +385,7 @@ impl Render for Hud {
                     .when(self.layer.read(cx).exclusive(), |left| left.self_start())
                     .when_some(game, |left, game| {
                         left.child(
-                            title(self.trainers.read(cx), game, 24., cx)
+                            title(self.trainers.read(cx), game, TYPE_DISPLAY, cx)
                                 .max_w_full()
                                 .px(px(14.))
                                 .py(px(8.))

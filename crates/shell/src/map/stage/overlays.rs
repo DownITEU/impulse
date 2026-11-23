@@ -25,7 +25,7 @@ use crate::{
         key,
         text::{failed, t, text},
         theme::*,
-        widgets::{button, icon, mono, square},
+        widgets::{button, icon, list_row, mono, square},
     },
 };
 
@@ -50,10 +50,17 @@ impl Stage {
         let text = v_flex()
             .p(px(10.))
             .gap(px(3.))
-            .child(div().truncate().text_size(px(13.5)).font_weight(FontWeight::BOLD).text_color(rgb(TEXT_BRIGHT)).child(pin.name.clone()))
-            .child(mono(kind(map, pin), 9.5).truncate().text_color(rgb(DIM)))
+            .child(
+                div()
+                    .truncate()
+                    .text_size(px(TYPE_LEAD))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(rgb(TEXT_BRIGHT))
+                    .child(pin.name.clone()),
+            )
+            .child(mono(kind(map, pin), TYPE_TAG).truncate().text_color(rgb(DIM)))
             .when(!about.is_empty(), |text| {
-                text.child(div().pt(px(3.)).line_clamp(2).text_size(px(12.)).text_color(rgb(TEXT_2)).child(about))
+                text.child(div().pt(px(3.)).line_clamp(2).text_size(px(TYPE_SMALL)).text_color(rgb(TEXT_2)).child(about))
             })
             .when(board.saved.found.contains(&pin.id), |text| {
                 let accent = rgb(accent(cx));
@@ -62,7 +69,7 @@ impl Stage {
                         .pt(px(3.))
                         .gap(px(5.))
                         .child(icon(Icon::Check, 10., accent))
-                        .child(mono(t(cx, key::MAP_FOUND), 9.5).text_color(accent)),
+                        .child(mono(t(cx, key::MAP_FOUND), TYPE_TAG).text_color(accent)),
                 )
             });
         let chip = v_flex()
@@ -130,7 +137,13 @@ impl Stage {
     /// Where the player is, and what went wrong last.
     pub(super) fn readout(&self, board: &Board, cx: &App) -> impl IntoElement {
         let chip = |text: SharedString, color: u32| {
-            mono(text, 10.5).px(px(7.)).py(px(3.)).border_1().border_color(alpha(color, 0.4)).bg(alpha(BG, 0.85)).text_color(rgb(color))
+            mono(text, TYPE_CAPTION)
+                .px(px(7.))
+                .py(px(3.))
+                .border_1()
+                .border_color(alpha(color, 0.4))
+                .bg(alpha(BG, 0.85))
+                .text_color(rgb(color))
         };
         h_flex()
             .absolute()
@@ -151,15 +164,12 @@ impl Stage {
 fn layers_menu(map: &Map, saved: &Saved, cx: &Context<Stage>) -> impl IntoElement {
     let accent = accent(cx);
     let option = |id: (&'static str, usize), label: SharedString, on: bool| {
-        h_flex()
-            .id(id)
+        list_row(id, false)
             .h(px(28.))
             .px(px(10.))
             .gap(px(10.))
-            .cursor_pointer()
-            .hover(|style| style.bg(rgb(ROW_HOVER)))
             .child(square(11., alpha(accent, if on { 1. } else { 0. })).border_1().border_color(if on { rgb(accent) } else { line(0.3) }))
-            .child(mono(label, 10.5).font_weight(FontWeight::BOLD).text_color(rgb(if on { TEXT } else { DIM })))
+            .child(mono(label, TYPE_CAPTION).font_weight(FontWeight::BOLD).text_color(rgb(if on { TEXT } else { DIM })))
     };
     let layer = |slot: usize, label: SharedString, on: bool, flip: fn(&mut Saved)| {
         option(("map-layer", slot), label, on)

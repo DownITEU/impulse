@@ -26,6 +26,6 @@ pub fn hotkeys_scope(hotkeys: &Entity<Hotkeys>, cx: &App) -> AnyElement {
             stat.cursor_pointer().on_click(move |_, _, cx| hotkeys.update(cx, |hotkeys, cx| hotkeys.set_game_only(!game_only, cx)))
         })
         .child(square(7., rgb(if enabled { accent(cx) } else { GHOST })))
-        .child(tracked(&scope, 12., 0.12).font_weight(FontWeight::BOLD).when(!enabled, |text| text.text_color(rgb(GHOST))))
+        .child(tracked(&scope, TYPE_SMALL, 0.12).font_weight(FontWeight::BOLD).when(!enabled, |text| text.text_color(rgb(GHOST))))
         .into_any_element()
 }

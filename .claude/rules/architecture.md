@@ -12,7 +12,7 @@
 - A feature is a folder or a crate with one public surface; other code uses that surface, never its fields.
 - One owner per piece of state; others hold projections of it.
 - A reaction in another feature subscribes to an event; it is never a call someone must remember to make.
-- A view renders and sends commands: it does not await a source, write a file or call Win32. Media it draws loads through `ui::art`, as GPUI's images do.
+- A view renders and sends commands: it does not await a source, write a file or call Win32. Media it draws loads through `client::media` off the UI thread, or `img(url)` (GPUI's http client is `ui::art`'s, over the same cache).
 - Operations on a game's process go in `agent`, with data in and data out; Win32 calls go in a leaf crate behind a data-only interface.
 - Every file the app keeps is written through `disk::replace`; a missing or damaged file means the defaults, one of another version is left as it is. A `Stored<T>` at a path named in `client::storage::Paths`.
 

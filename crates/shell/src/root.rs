@@ -10,7 +10,7 @@ use crate::{
     map::{MapEvent, MapView},
     page::Page,
     remote::Serve,
-    ui::theme::*,
+    ui::{dialog::backdrop, theme::*},
 };
 
 const MAP_INSET: f32 = 40.;
@@ -43,25 +43,15 @@ impl Root {
     /// The map over the dimmed page; a click beside it closes it.
     fn modal(&self) -> impl IntoElement {
         let map = self.map.clone();
-        div()
-            .id("map-backdrop")
-            .occlude()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .p(px(MAP_INSET))
-            .bg(alpha(SUNKEN, 0.78))
-            .on_click(move |_, _, cx| map.update(cx, |_, cx| cx.emit(MapEvent::Close)))
-            .child(
-                div()
-                    .id("map-modal")
-                    .size_full()
-                    .border_1()
-                    .border_color(line(0.14))
-                    .on_click(|_, _, cx| cx.stop_propagation())
-                    .child(self.map.clone()),
-            )
+        backdrop("map-backdrop").p(px(MAP_INSET)).on_click(move |_, _, cx| map.update(cx, |_, cx| cx.emit(MapEvent::Close))).child(
+            div()
+                .id("map-modal")
+                .size_full()
+                .border_1()
+                .border_color(line(0.14))
+                .on_click(|_, _, cx| cx.stop_propagation())
+                .child(self.map.clone()),
+        )
     }
 }
 
@@ -72,7 +62,7 @@ impl Render for Root {
             .relative()
             .size_full()
             .font_family(ui_font(cx))
-            .text_size(px(14.))
+            .text_size(px(TYPE_LEAD))
             .text_color(rgb(TEXT))
             .child(self.page.clone().cached(StyleRefinement::default().size_full()))
             .when(modal, |root| root.child(self.modal()))

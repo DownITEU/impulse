@@ -97,7 +97,7 @@ impl SettingsView {
                     .px(px(10.))
                     // The field is inside the list's trigger: clicking into it must not open the list.
                     .on_click(|_, _, cx| cx.stop_propagation())
-                    .child(Input::new(input).appearance(false).px_0().font_family(MONO).text_size(px(12.5))),
+                    .child(Input::new(input).appearance(false).px_0().font_family(MONO).text_size(px(TYPE_FIELD))),
             )
             .when(!choices.is_empty(), |field| field.child(edge(icon_button(("folder-choices", at), Icon::ChevronDown, 30., 12.))))
             .child(edge(icon_button(("folder-browse", at), Icon::Folder, 30., 14.)).on_click(cx.listener(move |view, _, window, cx| {
@@ -114,8 +114,8 @@ impl SettingsView {
                 }
             });
         let status = match &folder.status {
-            Ok(found) => mono(text(cx, found), 11.).text_color(rgb(accent(cx))),
-            Err(failure) => mono(said(cx, failure), 11.).text_color(rgb(WARN)),
+            Ok(found) => mono(text(cx, found), TYPE_LABEL).text_color(rgb(accent(cx))),
+            Err(failure) => mono(said(cx, failure), TYPE_LABEL).text_color(rgb(WARN)),
         };
         v_flex().gap(px(8.)).py(px(12.)).child(label(text(cx, &folder.label), text(cx, &folder.hint))).child(field).child(status)
     }

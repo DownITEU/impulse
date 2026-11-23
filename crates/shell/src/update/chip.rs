@@ -31,7 +31,7 @@ pub fn chip(updates: &Entity<Updates>, cx: &App) -> Option<impl IntoElement> {
             .gap(px(8.))
             .cursor_pointer()
             .child(square(7., accent))
-            .child(mono(text, 11.).text_color(accent))
+            .child(mono(text, TYPE_LABEL).text_color(accent))
             .on_click(move |_, _, cx| updates.update(cx, |updates, cx| updates.present(Mode::Available, cx))),
     )
 }

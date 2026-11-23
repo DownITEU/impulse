@@ -324,21 +324,31 @@ impl Page {
         if keystroke.key != "k" || keystroke.modifiers != Modifiers::control() {
             return;
         }
-        let remote = self.remote_view.as_ref().is_some_and(|view| view.read(cx).is_open());
-        let covered = remote
+        let covered = self.dialogs(cx).iter().any(Option::is_some)
+            || self.log.read(cx).is_open()
             || self.layer.read(cx).is_over()
             || self.map_modal(cx)
-            || self.map.read(cx).linker().read(cx).is_open()
-            || self.picker.read(cx).is_open()
-            || self.settings_view.read(cx).is_open()
-            || self.cheat_list.read(cx).editor().is_some()
-            || self.log.read(cx).is_open()
-            || self.disclaimer.read(cx).is_open(cx)
-            || self.signed_out.read(cx).is_open(cx)
-            || self.update_notice.read(cx).is_open(cx);
+            || self.map.read(cx).linker().read(cx).is_open();
         if !covered {
             self.picker.update(cx, |picker, cx| picker.find(window, cx));
         }
+    }
+
+    /// The dialogs open over the page, bottom to top: what draws them and what they cover read this one list.
+    fn dialogs(&self, cx: &App) -> [Option<AnyElement>; 7] {
+        // Typed, not `AnyView`: a debug build keeps a name per `AnyView` it draws, and each editor is a new one.
+        fn shown<V: Render>(view: &Entity<V>, open: bool) -> Option<AnyElement> {
+            open.then(|| view.clone().into_any_element())
+        }
+        [
+            shown(&self.settings_view, self.settings_view.read(cx).is_open()),
+            self.remote_view.as_ref().and_then(|view| shown(view, view.read(cx).is_open())),
+            self.cheat_list.read(cx).editor().and_then(|editor| shown(editor, true)),
+            shown(&self.picker, self.picker.read(cx).is_open()),
+            shown(&self.disclaimer, self.disclaimer.read(cx).is_open(cx)),
+            shown(&self.signed_out, self.signed_out.read(cx).is_open(cx)),
+            shown(&self.update_notice, self.update_notice.read(cx).is_open(cx)),
+        ]
     }
 
     fn session(&self, game: &Game, strip: bool, cx: &App) -> Div {
@@ -390,13 +400,7 @@ impl Render for Page {
                 self.hotkeys.read(cx),
                 cx,
             ))
-            .when(self.settings_view.read(cx).is_open(), |page| page.child(self.settings_view.clone()))
-            .children(self.remote_view.clone().filter(|view| view.read(cx).is_open()))
-            .children(self.cheat_list.read(cx).editor().cloned())
-            .when(self.picker.read(cx).is_open(), |page| page.child(self.picker.clone()))
-            .when(self.disclaimer.read(cx).is_open(cx), |page| page.child(self.disclaimer.clone()))
-            .when(self.signed_out.read(cx).is_open(cx), |page| page.child(self.signed_out.clone()))
-            .when(self.update_notice.read(cx).is_open(cx), |page| page.child(self.update_notice.clone()))
+            .children(self.dialogs(cx).into_iter().flatten())
             .into_any_element()
     }
 }

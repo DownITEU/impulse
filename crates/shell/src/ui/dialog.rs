@@ -1,7 +1,7 @@
 //! A titled box over the dimmed page: SETTINGS, REMOTE PANEL and the collection editor.
 
 use gpui_kit::{
-    App, Context, Div, FocusHandle, FontWeight, IntoElement, KeyBinding, SharedString, Stateful, Window, actions,
+    App, Context, Div, ElementId, FocusHandle, FontWeight, IntoElement, KeyBinding, SharedString, Stateful, Window, actions,
     component::{FocusTrapElement, h_flex, v_flex},
     div,
     prelude::*,
@@ -54,8 +54,13 @@ pub fn message(text: impl IntoElement, buttons: impl IntoIterator<Item = Statefu
     v_flex()
         .gap(px(20.))
         .p(px(20.))
-        .child(div().text_size(px(15.)).line_height(relative(1.5)).text_color(rgb(TEXT)).child(text))
+        .child(div().text_size(px(TYPE_LEAD)).line_height(relative(1.5)).text_color(rgb(TEXT)).child(text))
         .child(h_flex().justify_end().gap(px(10.)).children(buttons))
+}
+
+/// The dimmed page under a dialog or the map: what lies under it gets no hover or click.
+pub fn backdrop(id: impl Into<ElementId>) -> Stateful<Div> {
+    div().id(id).occlude().absolute().top_0().left_0().size_full().bg(alpha(SUNKEN, 0.78))
 }
 
 fn frame<V: 'static>(
@@ -67,19 +72,12 @@ fn frame<V: 'static>(
     body: impl IntoElement,
     cx: &Context<V>,
 ) -> impl IntoElement {
-    div()
-        .id((id, 0usize))
-        .occlude()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
+    backdrop((id, 0usize))
         .flex()
         .justify_center()
         .items_start()
         .pt(px(96.))
         .pb(px(40.))
-        .bg(alpha(SUNKEN, 0.78))
         .when_some(close, |backdrop, close| backdrop.on_click(cx.listener(move |view, _, window, cx| close(view, window, cx))))
         .child(
             v_flex()
@@ -108,7 +106,7 @@ fn frame<V: 'static>(
                         .justify_between()
                         .border_b_1()
                         .border_color(line(0.09))
-                        .child(tracked(&title.into(), 13., 0.16).font_weight(FontWeight::BOLD))
+                        .child(tracked(&title.into(), TYPE_BODY, 0.16).font_weight(FontWeight::BOLD))
                         .when_some(close, |bar, close| {
                             bar.child(
                                 icon_button((id, 1usize), Icon::Close, 32., 12.)

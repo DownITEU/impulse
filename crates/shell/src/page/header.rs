@@ -47,7 +47,7 @@ pub fn header(
         .border_color(line(0.09))
         .bg(alpha(BG, 0.94))
         .window_control_area(WindowControlArea::Drag)
-        .child(h_flex().gap(px(10.)).child(square(9., accent)).child(tracked("IMPULSE", 16., 0.22).font_weight(FontWeight::BOLD)))
+        .child(h_flex().gap(px(10.)).child(square(9., accent)).child(tracked("IMPULSE", TYPE_TITLE, 0.22).font_weight(FontWeight::BOLD)))
         .child(search)
         .child(div().flex_1())
         .child(
@@ -61,7 +61,7 @@ pub fn header(
                         .gap(px(10.))
                         .on_click(move |_, window, cx| settings.update(cx, |view, cx| view.open(window, cx)))
                         .when(!name.is_empty(), |button| {
-                            button.child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).child(name))
+                            button.child(div().text_size(px(TYPE_BODY)).font_weight(FontWeight::SEMIBOLD).child(name))
                         }),
                 )
                 .child(
@@ -101,10 +101,10 @@ pub fn search_box(library: &Library, picker: &Entity<GamePicker>, cx: &App) -> i
         .cursor_pointer()
         .text_color(rgb(DIM))
         .on_click(move |_, window, cx| picker.update(cx, |picker, cx| picker.find(window, cx)))
-        .child(mono(">", 13.).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx))))
-        .child(mono(search, 13.).font_weight(FontWeight::NORMAL).flex_1())
+        .child(mono(">", TYPE_BODY).font_weight(FontWeight::BOLD).text_color(rgb(accent(cx))))
+        .child(mono(search, TYPE_BODY).font_weight(FontWeight::NORMAL).flex_1())
         .child(
-            mono(t(cx, key::PAGE_SEARCH_KEY), 10.5)
+            mono(t(cx, key::PAGE_SEARCH_KEY), TYPE_CAPTION)
                 .px(px(6.))
                 .py(px(2.))
                 .rounded(px(2.))

@@ -49,10 +49,10 @@ fn page(updates: &AnyView, cx: &App) -> impl IntoElement {
             h_flex()
                 .gap(px(10.))
                 .child(square(10., accent))
-                .child(tracked("IMPULSE", 20., 0.22).font_weight(FontWeight::BOLD))
-                .child(mono(version, 11.).text_color(rgb(FAINT))),
+                .child(tracked("IMPULSE", TYPE_BRAND, 0.22).font_weight(FontWeight::BOLD))
+                .child(mono(version, TYPE_LABEL).text_color(rgb(FAINT))),
         )
-        .child(mono(t(cx, key::ABOUT_TAGLINE), 11.).text_color(accent))
+        .child(mono(t(cx, key::ABOUT_TAGLINE), TYPE_LABEL).text_color(accent))
         .child(div().text_color(rgb(MUTED)).child(t(cx, key::ABOUT_INTRO)));
     let contact = tf(cx, key::ABOUT_CONTACT_HINT, &[("address", Arg::Str(EMAIL))]);
     v_flex()
