@@ -10,8 +10,8 @@ use tray::{Event, Menu, Tray, Words};
 
 use super::{
     hwnd,
-    layer::Layer,
     library::Library,
+    overlay::Layer,
     run::{RunEvent, Runs},
     settings::Settings,
     ui::{

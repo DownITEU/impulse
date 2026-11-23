@@ -10,13 +10,12 @@ workspace = true
 [dependencies]
 client.workspace = true
 disk.workspace = true
-fetch.workspace = true
-hotkeys.workspace = true
 i18n.workspace = true
 journal.workspace = true
+keyhook.workspace = true
 model.workspace = true
-overlay.workspace = true
 sound.workspace = true
+topmost.workspace = true
 tray.workspace = true
 updater.workspace = true
 video.workspace = true

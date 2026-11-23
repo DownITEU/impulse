@@ -48,7 +48,7 @@ impl Render for ResourcesView {
         let body = v_flex().px(px(18.)).py(px(10.));
         let resources = self.resources.read(cx);
         let Some(usage) = &resources.usage else {
-            return body.child(mono(t(cx, key::RESOURCES_READING), 11.).text_color(rgb(FAINT))).into_any_element();
+            return body.child(mono(t(cx, key::RESOURCES_READING), TYPE_LABEL).text_color(rgb(FAINT))).into_any_element();
         };
         let color = |index: usize| COLORS[index % COLORS.len()];
         let total: u64 = usage.caches.iter().map(|store| store.bytes).sum::<u64>() + usage.progress + usage.hotkeys + usage.logs;
@@ -64,7 +64,7 @@ impl Render for ResourcesView {
             .child(
                 row(t(cx, key::RESOURCES_IN_USE), t(cx, key::RESOURCES_IN_USE_HINT), 52.)
                     .border_b_0()
-                    .child(mono(sized(cx, total), 18.).font_weight(FontWeight::BOLD).text_color(rgb(TEXT_BRIGHT))),
+                    .child(mono(sized(cx, total), TYPE_TITLE).font_weight(FontWeight::BOLD).text_color(rgb(TEXT_BRIGHT))),
             )
             .child(bar);
         let caches = usage.caches.iter().enumerate().map(|(index, store)| {
@@ -84,7 +84,7 @@ impl Render for ResourcesView {
                         .into_any_element(),
                 ),
                 Clear::NextStart { asked: true } => {
-                    Some(mono(t(cx, key::RESOURCES_CLEARS_ON_RESTART), 10.5).text_color(rgb(accent(cx))).into_any_element())
+                    Some(mono(t(cx, key::RESOURCES_CLEARS_ON_RESTART), TYPE_CAPTION).text_color(rgb(accent(cx))).into_any_element())
                 }
             };
             entry(Some(color(index)), text(cx, &store.name), text(cx, &store.hint), sized(cx, store.bytes)).children(action)
@@ -121,7 +121,7 @@ impl Render for ResourcesView {
             .children(caches)
             .child(clear_all)
             .child(limit)
-            .child(tracked(&t(cx, key::RESOURCES_KEPT), 11., 0.14).pt(px(18.)).pb(px(4.)).text_color(rgb(DIM)))
+            .child(tracked(&t(cx, key::RESOURCES_KEPT), TYPE_LABEL, 0.14).pt(px(18.)).pb(px(4.)).text_color(rgb(DIM)))
             .children(kept.map(|(name, hint, bytes)| entry(None, t(cx, name), t(cx, hint), sized(cx, bytes))))
             .into_any_element()
     }
@@ -146,7 +146,7 @@ fn entry(color: Option<u32>, name: SharedString, hint: SharedString, size: Share
         .border_color(line(0.07))
         .children(color.map(|color| square(10., rgb(color))))
         .child(label(name, hint).flex_1().min_w_0())
-        .child(mono(size, 12.).text_color(rgb(TEXT)))
+        .child(mono(size, TYPE_SMALL).text_color(rgb(TEXT)))
 }
 
 /// A size worded: the number with the language's marks, the unit from the catalog.

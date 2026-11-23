@@ -47,7 +47,7 @@ struct Grab {
 }
 
 pub(super) struct Docks {
-    specs: &'static [Spec],
+    specs: &'static [&'static Spec],
     /// Back to front; a dock without an entry is as its spec says, behind the placed ones.
     placed: Stored<Vec<Placed>>,
     grab: Option<Grab>,
@@ -55,7 +55,7 @@ pub(super) struct Docks {
 
 impl Docks {
     /// A missing or damaged file means the first layout.
-    pub fn load(paths: &Paths, specs: &'static [Spec]) -> Self {
+    pub fn load(paths: &Paths, specs: &'static [&'static Spec]) -> Self {
         Self { placed: Stored::load(paths.docks()), specs, grab: None }
     }
 
@@ -65,7 +65,7 @@ impl Docks {
 
     /// The shown docks, back to front.
     pub fn shown(&self) -> Vec<&'static Spec> {
-        let mut shown: Vec<_> = self.specs.iter().filter(|spec| self.is_shown(spec)).collect();
+        let mut shown: Vec<_> = self.specs.iter().copied().filter(|spec| self.is_shown(spec)).collect();
         shown.sort_by_key(|spec| self.placed.iter().position(|placed| placed.id == spec.id));
         shown
     }

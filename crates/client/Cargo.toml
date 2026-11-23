@@ -8,12 +8,14 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+agent.workspace = true
 disk.workspace = true
+fetch.workspace = true
 launchers.workspace = true
 model.workspace = true
-play.workspace = true
 
 anyhow.workspace = true
+blocking.workspace = true
 futures.workspace = true
 getrandom.workspace = true
 log.workspace = true

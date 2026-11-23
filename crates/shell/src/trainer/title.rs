@@ -28,7 +28,7 @@ pub fn title(trainers: &Trainers, game: &Game, size: f32, cx: &App) -> Div {
 }
 
 fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
-    let slash = || mono("/", 12.).text_color(rgb(GHOST));
+    let slash = || mono("/", TYPE_SMALL).text_color(rgb(GHOST));
     let mods = match game.support {
         Support::NoTrainer => t(cx, key::TRAINER_NONE),
         // The catalog count, until the trainer itself is there.
@@ -48,25 +48,25 @@ fn meta(trainers: &Trainers, game: &Game, cx: &App) -> impl IntoElement {
         .gap_x(px(10.))
         .gap_y(px(4.))
         .text_color(rgb(MUTED))
-        .child(mono(mods, 12.))
+        .child(mono(mods, TYPE_SMALL))
         .child(slash())
         .child(
             h_flex()
                 .gap(px(6.))
-                .child(mono(version, 12.))
+                .child(mono(version, TYPE_SMALL))
                 .when(game.support == Support::Ready, |version| version.child(icon(Icon::Check, 13., rgb(accent(cx)))))
                 .when(game.support == Support::UpdatePending, |version| {
-                    version.child(mono(t(cx, key::TRAINER_UPDATE_PENDING), 12.).text_color(rgb(WARN)))
+                    version.child(mono(t(cx, key::TRAINER_UPDATE_PENDING), TYPE_SMALL).text_color(rgb(WARN)))
                 }),
         )
         .child(slash())
-        .child(mono(game.store.clone().map_or_else(|| t(cx, key::PAGE_CUSTOM), Into::into), 12.))
+        .child(mono(game.store.clone().map_or_else(|| t(cx, key::PAGE_CUSTOM), Into::into), TYPE_SMALL))
         .when_some(game.trainer_from.as_ref(), |meta, from| {
-            meta.child(slash()).child(mono(tf(cx, key::TRAINER_FROM, &[("store", Arg::Str(&from.store))]), 12.))
+            meta.child(slash()).child(mono(tf(cx, key::TRAINER_FROM, &[("store", Arg::Str(&from.store))]), TYPE_SMALL))
         })
         .when(profile.sessions > 0, |meta| {
             let sessions = tf(cx, key::TRAINER_SESSIONS, &[("count", Arg::Num(profile.sessions as f64))]);
-            meta.child(slash()).child(mono(played(profile.played, cx), 12.)).child(slash()).child(mono(sessions, 12.))
+            meta.child(slash()).child(mono(played(profile.played, cx), TYPE_SMALL)).child(slash()).child(mono(sessions, TYPE_SMALL))
         })
 }
 

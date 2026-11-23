@@ -17,8 +17,8 @@ use super::{
     warning::{Closed, Warning, chip},
 };
 use crate::{
-    bindings::{Hotkeys, hotkeys_scope},
     cheats::{CheatList, EditorClosed},
+    hotkeys::{Hotkeys, hotkeys_scope},
     library::{GamePicker, Library, LibraryEvent, vacant},
     map::{MapView, Maps, Minimap},
     run::{Runs, run_button, session_panel},
@@ -49,49 +49,49 @@ const SIDE: f32 = 320.;
 // A zoom hotkey's step, in map levels: the span is seven, so a dozen presses cross it.
 const ZOOM_STEP: f64 = 0.5;
 
-/// The toolbar's order.
-pub(super) static DOCKS: [Spec; 4] = [
-    Spec {
-        id: MODS,
-        title: key::OVERLAY_DOCK_MODS,
-        icon: Icon::Mods,
-        first: list_first,
-        smallest: Some(size(px(420.), px(240.))),
-        shown: true,
-        body_moves: false,
-    },
-    Spec {
-        id: MAP,
-        title: key::OVERLAY_DOCK_MAP,
-        icon: Icon::Map,
-        first: map_first,
-        smallest: Some(size(px(360.), px(280.))),
-        shown: true,
-        body_moves: false,
-    },
-    Spec {
-        id: SESSION,
-        title: key::OVERLAY_DOCK_SESSION,
-        icon: Icon::Clock,
-        first: side_first,
-        smallest: None,
-        shown: true,
-        body_moves: false,
-    },
-    // Also over the game while Impulse is behind it.
-    Spec {
-        id: MINIMAP,
-        title: key::OVERLAY_DOCK_MINIMAP,
-        icon: Icon::Player,
-        first: minimap_first,
-        smallest: Some(size(px(200.), px(200.))),
-        shown: false,
-        body_moves: true,
-    },
-];
+static MODS_DOCK: Spec = Spec {
+    id: MODS,
+    title: key::OVERLAY_DOCK_MODS,
+    icon: Icon::Mods,
+    first: list_first,
+    smallest: Some(size(px(420.), px(240.))),
+    shown: true,
+    body_moves: false,
+};
 
-static MAP_DOCK: &Spec = &DOCKS[1];
-pub(super) static MINIMAP_DOCK: &Spec = &DOCKS[3];
+static MAP_DOCK: Spec = Spec {
+    id: MAP,
+    title: key::OVERLAY_DOCK_MAP,
+    icon: Icon::Map,
+    first: map_first,
+    smallest: Some(size(px(360.), px(280.))),
+    shown: true,
+    body_moves: false,
+};
+
+static SESSION_DOCK: Spec = Spec {
+    id: SESSION,
+    title: key::OVERLAY_DOCK_SESSION,
+    icon: Icon::Clock,
+    first: side_first,
+    smallest: None,
+    shown: true,
+    body_moves: false,
+};
+
+// Also over the game while Impulse is behind it.
+pub(super) static MINIMAP_DOCK: Spec = Spec {
+    id: MINIMAP,
+    title: key::OVERLAY_DOCK_MINIMAP,
+    icon: Icon::Player,
+    first: minimap_first,
+    smallest: Some(size(px(200.), px(200.))),
+    shown: false,
+    body_moves: true,
+};
+
+/// The toolbar's order.
+pub(super) static DOCKS: [&Spec; 4] = [&MODS_DOCK, &MAP_DOCK, &SESSION_DOCK, &MINIMAP_DOCK];
 
 fn list_first(screen: Size<Pixels>) -> Bounds<Pixels> {
     Bounds::new(point(px(EDGE), px(TOP)), size(px(LIST), screen.height - px(TOP + EDGE)))
@@ -275,7 +275,7 @@ impl Hud {
 
     /// The minimap follows the live run while its dock is shown.
     fn dock_minimap(&self, cx: &mut Context<Self>) {
-        let wanted = self.docks.read(cx).is_shown(MINIMAP_DOCK);
+        let wanted = self.docks.read(cx).is_shown(&MINIMAP_DOCK);
         self.maps.update(cx, |maps, cx| maps.set_minimap(wanted, cx));
     }
 
@@ -283,14 +283,14 @@ impl Hud {
     fn minimap_key(&mut self, cx: &mut Context<Self>) {
         let live = self.runs.read(cx).live().and_then(|live| self.library.read(cx).game(live));
         if live.is_some_and(|game| !game.source.maps.is_empty()) {
-            self.docks.update(cx, |docks, cx| docks.toggle(MINIMAP_DOCK, cx));
+            self.docks.update(cx, |docks, cx| docks.toggle(&MINIMAP_DOCK, cx));
         }
     }
 
     /// The dock's minimap lets go of its tiles once it is not drawn: out of the overlay, its dock closed, or no
     /// live map.
     fn let_go_minimap(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let drawn = self.over && self.docks.read(cx).is_shown(MINIMAP_DOCK) && self.maps.read(cx).live_map().read(cx).ready(cx);
+        let drawn = self.over && self.docks.read(cx).is_shown(&MINIMAP_DOCK) && self.maps.read(cx).live_map().read(cx).ready(cx);
         if !drawn {
             self.minimap.update(cx, |minimap, cx| minimap.hide(window, cx));
         }
@@ -315,7 +315,7 @@ impl Hud {
     }
 
     fn docked(&self, cx: &App) -> bool {
-        self.docks.read(cx).is_shown(MAP_DOCK) && self.maps.read(cx).mapped()
+        self.docks.read(cx).is_shown(&MAP_DOCK) && self.maps.read(cx).mapped()
     }
 
     fn leave_overlay(&mut self, _: &LeaveOverlay, window: &mut Window, cx: &mut Context<Self>) {
@@ -385,7 +385,7 @@ impl Render for Hud {
                     .when(self.layer.read(cx).exclusive(), |left| left.self_start())
                     .when_some(game, |left, game| {
                         left.child(
-                            title(self.trainers.read(cx), game, 24., cx)
+                            title(self.trainers.read(cx), game, TYPE_DISPLAY, cx)
                                 .max_w_full()
                                 .px(px(14.))
                                 .py(px(8.))

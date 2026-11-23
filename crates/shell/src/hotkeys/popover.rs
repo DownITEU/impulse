@@ -38,7 +38,7 @@ pub fn popover(hotkeys: &Entity<Hotkeys>, game: &GameId, cheat: &str, slot: usiz
     let popover = match hotkeys.read(cx).conflict_at(game, cheat, slot) {
         Some(asked) => question(frame, hotkeys, asked, cx).into_any_element(),
         None if binding => {
-            frame.child(mono(t(cx, key::HOTKEYS_BIND_HINT), 10.5).text_color(rgb(MUTED)).whitespace_nowrap()).into_any_element()
+            frame.child(mono(t(cx, key::HOTKEYS_BIND_HINT), TYPE_CAPTION).text_color(rgb(MUTED)).whitespace_nowrap()).into_any_element()
         }
         None => return None,
     };
@@ -64,7 +64,7 @@ fn question(frame: Stateful<Div>, hotkeys: &Entity<Hotkeys>, asked: &Conflict, c
         .key_context(CONTEXT)
         .track_focus(hotkeys.read(cx).focus())
         .on_action(move |_: &DismissConflict, window, cx| dismiss.update(cx, |hotkeys, cx| hotkeys.dismiss(window, cx)))
-        .child(mono(text, 11.).text_color(rgb(TEXT_2)))
+        .child(mono(text, TYPE_LABEL).text_color(rgb(TEXT_2)))
         .when(rebind, |frame| frame.child(answers))
 }
 

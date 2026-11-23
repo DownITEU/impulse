@@ -13,7 +13,7 @@ use client::library::{Game, GameId};
 use gpui_kit::{App, Context, Entity, EventEmitter, IntoElement, Render, Task, Window, component::input::InputState};
 
 use crate::{
-    bindings::Hotkeys,
+    hotkeys::Hotkeys,
     library::{GamePicker, Library, LibraryEvent},
     run::{RunEvent, Runs},
     trainer::{TrainerEvent, Trainers},

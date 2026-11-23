@@ -57,8 +57,8 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
     let (stop, start, id) = (runs.clone(), runs.clone(), game.id.clone());
     h_flex()
         .gap(px(8.))
-        .when_some(starting, |bar, stage| bar.child(tracked(&label(stage, cx), 12.5, 0.14).text_color(accent)))
-        .when(stopping, |bar| bar.child(tracked(&stopping_text, 12.5, 0.14).text_color(accent)))
+        .when_some(starting, |bar, stage| bar.child(tracked(&label(stage, cx), TYPE_FIELD, 0.14).text_color(accent)))
+        .when(stopping, |bar| bar.child(tracked(&stopping_text, TYPE_FIELD, 0.14).text_color(accent)))
         .when(stoppable, |bar| {
             bar.child(
                 action("stop")
@@ -67,7 +67,7 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
                     .text_color(accent)
                     .on_click(move |_, _, cx| stop.update(cx, |runs, cx| runs.stop(cx)))
                     .child(square(9., accent))
-                    .child(tracked(&stop_text, 12.5, 0.14)),
+                    .child(tracked(&stop_text, TYPE_FIELD, 0.14)),
             )
         })
         .when(launchable, |bar| {
@@ -78,9 +78,14 @@ pub fn run_button(runs: &Entity<Runs>, game: &Game, cx: &App) -> impl IntoElemen
                     .gap(px(12.))
                     .on_click(move |_, _, cx| start.update(cx, |runs, cx| runs.start(id.clone(), cx)))
                     .child(icon(Icon::Play, 13., rgb(BG)))
-                    .child(tracked(&launch_text, 12.5, 0.14))
+                    .child(tracked(&launch_text, TYPE_FIELD, 0.14))
                     .child(
-                        mono(enter_text, 10.).font_weight(FontWeight::BOLD).px(px(6.)).py(px(2.)).border_1().border_color(alpha(BG, 0.45)),
+                        mono(enter_text, TYPE_CAPTION)
+                            .font_weight(FontWeight::BOLD)
+                            .px(px(6.))
+                            .py(px(2.))
+                            .border_1()
+                            .border_color(alpha(BG, 0.45)),
                     ),
             )
         })
@@ -105,8 +110,8 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
     };
     let active = h_flex()
         .gap(px(8.))
-        .child(mono(active, 13.).text_color(if running { accent } else { rgb(FAINT) }))
-        .child(mono(format!("/ {total}"), 13.).text_color(rgb(FAINT)));
+        .child(mono(active, TYPE_BODY).text_color(if running { accent } else { rgb(FAINT) }))
+        .child(mono(format!("/ {total}"), TYPE_BODY).text_color(rgb(FAINT)));
     let clock = |size: f32| {
         mono(clock(time), size).font_weight(FontWeight::BOLD).line_height(relative(1.15)).text_color(rgb(if running {
             TEXT_BRIGHT
@@ -123,7 +128,7 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
             .gap_x(px(32.))
             .gap_y(px(6.))
             .py(px(10.))
-            .child(pair(title).child(clock(24.)))
+            .child(pair(title).child(clock(TYPE_DISPLAY)))
             .child(div().flex_1())
             .child(pair(t(cx, key::RUN_ACTIVE)).child(active))
             .child(pair(t(cx, key::RUN_HOTKEYS)).child(scope));
@@ -134,17 +139,17 @@ pub fn session_panel(runs: &Runs, trainers: &Trainers, game: &Game, strip: bool,
         .justify_between()
         .pt(px(14.))
         .pb(px(6.))
-        .child(v_flex().child(caption(title)).child(clock(42.).mt(px(6.)).mb(px(10.))))
+        .child(v_flex().child(caption(title)).child(clock(TYPE_CLOCK).mt(px(6.)).mb(px(10.))))
         .child(v_flex().child(stat(t(cx, key::RUN_ACTIVE)).child(active)).child(stat(t(cx, key::RUN_HOTKEYS)).child(scope)))
 }
 
 /// The line above the cheat list while the trainer is not live.
 pub fn run_note(runs: &Runs, game: &GameId, cx: &App) -> Div {
     match runs.state(game) {
-        State::Failed(error) => mono(why(cx, error), 11.).text_color(rgb(WARN)),
-        State::Starting(stage) => mono(label(stage, cx), 11.).text_color(rgb(accent(cx))),
-        State::Stopping => mono(t(cx, key::RUN_STOPPING), 11.).text_color(rgb(accent(cx))),
-        State::Idle | State::Live => mono(t(cx, key::RUN_IDLE), 11.).text_color(rgb(DIM)),
+        State::Failed(error) => mono(why(cx, error), TYPE_LABEL).text_color(rgb(WARN)),
+        State::Starting(stage) => mono(label(stage, cx), TYPE_LABEL).text_color(rgb(accent(cx))),
+        State::Stopping => mono(t(cx, key::RUN_STOPPING), TYPE_LABEL).text_color(rgb(accent(cx))),
+        State::Idle | State::Live => mono(t(cx, key::RUN_IDLE), TYPE_LABEL).text_color(rgb(DIM)),
     }
 }
 
@@ -155,7 +160,7 @@ fn clock(time: Duration) -> String {
 }
 
 fn caption(text: SharedString) -> Div {
-    mono(text, 10.5).text_color(rgb(DIM))
+    mono(text, TYPE_CAPTION).text_color(rgb(DIM))
 }
 
 fn stat(name: SharedString) -> Div {

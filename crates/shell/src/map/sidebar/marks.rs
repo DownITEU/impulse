@@ -1,7 +1,7 @@
 //! The sidebar's list of the user's own pins, with a switch for all of them.
 
 use client::map::state::{Mark, PALETTE};
-use gpui_kit::{AnyElement, App, Context, IntoElement, SharedString, component::h_flex, div, prelude::*, px, rgb};
+use gpui_kit::{AnyElement, App, Context, IntoElement, SharedString, div, prelude::*, px, rgb};
 use i18n::Arg;
 
 use super::{Sidebar, check, section};
@@ -11,6 +11,7 @@ use crate::{
         key,
         text::{t, tf},
         theme::*,
+        widgets::list_row,
     },
 };
 
@@ -32,26 +33,22 @@ impl Sidebar {
             return rows;
         }
         if marks.is_empty() {
-            let hint = div().px(px(32.)).pb(px(8.)).text_size(px(12.)).text_color(rgb(FAINT)).child(t(cx, key::MAP_NO_PINS));
+            let hint = div().px(px(32.)).pb(px(8.)).text_size(px(TYPE_SMALL)).text_color(rgb(FAINT)).child(t(cx, key::MAP_NO_PINS));
             rows.push(hint.into_any_element());
         }
         for (index, mark) in marks.iter().enumerate() {
-            let row = h_flex()
-                .id(("map-mark", index))
+            let row = list_row(("map-mark", index), board.mark == Some(index))
                 .h(px(28.))
                 .pl(px(32.))
                 .pr(px(14.))
                 .gap(px(10.))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(ROW_HOVER)))
-                .when(board.mark == Some(index), |row| row.bg(rgb(ROW_SELECTED)))
                 .child(div().size(px(10.)).flex_none().bg(rgb(mark.color)))
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
                         .truncate()
-                        .text_size(px(13.))
+                        .text_size(px(TYPE_BODY))
                         .text_color(rgb(if shown { TEXT_2 } else { FAINT }))
                         .child(title(index, mark, cx)),
                 )

@@ -59,7 +59,7 @@ pub(super) fn run(data_dir: &Path, started: SyncSender<EventLoopProxy<Cmd>>) {
     let proxy = event_loop.create_proxy();
     let _ = started.send(proxy.clone());
     let pending = Pending::default();
-    // tao registers raw input for the whole process, and then Windows skips the `hotkeys` hook
+    // tao registers raw input for the whole process, and then Windows skips the `keyhook` hook
     // while Impulse is in front.
     event_loop.set_device_event_filter(DeviceEventFilter::Always);
     let data_dir = data_dir.to_owned();

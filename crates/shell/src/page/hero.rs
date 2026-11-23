@@ -8,8 +8,8 @@ use gpui_kit::{
 use i18n::Arg;
 
 use crate::{
-    layer::{Layer, overlay_hotkey},
     library::{GamePicker, Library, pick_source, source_options},
+    overlay::{Layer, overlay_hotkey},
     run::{Runs, run_button},
     trainer::{Trainers, title},
     ui::{
@@ -59,7 +59,7 @@ impl Hero {
         let options = get.chain([t(cx, key::PAGE_ADD_MANUALLY)]).collect();
         let trigger = primary_action("add-game", cx).px(px(16.)).gap(px(10.)).child(icon(Icon::Plus, 13., rgb(BG))).child(tracked(
             &t(cx, key::PAGE_ADD_GAME),
-            12.5,
+            TYPE_FIELD,
             0.14,
         ));
         dropdown(trigger, (), open_menu, self.menu.is_some(), options, usize::MAX, px(220.), cx, |hero, at, window, cx| {
@@ -98,8 +98,8 @@ impl Hero {
                         .px(px(16.))
                         .on_click(move |_, _, cx| layer.read(cx).toggle())
                         .child(icon(Icon::Layers, 14., rgb(TEXT)))
-                        .child(tracked(&t(cx, key::PAGE_OVERLAY), 12.5, 0.14))
-                        .child(tracked(&overlay_hotkey(self.layer.read(cx)), 12.5, 0.14).text_color(rgb(FAINT))),
+                        .child(tracked(&t(cx, key::PAGE_OVERLAY), TYPE_FIELD, 0.14))
+                        .child(tracked(&overlay_hotkey(self.layer.read(cx)), TYPE_FIELD, 0.14).text_color(rgb(FAINT))),
                 )
             })
             .child(star)
@@ -159,7 +159,7 @@ impl Render for Hero {
             .child(cover().bg(linear_gradient(90., linear_color_stop(alpha(BG, 0.94), 0.), linear_color_stop(alpha(BG, 0.15), 0.8))))
             .child(cover().bg(linear_gradient(180., linear_color_stop(alpha(BG, 0.), 0.4), linear_color_stop(rgb(BG), 1.))))
             .child(self.actions(&game, cx))
-            .child(title(self.trainers.read(cx), &game, 56., cx).relative())
+            .child(title(self.trainers.read(cx), &game, TYPE_HERO, cx).relative())
     }
 }
 

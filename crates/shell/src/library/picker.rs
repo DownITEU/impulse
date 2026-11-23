@@ -27,7 +27,7 @@ use crate::ui::{
     key,
     text::{t, tf},
     theme::*,
-    widgets::{badge, input, mono},
+    widgets::{badge, input, list_row, mono},
 };
 use client::{
     Load,
@@ -253,26 +253,20 @@ impl Render for GamePicker {
                 Purpose::Find { finds } if finds[index].listed => (tf(cx, key::PICKER_IN_LIBRARY, &[("store", Arg::Str(store))]), mods),
                 Purpose::Find { .. } => (SharedString::default(), mods),
             };
-            h_flex()
-                .id(("choice", at))
+            list_row(("choice", at), row == picker.selected)
                 .h(px(32.))
                 .flex_none()
                 .px(px(10.))
                 .gap(px(12.))
                 .justify_between()
-                .cursor_pointer()
-                .map(|line| match row == picker.selected {
-                    true => line.bg(rgb(ROW_SELECTED)),
-                    false => line.hover(|style| style.bg(rgb(ROW_HOVER))),
-                })
                 .on_click(cx.listener(move |view, _, _, cx| view.choose(at, cx)))
-                .child(mono(choice.name.clone(), 12.).text_color(rgb(TEXT_2)).min_w_0().truncate())
+                .child(mono(choice.name.clone(), TYPE_SMALL).text_color(rgb(TEXT_2)).min_w_0().truncate())
                 .child(
                     h_flex()
                         .flex_none()
                         .gap(px(12.))
-                        .when_some(mods, |tags, mods| tags.child(mono(mods, 10.5).text_color(rgb(DIM))))
-                        .child(mono(tag, 10.5).text_color(rgb(FAINT)))
+                        .when_some(mods, |tags, mods| tags.child(mono(mods, TYPE_CAPTION).text_color(rgb(DIM))))
+                        .child(mono(tag, TYPE_CAPTION).text_color(rgb(FAINT)))
                         .when(in_use, |tags| tags.child(badge(t(cx, key::PICKER_IN_USE), accent(cx)))),
                 )
         });
@@ -288,7 +282,7 @@ impl Render for GamePicker {
             .border_1()
             .border_color(line(0.14))
             .bg(rgb(SUNKEN))
-            .child(Input::new(&picker.filter).appearance(false).px_0().font_family(MONO).text_size(px(12.5)));
+            .child(Input::new(&picker.filter).appearance(false).px_0().font_family(MONO).text_size(px(TYPE_FIELD)));
         let body = v_flex()
             .p(px(16.))
             .gap(px(12.))
@@ -302,9 +296,9 @@ impl Render for GamePicker {
                 cx.stop_propagation();
             }))
             .when(!picker.subject.is_empty(), |body| {
-                body.child(mono(picker.subject.clone(), 11.).text_color(rgb(MUTED)).min_w_0().truncate())
+                body.child(mono(picker.subject.clone(), TYPE_LABEL).text_color(rgb(MUTED)).min_w_0().truncate())
             })
-            .child(mono(t(cx, caption), 10.5).text_color(rgb(DIM)))
+            .child(mono(t(cx, caption), TYPE_CAPTION).text_color(rgb(DIM)))
             .child(field)
             .child(div().id("choices").max_h(px(320.)).overflow_y_scroll().track_scroll(&picker.scroll).flex().flex_col().children(rows));
         dialog("picker", t(cx, title), 520., &self.focus, Self::close, body, cx).into_any_element()

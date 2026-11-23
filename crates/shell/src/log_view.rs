@@ -280,8 +280,8 @@ impl LogView {
                     view.refilter(cx);
                 }))
                 .child(square(7., rgb(color)))
-                .child(mono(label, 10.5).font_weight(FontWeight::BOLD))
-                .child(mono(self.counts[slot].to_string(), 10.5).text_color(rgb(FAINT)))
+                .child(mono(label, TYPE_CAPTION).font_weight(FontWeight::BOLD))
+                .child(mono(self.counts[slot].to_string(), TYPE_CAPTION).text_color(rgb(FAINT)))
         });
         h_flex()
             .h(px(48.))
@@ -291,7 +291,7 @@ impl LogView {
             .gap(px(10.))
             .border_b_1()
             .border_color(line(0.09))
-            .child(tracked(&t(cx, key::LOG_TITLE), 13., 0.16).font_weight(FontWeight::BOLD))
+            .child(tracked(&t(cx, key::LOG_TITLE), TYPE_BODY, 0.16).font_weight(FontWeight::BOLD))
             .children(chips)
             .child(filter(&self.filter, cx).flex_1().min_w(px(120.)).h(px(28.)).px(px(10.)).border_1().border_color(line(0.1)))
             .child(
@@ -352,17 +352,17 @@ impl LogView {
             .on_click(cx.listener(move |view, event: &gpui_kit::ClickEvent, window, cx| {
                 view.click(seq, event.modifiers(), window, cx);
             }))
-            .child(mono(record.time.format("%H:%M:%S%.3f").to_string(), 12.).w(px(92.)).flex_none().text_color(rgb(FAINT)))
+            .child(mono(record.time.format("%H:%M:%S%.3f").to_string(), TYPE_SMALL).w(px(92.)).flex_none().text_color(rgb(FAINT)))
             .child(
                 h_flex()
                     .w(px(58.))
                     .flex_none()
                     .gap(px(6.))
                     .child(square(7., rgb(color)))
-                    .child(mono(label, 10.5).font_weight(FontWeight::BOLD).text_color(rgb(color))),
+                    .child(mono(label, TYPE_CAPTION).font_weight(FontWeight::BOLD).text_color(rgb(color))),
             )
-            .child(mono(record.source.clone(), 12.).w(px(150.)).flex_none().truncate().text_color(rgb(DIM)))
-            .child(mono(record.message.clone(), 12.).flex_1().min_w_0().truncate().text_color(rgb(text)))
+            .child(mono(record.source.clone(), TYPE_SMALL).w(px(150.)).flex_none().truncate().text_color(rgb(DIM)))
+            .child(mono(record.message.clone(), TYPE_SMALL).flex_1().min_w_0().truncate().text_color(rgb(text)))
     }
 
     fn detail(&self, cx: &App) -> impl IntoElement {
@@ -377,7 +377,7 @@ impl LogView {
             .border_color(line(0.09))
             .bg(rgb(PANEL))
             .font_family(MONO)
-            .text_size(px(12.))
+            .text_size(px(TYPE_SMALL))
             .overflow_y_scroll()
             .map(|strip| match record {
                 // Keyed by record, so a selection never carries over to another one.

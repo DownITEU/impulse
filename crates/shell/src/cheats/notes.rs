@@ -38,12 +38,12 @@ impl CheatList {
                     .px(px(14.))
                     .gap(px(10.))
                     .child(icon(Icon::Info, 13., rgb(accent(cx))))
-                    .child(tracked(&t(cx, key::CHEATS_NOTES), 13., 0.16).font_weight(FontWeight::BOLD))
+                    .child(tracked(&t(cx, key::CHEATS_NOTES), TYPE_BODY, 0.16).font_weight(FontWeight::BOLD))
                     .child(div().flex_1())
                     .child(
                         icon_button("fold-notes", chevron, 26., 13.).on_click(cx.listener(|list, _, _, cx| list.toggle_fold(NOTES, cx))),
                     ),
             )
-            .when(!folded, |card| card.child(div().px(px(14.)).pb(px(12.)).text_size(px(13.)).text_color(rgb(TEXT_2)).child(text)))
+            .when(!folded, |card| card.child(div().px(px(14.)).pb(px(12.)).text_size(px(TYPE_BODY)).text_color(rgb(TEXT_2)).child(text)))
     }
 }

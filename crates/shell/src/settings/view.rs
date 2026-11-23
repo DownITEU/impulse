@@ -19,7 +19,7 @@ use crate::ui::{
     key,
     text::t,
     theme::*,
-    widgets::{badge, choice, mono, segmented, square, switch, tracked},
+    widgets::{badge, choice, list_row, mono, segmented, square, switch, tracked},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -115,22 +115,19 @@ impl SettingsView {
         v_flex().min_w(px(168.)).flex_none().py(px(8.)).border_r_1().border_color(line(0.07)).bg(rgb(SUNKEN)).children(
             TABS.into_iter().map(|(name, tab)| {
                 let current = tab == self.tab;
-                h_flex()
-                    .id(name.0)
+                list_row(name.0, current)
                     .h(px(34.))
                     .px(px(14.))
                     .gap(px(10.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(rgb(if current { TEXT_BRIGHT } else { DIM }))
-                    .when(current, |item| item.bg(rgb(ROW_SELECTED)))
-                    .cursor_pointer()
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.tab = tab;
                         cx.emit(Looked);
                         cx.notify();
                     }))
                     .child(div().w(px(6.)).when(current, |cell| cell.child(square(6., rgb(accent(cx))))))
-                    .child(tracked(&t(cx, name), 12., 0.12).flex_nowrap())
+                    .child(tracked(&t(cx, name), TYPE_SMALL, 0.12).flex_nowrap())
                     .when(tab == Tab::Plugins, |item| item.child(badge(t(cx, key::ALPHA), WARN)))
             }),
         )
@@ -190,7 +187,7 @@ impl SettingsView {
                         .border_color(if current { rgb(color) } else { line(0.16) })
                         .child(div().size_full().bg(rgb(color))),
                 )
-                .child(mono(t(cx, label), 9.5).text_color(rgb(if current { TEXT } else { FAINT })))
+                .child(mono(t(cx, label), TYPE_TAG).text_color(rgb(if current { TEXT } else { FAINT })))
         });
         let lead = |id: &'static str, label: Key, choose: Lead| {
             choice(id, t(cx, label), lead == choose, cx)
@@ -258,8 +255,8 @@ pub(super) fn open_menu(view: &mut SettingsView) -> &mut Option<Menu> {
 pub fn label(title: impl Into<SharedString>, hint: impl Into<SharedString>) -> Div {
     v_flex()
         .gap(px(4.))
-        .child(tracked(&title.into(), 13., 0.1).font_weight(FontWeight::SEMIBOLD))
-        .child(mono(hint, 11.).font_weight(FontWeight::NORMAL).text_color(rgb(FAINT)))
+        .child(tracked(&title.into(), TYPE_BODY, 0.1).font_weight(FontWeight::SEMIBOLD))
+        .child(mono(hint, TYPE_LABEL).font_weight(FontWeight::NORMAL).text_color(rgb(FAINT)))
 }
 
 /// The control the caller adds keeps its width; a long hint wraps.

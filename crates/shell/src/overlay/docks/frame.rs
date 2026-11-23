@@ -59,7 +59,7 @@ pub fn frame(docks: &Entity<Docks>, docked: Vec<(&'static Spec, AnyElement)>, wi
                         .border_color(line(0.09))
                         .on_mouse_down(MouseButton::Left, grab(spec, false))
                         .child(square(7., rgb(accent(cx))))
-                        .child(tracked(&t(cx, spec.title), 11., 0.2).font_weight(FontWeight::BOLD))
+                        .child(tracked(&t(cx, spec.title), TYPE_LABEL, 0.2).font_weight(FontWeight::BOLD))
                         .child(div().flex_1())
                         // Occluding, it keeps its press from the header's drag.
                         .child(
@@ -106,7 +106,7 @@ pub fn below_header(mut bounds: Bounds<Pixels>) -> Bounds<Pixels> {
 pub fn toolbar(docks: &Entity<Docks>, cx: &App, usable: impl Fn(&Spec) -> bool) -> impl IntoElement {
     let accent = accent(cx);
     let state = docks.read(cx);
-    h_flex().gap(px(4.)).children(state.specs.iter().map(|spec| {
+    h_flex().gap(px(4.)).children(state.specs.iter().copied().map(|spec| {
         let (usable, shown) = (usable(spec), state.is_shown(spec));
         let docks = docks.clone();
         let title = t(cx, spec.title);

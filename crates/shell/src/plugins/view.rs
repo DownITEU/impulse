@@ -47,16 +47,15 @@ impl PluginsView {
             .p(px(14.))
             .border_1()
             .border_color(rgb(accent(cx)))
-            .child(tracked(&title, 13., 0.1).text_color(rgb(TEXT_BRIGHT)))
+            .child(tracked(&title, TYPE_BODY, 0.1).text_color(rgb(TEXT_BRIGHT)))
             .children(
-                approval
-                    .replaces
-                    .as_ref()
-                    .map(|version| mono(tf(cx, key::PLUGINS_REPLACES, &[("version", Arg::Str(version))]), 11.).text_color(rgb(FAINT))),
+                approval.replaces.as_ref().map(|version| {
+                    mono(tf(cx, key::PLUGINS_REPLACES, &[("version", Arg::Str(version))]), TYPE_LABEL).text_color(rgb(FAINT))
+                }),
             )
             .child(scope(key::PLUGINS_HOSTS, &approval.hosts, &approval.widened, cx))
             .child(scope(key::PLUGINS_LINKS, &approval.links, &approval.widened, cx))
-            .child(mono(t(cx, key::PLUGINS_SANDBOX), 11.).text_color(rgb(WARN)))
+            .child(mono(t(cx, key::PLUGINS_SANDBOX), TYPE_LABEL).text_color(rgb(WARN)))
             .child(
                 h_flex()
                     .gap(px(8.))
@@ -98,7 +97,7 @@ impl PluginsView {
             .child(head)
             .child(scope(key::PLUGINS_HOSTS, &plugin.hosts, &[], cx))
             .when(!plugin.links.is_empty(), |card| card.child(scope(key::PLUGINS_LINKS, &plugin.links, &[], cx)))
-            .children(plugin.failure.as_ref().map(|failure| mono(why(cx, failure), 11.).text_color(rgb(DANGER))))
+            .children(plugin.failure.as_ref().map(|failure| mono(why(cx, failure), TYPE_LABEL).text_color(rgb(DANGER))))
             .children(settings)
     }
 }
@@ -106,14 +105,16 @@ impl PluginsView {
 /// A scope's caption and its hosts, those not approved before marked.
 fn scope(caption: Key, hosts: &[String], widened: &[String], cx: &Context<PluginsView>) -> Div {
     let hosts: Vec<AnyElement> = match hosts.is_empty() {
-        true => vec![mono(t(cx, key::PLUGINS_NO_HOSTS), 11.).text_color(rgb(FAINT)).into_any_element()],
+        true => vec![mono(t(cx, key::PLUGINS_NO_HOSTS), TYPE_LABEL).text_color(rgb(FAINT)).into_any_element()],
         false => hosts
             .iter()
             .map(|host| {
                 h_flex()
                     .gap(px(6.))
-                    .child(mono(host.clone(), 11.).text_color(rgb(TEXT)))
-                    .when(widened.contains(host), |line| line.child(mono(t(cx, key::PLUGINS_NEW), 10.).text_color(rgb(accent(cx)))))
+                    .child(mono(host.clone(), TYPE_LABEL).text_color(rgb(TEXT)))
+                    .when(widened.contains(host), |line| {
+                        line.child(mono(t(cx, key::PLUGINS_NEW), TYPE_CAPTION).text_color(rgb(accent(cx))))
+                    })
                     .into_any_element()
             })
             .collect(),
@@ -121,7 +122,7 @@ fn scope(caption: Key, hosts: &[String], widened: &[String], cx: &Context<Plugin
     h_flex()
         .items_start()
         .gap(px(12.))
-        .child(mono(t(cx, caption), 10.5).w(px(120.)).flex_none().text_color(rgb(FAINT)))
+        .child(mono(t(cx, caption), TYPE_CAPTION).w(px(120.)).flex_none().text_color(rgb(FAINT)))
         .child(v_flex().gap(px(2.)).children(hosts))
 }
 
@@ -156,15 +157,15 @@ impl Render for PluginsView {
             .border_color(alpha(WARN, 0.4))
             .bg(alpha(WARN, 0.08))
             .child(badge(t(cx, key::ALPHA), WARN))
-            .child(mono(t(cx, key::PLUGINS_ALPHA_HINT), 11.).flex_1().min_w_0().text_color(rgb(TEXT_2)));
+            .child(mono(t(cx, key::PLUGINS_ALPHA_HINT), TYPE_LABEL).flex_1().min_w_0().text_color(rgb(TEXT_2)));
         v_flex()
             .px(px(18.))
             .py(px(6.))
             .child(warning)
             .child(install)
-            .children(failure.map(|failure| mono(why(cx, &failure), 11.).pt(px(10.)).text_color(rgb(DANGER))))
+            .children(failure.map(|failure| mono(why(cx, &failure), TYPE_LABEL).pt(px(10.)).text_color(rgb(DANGER))))
             .children(approval.map(|approval| self.approval(&approval, cx)))
-            .when(list.is_empty(), |tab| tab.child(mono(t(cx, key::PLUGINS_NONE), 11.).py(px(14.)).text_color(rgb(FAINT))))
+            .when(list.is_empty(), |tab| tab.child(mono(t(cx, key::PLUGINS_NONE), TYPE_LABEL).py(px(14.)).text_color(rgb(FAINT))))
             .children(cards)
     }
 }

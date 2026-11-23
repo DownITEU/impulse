@@ -400,13 +400,9 @@ impl Updates {
     fn recount(&mut self) {
         let (feed, channel) = &self.selected;
         self.offer = match self.saved.feed == *feed {
-            true => updater::newer(&self.saved.releases, &self.current, *channel),
+            true => updater::newer(&self.saved.releases, &self.current, *channel, self.saved.skipped.as_ref()),
             false => Vec::new(),
         };
-        if let Some(skipped) = &self.saved.skipped {
-            // By precedence, as `newer` is: a rebuild of the skipped version (`1.0.0+b2`) stays skipped.
-            self.offer.retain(|release| release.version.cmp_precedence(skipped).is_gt());
-        }
         self.publish();
     }
 

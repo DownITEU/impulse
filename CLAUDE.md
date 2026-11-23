@@ -22,17 +22,16 @@ Native Rust + GPUI client for the user's own Wand (WeMod) account and install. W
 
 - `app` - the composition root: the elevated copy's entry (`agent::serve_elevated`), one instance, the journal, the migration, the registry, the window, the remote panel's server (feature `remote`, on by default).
 - `shell` - the GPUI UI.
-- `client` - the app's logic without GPUI: library, trainer sheet, runs, hotkey choices, map state and the files that keep them.
+- `client` - the app's logic without GPUI: library, trainer sheet, runs (prepare, find or start the game, attach), hotkey choices, map state and the files that keep them.
 - `wand` - everything WeMod/Wand; its one public item is the `Wand` source.
 - `model` - the contract the UI, a run and the sources share: ids, data, the capability traits.
-- `play` - one run: prepare, find or start the game, attach.
 - `agent` - every operation on a game's process.
 - `launchers` - installed games from the launchers' own records.
 - `remote` - the remote panel's server: the embedded panel, pairing, the WebSocket; transport only.
 - `plugins` - the WASM host: a plugin as a source, its limits, the import of its answers, their cache.
 - `sdk` - what a plugin builds against: the v1 wire, the manifest's format, the guest's side of the ABI.
 - `i18n` - the languages we ship and the catalogs: Fluent messages by domain, over English.
-- `hotkeys`, `overlay`, `tray`, `video`, `sound` - Win32 and media leaves: key hooks, the overlay's window calls, the tray icon, clips on the GPU, cue sounds.
+- `keyhook`, `topmost`, `tray`, `video`, `sound` - Win32 and media leaves: key hooks, the overlay's window calls, the tray icon, clips on the GPU, cue sounds.
 - `updater` - self-update: the release feed, the download checked against its digest, the swap of the running executable, `CHANGELOG.md`'s sections.
 - `journal`, `disk`, `fetch`, `pe` - the log, atomic file writes and typed JSON files, public CDN GETs, PE headers.
 - `checks` - tests holding the crate graph, file sizes, the texts (no literal caption, every id in every language) and the rule files' globs; they cover `web/panel` too.

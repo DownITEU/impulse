@@ -8,7 +8,7 @@ use std::{
 use gpui_kit::RenderImage;
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::ui::art::Fetched;
+use client::media::Fetched;
 
 /// Level, column, row.
 pub type Key = (u8, u32, u32);

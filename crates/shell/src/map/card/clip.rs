@@ -10,7 +10,9 @@ use blocking::unblock;
 use gpui_kit::{Bounds, Context, IntoElement, Pixels, Render, Task, Window, canvas, div, prelude::*, px, size};
 use video::{Frame, ID3D11Device, Playback};
 
-use crate::ui::art::{self, Router};
+use client::media;
+
+use crate::ui::art::Router;
 
 // A stall is not caught up: the clip goes on from where it stopped.
 const STEP: Duration = Duration::from_millis(100);
@@ -29,7 +31,7 @@ impl ClipView {
     pub fn new(dir: PathBuf, url: String, device: ID3D11Device, cx: &mut Context<Self>) -> Self {
         let registry = Router::registry(cx);
         let play = cx.spawn(async move |clip, cx| {
-            let mut playback = match unblock(move || Playback::start(&art::path(&dir, &url, &registry)?, &device)).await {
+            let mut playback = match unblock(move || Playback::start(&media::path(&dir, &url, &registry)?, &device)).await {
                 Ok(playback) => playback,
                 Err(e) => return log::warn!("pin clip not played: {e:#}"),
             };

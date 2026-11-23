@@ -35,7 +35,7 @@ use crate::{
         key,
         text::{t, tf},
         theme::*,
-        widgets::{filter, icon, input, mono, square},
+        widgets::{filter, icon, input, list_row, mono, square},
     },
 };
 
@@ -118,7 +118,7 @@ impl Sidebar {
         let mut rows = vec![progress(map, board, cx).into_any_element()];
         if map.unfinished {
             let notice = h_flex().gap(px(8.)).mx(px(14.)).mb(px(8.)).child(icon(Icon::Warn, 12., rgb(WARN)));
-            let text = div().text_size(px(11.5)).text_color(rgb(MUTED)).child(t(cx, key::MAP_UNFINISHED));
+            let text = div().text_size(px(TYPE_SMALL)).text_color(rgb(MUTED)).child(t(cx, key::MAP_UNFINISHED));
             rows.push(notice.child(text).into_any_element());
         }
         rows.push(quick_filters(map, board, cx).into_any_element());
@@ -201,17 +201,14 @@ impl Sidebar {
         let glyph = self.images.glyph(board.icon(at, cx), at, color, ICON, window, cx);
         let (toggle_id, only_id) = (group.id.clone(), group.id.clone());
         let counted = tally(board.found_counts[at.0][at.1], board.counts[at.0][at.1]);
-        h_flex()
-            .id(("map-group", at.1))
+        list_row(("map-group", at.1), false)
             .h(px(32.))
             .px(px(6.))
             .gap(px(9.))
-            .cursor_pointer()
-            .hover(|style| style.bg(rgb(ROW_HOVER)))
             .text_color(rgb(if shown { TEXT_2 } else { GHOST }))
             .child(glyph)
-            .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).child(group.name.clone()))
-            .child(mono(counted, 10.5).text_color(rgb(if shown { DIM } else { GHOST })))
+            .child(div().flex_1().min_w_0().truncate().text_size(px(TYPE_BODY)).child(group.name.clone()))
+            .child(mono(counted, TYPE_CAPTION).text_color(rgb(if shown { DIM } else { GHOST })))
             .on_click(cx.listener(move |sidebar, _, _, cx| {
                 sidebar.board.update(cx, |board, cx| {
                     board.filter(
@@ -243,10 +240,10 @@ impl Sidebar {
         let matching = self.matches(map, board);
         let places = matching.len().to_string();
         let places = tf(cx, key::MAP_PLACES, &[("places", Arg::Str(&places)), ("count", Arg::Num(matching.len() as f64))]);
-        let header = mono(places, 10.).text_color(rgb(DIM)).px(px(14.)).pt(px(12.)).pb(px(6.));
+        let header = mono(places, TYPE_CAPTION).text_color(rgb(DIM)).px(px(14.)).pt(px(12.)).pb(px(6.));
         let mut rows = vec![header.into_any_element()];
         if matching.is_empty() {
-            let empty = div().px(px(14.)).text_size(px(12.)).text_color(rgb(FAINT)).child(t(cx, key::MAP_NO_MATCHES));
+            let empty = div().px(px(14.)).text_size(px(TYPE_SMALL)).text_color(rgb(FAINT)).child(t(cx, key::MAP_NO_MATCHES));
             rows.push(empty.into_any_element());
         }
         for &index in matching.iter().take(LISTED) {
@@ -254,21 +251,17 @@ impl Sidebar {
             let category = &map.categories[pin.group.0];
             let badge = h_flex().size(px(28.)).flex_none().justify_center().bg(rgb(category.color));
             let glyph = self.images.glyph(board.icon(pin.group, cx), pin.group, ink(category.color), ICON, window, cx);
-            let row = h_flex()
-                .id(("map-found", index))
+            let row = list_row(("map-found", index), board.selected == Some(index))
                 .px(px(14.))
                 .py(px(6.))
                 .gap(px(10.))
-                .cursor_pointer()
-                .hover(|style| style.bg(rgb(ROW_HOVER)))
-                .when(board.selected == Some(index), |row| row.bg(rgb(ROW_SELECTED)))
                 .child(badge.child(glyph))
                 .child(
                     v_flex()
                         .flex_1()
                         .min_w_0()
-                        .child(div().truncate().text_size(px(13.5)).text_color(rgb(TEXT_2)).child(pin.name.clone()))
-                        .child(mono(kind(map, pin), 10.).truncate().text_color(rgb(FAINT))),
+                        .child(div().truncate().text_size(px(TYPE_LEAD)).text_color(rgb(TEXT_2)).child(pin.name.clone()))
+                        .child(mono(kind(map, pin), TYPE_CAPTION).truncate().text_color(rgb(FAINT))),
                 )
                 .when(board.saved.found.contains(&pin.id), |row| row.child(icon(Icon::Check, 12., rgb(accent(cx)))))
                 .on_click(cx.listener(move |sidebar, _, _, cx| sidebar.board.update(cx, |board, cx| board.select(index, true, cx))));
@@ -323,8 +316,8 @@ fn progress(map: &Map, board: &Board, cx: &App) -> Div {
         .child(
             h_flex()
                 .justify_between()
-                .child(mono(t(cx, key::MAP_FOUND_COUNT), 10.5).text_color(rgb(DIM)))
-                .child(mono(format!("{found} / {total}"), 11.).text_color(rgb(if found > 0 { accent(cx) } else { MUTED }))),
+                .child(mono(t(cx, key::MAP_FOUND_COUNT), TYPE_CAPTION).text_color(rgb(DIM)))
+                .child(mono(format!("{found} / {total}"), TYPE_LABEL).text_color(rgb(if found > 0 { accent(cx) } else { MUTED }))),
         )
         .child(div().h(px(3.)).bg(line(0.08)).child(div().h_full().w(relative(share)).bg(rgb(accent(cx)))))
 }
@@ -349,7 +342,7 @@ fn quick_filters(map: &Map, board: &Board, cx: &Context<Sidebar>) -> impl IntoEl
             .border_color(line(0.14))
             .when(on && enabled, |cell| cell.bg(rgb(accent(cx))).border_color(rgb(accent(cx))))
             .when(enabled, |cell| cell.cursor_pointer().hover(|style| style.border_color(line(0.3))))
-            .child(mono(label, 10.).font_weight(FontWeight::BOLD).text_color(rgb(color)))
+            .child(mono(label, TYPE_CAPTION).font_weight(FontWeight::BOLD).text_color(rgb(color)))
     };
     let change = |change: fn(&mut client::map::state::Saved)| {
         cx.listener(move |sidebar: &mut Sidebar, _, _, cx| sidebar.board.update(cx, |board, cx| board.filter(change, cx)))
@@ -390,13 +383,10 @@ fn check(color: u32, on: bool) -> Div {
 
 /// A foldable section's header: chevron, title, a note, and an optional control on the right.
 fn section(id: impl Into<ElementId>, open: bool, title: &str, note: String, control: Option<AnyElement>, cx: &App) -> Stateful<Div> {
-    h_flex()
-        .id(id)
+    list_row(id, false)
         .h(px(34.))
         .px(px(14.))
         .gap(px(8.))
-        .cursor_pointer()
-        .hover(|style| style.bg(rgb(ROW_HOVER)))
         .child(icon(if open { Icon::ChevronDown } else { Icon::ChevronRight }, 11., rgb(if open { accent(cx) } else { DIM })))
         .child(
             div()
@@ -404,25 +394,22 @@ fn section(id: impl Into<ElementId>, open: bool, title: &str, note: String, cont
                 .min_w_0()
                 .truncate()
                 .font_weight(FontWeight::BOLD)
-                .text_size(px(12.5))
+                .text_size(px(TYPE_FIELD))
                 .text_color(rgb(TEXT))
                 .child(title.to_owned()),
         )
-        .child(mono(note, 10.5).text_color(rgb(DIM)))
+        .child(mono(note, TYPE_CAPTION).text_color(rgb(DIM)))
         .children(control)
 }
 
 fn item(id: impl Into<ElementId>, mark: Div, name: &str, shown: bool) -> Stateful<Div> {
-    h_flex()
-        .id(id)
+    list_row(id, false)
         .h(px(28.))
         .pr(px(14.))
         .gap(px(10.))
-        .cursor_pointer()
-        .hover(|style| style.bg(rgb(ROW_HOVER)))
         .text_color(rgb(if shown { TEXT_2 } else { FAINT }))
         .child(mark)
-        .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).child(name.to_owned()))
+        .child(div().flex_1().min_w_0().truncate().text_size(px(TYPE_BODY)).child(name.to_owned()))
 }
 
 /// A check's click: `ids` hide while any shows, else they all show.

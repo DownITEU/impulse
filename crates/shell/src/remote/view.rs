@@ -99,7 +99,7 @@ impl Render for RemoteView {
                     .min_w_0()
                     .gap(px(12.))
                     .child(label(t(cx, key::REMOTE_ADDRESS), t(cx, key::REMOTE_ADDRESS_HINT)))
-                    .child(h_flex().gap(px(10.)).child(mono(link, 13.).min_w_0().text_color(rgb(TEXT_BRIGHT))).child(copier)),
+                    .child(h_flex().gap(px(10.)).child(mono(link, TYPE_BODY).min_w_0().text_color(rgb(TEXT_BRIGHT))).child(copier)),
             )
         });
         let devices = remote.devices().iter().map(|device| {
@@ -119,14 +119,14 @@ impl Render for RemoteView {
                 .items_start()
                 .gap(px(10.))
                 .child(square(4., rgb(accent(cx))).mt(px(6.)))
-                .child(mono(t(cx, tip), 11.).flex_1().min_w_0().font_weight(FontWeight::NORMAL).text_color(rgb(DIM)))
+                .child(mono(t(cx, tip), TYPE_LABEL).flex_1().min_w_0().font_weight(FontWeight::NORMAL).text_color(rgb(DIM)))
         });
         let body = v_flex()
             .px(px(18.))
             .py(px(10.))
             .child(row(t(cx, key::REMOTE_SWITCH), t(cx, key::REMOTE_HINT), 64.).child(switch))
             .children(pairing)
-            .when(remote.failed(), |body| body.child(mono(t(cx, key::REMOTE_FAILED), 11.).py(px(10.)).text_color(rgb(WARN))))
+            .when(remote.failed(), |body| body.child(mono(t(cx, key::REMOTE_FAILED), TYPE_LABEL).py(px(10.)).text_color(rgb(WARN))))
             .when(on, |body| {
                 body.child(
                     v_flex()
@@ -134,16 +134,16 @@ impl Render for RemoteView {
                         .py(px(14.))
                         .border_b_1()
                         .border_color(line(0.07))
-                        .child(tracked(&t(cx, key::REMOTE_TIPS), 12., 0.1).font_weight(FontWeight::SEMIBOLD))
+                        .child(tracked(&t(cx, key::REMOTE_TIPS), TYPE_SMALL, 0.1).font_weight(FontWeight::SEMIBOLD))
                         .children(tips),
                 )
             })
             .child(row(t(cx, key::REMOTE_DEVICES), t(cx, key::REMOTE_DEVICES_HINT), 52.))
             .children(devices)
             .when(remote.devices().is_empty(), |body| {
-                body.child(mono(t(cx, key::REMOTE_NO_DEVICES), 11.).py(px(10.)).text_color(rgb(FAINT)))
+                body.child(mono(t(cx, key::REMOTE_NO_DEVICES), TYPE_LABEL).py(px(10.)).text_color(rgb(FAINT)))
             })
-            .child(mono(t(cx, key::REMOTE_TRUST), 11.).py(px(14.)).text_color(rgb(WARN)));
+            .child(mono(t(cx, key::REMOTE_TRUST), TYPE_LABEL).py(px(14.)).text_color(rgb(WARN)));
         let body = div().id("remote-page").overflow_y_scrollbar().child(body);
         dialog("remote", t(cx, key::REMOTE), 560., &self.focus, |view: &mut Self, _, cx| view.close(cx), body, cx)
     }

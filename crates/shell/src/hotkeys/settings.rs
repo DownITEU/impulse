@@ -1,6 +1,6 @@
 //! The Settings `HOTKEYS` tab.
 
-use gpui_kit::{Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, div, prelude::*, px};
+use gpui_kit::{Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, prelude::*, px};
 
 use super::Hotkeys;
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     ui::{
         key,
         text::t,
-        widgets::{choice, segmented, toggle},
+        widgets::{choice, segmented, switch},
     },
 };
 
@@ -37,13 +37,9 @@ impl Render for HotkeySettings {
             .py(px(6.))
             .child(
                 row(t(cx, key::HOTKEYS_ENABLED), t(cx, key::HOTKEYS_ENABLED_HINT), 64.).child(
-                    div()
-                        .id("hotkeys-enabled")
-                        .cursor_pointer()
-                        .on_click(
-                            cx.listener(move |view, _, _, cx| view.hotkeys.update(cx, |hotkeys, cx| hotkeys.set_enabled(!enabled, cx))),
-                        )
-                        .child(toggle(enabled, cx)),
+                    switch("hotkeys-enabled", enabled, cx).on_click(
+                        cx.listener(move |view, _, _, cx| view.hotkeys.update(cx, |hotkeys, cx| hotkeys.set_enabled(!enabled, cx))),
+                    ),
                 ),
             )
             .child(row(t(cx, key::HOTKEYS_WORKS_IN), t(cx, key::HOTKEYS_WORKS_IN_HINT), 64.).border_b_0().child(

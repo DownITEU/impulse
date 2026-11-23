@@ -4,7 +4,10 @@ use std::{ops::RangeInclusive, rc::Rc, sync::Arc, time::Instant};
 
 use anyhow::Context as _;
 use blocking::unblock;
-use client::map::{heading::Bearing, state::Saved};
+use client::{
+    map::{heading::Bearing, state::Saved},
+    media::{self, Fetched},
+};
 use gpui_kit::{
     App, BorderStyle, Bounds, ContentMask, Context, Corners, DispatchPhase, Font, FontWeight, Hitbox, MouseMoveEvent, MouseUpEvent,
     PathBuilder, Pixels, RenderImage, Rgba, SharedString, TextAlign, TextRun, TransformationMatrix, Window, font, point, px, quad, radians,
@@ -26,7 +29,7 @@ use crate::{
         markers::{GroupIcon, Look, Marker, PICTURE, SIZE, TIP, ink},
     },
     ui::{
-        art::{self, Fetched, Router},
+        art::{self, Router},
         assets::Icon,
         theme::*,
     },
@@ -39,10 +42,9 @@ const STALE: f32 = 0.4;
 // Opacity of a region's fill while hovered, and of its outline at rest.
 const REGION_FILL: f32 = 0.16;
 const REGION_LINE: f32 = 0.7;
-// A group of pins: its count's size, the ring's width and opacity.
-const COUNT_TEXT: f32 = 10.;
+// A group of pins: the ring's width and opacity.
 const RING: (f32, f32) = (1.5, 0.7);
-// Place names stay readable at every map's own sizes.
+// Place names come at each map's own sizes, kept readable: off the type scale.
 const LABEL_SIZES: (f32, f32) = (11., 18.);
 // A tile, or a map that is one picture, is held whole in memory and in the atlas: at most this many texels across.
 const TILE_SIDE: u32 = 4096;
@@ -164,7 +166,7 @@ impl Stage {
                     let ring = alpha(ink(color), RING.1);
                     window.paint_quad(quad(disc(center, side), px(side / 2.), rgb(color), px(RING.0), ring, BorderStyle::default()));
                     let count = self.shown.counts.entry(marker.count).or_insert_with(|| marker.count.to_string().into()).clone();
-                    text(count, COUNT_TEXT, ink(color), false, center, window, cx);
+                    text(count, TYPE_CAPTION, ink(color), false, center, window, cx);
                 } else if self.look(marker.pin, selected) == Look::Plain {
                     self.paint_marker(&shot, marker.pin, (x, y), window, cx);
                 }
@@ -318,7 +320,7 @@ impl Stage {
         cx.spawn(async move |stage, cx| {
             // Bytes that are no tile count as one the server lacks.
             let fetched = unblock(move || {
-                art::tile(&cache, &url, &registry).and_then(|bytes| match decode(&bytes) {
+                media::tile(&cache, &url, &registry).and_then(|bytes| match decode(&bytes) {
                     Ok(image) => Fetched::Ready(image),
                     Err(e) => {
                         log::debug!("tile {url}: {e:#}");

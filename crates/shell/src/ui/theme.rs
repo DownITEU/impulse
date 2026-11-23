@@ -1,4 +1,4 @@
-//! Design tokens, the single source for colors and fonts.
+//! Design tokens, the single source for colors, fonts and text sizes.
 
 use std::{borrow::Cow, sync::Once};
 
@@ -15,6 +15,22 @@ const UI: &str = "Chakra Petch";
 /// The UI font of Cyrillic languages: Chakra Petch has none, and Exo 2 is the closest in metrics.
 const UI_CYRILLIC: &str = "Exo 2";
 pub const MONO: &str = "JetBrains Mono";
+
+// The type scale, px: every fixed text size is one of these.
+pub const TYPE_TAG: f32 = 9.5;
+pub const TYPE_CAPTION: f32 = 10.5;
+pub const TYPE_LABEL: f32 = 11.;
+pub const TYPE_SMALL: f32 = 12.;
+/// Inputs and the tracked action labels.
+pub const TYPE_FIELD: f32 = 12.5;
+pub const TYPE_BODY: f32 = 13.;
+/// The window's default, and the names a row leads with.
+pub const TYPE_LEAD: f32 = 14.;
+pub const TYPE_TITLE: f32 = 16.;
+pub const TYPE_BRAND: f32 = 20.;
+pub const TYPE_DISPLAY: f32 = 24.;
+pub const TYPE_CLOCK: f32 = 42.;
+pub const TYPE_HERO: f32 = 56.;
 
 pub const BG: u32 = 0x0A0B0A;
 pub const PANEL: u32 = 0x0C0E0B;
