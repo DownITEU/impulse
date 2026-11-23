@@ -18,7 +18,7 @@ use model::{Account, Clear, Failure, FailureKind, Folder, Game, Locale, MapOffer
 use crate::{
     binary, catalog,
     folder::Setting,
-    locale, map,
+    locale, map, overlay,
     run::Host,
     session::{self, Session, Source, account},
     store,
@@ -162,6 +162,12 @@ impl model::Games for Wand {
                 }
             }
         })
+    }
+}
+
+impl model::Overlays for Wand {
+    fn enter(&self, game: &Ref, process: &model::Process) -> Result<model::Canvas, Failure> {
+        overlay::enter(&self.data_dir, &self.folder, game, process).map_err(Failure::from)
     }
 }
 

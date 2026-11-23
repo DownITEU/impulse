@@ -165,20 +165,25 @@ impl Render for OverlaySettings {
                 row(t(cx, title), t(cx, hint), 64.).child(self.hotkey_cap(id, target, Some(slot), key, cx))
             })
             .collect();
+        let prefs = self.settings.read(cx).prefs();
         // On until DON'T SHOW AGAIN was pressed in the question itself.
-        let asked = !self.settings.read(cx).prefs().skip_exclusive_warning;
+        let (asked, in_game) = (!prefs.skip_exclusive_warning, prefs.overlay_in_game);
+        let mode = |id: &'static str, label: Message, choose: bool| {
+            choice(id, t(cx, label), in_game == choose, cx).on_click(cx.listener(move |view, _, _, cx| {
+                view.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.overlay_in_game = choose, cx));
+            }))
+        };
         v_flex()
             .flex_1()
             .px(px(18.))
             .py(px(6.))
-            .child(
-                row(t(cx, key::OVERLAY_MODE), t(cx, key::OVERLAY_MODE_HINT), 64.).child(
-                    segmented()
-                        .h(px(26.))
-                        .child(choice("overlay-over", t(cx, key::OVERLAY_MODE_OVER), true, cx))
-                        .child(choice("overlay-in-game", t(cx, key::OVERLAY_MODE_IN_GAME), false, cx).cursor_default().opacity(0.4)),
-                ),
-            )
+            .child(row(t(cx, key::OVERLAY_MODE), t(cx, key::OVERLAY_MODE_HINT), 64.).child(
+                segmented().h(px(26.)).child(mode("overlay-over", key::OVERLAY_MODE_OVER, false)).child(mode(
+                    "overlay-in-game",
+                    key::OVERLAY_MODE_IN_GAME,
+                    true,
+                )),
+            ))
             .child(row(t(cx, key::OVERLAY_HOTKEY), t(cx, key::OVERLAY_HOTKEY_HINT), 64.).child(self.hotkey_cap(
                 "overlay-hotkey",
                 OVERLAY,

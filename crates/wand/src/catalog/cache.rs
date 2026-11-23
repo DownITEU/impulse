@@ -15,6 +15,11 @@ pub fn cached(data_dir: &Path) -> Option<Vec<Game>> {
     super::parse(&fs::read(data_dir.join(BODY)).ok()?).ok()
 }
 
+/// Whether Wand's overlay draws in the game `id`, from the disk copy (blocking); no copy means no.
+pub fn draws_overlay(data_dir: &Path, id: &str) -> bool {
+    fs::read(data_dir.join(BODY)).is_ok_and(|json| super::flagged_for_overlay(&json, id))
+}
+
 pub fn size(data_dir: &Path) -> u64 {
     disk::size(&data_dir.join(BODY)) + disk::size(&data_dir.join(ETAG))
 }

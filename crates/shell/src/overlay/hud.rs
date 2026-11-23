@@ -14,6 +14,7 @@ use super::{
     Layer, Pressed, Slot,
     docks::{self, Docks, Spec},
     glance::Glance,
+    in_game::InGame,
     warning::{Closed, Warning, chip},
 };
 use crate::{
@@ -152,6 +153,7 @@ impl Hud {
         map: Entity<MapView>,
         cheat_list: Entity<CheatList>,
         picker: Entity<GamePicker>,
+        in_game: Entity<InGame>,
         settings: &Entity<Settings>,
         paths: &Paths,
         window: &mut Window,
@@ -159,7 +161,7 @@ impl Hud {
     ) -> Self {
         let docks = cx.new(|_| Docks::load(paths, &DOCKS));
         let live_map = maps.read(cx).live_map().clone();
-        let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), live_map.clone(), settings, cx));
+        let glance = cx.new(|cx| Glance::new(&layer, in_game, docks.clone(), live_map.clone(), settings, cx));
         let minimap = cx.new(|cx| Minimap::new(live_map.clone(), cx));
         let warning = cx.new(|cx| Warning::new(settings.clone(), cx));
         cx.observe(&warning, |_, _, cx| cx.notify()).detach();

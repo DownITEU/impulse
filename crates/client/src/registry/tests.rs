@@ -140,6 +140,16 @@ fn a_download_goes_to_the_source_its_url_names() {
 }
 
 #[test]
+fn a_game_whose_source_has_no_overlay_is_unsupported() {
+    let (registry, ..) = registry();
+    let process = Process { pid: 1, path: "game.exe".into(), created: 1 };
+    for game in ["a:g", "c:g"] {
+        let refused = registry.enter(&Ref::parse(game).unwrap(), &process).err().map(|failure| failure.kind);
+        assert_eq!(refused, Some(FailureKind::Unsupported), "{game}");
+    }
+}
+
+#[test]
 fn folders_and_caches_list_every_source() {
     let (registry, ..) = registry();
     let folders: Vec<_> = block_on(registry.folders()).iter().map(|folder| folder.id.to_string()).collect();

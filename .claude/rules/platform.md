@@ -13,7 +13,9 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 - The mouse hook runs on every move: start it only when a chord `uses_mouse()`. A later hook sees keys first.
 
 ## topmost
-- `Key` (modifiers and one key), `Watch` (one thread: `RegisterHotKey`, a foreground hook, `EXTRAS` extra keys by number: `set_extra`, `Event::Extra`), and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `pass_through`, `exclusive`, ...).
+- `Key` (modifiers and one key), `Watch` (one thread: a foreground hook, and the keys set on demand with `RegisterHotKey`: the overlay's (`set_hotkey`, `Event::Hotkey`) and `EXTRAS` extra keys by number (`set_extra`, `Event::Extra`)), and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `show`, `pass_through`, `exclusive`, ...).
+- `client_area(window)`: a window's client area as (left, top, width, height) in screen physical pixels, for placing a layer inside a game's frame; data only, `None` for a gone window. `resize` keeps the z-order; `restore` says how the window was (`Away`) for `put_away`.
+- `post_input(window, message, wparam, lparam)`: posts only mouse and key messages; a wheel's client point becomes the screen one Win32 wants.
 - `exclusive(game)`: `SHQueryUserNotificationState` says D3D fullscreen and `game` is the window in front covering its monitor. The state is the session's and lags a mode change; borderless gives `QUNS_BUSY`.
 - `Watch`'s sink runs on the watch thread: forward to a channel. The calls take `isize` handles and are made outside GPUI updates.
 

@@ -1276,6 +1276,8 @@ pub struct Window {
     pub(crate) visibility_observers:
         SingleSubscriberSet<Box<dyn FnMut(WindowVisibility, &mut Window, &mut App) -> bool>>,
     hovered: Rc<Cell<bool>>,
+    /// `mirror_cursor`'s callback and the cursor it was last given.
+    mirrored_cursor: RefCell<Option<(Box<dyn FnMut(CursorStyle)>, Option<CursorStyle>)>>,
     pub(crate) needs_present: Rc<Cell<bool>>,
     /// Tracks recent input event timestamps to determine if input is arriving at a high rate.
     /// Used to selectively enable VRR optimization only when input rate exceeds 60fps.
@@ -2398,6 +2400,7 @@ impl Window {
             visibility,
             visibility_observers: SingleSubscriberSet::new(),
             hovered,
+            mirrored_cursor: RefCell::default(),
             needs_present,
             input_rate_tracker,
             #[cfg(feature = "profiler")]
@@ -5451,6 +5454,19 @@ impl Window {
         self.platform_window.d3d11_device()
     }
 
+    /// Copies each drawn frame into a texture another process opens, and calls `on_frame` after the copy; `None`
+    /// stops. Only a shown window draws: to keep it out of view, cloak it rather than hide it.
+    #[cfg(target_os = "windows")]
+    pub fn mirror_frames(&self, on_frame: Option<Box<dyn FnMut(crate::MirrorFrame)>>) {
+        self.platform_window.mirror_frames(on_frame)
+    }
+
+    /// Calls `on_cursor` with the cursor the window wants whenever it changes, under the pointer or not, for a
+    /// window shown elsewhere (`mirror_frames`); `None` stops.
+    pub fn mirror_cursor(&self, on_cursor: Option<Box<dyn FnMut(CursorStyle)>>) {
+        *self.mirrored_cursor.borrow_mut() = on_cursor.map(|on_cursor| (on_cursor, None));
+    }
+
     /// Removes an image from the sprite atlas.
     pub fn drop_image(&mut self, data: Arc<RenderImage>) -> Result<()> {
         for frame_index in 0..data.frame_count() {
@@ -5838,14 +5854,21 @@ impl Window {
     }
 
     fn reset_cursor_style(&self, cx: &mut App) {
+        // A drag can start before the next paint records its cursor in the frame.
+        let style = || {
+            cx.active_drag_cursor_style()
+                .or_else(|| self.rendered_frame.cursor_style(self))
+                .unwrap_or(CursorStyle::Arrow)
+        };
+        if let Some((on_cursor, given)) = self.mirrored_cursor.borrow_mut().as_mut() {
+            let style = style();
+            if given.replace(style) != Some(style) {
+                on_cursor(style);
+            }
+        }
         // Set the cursor only if we're the active window.
         if self.is_window_hovered() {
-            // A drag can start before the next paint records its cursor in the frame.
-            let style = cx
-                .active_drag_cursor_style()
-                .or_else(|| self.rendered_frame.cursor_style(self))
-                .unwrap_or(CursorStyle::Arrow);
-            cx.platform.set_cursor_style(style);
+            cx.platform.set_cursor_style(style());
         }
     }
 

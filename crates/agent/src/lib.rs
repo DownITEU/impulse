@@ -10,6 +10,6 @@ mod trust;
 
 pub use elevated::{elevated, serve_elevated};
 pub use image::Image;
-pub use inject::load;
+pub use inject::{load, map};
 pub use process::{find, of, wait};
 pub use trust::check as signed;

@@ -14,12 +14,13 @@ use i18n::{Key, LANGUAGES, Language};
 
 use super::{Folders, Lead, Panels, Prefs, Settings, Shown};
 use crate::ui::{
+    assets::Icon,
     dialog::dialog,
     dropdown::{dropdown, trigger},
     key,
     text::t,
     theme::*,
-    widgets::{badge, choice, list_row, mono, segmented, square, switch, tracked},
+    widgets::{badge, choice, icon, list_row, mono, segmented, square, switch, tracked},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -161,10 +162,18 @@ impl SettingsView {
                 ),
             )
             .child(
-                row(t(cx, key::HIDE_FROM_CAPTURE), t(cx, key::HIDE_FROM_CAPTURE_HINT), 64.).border_b_0().child(
+                row(t(cx, key::HIDE_FROM_CAPTURE), t(cx, key::HIDE_FROM_CAPTURE_HINT), 64.).child(
                     switch("hide-from-capture", hidden, cx)
                         .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.hide_from_capture = !hidden, cx))),
                 ),
+            )
+            .child(
+                h_flex()
+                    .items_start()
+                    .gap(px(8.))
+                    .py(px(12.))
+                    .child(icon(Icon::Info, 13., rgb(FAINT)))
+                    .child(mono(t(cx, key::HIDE_FROM_CAPTURE_INSIDE), TYPE_LABEL).flex_1().min_w_0().text_color(rgb(FAINT))),
             )
     }
 

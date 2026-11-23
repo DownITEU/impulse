@@ -13,8 +13,8 @@ use std::{
 
 pub use key::Key;
 pub use window::{
-    Monitor, cloak, exclude_from_capture, exclusive, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place,
-    raise, restore, window_of,
+    Away, Monitor, client_area, cloak, exclude_from_capture, exclusive, foreground, give_back, hide, is_window, lower, monitor_of, owner,
+    pass_through, place, post_input, put_away, raise, resize, restore, show, window_of,
 };
 use windows_sys::Win32::{
     Foundation::HWND,
@@ -29,13 +29,13 @@ use windows_sys::Win32::{
     },
 };
 
-// Hotkey ids: the overlay's, then the extras' (`EXTRAS` of them, set by the thread message).
+// Hotkey ids: the overlay's, then the extras' (`EXTRAS` of them); each set by the thread message.
 const OVERLAY: usize = 1;
 const FIRST_EXTRA: usize = 2;
 /// How many extra hotkeys a `Watch` holds, numbered from 0.
 pub const EXTRAS: usize = 3;
 const LAST_EXTRA: usize = FIRST_EXTRA + EXTRAS;
-const SET_EXTRA: u32 = WM_USER + 1;
+const SET_KEY: u32 = WM_USER + 1;
 
 pub enum Event {
     Hotkey,
@@ -51,18 +51,18 @@ thread_local! {
     static SINK: RefCell<Option<Sink>> = const { RefCell::new(None) };
 }
 
-/// Dropping it frees the hotkey and stops the watch.
+/// Dropping it frees the hotkeys and stops the watch.
 pub struct Watch {
     thread: u32,
     join: Option<JoinHandle<()>>,
-    // `set_extra`'s answers.
+    // `set_hotkey`'s and `set_extra`'s answers.
     set: mpsc::Receiver<io::Result<()>>,
 }
 
 impl Watch {
-    /// A registered hotkey, not a hook: its press lets this process take the foreground. `on_event` runs on
-    /// the watch's thread: forward it to a channel.
-    pub fn start(key: Key, on_event: impl FnMut(Event) + Send + 'static) -> io::Result<Self> {
+    /// The foreground's changes; the hotkeys are set later, each registered, not hooked: its press lets this process
+    /// take the foreground. `on_event` runs on the watch's thread: forward it to a channel.
+    pub fn start(on_event: impl FnMut(Event) + Send + 'static) -> io::Result<Self> {
         let (ready, started) = mpsc::sync_channel(1);
         let (answer, set) = mpsc::channel();
         let join = thread::Builder::new().name("topmost".into()).spawn(move || {
@@ -72,10 +72,6 @@ impl Watch {
                 let mut msg: MSG = mem::zeroed();
                 // Creates the queue `Drop` posts to.
                 PeekMessageW(&mut msg, ptr::null_mut(), WM_USER, WM_USER, PM_NOREMOVE);
-                if RegisterHotKey(ptr::null_mut(), OVERLAY as i32, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0 {
-                    let _ = ready.send(Err(io::Error::last_os_error()));
-                    return;
-                }
                 let hook = SetWinEventHook(
                     EVENT_SYSTEM_FOREGROUND,
                     EVENT_SYSTEM_FOREGROUND,
@@ -86,7 +82,6 @@ impl Watch {
                     WINEVENT_OUTOFCONTEXT,
                 );
                 if hook.is_null() {
-                    UnregisterHotKey(ptr::null_mut(), OVERLAY as i32);
                     let _ = ready.send(Err(io::Error::other("cannot watch the foreground window")));
                     return;
                 }
@@ -95,8 +90,8 @@ impl Watch {
                     match (msg.message, msg.wParam) {
                         (WM_HOTKEY, OVERLAY) => emit(Event::Hotkey),
                         (WM_HOTKEY, id @ FIRST_EXTRA..LAST_EXTRA) => emit(Event::Extra(id - FIRST_EXTRA)),
-                        (SET_EXTRA, packed) => {
-                            let id = (FIRST_EXTRA + msg.lParam as usize) as i32;
+                        (SET_KEY, packed) => {
+                            let id = msg.lParam as i32;
                             UnregisterHotKey(ptr::null_mut(), id);
                             let taken = Key::unpack(packed)
                                 .is_some_and(|key| RegisterHotKey(ptr::null_mut(), id, key.modifiers | MOD_NOREPEAT, key.vk.into()) == 0);
@@ -115,13 +110,22 @@ impl Watch {
         Ok(Self { thread, join: Some(join), set })
     }
 
+    /// The overlay's hotkey, or none; fails when another app holds it, which leaves none.
+    pub fn set_hotkey(&self, key: Option<Key>) -> io::Result<()> {
+        self.set(OVERLAY, key)
+    }
+
     /// Extra hotkey `number` (below `EXTRAS`), or none; fails when another app holds it, which leaves none.
     pub fn set_extra(&self, number: usize, key: Option<Key>) -> io::Result<()> {
         if number >= EXTRAS {
             return Err(io::Error::other("no such extra hotkey"));
         }
+        self.set(FIRST_EXTRA + number, key)
+    }
+
+    fn set(&self, id: usize, key: Option<Key>) -> io::Result<()> {
         // SAFETY: posts to the watch thread's queue, made before `start` returned.
-        if unsafe { PostThreadMessageW(self.thread, SET_EXTRA, key.map_or(0, Key::pack), number as isize) } == 0 {
+        if unsafe { PostThreadMessageW(self.thread, SET_KEY, key.map_or(0, Key::pack), id as isize) } == 0 {
             return Err(io::Error::last_os_error());
         }
         self.set.recv().map_err(|_| io::Error::other("the topmost thread ended"))?

@@ -9,6 +9,7 @@ mod inject;
 mod install;
 mod locale;
 mod map;
+mod overlay;
 mod provider;
 mod proxy;
 mod run;

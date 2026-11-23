@@ -70,8 +70,8 @@ enum Play {
     },
     Live {
         game: GameId,
-        /// The game's process, for hotkeys that fire only while it is in front.
-        pid: u32,
+        /// The game's process: its pid for hotkeys that fire only while it is in front, and what a source's overlay enters.
+        process: Process,
         since: Instant,
         /// Its time and mods are kept.
         closed: bool,
@@ -134,8 +134,12 @@ impl Runs {
     }
 
     pub fn pid(&self) -> Option<u32> {
-        match self.play {
-            Play::Live { pid, .. } => Some(pid),
+        self.process().map(|process| process.pid)
+    }
+
+    pub fn process(&self) -> Option<&Process> {
+        match &self.play {
+            Play::Live { process, .. } => Some(process),
             _ => None,
         }
     }
@@ -338,7 +342,7 @@ impl Runs {
         self.trainers.update(cx, |trainers, cx| trainers.reset(&game, cx));
         self.play = Play::Live {
             game: game.clone(),
-            pid: process.pid,
+            process,
             since: Instant::now(),
             closed: false,
             run: Run { session, tracker, teleport },

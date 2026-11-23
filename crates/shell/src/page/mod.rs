@@ -32,7 +32,7 @@ use crate::{
     library::{GamePicker, Library, Marks, SIDEBAR_WIDTH, Sidebar, vacant},
     log_view::{LogEvent, LogView},
     map::{MapEvent, MapView, Maps, map_panel, paneled},
-    overlay::{Entered, Hud, Layer, OverlaySettings},
+    overlay::{Entered, Hud, InGame, Layer, OverlaySettings},
     plugins::{Plugins, PluginsView},
     remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
@@ -133,8 +133,9 @@ impl Page {
         let resources = cx.new(|cx| Resources::new(registry.clone(), &paths, &sources, cx));
         let plugins = cx.new(|cx| Plugins::new(plugins, cx));
         // Only a source the page reads from reloads it: a plugin's answer cache must not stop a live trainer.
+        let plays = registry.clone();
         cx.subscribe(&resources, move |page, _, event: &ResourcesEvent, cx| match event {
-            ResourcesEvent::Cleared(sources) if sources.iter().any(|source| registry.plays(source)) => page.reload(cx),
+            ResourcesEvent::Cleared(sources) if sources.iter().any(|source| plays.plays(source)) => page.reload(cx),
             ResourcesEvent::Cleared(_) => {}
         })
         .detach();
@@ -157,7 +158,8 @@ impl Page {
             cx.observe(&runs, |_, _, cx| cx.notify()).detach();
             Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, starred, window, cx)
         });
-        let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, window, cx));
+        let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, cx));
+        let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, in_game.clone(), window, cx));
         let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), picker.clone(), cx));
         // The overlay's and the minimap's hotkeys are not the trainer's to take.
         let reserved = layer.downgrade();
@@ -209,6 +211,7 @@ impl Page {
                 map.clone(),
                 cheat_list.clone(),
                 picker.clone(),
+                in_game,
                 &settings,
                 &paths,
                 window,

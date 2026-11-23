@@ -51,6 +51,7 @@ pub const CLOSE_TO_TRAY: Key = Key("close-to-tray");
 pub const CLOSE_TO_TRAY_HINT: Key = Key("close-to-tray-hint");
 pub const HIDE_FROM_CAPTURE: Key = Key("hide-from-capture");
 pub const HIDE_FROM_CAPTURE_HINT: Key = Key("hide-from-capture-hint");
+pub const HIDE_FROM_CAPTURE_INSIDE: Key = Key("hide-from-capture-inside");
 pub const MEDIA_PICTURES: Key = Key("media-pictures");
 pub const MEDIA_PICTURES_HINT: Key = Key("media-pictures-hint");
 pub const MEDIA_TILES: Key = Key("media-tiles");

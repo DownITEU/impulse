@@ -15,8 +15,8 @@ use futures::{
     stream::{self, BoxStream},
 };
 use model::{
-    Accounts, Caches, Downloads, Failure, FailureKind, Files, Folder, Folders, Game, Games, Locale, Map, MapOffer, Maps, Offer, Ref,
-    SignIn, Snapshot, Source, SourceId, Store, Text, Title, Titles, Trainer, Trainers,
+    Accounts, Caches, Canvas, Downloads, Failure, FailureKind, Files, Folder, Folders, Game, Games, Locale, Map, MapOffer, Maps, Offer,
+    Overlays, Process, Ref, SignIn, Snapshot, Source, SourceId, Store, Text, Title, Titles, Trainer, Trainers,
 };
 
 /// One source's capabilities, added and removed together; each is that source's own.
@@ -30,12 +30,13 @@ pub struct Capabilities {
     pub downloads: Option<Arc<dyn Downloads>>,
     pub folders: Option<Arc<dyn Folders>>,
     pub caches: Option<Arc<dyn Caches>>,
+    pub overlays: Option<Arc<dyn Overlays>>,
 }
 
 impl Capabilities {
     fn sources(&self) -> impl Iterator<Item = &dyn Source> {
-        let Self { accounts, games, trainers, maps, titles, downloads, folders, caches } = self;
-        let all: [Option<&dyn Source>; 8] = [
+        let Self { accounts, games, trainers, maps, titles, downloads, folders, caches, overlays } = self;
+        let all: [Option<&dyn Source>; 9] = [
             accounts.as_deref().map(|source| source as _),
             games.as_deref().map(|source| source as _),
             trainers.as_deref().map(|source| source as _),
@@ -44,6 +45,7 @@ impl Capabilities {
             downloads.as_deref().map(|source| source as _),
             folders.as_deref().map(|source| source as _),
             caches.as_deref().map(|source| source as _),
+            overlays.as_deref().map(|source| source as _),
         ];
         all.into_iter().flatten()
     }
@@ -189,6 +191,12 @@ impl Registry {
     }
 
     /// The bytes behind a URL a source gave, `<source>:...` (blocking).
+    /// Blocking: the game's source loads its overlay into `process`; `Unsupported` without one.
+    pub fn enter(&self, game: &Ref, process: &Process) -> Result<Canvas, Failure> {
+        let routed = self.route(game.source(), |c| c.overlays.as_ref());
+        routed.map_or_else(|| Err(unserved(game)), |(source, _)| source.enter(game, process))
+    }
+
     pub fn download(&self, url: &str) -> Result<Vec<u8>, Failure> {
         let routed = Ref::parse(url).and_then(|id| self.route(id.source(), |c| c.downloads.as_ref()));
         routed.map_or_else(|| Err(unserved(url)), |(source, _)| source.download(url))

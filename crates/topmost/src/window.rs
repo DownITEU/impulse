@@ -5,21 +5,22 @@
 use std::{mem, ptr};
 
 use windows_sys::Win32::{
-    Foundation::{HWND, LPARAM, RECT},
+    Foundation::{HWND, LPARAM, POINT, RECT},
     Graphics::{
         Dwm::{DWMWA_CLOAK, DwmSetWindowAttribute},
-        Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow},
+        Gdi::{ClientToScreen, GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow},
     },
     System::Threading::{AttachThreadInput, GetCurrentThreadId},
     UI::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
         Shell::{QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState},
         WindowsAndMessaging::{
-            EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
-            HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, SW_HIDE, SW_RESTORE, SW_SHOWNOACTIVATE,
-            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetLayeredWindowAttributes,
-            SetWindowDisplayAffinity, SetWindowLongW, SetWindowPos, ShowWindow, ShowWindowAsync, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
-            WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            EnumWindows, GW_OWNER, GWL_EXSTYLE, GetClientRect, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect,
+            GetWindowThreadProcessId, HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, PostMessageW, SW_HIDE,
+            SW_RESTORE, SW_SHOWMINNOACTIVE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
+            SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowLongW, SetWindowPos, ShowWindow,
+            ShowWindowAsync, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_KEYFIRST, WM_KEYLAST, WM_MOUSEFIRST, WM_MOUSEHWHEEL, WM_MOUSELAST,
+            WM_MOUSEWHEEL, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
         },
     },
 };
@@ -136,15 +137,60 @@ unsafe fn take_input(window: HWND) {
     }
 }
 
+/// How a window was before `restore`, to be put back with `put_away`.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Away {
+    Shown,
+    Minimized,
+    Hidden,
+}
+
 /// Shows `window` again from the taskbar or the tray, without taking the input.
-pub fn restore(window: isize) {
+pub fn restore(window: isize) -> Away {
     let window = window as HWND;
     // SAFETY: a gone window fails them.
     unsafe {
-        if IsIconic(window) != 0 || IsWindowVisible(window) == 0 {
-            ShowWindow(window, SW_SHOWNOACTIVATE);
-        }
+        let away = match (IsWindowVisible(window) != 0, IsIconic(window) != 0) {
+            (false, _) => Away::Hidden,
+            (true, true) => Away::Minimized,
+            (true, false) => return Away::Shown,
+        };
+        ShowWindow(window, SW_SHOWNOACTIVATE);
+        away
     }
+}
+
+pub fn put_away(window: isize, away: Away) {
+    let show = match away {
+        Away::Shown => return,
+        Away::Minimized => SW_SHOWMINNOACTIVE,
+        Away::Hidden => SW_HIDE,
+    };
+    // SAFETY: a gone window fails it.
+    unsafe { ShowWindow(window as HWND, show) };
+}
+
+/// Moves and sizes `window` (left, top, width, height in physical pixels), keeping its place in the z-order.
+pub fn resize(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
+    // SAFETY: a gone window fails it.
+    unsafe { SetWindowPos(window as HWND, ptr::null_mut(), left, top, width, height, SWP_NOZORDER | SWP_NOACTIVATE) };
+}
+
+/// Posts a mouse or key message to `window` as if given there; any other message is dropped. A wheel's point is
+/// relative to the client area, as the other mouse messages have it: Win32 wants a screen one there.
+pub fn post_input(window: isize, message: u32, wparam: usize, lparam: isize) {
+    let lparam = match message {
+        WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
+            let mut point = POINT { x: i32::from(lparam as i16), y: i32::from((lparam >> 16) as i16) };
+            // SAFETY: `point` outlives the call; a gone window fails it.
+            unsafe { ClientToScreen(window as HWND, &mut point) };
+            (point.x as u16 as isize) | ((point.y as u16 as isize) << 16)
+        }
+        WM_KEYFIRST..=WM_KEYLAST | WM_MOUSEFIRST..=WM_MOUSELAST => lparam,
+        _ => return,
+    };
+    // SAFETY: a post; a gone window fails it.
+    unsafe { PostMessageW(window as HWND, message, wparam, lparam) };
 }
 
 /// Takes `window` out of the topmost band, right behind `below`.
@@ -186,6 +232,17 @@ pub fn monitor_of(window: isize) -> Option<Monitor> {
     }
 }
 
+/// The client area of `window` (left, top, width, height) in screen physical pixels; `None` for a gone window.
+pub fn client_area(window: isize) -> Option<(i32, i32, i32, i32)> {
+    let window = window as HWND;
+    let mut origin = POINT { x: 0, y: 0 };
+    // SAFETY: RECT is plain integers, so all zeros is a valid value.
+    let mut rect: RECT = unsafe { mem::zeroed() };
+    // SAFETY: plain Win32 calls; `origin` and `rect` outlive them, and a gone window fails them.
+    let known = unsafe { GetClientRect(window, &mut rect) != 0 && ClientToScreen(window, &mut origin) != 0 };
+    known.then_some((origin.x, origin.y, rect.right - rect.left, rect.bottom - rect.top))
+}
+
 /// Lets every click and key through `window` to what is under it; it never takes the input.
 pub fn pass_through(window: isize) {
     let window = window as HWND;
@@ -202,6 +259,12 @@ pub fn pass_through(window: isize) {
 pub fn place(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
     // SAFETY: a gone window fails it.
     unsafe { SetWindowPos(window as HWND, HWND_TOPMOST, left, top, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
+}
+
+/// Shows `window` at `rect` (left, top, width, height in physical pixels) out of the topmost band, without the input.
+pub fn show(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
+    // SAFETY: a gone window fails it.
+    unsafe { SetWindowPos(window as HWND, HWND_NOTOPMOST, left, top, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
 }
 
 pub fn hide(window: isize) {

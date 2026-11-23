@@ -14,6 +14,7 @@ pub const PUBLISHERS: &[&str] = &["WeMod LLC", "Daring Development Inc."];
 
 const TRAINERLIB: &str = r"resources\app.asar.unpacked\static\unpacked\trainerlib";
 const GAME_LAUNCHER: &str = r"resources\app.asar.unpacked\static\unpacked\auxiliary\GameLauncher.exe";
+const OVERLAY: &str = r"resources\app.asar.unpacked\static\unpacked\overlay";
 // Wand was WeMod: older installs live under the old name.
 const BRANDS: [&str; 2] = ["Wand", "WeMod"];
 // A folder picked inside an install (down to `trainerlib`) still means that install.
@@ -35,6 +36,11 @@ impl Install {
     /// The stand-in for an anti-cheat's launcher (`proxy`).
     pub fn game_launcher(&self) -> PathBuf {
         self.root.join(GAME_LAUNCHER)
+    }
+
+    /// The DLL that draws Wand's overlay inside a game of that architecture.
+    pub fn overlay(&self, x64: bool) -> PathBuf {
+        self.root.join(OVERLAY).join(if x64 { "overlay_game_x64.dll" } else { "overlay_game.dll" })
     }
 
     pub fn label(&self) -> String {
