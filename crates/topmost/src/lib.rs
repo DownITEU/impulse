@@ -65,7 +65,7 @@ impl Watch {
     pub fn start(key: Key, on_event: impl FnMut(Event) + Send + 'static) -> io::Result<Self> {
         let (ready, started) = mpsc::sync_channel(1);
         let (answer, set) = mpsc::channel();
-        let join = thread::Builder::new().name("overlay".into()).spawn(move || {
+        let join = thread::Builder::new().name("topmost".into()).spawn(move || {
             SINK.set(Some(Box::new(on_event)));
             // SAFETY: plain Win32 calls on this thread; `msg` outlives them.
             unsafe {
@@ -111,7 +111,7 @@ impl Watch {
                 }
             }
         })?;
-        let thread = started.recv().map_err(|_| io::Error::other("the overlay thread ended"))??;
+        let thread = started.recv().map_err(|_| io::Error::other("the topmost thread ended"))??;
         Ok(Self { thread, join: Some(join), set })
     }
 
@@ -124,7 +124,7 @@ impl Watch {
         if unsafe { PostThreadMessageW(self.thread, SET_EXTRA, key.map_or(0, Key::pack), number as isize) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        self.set.recv().map_err(|_| io::Error::other("the overlay thread ended"))?
+        self.set.recv().map_err(|_| io::Error::other("the topmost thread ended"))?
     }
 }
 

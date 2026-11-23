@@ -17,7 +17,7 @@ use i18n::Arg;
 
 use super::{CheatList, Printed};
 use crate::{
-    bindings::caps,
+    hotkeys::caps,
     run::run_note,
     ui::{
         assets::Icon,

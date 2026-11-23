@@ -82,10 +82,13 @@ pub fn parse(json: &[u8]) -> Result<Vec<Release>> {
     Ok(entries.into_iter().take(MAX_RELEASES).filter_map(|entry| serde_json::from_value::<Raw>(entry).ok()?.release()).collect())
 }
 
-/// The releases of `channel` newer than `current`, newest first. Never a downgrade, whatever the dates say; build
-/// metadata (`1.0.0+mirror`) does not make a version newer.
-pub fn newer(releases: &[Release], current: &Version, channel: Channel) -> Vec<Release> {
-    let newer = |release: &&Release| release.version.cmp_precedence(current).is_gt() && (channel == Channel::Pre || !release.pre);
+/// The releases of `channel` newer than `current` and than the `skipped` one, newest first. Never a downgrade, whatever
+/// the dates say; build metadata (`1.0.0+mirror`) does not make a version newer, so a rebuild of a skipped one stays skipped.
+pub fn newer(releases: &[Release], current: &Version, channel: Channel, skipped: Option<&Version>) -> Vec<Release> {
+    let above = |release: &Release, floor: &Version| release.version.cmp_precedence(floor).is_gt();
+    let newer = |release: &&Release| {
+        above(release, current) && skipped.is_none_or(|skipped| above(release, skipped)) && (channel == Channel::Pre || !release.pre)
+    };
     let mut found: Vec<Release> = releases.iter().filter(newer).cloned().collect();
     found.sort_by(|a, b| b.version.cmp_precedence(&a.version));
     found
@@ -184,16 +187,24 @@ mod tests {
     fn stable_ignores_pre_releases_and_pre_takes_both_newest_first() {
         let all = releases(&["v1.30.0-pre", "v1.29.2", "v1.30.1-pre", "v1.29.1"]);
         let current = Version::new(1, 29, 1);
-        assert_eq!(versions(&newer(&all, &current, Channel::Stable)), ["1.29.2"]);
-        assert_eq!(versions(&newer(&all, &current, Channel::Pre)), ["1.30.1-pre", "1.30.0-pre", "1.29.2"]);
+        assert_eq!(versions(&newer(&all, &current, Channel::Stable, None)), ["1.29.2"]);
+        assert_eq!(versions(&newer(&all, &current, Channel::Pre, None)), ["1.30.1-pre", "1.30.0-pre", "1.29.2"]);
     }
 
     #[test]
     fn a_release_beats_its_own_pre_release_and_a_downgrade_is_never_offered() {
         let all = releases(&["v1.30.1", "v1.30.1-pre", "v1.28.0"]);
-        assert_eq!(versions(&newer(&all, &Version::parse("1.30.1-pre").unwrap(), Channel::Stable)), ["1.30.1"]);
-        assert!(newer(&all, &Version::new(1, 30, 1), Channel::Pre).is_empty());
-        assert!(newer(&all, &Version::parse("2.0.0-pre").unwrap(), Channel::Stable).is_empty());
+        assert_eq!(versions(&newer(&all, &Version::parse("1.30.1-pre").unwrap(), Channel::Stable, None)), ["1.30.1"]);
+        assert!(newer(&all, &Version::new(1, 30, 1), Channel::Pre, None).is_empty());
+        assert!(newer(&all, &Version::parse("2.0.0-pre").unwrap(), Channel::Stable, None).is_empty());
+    }
+
+    #[test]
+    fn a_skip_drops_its_version_its_rebuilds_and_every_older_one_but_never_lowers_the_floor() {
+        let all = releases(&["v1.3.0", "v1.2.0+b2", "v1.2.0", "v1.1.0"]);
+        let current = Version::new(1, 0, 0);
+        assert_eq!(versions(&newer(&all, &current, Channel::Stable, Some(&Version::new(1, 2, 0)))), ["1.3.0"]);
+        assert_eq!(versions(&newer(&all, &Version::new(1, 2, 0), Channel::Stable, Some(&Version::new(0, 9, 0)))), ["1.3.0"]);
     }
 
     #[test]
@@ -207,7 +218,7 @@ mod tests {
     #[test]
     fn build_metadata_is_not_newer_and_an_insecure_asset_is_not_offered() {
         let all = releases(&["v1.0.0+mirror", "v1.1.0"]);
-        assert_eq!(versions(&newer(&all, &Version::new(1, 0, 0), Channel::Stable)), ["1.1.0"]);
+        assert_eq!(versions(&newer(&all, &Version::new(1, 0, 0), Channel::Stable, None)), ["1.1.0"]);
         let digest = DIGEST.to_ascii_lowercase();
         let insecure = format!(
             r#"{{"tag_name":"v9.0.0","assets":[{{"name":"Impulse.exe","browser_download_url":"http://evil.com/x","digest":"{digest}"}}]}}"#

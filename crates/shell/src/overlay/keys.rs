@@ -1,11 +1,11 @@
 //! `overlay.json`: the overlay's and the extra hotkeys' keys.
 
-use overlay::{EXTRAS, Key};
 use serde::{Deserialize, Serialize};
+use topmost::{EXTRAS, Key};
 
 use client::storage::{Paths, Stored};
 
-/// The hotkeys beside the overlay's own, in `overlay`'s numbering.
+/// The hotkeys beside the overlay's own, in `topmost`'s numbering.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Slot {
     Minimap,
@@ -81,11 +81,11 @@ impl Saved {
     }
 }
 
-pub(super) struct Store {
+pub(super) struct Keys {
     saved: Stored<Saved>,
 }
 
-impl Store {
+impl Keys {
     pub fn load(paths: &Paths) -> Self {
         Self { saved: Stored::load(paths.overlay()) }
     }

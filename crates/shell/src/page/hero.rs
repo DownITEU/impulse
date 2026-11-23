@@ -8,8 +8,8 @@ use gpui_kit::{
 use i18n::Arg;
 
 use crate::{
-    layer::{Layer, overlay_hotkey},
     library::{GamePicker, Library, pick_source, source_options},
+    overlay::{Layer, overlay_hotkey},
     run::{Runs, run_button},
     trainer::{Trainers, title},
     ui::{

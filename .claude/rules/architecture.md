@@ -2,7 +2,7 @@
 
 ## Layers
 
-- `app` composes; `shell` is the UI and `client` its logic without GPUI; `wand` is a source behind `model`'s capability traits, reached through `client::Registry`; `play` runs a trainer on `model` alone; `agent` is the only way into a game's process; the leaves know no crate of ours but `model`.
+- `app` composes; `shell` is the UI and `client` its logic without GPUI; `wand` is a source behind `model`'s capability traits, reached through `client::Registry`; `client::run` runs a trainer, naming no source; `agent` is the only way into a game's process; the leaves know no crate of ours but `model`.
 - Dependencies point one way. The allowed edges are `GRAPH` in `crates/checks/src/graph.rs`; a change of an edge edits it in the same change.
 - GPUI only in `shell` and `app`.
 - Everything that talks to WeMod/Wand, names it or touches its files is in `wand`, and only `app` names `wand`. The UI and a run speak `model` types.

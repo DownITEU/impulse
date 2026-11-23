@@ -42,7 +42,7 @@ impl Hook {
     /// when a binding needs it.
     pub fn start(mouse: bool, handler: impl FnMut(u8, bool) -> bool + Send + 'static) -> io::Result<Self> {
         let (ready, started) = mpsc::sync_channel(1);
-        let join = thread::Builder::new().name("hotkeys".into()).spawn(move || {
+        let join = thread::Builder::new().name("keyhook".into()).spawn(move || {
             KEYS.set(Some(Keys { handler: Box::new(handler), state: [State::Up; 256] }));
             // SAFETY: plain Win32 calls on this thread; `msg` outlives them.
             unsafe {
@@ -193,7 +193,7 @@ mod tests {
     }
 
     /// Injects F24 and a wheel notch up; the hook hides the press and the notch, and the lone F24 release
-    /// reaches nothing bound to it. Run with `cargo test -p hotkeys -- --ignored`.
+    /// reaches nothing bound to it. Run with `cargo test -p keyhook -- --ignored`.
     #[test]
     #[ignore = "injects input"]
     fn the_hook_sees_injected_keys_and_notches() {

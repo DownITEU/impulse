@@ -3,13 +3,13 @@
 
 mod about;
 mod account;
-mod bindings;
 mod cheats;
 mod crash;
-mod layer;
+mod hotkeys;
 mod library;
 mod log_view;
 mod map;
+mod overlay;
 mod page;
 mod plugins;
 mod remote;
@@ -42,9 +42,9 @@ pub fn init(data_dir: &Path, registry: Arc<Registry>, cx: &mut App) {
     ui::art::Router::set(registry, cx);
     log_view::bind_keys(cx);
     map::bind_keys(cx);
-    layer::bind_keys(cx);
+    overlay::bind_keys(cx);
     ui::dialog::bind_keys(cx);
-    bindings::bind_keys(cx);
+    hotkeys::bind_keys(cx);
 }
 
 fn hwnd(window: &Window) -> Option<isize> {

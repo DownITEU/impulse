@@ -1,14 +1,14 @@
 //! The Settings `OVERLAY` tab and the overlay's and the extra hotkeys' rebinding.
 
 use gpui_kit::{App, Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, prelude::*, px, rgb};
-use hotkeys::Outcome;
 use i18n::Key as Message;
+use keyhook::Outcome;
 use model::Chord;
-use overlay::Key;
+use topmost::Key;
 
 use super::{Layer, Slot};
 use crate::{
-    bindings::{Hotkeys, Target},
+    hotkeys::{Hotkeys, Target},
     settings::{Settings, row},
     trainer::Trainers,
     ui::{
@@ -22,7 +22,7 @@ use crate::{
 const OVERLAY: Target = Target::Key { name: "overlay", required: true };
 
 /// Each extra hotkey's capture target, cap id, title and hint.
-const EXTRA_ROWS: [(Slot, Target, &str, Message, Message); overlay::EXTRAS] = [
+const EXTRA_ROWS: [(Slot, Target, &str, Message, Message); topmost::EXTRAS] = [
     (
         Slot::Minimap,
         Target::Key { name: "minimap", required: false },

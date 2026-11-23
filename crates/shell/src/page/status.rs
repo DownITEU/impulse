@@ -5,7 +5,7 @@ use i18n::{Arg, Key};
 
 use crate::{
     about::Link,
-    bindings::{Hotkeys, Target},
+    hotkeys::{Hotkeys, Target},
     library::Library,
     log_view::LogView,
     run::Runs,

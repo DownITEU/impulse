@@ -106,7 +106,7 @@ pub fn below_header(mut bounds: Bounds<Pixels>) -> Bounds<Pixels> {
 pub fn toolbar(docks: &Entity<Docks>, cx: &App, usable: impl Fn(&Spec) -> bool) -> impl IntoElement {
     let accent = accent(cx);
     let state = docks.read(cx);
-    h_flex().gap(px(4.)).children(state.specs.iter().map(|spec| {
+    h_flex().gap(px(4.)).children(state.specs.iter().copied().map(|spec| {
         let (usable, shown) = (usable(spec), state.is_shown(spec));
         let docks = docks.clone();
         let title = t(cx, spec.title);

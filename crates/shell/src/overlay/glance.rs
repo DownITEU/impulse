@@ -89,7 +89,7 @@ impl Glance {
     fn set_hidden(&mut self, hidden: bool) {
         self.hidden = hidden;
         if let Some(hud) = &self.hud {
-            overlay::exclude_from_capture(hud.hwnd, hidden);
+            topmost::exclude_from_capture(hud.hwnd, hidden);
         }
     }
 
@@ -100,14 +100,14 @@ impl Glance {
                 self.close(cx);
                 return None;
             }
-            Playing::Front(game) if self.docks.read(cx).is_shown(MINIMAP_DOCK) && self.live.read(cx).ready(cx) => Some(game),
+            Playing::Front(game) if self.docks.read(cx).is_shown(&MINIMAP_DOCK) && self.live.read(cx).ready(cx) => Some(game),
             Playing::Front(_) | Playing::Away => None,
         };
         self.follow(game.is_some(), cx);
         let want = game.filter(|_| self.live.read(cx).placed()).and_then(|game| {
-            let monitor = overlay::monitor_of(game)?;
+            let monitor = topmost::monitor_of(game)?;
             let screen = size(px(monitor.size.0 as f32 / monitor.scale), px(monitor.size.1 as f32 / monitor.scale));
-            let bounds = docks::below_header(self.docks.read(cx).bounds(MINIMAP_DOCK, screen)).to_device_pixels(monitor.scale);
+            let bounds = docks::below_header(self.docks.read(cx).bounds(&MINIMAP_DOCK, screen)).to_device_pixels(monitor.scale);
             Some((monitor.origin.0 + bounds.origin.x.0, monitor.origin.1 + bounds.origin.y.0, bounds.size.width.0, bounds.size.height.0))
         });
         let Some(hud) = &mut self.hud else { return want.map(|_| Call::Open) };
@@ -146,12 +146,12 @@ async fn calls(glance: WeakEntity<Glance>, mut woken: mpsc::UnboundedReceiver<()
                     let (live, hidden) = glance.read_with(cx, |glance, _| (glance.live.clone(), glance.hidden))?;
                     let hud = open(live, cx)?;
                     // Before the first show, so it never takes the input.
-                    overlay::pass_through(hud.hwnd);
-                    overlay::exclude_from_capture(hud.hwnd, hidden);
+                    topmost::pass_through(hud.hwnd);
+                    topmost::exclude_from_capture(hud.hwnd, hidden);
                     glance.update(cx, |glance, _| glance.hud = Some(hud))?;
                 }
-                Call::Place(hwnd, rect) => overlay::place(hwnd, rect),
-                Call::Hide(hwnd) => overlay::hide(hwnd),
+                Call::Place(hwnd, rect) => topmost::place(hwnd, rect),
+                Call::Hide(hwnd) => topmost::hide(hwnd),
             }
         }
     }

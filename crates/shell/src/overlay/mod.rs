@@ -6,8 +6,8 @@
 mod docks;
 mod glance;
 mod hud;
+mod keys;
 mod settings;
-mod store;
 mod warning;
 
 use std::{io, pin::pin, time::Duration};
@@ -23,10 +23,10 @@ use gpui_kit::{
     base::Root as Surface, transparent_black,
 };
 pub use hud::{Entered, Hud, bind_keys};
+use keys::{Keys, Slot};
 use model::Chord;
-use overlay::{EXTRAS, Event, Key, Watch};
 pub use settings::{OverlaySettings, overlay_hotkey};
-use store::{Slot, Store};
+use topmost::{EXTRAS, Event, Key, Watch};
 
 use client::storage::Paths;
 
@@ -74,7 +74,7 @@ pub(super) enum Playing {
 pub(super) struct Layer {
     mode: Mode,
     playing: Playing,
-    store: Store,
+    keys: Keys,
     asks: mpsc::UnboundedSender<Ask>,
     hwnd: Option<isize>,
     watch: Option<Watch>,
@@ -92,20 +92,20 @@ impl Layer {
         let hwnd = crate::hwnd(window);
         let mut excluded = settings.read(cx).prefs().hide_from_capture;
         if excluded && let Some(hwnd) = hwnd {
-            overlay::exclude_from_capture(hwnd, true);
+            topmost::exclude_from_capture(hwnd, true);
         }
         cx.observe(settings, move |layer, settings, cx| {
             let hidden = settings.read(cx).prefs().hide_from_capture;
             if hidden != excluded
                 && let Some(hwnd) = layer.hwnd
             {
-                overlay::exclude_from_capture(hwnd, hidden);
+                topmost::exclude_from_capture(hwnd, hidden);
             }
             excluded = hidden;
         })
         .detach();
-        let store = Store::load(paths);
-        let watch = hwnd.and_then(|_| watch(store.hotkey(), &asks).inspect_err(|e| log::warn!("overlay hotkey: {e}")).ok());
+        let keys = Keys::load(paths);
+        let watch = hwnd.and_then(|_| watch(keys.hotkey(), &asks).inspect_err(|e| log::warn!("overlay hotkey: {e}")).ok());
         // A foreground event can be missed; the overlay losing the input is one too.
         cx.observe_window_activation(window, |layer, window, _| {
             if layer.is_over() && !window.is_window_active() {
@@ -127,7 +127,7 @@ impl Layer {
         Self {
             mode: Mode::Window { armed: None },
             playing: Playing::Idle,
-            store,
+            keys,
             asks,
             hwnd,
             watch,
@@ -157,7 +157,7 @@ impl Layer {
     }
 
     pub fn hotkey(&self) -> Key {
-        self.store.hotkey()
+        self.keys.hotkey()
     }
 
     /// Whether the overlay's or an extra hotkey fires on `chord`.
@@ -178,7 +178,7 @@ impl Layer {
         }
         // Registered before the old one goes, so a refused key leaves the old in place.
         self.watch = Some(watch(key, &self.asks)?);
-        self.store.set_hotkey(key);
+        self.keys.set_hotkey(key);
         // The old watch took the extras' with it.
         self.held = [None; EXTRAS];
         self.hold_keys(cx);
@@ -187,11 +187,11 @@ impl Layer {
     }
 
     pub fn key(&self, slot: Slot) -> Option<Key> {
-        self.store.key(slot)
+        self.keys.key(slot)
     }
 
     pub fn set_key(&mut self, slot: Slot, key: Option<Key>, cx: &mut Context<Self>) {
-        self.store.set_key(slot, key);
+        self.keys.set_key(slot, key);
         self.hold_keys(cx);
         cx.notify();
     }
@@ -200,13 +200,13 @@ impl Layer {
     /// the overlay.
     fn hold_keys(&mut self, cx: &App) {
         let under = match self.mode {
-            Mode::Over { game } => self.live(cx).is_some_and(|pid| overlay::owner(game) == pid),
+            Mode::Over { game } => self.live(cx).is_some_and(|pid| topmost::owner(game) == pid),
             Mode::Window { .. } => false,
         };
         let held = matches!(self.playing, Playing::Front(_)) || under;
         let Some(watch) = &self.watch else { return };
         for slot in Slot::ALL {
-            let wanted = held.then(|| self.store.key(slot)).flatten();
+            let wanted = held.then(|| self.keys.key(slot)).flatten();
             if wanted != self.held[slot.number()] {
                 // A refused key leaves none registered, so the next recheck tries it again.
                 self.held[slot.number()] = match watch.set_extra(slot.number(), wanted) {
@@ -230,7 +230,7 @@ impl Layer {
             None => Playing::Idle,
             // Without the foreground hook the HUD would stay over whatever comes in front next.
             Some(pid) => match front {
-                Some(front) if self.watch.is_some() && !self.is_over() && overlay::owner(front) == pid => Playing::Front(front),
+                Some(front) if self.watch.is_some() && !self.is_over() && topmost::owner(front) == pid => Playing::Front(front),
                 _ => Playing::Away,
             },
         };
@@ -265,15 +265,15 @@ fn watch(key: Key, asks: &mpsc::UnboundedSender<Ask>) -> io::Result<Watch> {
 async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::UnboundedReceiver<Ask>, cx: &mut AsyncWindowContext) -> Result<()> {
     while let Some(ask) = asked.next().await {
         let (mode, live) = layer.read_with(cx, |layer, cx| (layer.mode, layer.live(cx)))?;
-        let front = overlay::foreground();
+        let front = topmost::foreground();
         match (mode, ask) {
             (_, Ask::Extra(slot)) => layer.update(cx, |_, cx| cx.emit(Pressed(slot)))?,
             (Mode::Window { armed }, Ask::Toggle) => {
                 let other = front.filter(|&front| front != hwnd);
-                if let Some(game) = other.or(armed.filter(|&game| overlay::is_window(game))).or_else(|| live.and_then(overlay::window_of)) {
+                if let Some(game) = other.or(armed.filter(|&game| topmost::is_window(game))).or_else(|| live.and_then(topmost::window_of)) {
                     // From Impulse in front: the game comes forward under the layer.
                     if other.is_none() {
-                        overlay::give_back(game);
+                        topmost::give_back(game);
                     }
                     enter(&layer, hwnd, game, cx).await?;
                 }
@@ -286,7 +286,7 @@ async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::Unbounde
                 None => {}
             },
             (Mode::Window { armed: Some(game) }, Ask::Foreground) => {
-                if !overlay::is_window(game) {
+                if !topmost::is_window(game) {
                     layer.update(cx, |layer, cx| layer.set(Mode::Window { armed: None }, cx))?;
                 } else if front == Some(game) {
                     enter(&layer, hwnd, game, cx).await?;
@@ -294,7 +294,7 @@ async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::Unbounde
             }
             _ => {}
         }
-        let front = overlay::foreground();
+        let front = topmost::foreground();
         layer.update(cx, |layer, cx| layer.seen(front, cx))?;
     }
     Ok(())
@@ -302,10 +302,10 @@ async fn switch(layer: WeakEntity<Layer>, hwnd: isize, mut asked: mpsc::Unbounde
 
 async fn enter(layer: &WeakEntity<Layer>, hwnd: isize, game: isize, cx: &mut AsyncWindowContext) -> Result<()> {
     // Asked before our window covers the game: it would change the answer.
-    let exclusive = overlay::exclusive(game);
-    overlay::cloak(hwnd, true);
+    let exclusive = topmost::exclusive(game);
+    topmost::cloak(hwnd, true);
     // Fullscreen saves the window's rect for the way back, and a minimized or hidden one has none.
-    overlay::restore(hwnd);
+    topmost::restore(hwnd);
     layer.update_in(cx, |layer, window, cx| {
         layer.exclusive = exclusive;
         layer.set(Mode::Over { game }, cx);
@@ -317,15 +317,15 @@ async fn enter(layer: &WeakEntity<Layer>, hwnd: isize, game: isize, cx: &mut Asy
     })?;
     // Raised before GPUI's fullscreen, the layer's rect would be saved for the way back.
     fullscreen(true, cx).await?;
-    overlay::raise(hwnd, game);
+    topmost::raise(hwnd, game);
     reveal(hwnd, cx).await
 }
 
 /// Back to the window, right behind `below`: the window now in front, with the overlay `armed` for the game,
 /// or the game itself, which gets the input back.
 async fn leave(layer: &WeakEntity<Layer>, hwnd: isize, below: isize, armed: Option<isize>, cx: &mut AsyncWindowContext) -> Result<()> {
-    overlay::cloak(hwnd, true);
-    overlay::lower(hwnd, Some(below));
+    topmost::cloak(hwnd, true);
+    topmost::lower(hwnd, Some(below));
     layer.update_in(cx, |layer, window, cx| {
         layer.exclusive = false;
         layer.set(Mode::Window { armed }, cx);
@@ -336,7 +336,7 @@ async fn leave(layer: &WeakEntity<Layer>, hwnd: isize, below: isize, armed: Opti
     })?;
     fullscreen(false, cx).await?;
     if armed.is_none() {
-        overlay::give_back(below);
+        topmost::give_back(below);
     }
     reveal(hwnd, cx).await
 }
@@ -376,6 +376,6 @@ async fn reveal(hwnd: isize, cx: &mut AsyncWindowContext) -> Result<()> {
         });
     })?;
     future::select(done, pin!(cx.background_executor().timer(REVEAL))).await;
-    overlay::cloak(hwnd, false);
+    topmost::cloak(hwnd, false);
     Ok(())
 }

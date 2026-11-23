@@ -18,7 +18,7 @@ use futures::{
     channel::{mpsc, oneshot},
 };
 use gpui_kit::{App, Context, Entity, FocusHandle, Task, Window};
-use hotkeys::{Binding, Capture, Fired, Hook, Matcher, Outcome, Step};
+use keyhook::{Binding, Capture, Fired, Hook, Matcher, Outcome, Step};
 use model::Chord;
 
 use crate::{
@@ -261,7 +261,7 @@ impl Hotkeys {
         let hook = Hook::start(mouse, move |vk, down| {
             matcher.key(vk, down, |fired| {
                 if let Fired::Press(action) = fired
-                    && (!game_only || hotkeys::foreground_pid() == pid)
+                    && (!game_only || keyhook::foreground_pid() == pid)
                 {
                     let _ = tx.unbounded_send(action);
                 }

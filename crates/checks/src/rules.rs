@@ -104,7 +104,7 @@ fn globs_match_as_claude_code_reads_them() {
     assert!(hit("crates/agent/**", "crates/agent/src/lib.rs"));
     assert!(hit("crates/**/*.rs", "crates/shell/src/map/stage/paint.rs"));
     assert!(hit("crates/{tray,pe}/**", "crates/pe/src/lib.rs"));
-    assert!(!hit("crates/{tray,pe}/**", "crates/play/src/lib.rs"));
+    assert!(!hit("crates/{tray,pe}/**", "crates/model/src/lib.rs"));
     assert!(!hit("crates/*.rs", "crates/agent/src/lib.rs"));
     assert_eq!(globs("---\npaths:\n  - \"a/**\"\n---\nbody"), Some(Ok(vec!["a/**".to_owned()])));
     assert!(globs("# no frontmatter").is_none());

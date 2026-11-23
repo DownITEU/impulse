@@ -10,7 +10,7 @@ use std::{collections::HashSet, path::PathBuf, sync::Arc};
 use blocking::unblock;
 use client::{
     Registry,
-    library::{self as listing, Game, GameId, Links, Picked, sources},
+    library::{self as listing, Game, GameId, Landing, Links, Picked, sources},
     storage::Paths,
 };
 use futures::StreamExt;
@@ -307,31 +307,32 @@ impl Library {
     }
 
     /// Shows `list` with the trainers chosen now: a scan that ran meanwhile has the old choice.
-    /// The catalog game asked for last, else the one shown, is open as listed once installed, else made again from a
-    /// new catalog.
     fn set(&mut self, mut list: listing::Library, cx: &mut Context<Self>) {
         list.relink(|game| self.trainer_links.get(game));
         let was = self.open_id().cloned();
-        let has = |id: &GameId| list.games.iter().any(|game| game.id == *id);
-        let target = self.wanted.clone().or_else(|| self.browsed.as_ref().map(|game| (game.source.id.clone(), false)));
-        let installed = target.as_ref().map(|(record, _)| GameId::of(record)).filter(|id| has(id));
-        let opened = installed.is_some();
-        if let Some(id) = installed {
-            self.stop_browsing();
-            self.keep_open(id, cx);
-        }
-        if !self.open.as_ref().is_some_and(has) {
-            self.open = list.games.first().map(|game| game.id.clone());
-        }
-        let new_catalog = match &self.list {
-            Load::Ready(old) => !Arc::ptr_eq(&old.catalog, &list.catalog),
-            _ => true,
+        // The browse under way, else the game shown.
+        let browsed = self.wanted.clone().or_else(|| self.browsed.as_ref().map(|game| (game.source.id.clone(), false)));
+        let before = match &self.list {
+            Load::Ready(before) => Some(before),
+            _ => None,
         };
+        let landing = list.land(before, self.open.as_ref(), browsed);
         self.list = Load::Ready(list);
-        if let Some((record, opens)) = target.filter(|_| !opened && new_catalog) {
-            self.load_browsed(record, opens, cx);
-        }
-        if opened || self.open_id() != was.as_ref() {
+        let listed = match landing {
+            Landing::Listed(id) => {
+                self.stop_browsing();
+                self.keep_open(id, cx);
+                true
+            }
+            Landing::Kept { open, browse } => {
+                self.open = open;
+                if let Some((record, opens)) = browse {
+                    self.load_browsed(record, opens, cx);
+                }
+                false
+            }
+        };
+        if listed || self.open_id() != was.as_ref() {
             cx.emit(LibraryEvent::Opened);
         }
         cx.emit(LibraryEvent::Listed);
@@ -394,25 +395,18 @@ async fn rescan(library: &WeakEntity<Library>, mut games: Arc<Vec<model::Game>>,
         }
         let all = games.clone();
         let list = unblock(move || listing::scan(&all, &picked, &paths)).await;
-        if show(library, list, version, cx) != Some(false) {
-            return;
-        }
-        // A source changed while it scanned: again, with it.
+        let stale = library.update(cx, |library, cx| {
+            let stale = library.picked.version() != version;
+            if !stale {
+                library.set(list, cx);
+            }
+            stale
+        });
+        // The picked executables changed while it scanned: again, with the catalog as it is now.
+        let Ok(true) = stale else { return };
         let Some(all) = catalog(registry.as_ref()).await else { return };
         games = Arc::new(all);
     }
-}
-
-/// Shows `list` unless the picked executables changed while it was made: `Some(false)`.
-fn show(library: &WeakEntity<Library>, list: listing::Library, version: u64, cx: &mut AsyncApp) -> Option<bool> {
-    let shown = library.update(cx, |library, cx| {
-        let current = library.picked.version() == version;
-        if current {
-            library.set(list, cx);
-        }
-        current
-    });
-    shown.ok()
 }
 
 /// The source's games, the disk copy when there is one.

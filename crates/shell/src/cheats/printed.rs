@@ -6,7 +6,7 @@ use client::{bindings, library::GameId, trainer::Sheet};
 use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
 use model::{Cheat, Chord, Kind};
 
-use crate::{bindings::cap, ui::text::text};
+use crate::{hotkeys::cap, ui::text::text};
 
 const INPUT_DIGITS: usize = 6;
 

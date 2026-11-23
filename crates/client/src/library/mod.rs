@@ -3,6 +3,7 @@
 mod find;
 mod id;
 mod installs;
+mod land;
 mod links;
 mod picked;
 pub mod sources;
@@ -20,6 +21,7 @@ use model::{Installation, Offer, Origin, Ref, StoreId};
 
 pub use find::{Find, rank};
 pub use id::GameId;
+pub use land::Landing;
 pub use links::Links;
 pub use picked::Picked;
 
@@ -331,7 +333,7 @@ fn store(origin: &Origin) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn record(id: &str, title: &str, store: &str, builds: Option<&[u32]>) -> model::Game {
+    pub(super) fn record(id: &str, title: &str, store: &str, builds: Option<&[u32]>) -> model::Game {
         let id = Ref::parse(id).unwrap();
         let trainer = builds.map(|builds| Offer { id: id.clone(), cheats: 24, builds: builds.to_vec(), revision: Some("r".into()) });
         model::Game {
@@ -350,7 +352,7 @@ mod tests {
         }
     }
 
-    fn paths() -> Paths {
+    pub(super) fn paths() -> Paths {
         Paths::new(std::env::temp_dir().join(format!("impulse-library-{}", std::process::id())))
     }
 
