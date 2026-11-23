@@ -1,24 +1,34 @@
 //! The HUD inside the game's frame (the IN-GAME mode): Impulse's window, cloaked and never in front, takes the size the
-//! overlay draws in and is mirrored into the canvas as its input layer. The game keeps the focus; the input the overlay
-//! takes over it is posted to the window.
+//! overlay draws in and is mirrored into the canvas as its input layer. The game keeps the focus: the mouse the overlay
+//! takes over it is posted to the window, the keys come from our hook (`Input`) as keystrokes.
 
 use anyhow::Result;
-use gpui_kit::{AsyncWindowContext, WeakEntity};
+use futures::{StreamExt, channel::mpsc};
+use gpui_kit::{AsyncWindowContext, Keystroke, Modifiers, WeakEntity};
 use model::CanvasEvent;
-use topmost::Away;
+use topmost::{Away, Typed};
 
 use super::{
     Ask, Layer, Mode, fullscreen,
     in_game::{HUD_LAYER, InGameEvent},
     reveal,
 };
+use crate::input::HudKey;
 
 impl Layer {
     pub(super) fn is_inside(&self) -> bool {
         matches!(self.mode, Mode::Over { inside: Some(_), .. })
     }
 
-    /// While inside: the HUD layer's input goes to the window; a new size or the canvas's end is an ask.
+    /// The game the HUD takes keys in, while it is inside and ready.
+    fn typing_into(&self) -> Option<isize> {
+        match self.mode {
+            Mode::Over { game, inside: Some(_) } if self.typing => Some(game),
+            _ => None,
+        }
+    }
+
+    /// While inside: the HUD layer's mouse goes to the window; a new size or the canvas's end is an ask.
     pub(super) fn in_game_event(&self, event: InGameEvent) {
         if !self.is_inside() {
             return;
@@ -64,6 +74,8 @@ pub(super) async fn enter(
         window.mirror_frames(in_game.frames(HUD_LAYER, (0, 0), || {}));
         window.mirror_cursor(in_game.cursors(HUD_LAYER));
         window.refresh();
+        layer.typing = true;
+        layer.publish(cx);
         true
     })?;
     // The canvas went before the mode was set: nothing asks to leave.
@@ -82,6 +94,8 @@ pub(super) async fn leave(
     cx: &mut AsyncWindowContext,
 ) -> Result<()> {
     layer.update_in(cx, |layer, window, cx| {
+        // First, so no key typed from now on lands in the window on its way out.
+        layer.typing = false;
         window.mirror_frames(None);
         window.mirror_cursor(None);
         if let Some(layers) = layer.in_game.read(cx).layers() {
@@ -101,6 +115,23 @@ pub(super) async fn leave(
         None => {}
     }
     reveal(hwnd, cx).await
+}
+
+/// The keys our hook takes for the HUD, as keystrokes in the game's layout. Dispatched outside any entity's update:
+/// the HUD's handlers read the layer.
+pub(super) async fn type_keys(
+    layer: WeakEntity<Layer>,
+    mut keys: mpsc::UnboundedReceiver<HudKey>,
+    cx: &mut AsyncWindowContext,
+) -> Result<()> {
+    while let Some(HudKey { vk, scan, held }) = keys.next().await {
+        // A key queued before the HUD was ready or after it began to leave goes nowhere.
+        let Some(game) = layer.read_with(cx, |layer, _| layer.typing_into())? else { continue };
+        let Some(Typed { key, text, shifted }) = topmost::typed(game, vk, scan, held) else { continue };
+        let modifiers = Modifiers { control: held.control, alt: held.alt, shift: held.shift && !shifted, ..Modifiers::default() };
+        cx.update(|window, cx| window.dispatch_keystroke(Keystroke { modifiers, key, key_char: text }, cx))?;
+    }
+    Ok(())
 }
 
 /// The window at the game's client area with the size the overlay draws in, right behind the game.

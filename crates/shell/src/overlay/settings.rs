@@ -2,11 +2,10 @@
 
 use gpui_kit::{App, Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, prelude::*, px, rgb};
 use i18n::Key as Message;
-use keyhook::Outcome;
+use keyhook::{Key, Outcome};
 use model::Chord;
-use topmost::Key;
 
-use super::{Layer, Slot};
+use super::{Layer, Slot, keys};
 use crate::{
     hotkeys::{Hotkeys, Target},
     settings::{Settings, row},
@@ -22,7 +21,7 @@ use crate::{
 const OVERLAY: Target = Target::Key { name: "overlay", required: true };
 
 /// Each extra hotkey's capture target, cap id, title and hint.
-const EXTRA_ROWS: [(Slot, Target, &str, Message, Message); topmost::EXTRAS] = [
+const EXTRA_ROWS: [(Slot, Target, &str, Message, Message); Slot::ALL.len()] = [
     (
         Slot::Minimap,
         Target::Key { name: "minimap", required: false },
@@ -115,13 +114,11 @@ impl OverlaySettings {
     fn rebind_overlay(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
         let key = match outcome {
             Outcome::Bound(chord) => Key::from_vks(chord.vks()),
-            Outcome::Reset => Some(Key::DEFAULT),
+            Outcome::Reset => Some(keys::DEFAULT),
             _ => None,
         };
-        if let Some(key) = key.filter(|&key| !self.extras_hold(key, None, cx) && !self.cheats_hold(key, cx))
-            && let Err(e) = self.layer.update(cx, |layer, cx| layer.set_hotkey(key, cx))
-        {
-            log::warn!("overlay hotkey not changed: {e}");
+        if let Some(key) = key.filter(|&key| !self.extras_hold(key, None, cx) && !self.cheats_hold(key, cx)) {
+            self.layer.update(cx, |layer, cx| layer.set_hotkey(key, cx));
         }
     }
 
@@ -149,7 +146,7 @@ impl OverlaySettings {
     }
 
     fn cheats_hold(&self, key: Key, cx: &App) -> bool {
-        self.trainers.read(cx).sheets().any(|sheet| sheet.hotkeys.iter().flatten().flatten().any(|bound| key.fired_by(bound.vks())))
+        self.trainers.read(cx).sheets().any(|sheet| sheet.hotkeys.iter().flatten().flatten().any(|&bound| key.clashes(bound)))
     }
 }
 

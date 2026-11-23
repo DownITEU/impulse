@@ -29,6 +29,7 @@ use crate::{
     cheats::CheatList,
     crash,
     hotkeys::{HotkeySettings, Hotkeys, hotkeys_scope},
+    input::{Hud as InputHud, Input},
     library::{GamePicker, Library, Marks, SIDEBAR_WIDTH, Sidebar, vacant},
     log_view::{LogEvent, LogView},
     map::{MapEvent, MapView, Maps, map_panel, paneled},
@@ -159,12 +160,12 @@ impl Page {
             Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, starred, window, cx)
         });
         let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, cx));
-        let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, in_game.clone(), window, cx));
+        let input = cx.new(|cx| Input::new(&runs, cx));
+        let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, input.clone(), in_game.clone(), window, cx));
+        let keys = input.clone();
+        cx.subscribe(&layer, move |_, _, hud: &InputHud, cx| keys.update(cx, |input, _| input.set_hud(*hud))).detach();
         let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), picker.clone(), cx));
-        // The overlay's and the minimap's hotkeys are not the trainer's to take.
-        let reserved = layer.downgrade();
-        let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
-        let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), reserved, window, cx));
+        let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), input, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         let cheat_list =
             cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), picker.clone(), window, cx));

@@ -2,7 +2,7 @@
 //! front, topmost on its monitor and with the input, and back into the window behind the game. Leaving the
 //! game for another window turns it back too, and the game in front again brings the overlay back. Where the
 //! live game's canvas can draw (IN-GAME), the layer goes inside the game's frame instead (`inside`). It also
-//! tells `Glance` whether the live game is in front, and holds the minimap's hotkey meanwhile.
+//! tells `Glance` whether the live game is in front, and binds the overlay's keys in `Input`.
 
 mod docks;
 mod glance;
@@ -13,7 +13,7 @@ mod keys;
 mod settings;
 mod warning;
 
-use std::{io, pin::pin, time::Duration};
+use std::{iter, pin::pin, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use futures::{
@@ -28,14 +28,15 @@ use gpui_kit::{
 pub use hud::{Entered, Hud, bind_keys};
 pub use in_game::InGame;
 use in_game::InGameEvent;
+use keyhook::{Key, Trigger};
 use keys::{Keys, Slot};
-use model::Chord;
 pub use settings::{OverlaySettings, overlay_hotkey};
-use topmost::{Away, EXTRAS, Event, Key, Watch};
+use topmost::{Away, Watch};
 
 use client::storage::Paths;
 
 use crate::{
+    input::{self, Action, Input, Owner, Scope},
     run::{RunEvent, Runs},
     settings::Settings,
 };
@@ -55,6 +56,7 @@ enum Mode {
 }
 
 /// What the window is asked to do; one switch runs at a time, in order.
+#[derive(Clone, Copy)]
 enum Ask {
     Toggle,
     Leave,
@@ -89,14 +91,17 @@ pub(super) struct Layer {
     asks: mpsc::UnboundedSender<Ask>,
     hwnd: Option<isize>,
     watch: Option<Watch>,
-    // The overlay's and the extras' keys as registered now, the extras by `Slot::number`.
-    held_hotkey: Option<Key>,
-    held: [Option<Key>; EXTRAS],
+    input: Entity<Input>,
+    // The last `input::Hud` emitted.
+    hud: input::Hud,
+    // Inside and ready for keys: set once the layer takes input in the game, cleared first on the way out.
+    typing: bool,
     // The game in front was in exclusive fullscreen when the overlay went over it.
     exclusive: bool,
     runs: WeakEntity<Runs>,
     in_game: Entity<InGame>,
     _switches: Task<()>,
+    _typing: Task<()>,
 }
 
 impl Layer {
@@ -104,6 +109,7 @@ impl Layer {
         paths: &Paths,
         runs: &Entity<Runs>,
         settings: &Entity<Settings>,
+        input: Entity<Input>,
         in_game: Entity<InGame>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -125,7 +131,13 @@ impl Layer {
         })
         .detach();
         let keys = Keys::load(paths);
-        let watch = hwnd.and_then(|_| watch(&asks).inspect_err(|e| log::warn!("overlay hotkey: {e}")).ok());
+        let watch = hwnd.and_then(|_| watch(&asks).inspect_err(|e| log::warn!("overlay: {e}")).ok());
+        let keyed = input.update(cx, |input, _| input.typed_keys());
+        let typing = cx.spawn_in(window, async move |layer, cx| {
+            if let Some(keyed) = keyed {
+                let _ = inside::type_keys(layer, keyed, cx).await;
+            }
+        });
         // A foreground event can be missed; the overlay losing the input is one too. Inside, the window never takes
         // the input itself.
         cx.observe_window_activation(window, |layer, window, _| {
@@ -149,20 +161,24 @@ impl Layer {
                 let _ = switch(layer, hwnd, asked, cx).await;
             }
         });
-        Self {
+        let layer = Self {
             mode: Mode::Window { armed: None },
             playing: Playing::Idle,
             keys,
             asks,
             hwnd,
             watch,
-            held_hotkey: None,
-            held: [None; EXTRAS],
+            input,
+            hud: input::Hud::Off,
+            typing: false,
             exclusive: false,
             runs: runs.downgrade(),
             in_game,
             _switches: switches,
-        }
+            _typing: typing,
+        };
+        layer.bind_keys(cx);
+        layer
     }
 
     /// The process of the game a trainer is live in.
@@ -187,31 +203,17 @@ impl Layer {
         self.keys.hotkey()
     }
 
-    /// Whether the overlay's or an extra hotkey fires on `chord`.
-    pub fn takes(&self, chord: Chord) -> bool {
-        self.hotkey().fired_by(chord.vks()) || Slot::ALL.into_iter().any(|slot| self.key(slot).is_some_and(|key| key.fired_by(chord.vks())))
-    }
-
     /// The game in front was in exclusive fullscreen as the overlay went over it: the layer may not show over it.
     pub fn exclusive(&self) -> bool {
         self.exclusive
     }
 
-    /// Fails, keeping the old one, when another app holds `key`.
-    pub fn set_hotkey(&mut self, key: Key, cx: &mut Context<Self>) -> io::Result<()> {
-        let Some(watch) = &self.watch else { return Ok(()) };
-        if key == self.hotkey() {
-            return Ok(());
-        }
-        // Registered once to learn it is free; `hold_keys` lets it go again unless it can act now.
-        let taken = watch.set_hotkey(Some(key));
-        self.held_hotkey = taken.is_ok().then_some(key);
-        if taken.is_ok() {
+    pub fn set_hotkey(&mut self, key: Key, cx: &mut Context<Self>) {
+        if key != self.hotkey() {
             self.keys.set_hotkey(key);
+            self.bind_keys(cx);
+            cx.notify();
         }
-        self.hold_keys(cx);
-        cx.notify();
-        taken
     }
 
     pub fn key(&self, slot: Slot) -> Option<Key> {
@@ -220,50 +222,42 @@ impl Layer {
 
     pub fn set_key(&mut self, slot: Slot, key: Option<Key>, cx: &mut Context<Self>) {
         self.keys.set_key(slot, key);
-        self.hold_keys(cx);
+        self.bind_keys(cx);
         cx.notify();
     }
 
-    /// The keys are taken from every app, so only while they can act: the overlay's while the live game is in front
-    /// or the overlay is up (to leave it), the extras while there is a minimap: the live game in front or under the
-    /// overlay.
-    fn hold_keys(&mut self, cx: &App) {
-        let under = match self.mode {
-            Mode::Over { game, .. } => self.live(cx).is_some_and(|pid| topmost::owner(game) == pid),
-            Mode::Window { .. } => false,
-        };
-        let front = matches!(self.playing, Playing::Front(_));
-        let held = front || under;
-        let Some(watch) = &self.watch else { return };
-        let hotkey = (front || self.is_over()).then(|| self.keys.hotkey());
-        if hotkey != self.held_hotkey {
-            // A refused key leaves none registered, so the next recheck tries it again.
-            self.held_hotkey = match watch.set_hotkey(hotkey) {
-                Ok(()) => hotkey,
-                Err(e) => {
-                    log::warn!("overlay hotkey: {e}");
-                    None
-                }
-            };
-        }
-        for slot in Slot::ALL {
-            let wanted = held.then(|| self.keys.key(slot)).flatten();
-            if wanted != self.held[slot.number()] {
-                // A refused key leaves none registered, so the next recheck tries it again.
-                self.held[slot.number()] = match watch.set_extra(slot.number(), wanted) {
-                    Ok(()) => wanted,
-                    Err(e) => {
-                        log::warn!("{slot:?} hotkey: {e}");
-                        None
-                    }
-                };
-            }
-        }
+    /// The overlay's and the extras' keys act while the live game is in front or the HUD is up, and only then are
+    /// they taken from the other apps.
+    fn bind_keys(&self, cx: &mut Context<Self>) {
+        let extras = Slot::ALL.into_iter().filter_map(|slot| Some((self.keys.key(slot)?, Ask::Extra(slot))));
+        let bound = iter::once((self.keys.hotkey(), Ask::Toggle)).chain(extras).map(|(key, ask)| {
+            let asks = self.asks.clone();
+            let press: Action = Arc::new(move || {
+                let _ = asks.unbounded_send(ask);
+            });
+            (Trigger::Key(key), Scope::Hud, press)
+        });
+        let bound = bound.collect();
+        self.input.update(cx, |input, _| input.bind(Owner::Overlay, bound));
     }
 
     fn set(&mut self, mode: Mode, cx: &mut Context<Self>) {
         self.mode = mode;
+        self.publish(cx);
         cx.notify();
+    }
+
+    /// The overlay as the keys see it, emitted on change.
+    fn publish(&mut self, cx: &mut Context<Self>) {
+        let hud = match self.mode {
+            Mode::Window { .. } => input::Hud::Off,
+            Mode::Over { inside: Some(_), .. } if self.typing => input::Hud::Inside,
+            Mode::Over { .. } => input::Hud::Over,
+        };
+        if hud != self.hud {
+            self.hud = hud;
+            cx.emit(hud);
+        }
     }
 
     /// `set` with the window's look: over a game it is transparent and frameless.
@@ -290,25 +284,17 @@ impl Layer {
             self.playing = playing;
             cx.emit(playing);
         }
-        self.hold_keys(cx);
     }
 }
 
 impl EventEmitter<Playing> for Layer {}
 impl EventEmitter<Pressed> for Layer {}
+impl EventEmitter<input::Hud> for Layer {}
 
-fn watch(asks: &mpsc::UnboundedSender<Ask>) -> io::Result<Watch> {
+fn watch(asks: &mpsc::UnboundedSender<Ask>) -> std::io::Result<Watch> {
     let asks = asks.clone();
-    Watch::start(move |event| {
-        let ask = match event {
-            Event::Hotkey => Ask::Toggle,
-            Event::Extra(number) => match Slot::ALL.get(number) {
-                Some(&slot) => Ask::Extra(slot),
-                None => return,
-            },
-            Event::Foreground => Ask::Foreground,
-        };
-        let _ = asks.unbounded_send(ask);
+    Watch::start(move || {
+        let _ = asks.unbounded_send(Ask::Foreground);
     })
 }
 
@@ -380,7 +366,11 @@ async fn enter(layer: &WeakEntity<Layer>, hwnd: isize, game: isize, size: Option
     })?;
     // Raised before GPUI's fullscreen, the layer's rect would be saved for the way back.
     fullscreen(true, cx).await?;
-    topmost::raise(hwnd, game);
+    // A HUD without the input would look open while the keys go to the game.
+    if !topmost::raise(hwnd, game) {
+        log::warn!("the overlay did not get the input");
+        return leave(layer, hwnd, game, None, cx).await;
+    }
     reveal(hwnd, cx).await
 }
 

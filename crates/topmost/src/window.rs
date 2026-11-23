@@ -13,14 +13,15 @@ use windows_sys::Win32::{
     System::Threading::{AttachThreadInput, GetCurrentThreadId},
     UI::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+        Input::KeyboardAndMouse::{INPUT, INPUT_MOUSE, SendInput},
         Shell::{QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState},
         WindowsAndMessaging::{
             EnumWindows, GW_OWNER, GWL_EXSTYLE, GetClientRect, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect,
             GetWindowThreadProcessId, HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA, PostMessageW, SW_HIDE,
             SW_RESTORE, SW_SHOWMINNOACTIVE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
             SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowLongW, SetWindowPos, ShowWindow,
-            ShowWindowAsync, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_KEYFIRST, WM_KEYLAST, WM_MOUSEFIRST, WM_MOUSEHWHEEL, WM_MOUSELAST,
-            WM_MOUSEWHEEL, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            ShowWindowAsync, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_MOUSEFIRST, WM_MOUSEHWHEEL, WM_MOUSELAST, WM_MOUSEWHEEL, WS_EX_LAYERED,
+            WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
         },
     },
 };
@@ -104,8 +105,8 @@ pub fn exclude_from_capture(window: isize, on: bool) {
     unsafe { SetWindowDisplayAffinity(window as HWND, if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE }) };
 }
 
-/// Shows `window` topmost over the whole monitor of `over`, with the input.
-pub fn raise(window: isize, over: isize) {
+/// Shows `window` topmost over the whole monitor of `over`, with the input. Whether `window` is in front after it.
+pub fn raise(window: isize, over: isize) -> bool {
     let (window, over) = (window as HWND, over as HWND);
     // SAFETY: plain Win32 calls; `info` outlives them, and gone windows fail them.
     unsafe {
@@ -116,14 +117,20 @@ pub fn raise(window: isize, over: isize) {
             SetWindowPos(window, HWND_TOPMOST, left, top, right - left, bottom - top, SWP_SHOWWINDOW);
         }
         take_input(window);
+        GetForegroundWindow() == window
     }
 }
 
 // Windows lets only the process with the last input take it: back over an armed game that is the game's.
 // Sharing the input of the window in front for the call is the usual way past that.
 unsafe fn take_input(window: HWND) {
-    // SAFETY: plain Win32 calls; the attachment is undone before returning.
+    // SAFETY: plain Win32 calls; the attachment is undone before returning, and `empty` outlives its call.
     unsafe {
+        // A press seen by a low-level hook gives this process no last input, as a hotkey's did; an empty input
+        // sent here does (the way PowerToys Run does it, microsoft/PowerToys#4362).
+        let mut empty: INPUT = mem::zeroed();
+        empty.r#type = INPUT_MOUSE;
+        SendInput(1, &empty, size_of::<INPUT>() as i32);
         if SetForegroundWindow(window) != 0 {
             return;
         }
@@ -176,8 +183,9 @@ pub fn resize(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
     unsafe { SetWindowPos(window as HWND, ptr::null_mut(), left, top, width, height, SWP_NOZORDER | SWP_NOACTIVATE) };
 }
 
-/// Posts a mouse or key message to `window` as if given there; any other message is dropped. A wheel's point is
-/// relative to the client area, as the other mouse messages have it: Win32 wants a screen one there.
+/// Posts a mouse message to `window` as if given there; any other message, keys too (the HUD's come from the
+/// keyboard hook), is dropped. A wheel's point is relative to the client area, as the other mouse messages have it:
+/// Win32 wants a screen one there.
 pub fn post_input(window: isize, message: u32, wparam: usize, lparam: isize) {
     let lparam = match message {
         WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
@@ -186,7 +194,7 @@ pub fn post_input(window: isize, message: u32, wparam: usize, lparam: isize) {
             unsafe { ClientToScreen(window as HWND, &mut point) };
             (point.x as u16 as isize) | ((point.y as u16 as isize) << 16)
         }
-        WM_KEYFIRST..=WM_KEYLAST | WM_MOUSEFIRST..=WM_MOUSELAST => lparam,
+        WM_MOUSEFIRST..=WM_MOUSELAST => lparam,
         _ => return,
     };
     // SAFETY: a post; a gone window fails it.
