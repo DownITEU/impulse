@@ -70,7 +70,7 @@ mod tests {
             trainer: None,
         };
         let origin = Origin::Launcher(StoreId::parse(installed).unwrap());
-        let install = Installation { game: id, origin, location: "c:/games".into(), build: None };
+        let install = Installation { game: id, origin, location: "c:/games".into(), alternates: Vec::new(), build: None };
         super::super::game(record, Some(install), None, Path::new("."))
     }
 

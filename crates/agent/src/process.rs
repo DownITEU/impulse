@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn the_biggest_match_is_the_game_even_while_it_starts_up() {
-        let rule = Rule { image: None, location: PathBuf::from(r"C:\g"), minimum_age: Duration::from_secs(8) };
+        let rule = Rule { image: None, location: PathBuf::from(r"C:\g"), alternates: Vec::new(), minimum_age: Duration::from_secs(8) };
         let all = vec![candidate(r"C:\g\helper.exe", 30, 100), candidate(r"C:\g\g.exe", 2, 5000), candidate(r"C:\other\o.exe", 30, 9000)];
         assert_eq!(pick(all, &rule).unwrap().process.path, PathBuf::from(r"C:\g\g.exe"), "not its old helper");
     }

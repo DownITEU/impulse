@@ -16,6 +16,7 @@ mod xbox;
 
 use std::{
     collections::HashMap,
+    fs,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -29,6 +30,14 @@ pub use store::{store_link, store_name};
 struct App {
     store_id: String,
     location: PathBuf,
+    /// The install's other folders its process may run from.
+    alternates: Vec<PathBuf>,
+}
+
+impl App {
+    fn new(store_id: String, location: PathBuf) -> Self {
+        Self { store_id, location, alternates: Vec::new() }
+    }
 }
 
 /// Scans every launcher for `games`, then the executables the user picked (blocking: registry and
@@ -61,18 +70,19 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
 
 /// One install per game: of its store ids found, the one its record lists first, as Wand prefers them.
 fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: impl Iterator<Item = App>) -> Vec<Installation> {
-    let mut best = HashMap::<&Ref, (usize, StoreId, PathBuf)>::new();
-    for app in apps {
+    let mut best = HashMap::<&Ref, (usize, StoreId, &App)>::new();
+    let apps: Vec<App> = apps.collect();
+    for app in &apps {
         let Some(id) = StoreId::parse(&app.store_id) else { continue };
         for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
             let rank = game.store_ids.iter().position(|own| own.as_str().eq_ignore_ascii_case(id.as_str())).unwrap_or(usize::MAX);
             if best.get(&game.id).is_none_or(|(had, ..)| rank < *had) {
-                best.insert(&game.id, (rank, id.clone(), app.location.clone()));
+                best.insert(&game.id, (rank, id.clone(), app));
             }
         }
     }
     let found = games.iter().filter_map(|game| Some((game, best.remove(&game.id)?)));
-    found.map(|(game, (_, id, location))| installation(game, Origin::Launcher(id), location)).collect()
+    found.map(|(game, (_, id, app))| installation(game, Origin::Launcher(id), app.location.clone(), app.alternates.clone())).collect()
 }
 
 /// One launcher's records, timed: a slow disk or a scanning antivirus shows in the log.
@@ -83,10 +93,25 @@ fn timed(launcher: &str, apps: impl FnOnce() -> Vec<App>) -> Vec<App> {
     apps
 }
 
-/// The build is the PE TimeDateStamp of the game's `exe` in the install.
-fn installation(game: &Game, origin: Origin, location: PathBuf) -> Installation {
+/// The build is the PE TimeDateStamp of the game's `exe` in the install. The location's final path is one of its
+/// folders too, as Wand resolves it before it looks for the process: a library behind a junction, a package on a mount.
+fn installation(game: &Game, origin: Origin, location: PathBuf, mut alternates: Vec<PathBuf>) -> Installation {
     let build = game.exe.as_deref().and_then(|exe| pe::header(&location.join(exe))).map(|header| header.timestamp);
-    Installation { game: game.id.clone(), origin, location, build }
+    let resolved = final_path(&location).filter(|resolved| !same_path(resolved, &location));
+    if let Some(resolved) = resolved.filter(|resolved| !alternates.iter().any(|had| same_path(had, resolved))) {
+        alternates.insert(0, resolved);
+    }
+    Installation { game: game.id.clone(), origin, location, alternates, build }
+}
+
+/// The path once links resolve, written as a process's image path is (blocking).
+fn final_path(path: &Path) -> Option<PathBuf> {
+    let resolved = fs::canonicalize(path).ok()?;
+    let text = resolved.to_str()?;
+    Some(match text.strip_prefix(r"\\?\UNC\") {
+        Some(share) => format!(r"\\{share}").into(),
+        None => text.strip_prefix(r"\\?\").unwrap_or(text).into(),
+    })
 }
 
 /// The launcher's name and the URI of the game's page in it, for the stores that have one.
@@ -143,10 +168,25 @@ pub(crate) mod tests {
                 by_store_id.entry(id.as_str().to_owned()).or_default().push(game);
             }
         }
-        let app = |id: &str| App { store_id: id.into(), location: id.into() };
+        let app = |id: &str| App::new(id.into(), id.into());
         let installs = launched(&games, &by_store_id, [app("steam:5"), app("steam:6"), app("gog:7")].into_iter());
         let origins: Vec<_> = installs.iter().map(|install| install.origin.store_id().unwrap().as_str()).collect();
         assert_eq!(origins, ["gog:7", "steam:6"]);
+    }
+
+    #[test]
+    fn a_location_behind_a_junction_also_counts_as_its_final_path() {
+        let base = std::env::temp_dir().join(format!("impulse-junction-{}", std::process::id()));
+        let (real, link) = (base.join("real"), base.join("link"));
+        fs::create_dir_all(&real).unwrap();
+        let made = std::process::Command::new("cmd").args(["/c", "mklink", "/J"]).arg(&link).arg(&real).output().unwrap();
+        assert!(made.status.success(), "{made:?}");
+
+        let install = installation(&game("1", None, &[]), Origin::Picked(link.join("g.exe")), link.clone(), Vec::new());
+        let final_real = final_path(&real).unwrap();
+        assert!(!final_real.to_string_lossy().starts_with(r"\\?\"), "{final_real:?}");
+        assert!(install.alternates.iter().any(|folder| same_path(folder, &final_real)), "{:?}", install.alternates);
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

@@ -96,7 +96,7 @@ mod tests {
     }
 
     fn install(origin: Origin) -> Installation {
-        Installation { game: id(), origin, location: Default::default(), build: None }
+        Installation { game: id(), origin, location: Default::default(), alternates: Vec::new(), build: None }
     }
 
     fn record() -> model::Game {

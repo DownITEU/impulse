@@ -21,6 +21,8 @@ pub struct Rule {
     /// the install folder decides.
     pub image: Option<String>,
     pub location: PathBuf,
+    /// Without an image, these folders count as the install's too (`Installation::alternates`).
+    pub alternates: Vec<PathBuf>,
     /// A younger process is still starting up.
     pub minimum_age: Duration,
 }
@@ -28,12 +30,14 @@ pub struct Rule {
 impl Rule {
     pub fn matches(&self, path: &Path) -> bool {
         let path = path.to_string_lossy().to_lowercase();
+        let inside = |folder: &PathBuf| {
+            // Steam's own registry path has forward slashes.
+            let folder = folder.to_string_lossy().replace('/', "\\").to_lowercase();
+            path.strip_prefix(folder.trim_end_matches('\\')).is_some_and(|rest| rest.starts_with('\\'))
+        };
         match &self.image {
             Some(image) => ends_with_image(&path, &image.to_lowercase()),
-            None => {
-                let folder = self.location.to_string_lossy().to_lowercase();
-                path.strip_prefix(folder.trim_end_matches('\\')).is_some_and(|rest| rest.starts_with('\\'))
-            }
+            None => inside(&self.location) || self.alternates.iter().any(inside),
         }
     }
 }
@@ -95,10 +99,15 @@ mod tests {
     }
 
     #[test]
-    fn without_an_image_the_install_folder_decides() {
-        let rule = Rule { image: None, location: PathBuf::from(r"D:\Steam\common\Game\"), minimum_age: Duration::ZERO };
+    fn without_an_image_the_install_folders_decide() {
+        let location = PathBuf::from(r"D:\Steam\common\Game\");
+        let rule =
+            Rule { image: None, location, alternates: vec![PathBuf::from(r"E:\XboxGames\Game\Content")], minimum_age: Duration::ZERO };
         assert!(rule.matches(Path::new(r"D:\STEAM\common\game\bin\x64\g.exe")));
+        assert!(rule.matches(Path::new(r"E:\XboxGames\Game\Content\g.exe")), "an alternate folder");
         assert!(!rule.matches(Path::new(r"D:\Steam\common\Game2\g.exe")), "a sibling folder with the same prefix");
         assert!(!rule.matches(Path::new(r"D:\Steam\common\g.exe")));
+        let slashed = Rule { location: PathBuf::from("c:/program files (x86)/steam/steamapps/common/Game"), ..rule };
+        assert!(slashed.matches(Path::new(r"C:\Program Files (x86)\Steam\steamapps\common\Game\g.exe")), "Steam's own slashes");
     }
 }

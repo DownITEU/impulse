@@ -40,7 +40,7 @@ pub fn apps() -> Vec<App> {
             let location = redirect(&item).unwrap_or_else(|| item.install_location.clone().into());
             // The catalog lists both the full id and the bare app name.
             [format!("epic:{}:{}:{}", item.catalog_namespace, item.catalog_item_id, item.app_name), format!("epic:{}", item.app_name)]
-                .map(|store_id| App { store_id, location: location.clone() })
+                .map(|store_id| App::new(store_id, location.clone()))
         })
         .collect()
 }

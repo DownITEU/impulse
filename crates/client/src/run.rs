@@ -34,7 +34,12 @@ pub fn request(install: &Installation, plan: &Plan) -> Request {
     Request {
         runner: plan.runner.clone(),
         origin: install.origin.clone(),
-        rule: Rule { image: plan.image.clone(), location: install.location.clone(), minimum_age: plan.minimum_age },
+        rule: Rule {
+            image: plan.image.clone(),
+            location: install.location.clone(),
+            alternates: install.alternates.clone(),
+            minimum_age: plan.minimum_age,
+        },
         launch: plan.launch,
         build: install.build,
     }
@@ -137,7 +142,8 @@ mod tests {
         let me = std::env::current_exe().unwrap();
         let image = me.file_name().unwrap().to_string_lossy().into_owned();
         let request = |launch, minimum_age| {
-            let rule = Rule { image: Some(image.clone()), location: PathBuf::from(me.parent().unwrap()), minimum_age };
+            let rule =
+                Rule { image: Some(image.clone()), location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new(), minimum_age };
             Request { runner: Arc::new(Prepare(probe.clone())), origin: Origin::Picked(me.clone()), rule, launch, build: None }
         };
 
@@ -157,7 +163,8 @@ mod tests {
         let me = std::env::current_exe().unwrap();
         let image = Some(me.file_name().unwrap().to_string_lossy().into_owned());
         // Longer than the tests have run: a start would ready the install first. No launcher starts that store.
-        let rule = Rule { image, location: PathBuf::from(me.parent().unwrap()), minimum_age: Duration::from_secs(3) };
+        let rule =
+            Rule { image, location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new(), minimum_age: Duration::from_secs(3) };
         let origin = Origin::Launcher(model::StoreId::parse("itch:0").unwrap());
         let request = Request { runner: Arc::new(Prepare(probe.clone())), origin, rule, launch: Launch::Start, build: None };
 

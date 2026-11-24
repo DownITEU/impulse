@@ -60,6 +60,8 @@ pub struct Installation {
     pub game: Ref,
     pub origin: Origin,
     pub location: PathBuf,
+    /// Other folders its process may run from: the location's final path, a package's other folders.
+    pub alternates: Vec<PathBuf>,
     /// `None` when the exe could not be read.
     pub build: Option<u32>,
 }

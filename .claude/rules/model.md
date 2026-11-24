@@ -12,7 +12,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - `SourceId`, `Ref`: a source's name and an id it minted, printed `source:id`; only `Ref` splits one. `SourceId::APP` is the app's own.
 - `Text`: a message of a source's catalog (its domain is its `SourceId`), or plain content. `Locale`: the language content is asked in, a BCP 47 tag. `Failure`: a `FailureKind`, the source's own `message`, the English `detail`.
 - `Game`, `Offer`, `Standalone`, `Locator`: a game a source lists, with its store ids, `exe`, the title's other names (`terms`), art and offers. `Game.id`, `Offer.id` (the trainer) and `MapOffer.id` are the source's `Ref`s.
-- `StoreId`: a launcher's id for a game, `<store>:<id>`, the one place that splits one (`store`, `id`, `steam_app`). `Installation`: a game on this machine (`Origin`: a launcher's `StoreId` or the picked executable, location, build).
+- `StoreId`: a launcher's id for a game, `<store>:<id>`, the one place that splits one (`store`, `id`, `steam_app`). `Installation`: a game on this machine (`Origin`: a launcher's `StoreId` or the picked executable, location, `alternates`: other folders its process may run from, build).
 - `Chord`, `Held`, `mouse`: a hotkey in Wand's key codes, its names (`Display`), the keys being pressed.
 - `Process`, `Rule`: the game's process and how a trainer says which one to look for.
 - `Trainer`, `Cheat`, `Kind`, `Args`, `Plan`, `Launch`: the cheat list, its `notes` (markdown, read before playing) and what running exactly this list takes; `Launch` says who starts the game: the user, the run, or the run only (`Required`: a game already running is refused).
@@ -23,7 +23,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 
 ## Rules
 - A snapshot stream yields `Cached(Option)` first, then `Fresh(Result)` only when the copy was missing or stale. An `Err` keeps the cached value: a consumer never clears on it.
-- `Rule::matches` is case-insensitive. `image` is a whole-name path suffix (`*` inside one name); without it the install folder is a prefix at a `\` boundary. The glob stays iterative and bounded: the pattern is remote data.
+- `Rule::matches` is case-insensitive. `image` is a whole-name path suffix (`*` inside one name); without it the install folder or one of its `alternates` is a prefix at a `\` boundary (a folder's `/` read as `\`). The glob stays iterative and bounded: the pattern is remote data.
 - `Process` is pid and creation time together. `Attach::attach` refuses a process that is no longer the one given.
 - `Runner::prepare` runs before the game is looked for and refuses what cannot run.
 - `Plan::runner` runs exactly the cheat list of the `Trainer` that holds it. An implementer builds both from one value.

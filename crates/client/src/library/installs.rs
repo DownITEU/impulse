@@ -19,6 +19,8 @@ struct Install {
     game: String,
     origin: Kept,
     location: PathBuf,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    alternates: Vec<PathBuf>,
     build: Option<u32>,
 }
 
@@ -35,7 +37,8 @@ impl Install {
             Origin::Launcher(id) => Kept::Launcher(id.as_str().to_owned()),
             Origin::Picked(exe) => Kept::Picked(exe.clone()),
         };
-        Self { game: install.game.to_string(), origin, location: install.location.clone(), build: install.build }
+        let (location, alternates) = (install.location.clone(), install.alternates.clone());
+        Self { game: install.game.to_string(), origin, location, alternates, build: install.build }
     }
 
     fn installation(&self) -> Option<Installation> {
@@ -43,7 +46,8 @@ impl Install {
             Kept::Launcher(id) => Origin::Launcher(StoreId::parse(id)?),
             Kept::Picked(exe) => Origin::Picked(exe.clone()),
         };
-        Some(Installation { game: Ref::parse(&self.game)?, origin, location: self.location.clone(), build: self.build })
+        let (location, alternates) = (self.location.clone(), self.alternates.clone());
+        Some(Installation { game: Ref::parse(&self.game)?, origin, location, alternates, build: self.build })
     }
 }
 
@@ -79,14 +83,17 @@ mod tests {
             game: game.clone(),
             origin: Origin::Launcher(StoreId::parse("steam:1203620").unwrap()),
             location: r"C:\Games\Enshrouded".into(),
+            alternates: vec![r"E:\Library\Enshrouded".into()],
             build: Some(1793791052),
         };
-        let picked = Installation { game, origin: Origin::Picked(r"D:\Copy\game.exe".into()), location: r"D:\Copy".into(), build: None };
+        let origin = Origin::Picked(r"D:\Copy\game.exe".into());
+        let picked = Installation { game, origin, location: r"D:\Copy".into(), alternates: Vec::new(), build: None };
         keep(&paths, &[launcher.clone(), picked.clone()]);
         let again = kept(&paths);
         assert_eq!(again.len(), 2);
         assert!(again.iter().zip([&launcher, &picked]).all(|(a, b)| a.game == b.game && a.origin == b.origin && a.location == b.location));
         assert_eq!((again[0].build, again[1].build), (Some(1793791052), None));
+        assert_eq!((&again[0].alternates, &again[1].alternates), (&launcher.alternates, &picked.alternates));
         fs::remove_dir_all(&dir).unwrap();
     }
 }
