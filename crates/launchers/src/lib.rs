@@ -1,5 +1,6 @@
 //! Installed games, found through each launcher's own records.
 
+mod appinfo;
 mod custom;
 mod ea;
 mod epic;

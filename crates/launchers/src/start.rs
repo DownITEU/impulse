@@ -12,7 +12,7 @@ use anyhow::{Context, Result, bail, ensure};
 use model::{Failure, FailureKind, Origin};
 use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
-use crate::{gog, rockstar, ubisoft};
+use crate::{appinfo, gog, rockstar, steam, ubisoft};
 
 // ShellExecuteW's answer when no program handles a URI's scheme: that launcher is not installed.
 const SE_ERR_NOASSOC: usize = 31;
@@ -41,6 +41,7 @@ pub fn start(origin: &Origin, location: &Path, app: Option<&str>) -> Result<bool
 
 fn launcher(store: &str) -> Option<PathBuf> {
     let dir = match store {
+        "steam" => steam::install_dir(),
         "gog" => gog::launcher(),
         "uplay" => ubisoft::launcher(),
         "rockstar" => rockstar::launcher(),
@@ -67,7 +68,14 @@ fn command(origin: &Origin, location: &Path, app: Option<&str>, launcher: impl F
     let dir = launcher(id.store());
     Ok(match id.store() {
         // The id comes from a remote catalog: only a number reaches the URI.
-        "steam" => uri(format!("steam://rungameid/{}", id.steam_app().with_context(|| format!("unexpected Steam app id '{}'", id.id()))?)),
+        "steam" => {
+            let app = id.steam_app().with_context(|| format!("unexpected Steam app id '{}'", id.id()))?;
+            // As Wand: the game's launch option without its anti-cheat, when Steam lists one.
+            match launcher("steam").and_then(|steam| appinfo::anti_cheat_off(&steam, app)) {
+                Some(kind) => uri(format!("steam://launch/{app}/{kind}")),
+                None => uri(format!("steam://rungameid/{app}")),
+            }
+        }
         "epic" => uri(format!("com.epicgames.launcher://apps/{}?action=launch&silent=true", percent(id.id()))),
         "gog" => {
             let game = plain_id(b"")?;
@@ -143,7 +151,8 @@ mod tests {
     }
 
     fn command_with(id: &str, location: &str, app: Option<&str>) -> Result<Option<Command>> {
-        let installed = |store: &str| (store != "rockstar").then(|| PathBuf::from(format!(r"C:\{store}")));
+        // Steam's folder would be read for its app cache.
+        let installed = |store: &str| (!["rockstar", "steam"].contains(&store)).then(|| PathBuf::from(format!(r"C:\{store}")));
         command(&Origin::Launcher(StoreId::parse(id).unwrap()), Path::new(location), app, installed)
     }
 
@@ -166,6 +175,15 @@ mod tests {
         assert_eq!(command_of("rockstar:rdr2", "").unwrap(), None, "its launcher is not installed");
         assert_eq!(command_of("ea:Origin.OFR.1", "").unwrap(), None);
         assert_eq!(command_of("standalone:gta", "").unwrap(), None, "the catalog's own launcher file is not run");
+    }
+
+    #[test]
+    fn a_steam_game_starts_through_its_option_without_anti_cheat() {
+        let steam = crate::appinfo::tests::steam_folder("start", 976730, &[("0", "Play without EAC", Some("option1"))]);
+        let origin = Origin::Launcher(StoreId::parse("steam:976730").unwrap());
+        let target = command(&origin, Path::new(""), None, |_| Some(steam.clone())).unwrap().unwrap().target;
+        assert_eq!(target, "steam://launch/976730/option1");
+        fs::remove_dir_all(&steam).unwrap();
     }
 
     #[test]
