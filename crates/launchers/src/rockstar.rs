@@ -24,7 +24,7 @@ pub fn apps() -> Vec<App> {
             let id = title["ti"].as_str().filter(|id| *id != "launcher")?;
             let location = title["il"].as_str().filter(|l| !l.is_empty())?;
             title["if"].as_i64().filter(|flags| *flags != 0)?;
-            Some(App { store_id: format!("rockstar:{id}"), location: location.into() })
+            Some(App { store_id: format!("rockstar:{id}"), name: None, location: location.into() })
         })
         .collect()
 }

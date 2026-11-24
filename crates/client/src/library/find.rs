@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use model::Ref;
 
-use super::Library;
+use super::{Library, shares};
 
 /// A row of the search.
 pub struct Find {
@@ -17,10 +17,13 @@ pub struct Find {
 
 impl Library {
     /// The search's rows by name: the listed games, then for each other title with a trainer its Steam record, else
-    /// its first with a trainer.
+    /// its first with a trainer. A title with an edition of a listed install is that install's: the game stands for it.
     pub fn finds(&self) -> Vec<Find> {
         let listed: HashSet<&Ref> = self.games.iter().map(|game| &game.source.id).collect();
-        let listed_titles: HashSet<&str> = self.games.iter().map(|game| game.source.title_id.as_str()).collect();
+        let installed: Vec<_> = self.games.iter().filter_map(|game| game.install.as_ref()?.origin.store_id()).collect();
+        let editions = self.catalog.iter().filter(|record| installed.iter().any(|id| shares(record, id)));
+        let listed_titles: HashSet<&str> =
+            self.games.iter().map(|game| game.source.title_id.as_str()).chain(editions.map(|record| record.title_id.as_str())).collect();
         let steam = |at: usize| self.catalog[at].store_ids.iter().any(|id| id.steam_app().is_some());
         let mut titles = HashMap::<&str, usize>::new();
         let mut rows = Vec::new();

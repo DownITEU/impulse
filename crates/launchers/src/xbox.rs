@@ -31,7 +31,7 @@ pub fn apps(known: impl Fn(&str) -> bool) -> Vec<App> {
             found.insert(store_id, (rank, root));
         }
     }
-    found.into_iter().map(|(store_id, (_, root))| App { store_id, location: root.into() }).collect()
+    found.into_iter().map(|(store_id, (_, root))| App { store_id, name: None, location: root.into() }).collect()
 }
 
 // Full name: name_version_arch_resourceId_publisherId; family: name_publisherId.

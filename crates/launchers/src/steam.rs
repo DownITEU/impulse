@@ -85,6 +85,7 @@ fn manifest(apps: &Path, file: &Path) -> Option<App> {
     let id: u32 = state.str("appid")?.parse().ok()?;
     Some(App {
         store_id: format!("steam:{id}"),
+        name: state.str("name").map(str::to_owned),
         // `installdir` is usually relative to steamapps\common; join keeps an absolute one.
         location: apps.join("common").join(state.str("installdir")?),
     })

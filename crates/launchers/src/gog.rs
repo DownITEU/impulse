@@ -12,7 +12,8 @@ pub fn apps() -> Vec<App> {
         .into_iter()
         .filter_map(|(_, key)| {
             let id: u64 = registry::string(&key, "gameID")?.parse().ok()?;
-            Some(App { store_id: format!("gog:{id}"), location: registry::string(&key, "path")?.into() })
+            let name = registry::string(&key, "gameName");
+            Some(App { store_id: format!("gog:{id}"), name, location: registry::string(&key, "path")?.into() })
         })
         .collect()
 }

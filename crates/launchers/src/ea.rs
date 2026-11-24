@@ -46,7 +46,11 @@ fn match_folders(games: &[Game], folders: &[PathBuf]) -> Vec<App> {
     folders
         .iter()
         .flat_map(|dir| {
-            games.iter().filter(|(_, exe)| dir.join(exe).is_file()).map(|(id, _)| App { store_id: (*id).to_owned(), location: dir.clone() })
+            games.iter().filter(|(_, exe)| dir.join(exe).is_file()).map(|(id, _)| App {
+                store_id: (*id).to_owned(),
+                name: None,
+                location: dir.clone(),
+            })
         })
         .collect()
 }

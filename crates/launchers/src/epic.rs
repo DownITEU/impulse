@@ -15,6 +15,8 @@ struct Item {
     catalog_namespace: String,
     catalog_item_id: String,
     app_name: String,
+    #[serde(default)]
+    display_name: String,
     app_categories: Vec<String>,
     #[serde(rename = "bIsIncompleteInstall", default)]
     incomplete: bool,
@@ -39,8 +41,13 @@ pub fn apps() -> Vec<App> {
         .flat_map(|item| {
             let location = redirect(&item).unwrap_or_else(|| item.install_location.clone().into());
             // The catalog lists both the full id and the bare app name.
-            [format!("epic:{}:{}:{}", item.catalog_namespace, item.catalog_item_id, item.app_name), format!("epic:{}", item.app_name)]
-                .map(|store_id| App { store_id, location: location.clone() })
+            [format!("epic:{}:{}:{}", item.catalog_namespace, item.catalog_item_id, item.app_name), format!("epic:{}", item.app_name)].map(
+                |store_id| App {
+                    store_id,
+                    name: Some(item.display_name.clone()).filter(|name| !name.is_empty()),
+                    location: location.clone(),
+                },
+            )
         })
         .collect()
 }
