@@ -31,17 +31,33 @@ struct Candidate {
     working_set: usize,
 }
 
-/// The matching process that is old enough, the one with the most memory if there are several (blocking).
-pub fn find(rule: &Rule) -> Result<Option<Process>> {
+/// The matching process with the most memory, once it is old enough (blocking).
+fn find(rule: &Rule) -> Result<Option<Process>> {
     Ok(pick(running()?, rule))
 }
 
+// Ranked before the age, as Wand does: a small old helper in the game's folder is not the game still starting up.
 fn pick(candidates: Vec<Candidate>, rule: &Rule) -> Option<Process> {
-    candidates
-        .into_iter()
-        .filter(|candidate| rule.matches(&candidate.process.path) && candidate.age >= rule.minimum_age)
-        .max_by_key(|candidate| candidate.working_set)
-        .map(|candidate| candidate.process)
+    biggest(candidates, rule).filter(|candidate| candidate.age >= rule.minimum_age).map(|candidate| candidate.process)
+}
+
+fn biggest(candidates: Vec<Candidate>, rule: &Rule) -> Option<Candidate> {
+    candidates.into_iter().filter(|candidate| rule.matches(&candidate.process.path)).max_by_key(|candidate| candidate.working_set)
+}
+
+/// What `find` takes from the processes running now, waited for while it is younger than `minimum_age`; `None` once
+/// nothing matches. Dropping the future stops it within one poll.
+pub async fn settled(rule: &Rule) -> Result<Option<Process>> {
+    loop {
+        let found = {
+            let rule = rule.clone();
+            unblock(move || running().map(|candidates| biggest(candidates, &rule))).await?
+        };
+        match found {
+            Some(candidate) if candidate.age < rule.minimum_age => unblock(|| thread::sleep(POLL)).await,
+            found => return Ok(found.map(|candidate| candidate.process)),
+        }
+    }
 }
 
 /// Polls until `find` finds a process. Dropping the future stops it within one poll.
@@ -162,18 +178,13 @@ mod tests {
     }
 
     #[test]
-    fn the_biggest_old_enough_match_is_picked() {
-        let rule = Rule { image: Some("g.exe".into()), location: PathBuf::from(r"C:\g"), minimum_age: Duration::from_secs(8) };
-        let all = || {
-            vec![
-                candidate(r"C:\g\g.exe", 30, 100),
-                candidate(r"C:\g\g.exe", 30, 900),
-                candidate(r"C:\g\g.exe", 2, 5000),
-                candidate(r"C:\other\o.exe", 30, 9000),
-            ]
+    fn the_biggest_match_is_picked_once_old_enough() {
+        let rule = Rule { image: None, location: PathBuf::from(r"C:\g"), minimum_age: Duration::from_secs(8) };
+        let all = |game_age| {
+            vec![candidate(r"C:\g\helper.exe", 30, 100), candidate(r"C:\g\g.exe", game_age, 5000), candidate(r"C:\other\o.exe", 30, 9000)]
         };
-        assert_eq!(pick(all(), &rule), Some(all().swap_remove(1).process));
-        assert_eq!(pick(vec![candidate(r"C:\g\g.exe", 2, 5000)], &rule), None, "too young");
+        assert_eq!(pick(all(30), &rule), Some(all(30).swap_remove(1).process));
+        assert_eq!(pick(all(2), &rule), None, "the game is still starting up: not its old helper");
     }
 
     #[test]

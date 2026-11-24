@@ -11,5 +11,5 @@ mod trust;
 pub use elevated::{elevated, serve_elevated};
 pub use image::Image;
 pub use inject::{load, map};
-pub use process::{find, of, wait};
+pub use process::{of, settled, wait};
 pub use trust::check as signed;
