@@ -188,11 +188,11 @@ impl Library {
         let with: Vec<usize> = (0..self.catalog.len()).filter(|&at| self.catalog[at].trainer.is_some()).collect();
         let mut order: Vec<usize> =
             titles::likeness(&game.name, with.iter().map(|&at| self.catalog[at].name.as_str())).into_iter().map(|at| with[at]).collect();
-        let installed = game.install.as_ref().and_then(|install| install.origin.store_id());
+        let same = one_install(game);
         let group = |record: &model::Game| {
             if record.title_id == game.source.title_id {
                 0
-            } else if installed.is_some_and(|id| shares(record, id)) {
+            } else if same(record) {
                 1
             } else {
                 2
@@ -207,9 +207,10 @@ fn trainer_record<'a>(catalog: &'a [model::Game], id: &Ref) -> Option<&'a model:
     catalog.iter().find(|record| record.id == *id && record.trainer.is_some())
 }
 
-/// Whether `record` is an edition of the install under `store_id`: the launcher lists one game per store id.
-fn shares(record: &model::Game, store_id: &StoreId) -> bool {
-    record.store_ids.iter().any(|id| id.as_str().eq_ignore_ascii_case(store_id.as_str()))
+/// Whether a record is one install with `game`'s launcher install: the scan listed `game` for it.
+fn one_install(game: &Game) -> impl Fn(&model::Game) -> bool + '_ {
+    let store_id = [&game.install, &game.other].into_iter().flatten().find_map(|install| install.origin.store_id());
+    move |record| store_id.is_some_and(|id| launchers::same_install(record, &game.source, id))
 }
 
 fn trainer_id(record: &model::Game) -> Option<&Ref> {
@@ -456,21 +457,31 @@ mod tests {
     #[test]
     fn the_search_holds_the_listed_games_and_a_record_per_other_title_with_a_trainer_steams_first() {
         let mut all = catalog();
+        all[0].exe = Some("echoes.exe".into());
         all.extend([record("wand:6", "x", "epic:6", Some(&[1])), record("wand:7", "x", "steam:7", Some(&[1]))]);
-        // Another title's edition of the listed install: the listed game stands for its whole title.
-        all.extend([record("wand:8", "dx", "gog:1", Some(&[1])), record("wand:9", "dx", "steam:9", Some(&[1]))]);
+        // Another title's record of the listed install, with its files: the listed game stands for that title.
+        all.extend([with_exe(record("wand:8", "dx", "gog:1", Some(&[1])), "Echoes.exe"), record("wand:9", "dx", "steam:9", Some(&[1]))]);
+        // A collection's other game shares the store id, not the files.
+        all.push(with_exe(record("wand:10", "pack", "gog:1", Some(&[1])), "other.exe"));
         let list = listed(all, None);
         let finds: Vec<_> = list.finds().iter().map(|find| (list.catalog[find.at].id.to_string(), find.listed)).collect();
-        assert_eq!(finds, [("wand:1".to_owned(), true), ("wand:3".to_owned(), false), ("wand:7".to_owned(), false)]);
+        let row = |id: &str, listed| (id.to_owned(), listed);
+        assert_eq!(finds, [row("wand:1", true), row("wand:3", false), row("wand:7", false), row("wand:10", false)]);
     }
 
     #[test]
-    fn the_trainer_picker_lists_records_with_a_trainer_its_titles_then_its_installs_editions_first() {
+    fn the_trainer_picker_lists_records_with_a_trainer_its_titles_then_its_installs_records_first() {
         let list = listed(catalog(), None);
         assert_eq!(list.trainer_records(&list.games[0]), [1, 4, 2]);
         let mut all = catalog();
-        all.push(record("wand:8", "dx", "gog:1", Some(&[1])));
+        all[0].exe = Some("echoes.exe".into());
+        all.push(with_exe(record("wand:8", "dx", "gog:1", Some(&[1])), "echoes.exe"));
         let list = listed(all, None);
         assert_eq!(list.trainer_records(&list.games[0]), [1, 4, 5, 2]);
+    }
+
+    fn with_exe(mut record: model::Game, exe: &str) -> model::Game {
+        record.exe = Some(exe.into());
+        record
     }
 }

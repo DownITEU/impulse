@@ -23,7 +23,8 @@ pub fn apps() -> Vec<App> {
         .into_iter()
         .filter_map(|(_, key)| {
             let id: u64 = registry::string(&key, "gameID")?.parse().ok()?;
-            Some(App::new(format!("gog:{id}"), registry::string(&key, "path")?.into()))
+            let app = App::new(format!("gog:{id}"), registry::string(&key, "path")?.into());
+            Some(app.named(registry::string(&key, "gameName").as_deref()))
         })
         .collect()
 }

@@ -34,12 +34,33 @@ struct App {
     location: PathBuf,
     /// The install's other folders its process may run from.
     alternates: Vec<PathBuf>,
+    /// The launcher's own name for the game, as `words`: which of the records sharing its store id it is.
+    name: Vec<String>,
 }
 
 impl App {
     fn new(store_id: String, location: PathBuf) -> Self {
-        Self { store_id, location, alternates: Vec::new() }
+        Self { store_id, location, alternates: Vec::new(), name: Vec::new() }
     }
+
+    fn named(self, name: Option<&str>) -> Self {
+        Self { name: name.map(words).unwrap_or_default(), ..self }
+    }
+
+    fn names(&self, game: &Game) -> bool {
+        !self.name.is_empty() && words(&game.name) == self.name
+    }
+}
+
+/// A name as compared: its words of letters and digits, in lower case.
+fn words(name: &str) -> Vec<String> {
+    name.split(|c: char| !c.is_alphanumeric()).filter(|word| !word.is_empty()).map(str::to_lowercase).collect()
+}
+
+/// Whether `record` is one install with `game` under `store_id`: it lists the store id and has the same version file.
+pub fn same_install(record: &Game, game: &Game, store_id: &StoreId) -> bool {
+    let lists = record.store_ids.iter().any(|id| id.as_str().eq_ignore_ascii_case(store_id.as_str()));
+    lists && record.exe.as_deref().zip(game.exe.as_deref()).is_some_and(|(a, b)| a.eq_ignore_ascii_case(b))
 }
 
 /// Scans every launcher for `games`, then the executables the user picked (blocking: registry and
@@ -71,12 +92,16 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
 }
 
 /// One install per game: of its store ids found, the one its record lists first. An install whose version file gives
-/// no build is none: the game is gone or no longer the one the record describes.
+/// no build is none: the game is gone or no longer the one the record describes. A record gives way to one with its
+/// version file that the launcher names; then a title has one install per location.
 fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: impl Iterator<Item = App>) -> Vec<Installation> {
     let mut best = HashMap::<&Ref, (usize, Installation)>::new();
     for app in apps {
         let Some(id) = StoreId::parse(&app.store_id) else { continue };
-        for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
+        let editions = by_store_id.get(&app.store_id.to_ascii_lowercase()).map_or(&[][..], Vec::as_slice);
+        // A collection's games share a store id too: only a record with the same files gives way.
+        let renamed = |game: &Game| !app.names(game) && editions.iter().any(|other| app.names(other) && same_install(other, game, &id));
+        for game in editions.iter().filter(|game| !renamed(game)) {
             let rank = game.store_ids.iter().position(|own| own.as_str().eq_ignore_ascii_case(id.as_str())).unwrap_or(usize::MAX);
             if best.get(&game.id).is_some_and(|(had, _)| *had <= rank) {
                 continue;
@@ -87,7 +112,25 @@ fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: imp
             }
         }
     }
-    games.iter().filter_map(|game| Some(best.remove(&game.id)?.1)).collect()
+    one_per_title(games.iter().filter_map(|game| Some((game, best.remove(&game.id)?.1))))
+}
+
+/// A title's records on one install are one game: the record whose trainer knows the build, else one with a trainer,
+/// else the first.
+fn one_per_title<'a>(installs: impl Iterator<Item = (&'a Game, Installation)>) -> Vec<Installation> {
+    let rank = |game: &Game, install: &Installation| {
+        let offer = game.trainer.as_ref();
+        (offer.zip(install.build).is_some_and(|(offer, build)| offer.builds.contains(&build)), offer.is_some())
+    };
+    let mut kept = Vec::<(&Game, Installation)>::new();
+    for (game, install) in installs {
+        match kept.iter_mut().find(|(had, was)| had.title_id == game.title_id && same_path(&was.location, &install.location)) {
+            Some(slot) if rank(game, &install) > rank(slot.0, &slot.1) => *slot = (game, install),
+            Some(_) => {}
+            None => kept.push((game, install)),
+        }
+    }
+    kept.into_iter().map(|(_, install)| install).collect()
 }
 
 /// One launcher's records, timed: a slow disk or a scanning antivirus shows in the log.
@@ -196,6 +239,36 @@ pub(crate) mod tests {
         let installs = launched(&games, &by_store_id, apps.into_iter());
         let found: Vec<_> = installs.iter().map(|install| (install.game.id(), install.origin.store_id().unwrap().as_str())).collect();
         assert_eq!(found, [("1", "gog:7"), ("2", "steam:6"), ("3", "gog:8")], "a game without a version file is not installed");
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn an_app_is_the_record_its_launcher_names_a_title_one_game_and_a_collections_own_files_stay() {
+        let base = std::env::temp_dir().join(format!("impulse-editions-{}", std::process::id()));
+        let dir = base.join("steam_1");
+        fs::create_dir_all(&dir).unwrap();
+        for exe in ["v.jar", "dlc.jar"] {
+            fs::write(dir.join(exe), b"PK\x03\x04\0\0\0\0\0\0\0\0\x84\x52").unwrap();
+        }
+        let record =
+            |id, title: &str, name: &str, exe| Game { title_id: title.into(), name: name.into(), ..game(id, Some(exe), &["steam:1"]) };
+        let mut games = [
+            record("1", "a", "Mafia III", "v.jar"),
+            record("2", "a", "Mafia III", "v.jar"),
+            record("3", "b", "Mafia III: Definitive Edition", "v.jar"),
+            record("4", "c", "Mafia III: Faster, Baby!", "dlc.jar"),
+        ];
+        let builds = version::build(&dir, "v.jar", false).into_iter().collect();
+        games[1].trainer = Some(model::Offer { id: games[1].id.clone(), cheats: 1, builds, revision: None });
+        let by_store_id = HashMap::from([("steam:1".to_owned(), games.iter().collect::<Vec<_>>())]);
+        let found = |name| {
+            let app = App::new("steam:1".into(), dir.clone()).named(name);
+            launched(&games, &by_store_id, [app].into_iter()).iter().map(|install| install.game.id().to_owned()).collect::<Vec<_>>()
+        };
+        assert_eq!(found(Some("MAFIA III - Definitive Edition™")), ["3", "4"]);
+        assert_eq!(found(Some("Mafia III")), ["2", "4"], "of a title's records, the one whose trainer knows the build");
+        assert_eq!(found(None), ["2", "3", "4"]);
+        assert_eq!(found(Some("Mafia III: Deluxe")), ["2", "3", "4"], "only a whole name names a record");
         fs::remove_dir_all(&base).unwrap();
     }
 
