@@ -14,6 +14,8 @@ use super::key;
 const UI: &str = "Chakra Petch";
 /// The UI font of Cyrillic languages: Chakra Petch has none, and Exo 2 is the closest in metrics.
 const UI_CYRILLIC: &str = "Exo 2";
+/// The UI font of Chinese: Chakra Petch has no han, and Windows ships this one with its own faces.
+const UI_CJK: &str = "Microsoft YaHei UI";
 pub const MONO: &str = "JetBrains Mono";
 
 // The type scale, px: every fixed text size is one of these.
@@ -91,8 +93,26 @@ pub fn ui_font(cx: &App) -> &'static str {
     cx.global::<Look>().ui
 }
 
+/// The UI font with the fallback its family lacks. DirectWrite shapes a run with the one face it is
+/// given, and content in another script (a Chinese game title, a pin the user named) would fall to
+/// Windows' own choice; naming the CJK family keeps it in the same look.
+pub fn ui_font_of(cx: &App) -> gpui_kit::Font {
+    let ui = cx.global::<Look>().ui;
+    let mut font = gpui_kit::font(ui);
+    if ui != UI_CJK {
+        font.fallbacks = Some(gpui_kit::FontFallbacks::from_fonts(vec![UI_CJK.to_owned()]));
+    }
+    font
+}
+
 fn ui_family(language: Language) -> &'static str {
-    if language.is_cyrillic() { UI_CYRILLIC } else { UI }
+    if language.is_cyrillic() {
+        UI_CYRILLIC
+    } else if language.is_cjk() {
+        UI_CJK
+    } else {
+        UI
+    }
 }
 
 /// Sets the look; false when it already was. Exo 2 joins the font system when a language first needs it.
@@ -153,14 +173,15 @@ pub fn init(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use i18n::{ENGLISH, RUSSIAN, UKRAINIAN};
+    use i18n::{CHINESE, ENGLISH, RUSSIAN, UKRAINIAN};
 
     use super::*;
 
     #[test]
-    fn a_cyrillic_language_gets_the_font_that_has_its_letters() {
+    fn a_language_without_latin_letters_gets_the_font_that_has_them() {
         assert_eq!(ui_family(ENGLISH), UI);
         assert_eq!(ui_family(RUSSIAN), UI_CYRILLIC);
         assert_eq!(ui_family(UKRAINIAN), UI_CYRILLIC);
+        assert_eq!(ui_family(CHINESE), UI_CJK);
     }
 }

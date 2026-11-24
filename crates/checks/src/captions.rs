@@ -43,6 +43,7 @@ const NAMES: &[&str] = &[
     // The bug form's address: its `version` field arrives filled in.
     "{REPO}/issues/new?template=bug_report.yml&version={VERSION}",
     "Exo 2",
+    "Microsoft YaHei UI",
     "JetBrains Mono",
     "Dialog",
     "Conflict",

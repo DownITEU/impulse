@@ -8,7 +8,9 @@ use std::{
 };
 
 use gpui_kit::{App, Global, SharedString};
-use i18n::{Arg, Catalog, ENGLISH, FRENCH, GERMAN, ITALIAN, Key, Language, POLISH, PORTUGUESE, RUSSIAN, SPANISH, TURKISH, UKRAINIAN};
+use i18n::{
+    Arg, CHINESE, Catalog, ENGLISH, FRENCH, GERMAN, ITALIAN, Key, Language, POLISH, PORTUGUESE, RUSSIAN, SPANISH, TURKISH, UKRAINIAN,
+};
 use model::{Failure, FailureKind, Files, Locale, SourceId, Text};
 use rustc_hash::{FxHashMap, FxHasher};
 
@@ -18,6 +20,7 @@ const APP: &str = SourceId::APP;
 static FILES: LazyLock<Files> = LazyLock::new(|| {
     [
         (ENGLISH, include_str!("../../locales/en.ftl")),
+        (CHINESE, include_str!("../../locales/zh.ftl")),
         (FRENCH, include_str!("../../locales/fr.ftl")),
         (GERMAN, include_str!("../../locales/de.ftl")),
         (SPANISH, include_str!("../../locales/es.ftl")),

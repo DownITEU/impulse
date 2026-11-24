@@ -14,6 +14,7 @@ pub struct Language {
 }
 
 pub const ENGLISH: Language = Language { tag: "en", name: "ENGLISH" };
+pub const CHINESE: Language = Language { tag: "zh", name: "简体中文" };
 pub const FRENCH: Language = Language { tag: "fr", name: "FRANÇAIS" };
 pub const GERMAN: Language = Language { tag: "de", name: "DEUTSCH" };
 pub const SPANISH: Language = Language { tag: "es", name: "ESPAÑOL" };
@@ -24,12 +25,17 @@ pub const TURKISH: Language = Language { tag: "tr", name: "TÜRKÇE" };
 pub const RUSSIAN: Language = Language { tag: "ru", name: "РУССКИЙ" };
 pub const UKRAINIAN: Language = Language { tag: "uk", name: "УКРАЇНСЬКА" };
 
-pub const LANGUAGES: &[Language] = &[ENGLISH, FRENCH, GERMAN, SPANISH, ITALIAN, PORTUGUESE, POLISH, TURKISH, RUSSIAN, UKRAINIAN];
+pub const LANGUAGES: &[Language] = &[ENGLISH, CHINESE, FRENCH, GERMAN, SPANISH, ITALIAN, PORTUGUESE, POLISH, TURKISH, RUSSIAN, UKRAINIAN];
 
 impl Language {
     /// Written in Cyrillic: the UI's Latin font has no letters for it.
     pub fn is_cyrillic(&self) -> bool {
         matches!(self.tag, "ru" | "uk")
+    }
+
+    /// Written in han: the UI's Latin font has none of the characters.
+    pub fn is_cjk(&self) -> bool {
+        matches!(self.tag, "zh")
     }
 
     pub fn find(tag: &str) -> Option<Self> {
