@@ -14,6 +14,7 @@ use super::{
     Layer, Pressed, Slot,
     docks::{self, Docks, Spec},
     glance::Glance,
+    in_game::InGame,
     warning::{Closed, Warning, chip},
 };
 use crate::{
@@ -21,7 +22,7 @@ use crate::{
     hotkeys::{Hotkeys, hotkeys_scope},
     library::{GamePicker, Library, LibraryEvent, vacant},
     map::{MapView, Maps, Minimap},
-    run::{Runs, run_button, session_panel},
+    run::{Runs, Unconfirmed, UnconfirmedClosed, run_button, session_panel},
     settings::Settings,
     trainer::{Trainers, title},
     ui::{
@@ -123,6 +124,7 @@ pub struct Hud {
     library: Entity<Library>,
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
+    unconfirmed: Entity<Unconfirmed>,
     hotkeys: Entity<Hotkeys>,
     maps: Entity<Maps>,
     map: Entity<MapView>,
@@ -147,11 +149,13 @@ impl Hud {
         library: Entity<Library>,
         trainers: Entity<Trainers>,
         runs: Entity<Runs>,
+        unconfirmed: Entity<Unconfirmed>,
         hotkeys: Entity<Hotkeys>,
         maps: Entity<Maps>,
         map: Entity<MapView>,
         cheat_list: Entity<CheatList>,
         picker: Entity<GamePicker>,
+        in_game: Entity<InGame>,
         settings: &Entity<Settings>,
         paths: &Paths,
         window: &mut Window,
@@ -159,13 +163,20 @@ impl Hud {
     ) -> Self {
         let docks = cx.new(|_| Docks::load(paths, &DOCKS));
         let live_map = maps.read(cx).live_map().clone();
-        let glance = cx.new(|cx| Glance::new(&layer, docks.clone(), live_map.clone(), settings, cx));
+        let glance = cx.new(|cx| Glance::new(&layer, in_game, docks.clone(), live_map.clone(), settings, cx));
         let minimap = cx.new(|cx| Minimap::new(live_map.clone(), cx));
         let warning = cx.new(|cx| Warning::new(settings.clone(), cx));
         cx.observe(&warning, |_, _, cx| cx.notify()).detach();
         cx.subscribe_in(&warning, window, |hud, _, _: &Closed, window, cx| {
             // The focus must not stay in the gone dialog, or Escape would reach nothing.
             hud.focus.focus(window, cx);
+        })
+        .detach();
+        cx.observe(&unconfirmed, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&unconfirmed, window, |hud, _, _: &UnconfirmedClosed, window, cx| {
+            if hud.over {
+                hud.focus.focus(window, cx);
+            }
         })
         .detach();
         cx.observe(&library, |_, _, cx| cx.notify()).detach();
@@ -229,6 +240,7 @@ impl Hud {
             library,
             trainers,
             runs,
+            unconfirmed,
             hotkeys,
             maps,
             map,
@@ -413,7 +425,12 @@ impl Render for Hud {
                             .on_click(move |_, _, cx| layer.read(cx).leave()),
                     ),
             )
-            .child(h_flex().flex_1().justify_end().when_some(game, |right, game| right.child(run_button(&self.runs, game, cx))));
+            .child(
+                h_flex()
+                    .flex_1()
+                    .justify_end()
+                    .when_some(game, |right, game| right.child(run_button(&self.runs, &self.unconfirmed, game, cx))),
+            );
         div()
             .id("hud")
             .key_context(CONTEXT)
@@ -428,5 +445,6 @@ impl Render for Hud {
             .children(self.cheat_list.read(cx).editor().cloned())
             .children(Some(self.picker.clone()).filter(|picker| picker.read(cx).is_open()))
             .children(Some(self.warning.clone()).filter(|warning| warning.read(cx).is_open()))
+            .children(Some(self.unconfirmed.clone()).filter(|unconfirmed| unconfirmed.read(cx).is_open()))
     }
 }

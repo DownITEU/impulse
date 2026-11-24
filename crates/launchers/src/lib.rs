@@ -1,5 +1,6 @@
 //! Installed games, found through each launcher's own records.
 
+mod appinfo;
 mod custom;
 mod ea;
 mod epic;
@@ -12,11 +13,12 @@ mod steam;
 mod store;
 mod ubisoft;
 mod vdf;
+mod version;
 mod xbox;
 
 use std::{
-    cmp::Reverse,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
+    fs,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -29,13 +31,19 @@ pub use store::{store_link, store_name};
 
 struct App {
     store_id: String,
-    /// The launcher's own name for the game, when its records hold one: which edition sharing the store id it is.
-    name: Option<String>,
     location: PathBuf,
+    /// The install's other folders its process may run from.
+    alternates: Vec<PathBuf>,
+}
+
+impl App {
+    fn new(store_id: String, location: PathBuf) -> Self {
+        Self { store_id, location, alternates: Vec::new() }
+    }
 }
 
 /// Scans every launcher for `games`, then the executables the user picked (blocking: registry and
-/// file reads). An app is one game's install, a game has one launcher's install at most, and its picked one after it.
+/// file reads). A game has one launcher's install at most, and its picked one after it.
 pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
     // Several editions can share a store id.
     let mut by_store_id = HashMap::<String, Vec<&Game>>::new();
@@ -55,21 +63,31 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
         timed("standalone", || standalone::apps(games)),
     ];
     let builds = Instant::now();
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for app in apps.into_iter().flatten() {
-        let Some(id) = StoreId::parse(&app.store_id) else { continue };
-        let editions = by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten().filter(|game| !seen.contains(&game.id));
-        let installs = editions.map(|game| (*game, installation(game, Origin::Launcher(id.clone()), app.location.clone())));
-        if let Some((game, install)) = edition(app.name.as_deref(), installs) {
-            seen.insert(&game.id);
-            out.push(install);
-        }
-    }
+    let mut out = launched(games, &by_store_id, apps.into_iter().flatten());
     let by_id: HashMap<&Ref, &Game> = games.iter().map(|game| (&game.id, game)).collect();
     out.extend(custom.iter().filter_map(|picked| custom::install(by_id.get(&picked.game)?, &picked.exe)));
     log::debug!("builds: {} read in {:?}", out.len(), builds.elapsed());
     out
+}
+
+/// One install per game: of its store ids found, the one its record lists first. An install whose version file gives
+/// no build is none: the game is gone or no longer the one the record describes.
+fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: impl Iterator<Item = App>) -> Vec<Installation> {
+    let mut best = HashMap::<&Ref, (usize, Installation)>::new();
+    for app in apps {
+        let Some(id) = StoreId::parse(&app.store_id) else { continue };
+        for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
+            let rank = game.store_ids.iter().position(|own| own.as_str().eq_ignore_ascii_case(id.as_str())).unwrap_or(usize::MAX);
+            if best.get(&game.id).is_some_and(|(had, _)| *had <= rank) {
+                continue;
+            }
+            let install = installation(game, Origin::Launcher(id.clone()), app.location.clone(), app.alternates.clone());
+            if install.build.is_some() {
+                best.insert(&game.id, (rank, install));
+            }
+        }
+    }
+    games.iter().filter_map(|game| Some(best.remove(&game.id)?.1)).collect()
 }
 
 /// One launcher's records, timed: a slow disk or a scanning antivirus shows in the log.
@@ -80,41 +98,28 @@ fn timed(launcher: &str, apps: impl FnOnce() -> Vec<App>) -> Vec<App> {
     apps
 }
 
-/// The build is the PE TimeDateStamp of the game's `exe` in the install.
-fn installation(game: &Game, origin: Origin, location: PathBuf) -> Installation {
-    let build = game.exe.as_deref().and_then(|exe| pe::header(&location.join(exe))).map(|header| header.timestamp);
-    Installation { game: game.id.clone(), origin, location, build }
-}
-
-/// The edition an app is, of the games sharing its store id: the one its launcher names, then one whose trainer knows
-/// the installed build, then one with a trainer, then the first.
-fn edition<'a>(launcher: Option<&str>, installs: impl Iterator<Item = (&'a Game, Installation)>) -> Option<(&'a Game, Installation)> {
-    let launcher = launcher.map(words).unwrap_or_default();
-    let rank = |at: usize, game: &Game, install: &Installation| {
-        let offer = game.trainer.as_ref();
-        let knows = offer.zip(install.build).is_some_and(|(offer, build)| offer.builds.contains(&build));
-        (named(&launcher, &game.name), knows, offer.is_some(), Reverse(at))
-    };
-    installs.enumerate().max_by_key(|(at, (game, install))| rank(*at, game, install)).map(|(_, found)| found)
-}
-
-/// How well `name` answers to the launcher's name, both as words: all of them, else how many it starts with, else 0.
-fn named(launcher: &[String], name: &str) -> usize {
-    let name = words(name);
-    if name.is_empty() {
-        0
-    } else if name == launcher {
-        usize::MAX
-    } else if launcher.starts_with(&name) {
-        name.len()
-    } else {
-        0
+/// The build is the stamp of the game's version file in the install (`version::build`). The location's final path is one
+/// of its folders too, for the process search: a library behind a junction, a package on a mount.
+fn installation(game: &Game, origin: Origin, location: PathBuf, mut alternates: Vec<PathBuf>) -> Installation {
+    let package = origin.store_id().filter(|id| id.store() == "uwp");
+    let build = game.exe.as_deref().and_then(|exe| version::build(&location, exe, package.is_some()));
+    let app = package.and_then(|id| game.package_apps.iter().find(|(of, _)| of.as_str().eq_ignore_ascii_case(id.as_str())));
+    let app = app.map(|(_, app)| app.clone());
+    let resolved = final_path(&location).filter(|resolved| !same_path(resolved, &location));
+    if let Some(resolved) = resolved.filter(|resolved| !alternates.iter().any(|had| same_path(had, resolved))) {
+        alternates.insert(0, resolved);
     }
+    Installation { game: game.id.clone(), origin, location, alternates, build, app }
 }
 
-/// A name as compared: its words of letters and digits, in lower case.
-fn words(name: &str) -> Vec<String> {
-    name.split(|c: char| !c.is_alphanumeric()).filter(|word| !word.is_empty()).map(str::to_lowercase).collect()
+/// The path once links resolve, written as a process's image path is (blocking).
+fn final_path(path: &Path) -> Option<PathBuf> {
+    let resolved = fs::canonicalize(path).ok()?;
+    let text = resolved.to_str()?;
+    Some(match text.strip_prefix(r"\\?\UNC\") {
+        Some(share) => format!(r"\\{share}").into(),
+        None => text.strip_prefix(r"\\?\").unwrap_or(text).into(),
+    })
 }
 
 /// The launcher's name and the URI of the game's page in it, for the stores that have one.
@@ -155,11 +160,66 @@ pub(crate) mod tests {
             exe: exe.map(str::to_owned),
             purchase: Vec::new(),
             standalone: Vec::new(),
+            package_apps: Vec::new(),
             cover: None,
             thumbnail: None,
             maps: Vec::new(),
             trainer: None,
         }
+    }
+
+    #[test]
+    fn a_game_found_by_several_launchers_takes_the_store_its_record_lists_first() {
+        let base = std::env::temp_dir().join(format!("impulse-launched-{}", std::process::id()));
+        // An archive as the version file: its first entry date is the build.
+        for store in ["steam_5", "steam_6", "gog_7", "gog_8"] {
+            fs::create_dir_all(base.join(store)).unwrap();
+            fs::write(base.join(store).join("v.jar"), b"PK\x03\x04\0\0\0\0\0\0\0\0\x84\x52").unwrap();
+        }
+        fs::create_dir_all(base.join("steam_9")).unwrap();
+        let versioned = |id, ids| game(id, Some("v.jar"), ids);
+        let games = [
+            versioned("1", &["gog:7", "steam:5"]),
+            versioned("2", &["steam:6"]),
+            // No build where its record lists first: the other store's install is the one.
+            versioned("3", &["steam:9", "gog:8"]),
+            game("4", None, &["steam:5"]),
+        ];
+        let mut by_store_id = HashMap::<String, Vec<&Game>>::new();
+        for game in &games {
+            for id in &game.store_ids {
+                by_store_id.entry(id.as_str().to_owned()).or_default().push(game);
+            }
+        }
+        let app = |id: &str| App::new(id.into(), base.join(id.replace(':', "_")));
+        let apps = ["steam:5", "steam:6", "gog:7", "steam:9", "gog:8"].map(app);
+        let installs = launched(&games, &by_store_id, apps.into_iter());
+        let found: Vec<_> = installs.iter().map(|install| (install.game.id(), install.origin.store_id().unwrap().as_str())).collect();
+        assert_eq!(found, [("1", "gog:7"), ("2", "steam:6"), ("3", "gog:8")], "a game without a version file is not installed");
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_location_behind_a_junction_also_counts_as_its_final_path() {
+        let base = std::env::temp_dir().join(format!("impulse-junction-{}", std::process::id()));
+        let (real, link) = (base.join("real"), base.join("link"));
+        fs::create_dir_all(&real).unwrap();
+        let made = std::process::Command::new("cmd").args(["/c", "mklink", "/J"]).arg(&link).arg(&real).output().unwrap();
+        assert!(made.status.success(), "{made:?}");
+
+        let install = installation(&game("1", None, &[]), Origin::Picked(link.join("g.exe")), link.clone(), Vec::new());
+        let final_real = final_path(&real).unwrap();
+        assert!(!final_real.to_string_lossy().starts_with(r"\\?\"), "{final_real:?}");
+        assert!(install.alternates.iter().any(|folder| same_path(folder, &final_real)), "{:?}", install.alternates);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_package_takes_the_application_its_game_names_for_it() {
+        let mut halo = game("1", None, &["uwp:Halo_8w", "uwp:Other_8w"]);
+        halo.package_apps = vec![(StoreId::parse("uwp:Halo_8w").unwrap(), "NoEAC".into())];
+        let install = |id: &str| installation(&halo, Origin::Launcher(StoreId::parse(id).unwrap()), "C:\\nowhere".into(), Vec::new()).app;
+        assert_eq!((install("uwp:halo_8w").as_deref(), install("uwp:Other_8w")), (Some("NoEAC"), None));
     }
 
     #[test]
@@ -170,43 +230,5 @@ pub(crate) mod tests {
         for id in ["steam:", "steam:12&x", "gog:1 2", "uwp:a/b", "epic:Fortnite"] {
             assert!(page(id).is_none(), "{id}");
         }
-    }
-
-    /// Records sharing `steam:1`, each with a trainer for `builds` when given.
-    fn editions(names: &[(&str, Option<&[u32]>)]) -> Vec<Game> {
-        let edition = |(at, (name, builds)): (usize, &(&str, Option<&[u32]>))| {
-            let mut game = game(&at.to_string(), None, &["steam:1"]);
-            game.name = (*name).to_owned();
-            game.trainer = builds.map(|builds| model::Offer { id: game.id.clone(), cheats: 1, builds: builds.to_vec(), revision: None });
-            game
-        };
-        names.iter().enumerate().map(edition).collect()
-    }
-
-    /// The record `edition` takes for an install of `steam:1` at `build`.
-    fn installed_as(launcher: Option<&str>, games: &[Game], build: Option<u32>) -> String {
-        let origin = Origin::Launcher(StoreId::parse("steam:1").unwrap());
-        let installs = games
-            .iter()
-            .map(|game| (game, Installation { game: game.id.clone(), origin: origin.clone(), location: PathBuf::new(), build }));
-        edition(launcher, installs).map(|(game, _)| game.id.id().to_owned()).unwrap_or_default()
-    }
-
-    #[test]
-    fn an_app_is_the_edition_its_launcher_names_else_the_longest_start_of_that_name() {
-        let games = editions(&[("Mafia III", Some(&[7])), ("Mafia III", Some(&[7])), ("Mafia III: Definitive Edition", Some(&[7]))]);
-        assert_eq!(installed_as(Some("Mafia III: Definitive Edition"), &games, Some(7)), "2");
-        assert_eq!(installed_as(Some("MAFIA III - Definitive Edition™"), &games, Some(7)), "2", "only letters and digits count");
-        let games = editions(&[("Mafia", None), ("Mafia III", None), ("Mafia II", None)]);
-        assert_eq!(installed_as(Some("Mafia III: Deluxe"), &games, None), "1");
-    }
-
-    #[test]
-    fn without_a_name_an_app_is_the_edition_whose_trainer_knows_its_build_else_one_with_a_trainer_else_the_first() {
-        let games = editions(&[("A", None), ("B", Some(&[5])), ("C", Some(&[7]))]);
-        assert_eq!(installed_as(None, &games, Some(7)), "2");
-        assert_eq!(installed_as(Some("Another game"), &games, Some(9)), "1", "a name starts another only with whole words");
-        assert_eq!(installed_as(None, &editions(&[("A", None), ("B", None)]), None), "0");
-        assert_eq!(installed_as(None, &[], None), "");
     }
 }

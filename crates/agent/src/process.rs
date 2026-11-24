@@ -1,21 +1,24 @@
-//! Finding the game's process by its `Rule`, taking the biggest if several match.
+//! Finding the game's process by its `Rule`, taking the one its `Pick` names if several match.
 
 use std::{
     io, mem,
     path::{Path, PathBuf},
-    thread,
+    ptr, thread,
     time::Duration,
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use blocking::unblock;
-use model::{Failure, FailureKind, Process, Rule};
-use windows_sys::Win32::{
-    Foundation::FILETIME,
-    System::{
-        ProcessStatus::{EnumProcesses, GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
-        SystemInformation::GetSystemTimeAsFileTime,
-        Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW},
+use model::{Failure, FailureKind, Pick, Process, Rule, Target};
+use windows_sys::{
+    Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation},
+    Win32::{
+        Foundation::{ERROR_ACCESS_DENIED, FILETIME, UNICODE_STRING},
+        System::{
+            ProcessStatus::{EnumProcesses, GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
+            SystemInformation::GetSystemTimeAsFileTime,
+            Threading::{GetProcessTimes, IsWow64Process, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW},
+        },
     },
 };
 
@@ -31,37 +34,77 @@ struct Candidate {
     working_set: usize,
 }
 
-/// The matching process that is old enough, the one with the most memory if there are several (blocking).
-pub fn find(rule: &Rule) -> Result<Option<Process>> {
-    Ok(pick(running()?, rule))
+/// The matching process the rule's `Pick` names, waited for while it is younger than `minimum_age`; `None` once
+/// nothing matches. Dropping the future stops it within one poll.
+pub async fn settled(rule: &Rule) -> Result<Option<Process>> {
+    poll(rule, None).await
 }
 
-fn pick(candidates: Vec<Candidate>, rule: &Rule) -> Option<Process> {
-    candidates
-        .into_iter()
-        .filter(|candidate| rule.matches(&candidate.process.path) && candidate.age >= rule.minimum_age)
-        .max_by_key(|candidate| candidate.working_set)
-        .map(|candidate| candidate.process)
+/// Polls until that process is old enough; `None` past `within`. Dropping the future stops it within one poll.
+pub async fn wait(rule: &Rule, within: Duration) -> Result<Option<Process>> {
+    poll(rule, Some(within)).await
 }
 
-/// Polls until `find` finds a process. Dropping the future stops it within one poll.
-pub async fn wait(rule: &Rule, timeout: Duration) -> Result<Process> {
+/// `None`: past `within`; without one, as soon as nothing matches.
+async fn poll(rule: &Rule, within: Option<Duration>) -> Result<Option<Process>> {
     let mut waited = Duration::ZERO;
     loop {
         let found = {
             let rule = rule.clone();
-            unblock(move || find(&rule)).await?
+            unblock(move || running().map(|candidates| pick(candidates, &rule, |process| takes(process, &rule.target)))).await?
         };
-        if let Some(process) = found {
-            return Ok(process);
-        }
-        if waited >= timeout {
-            return Err(anyhow!("the game did not start in {} s", timeout.as_secs()).context(Failure::new(FailureKind::GameNotFound)));
+        match found {
+            Some(candidate) if candidate.age >= rule.target.minimum_age => return Ok(Some(candidate.process)),
+            None if within.is_none() => return Ok(None),
+            _ if within.is_some_and(|within| waited >= within) => return Ok(None),
+            _ => {}
         }
         // A blocking-pool sleep: the caller's executor may have no timer.
         unblock(|| thread::sleep(POLL)).await;
         waited += POLL;
     }
+}
+
+// Ranked before the age is checked: a small old helper in the game's folder is not the game starting up.
+// `takes` is asked only of a process whose path matches; ties keep the first.
+fn pick(candidates: Vec<Candidate>, rule: &Rule, takes: impl Fn(&Process) -> bool) -> Option<Candidate> {
+    // By creation time, not age: each age is read at its own moment of the scan.
+    let better = |best: &Candidate, next: &Candidate| match rule.target.pick {
+        Pick::Biggest => next.working_set > best.working_set,
+        Pick::Oldest => next.process.created < best.process.created,
+        Pick::Newest => next.process.created > best.process.created,
+    };
+    let matching = candidates.into_iter().filter(|candidate| rule.matches(&candidate.process.path) && takes(&candidate.process));
+    matching.reduce(|best, next| if better(&best, &next) { next } else { best })
+}
+
+/// Whether `process` was started with `target`'s arguments; one whose command line cannot be read was not (blocking).
+fn takes(process: &Process, target: &Target) -> bool {
+    target.arguments.is_none() || command_line(process).is_ok_and(|line| target.takes(&line))
+}
+
+/// The command line `target` was started with, through a verified handle (blocking). It never leaves this crate.
+fn command_line(target: &Process) -> Result<String> {
+    let process = open(target, 0)?;
+    let mut size = 0;
+    // SAFETY: a size query: no buffer, `size` outlives the call.
+    unsafe { NtQueryInformationProcess(process.0, ProcessCommandLineInformation, ptr::null_mut(), 0, &mut size) };
+    ensure!(size as usize >= size_of::<UNICODE_STRING>(), "cannot size the command line of process {}", target.pid);
+    // In u64s: the UNICODE_STRING at its head is pointer-aligned.
+    let mut buffer = vec![0u64; (size as usize).div_ceil(8)];
+    // SAFETY: `buffer` holds at least `size` bytes, aligned for what the call writes.
+    let status =
+        unsafe { NtQueryInformationProcess(process.0, ProcessCommandLineInformation, buffer.as_mut_ptr().cast(), size, &mut size) };
+    ensure!(status >= 0, "cannot read the command line of process {}: NTSTATUS {:#x}", target.pid, status as u32);
+    // SAFETY: the call wrote a UNICODE_STRING at the head of `buffer`, which is aligned for it.
+    let string = unsafe { buffer.as_ptr().cast::<UNICODE_STRING>().read() };
+    // Its text follows it in `buffer`: read by offset, never through the pointer.
+    let at = (string.Buffer as usize).checked_sub(buffer.as_ptr() as usize).filter(|at| at % 2 == 0).map(|at| at / 2);
+    let len = usize::from(string.Length) / 2;
+    let at = at.filter(|at| at + len <= buffer.len() * 4).context("odd command line")?;
+    // UTF-16 units in memory order: Windows is little-endian.
+    let units = buffer.iter().flat_map(|&word| (0..4).map(move |unit| (word >> (16 * unit)) as u16));
+    Ok(char::decode_utf16(units.skip(at).take(len)).map(|unit| unit.unwrap_or(char::REPLACEMENT_CHARACTER)).collect())
 }
 
 /// Every process we may look at (blocking). Protected ones are skipped.
@@ -86,6 +129,39 @@ fn running() -> Result<Vec<Candidate>> {
 /// The process `pid` is now, if it can be looked at (blocking).
 pub fn of(pid: u32) -> Option<Process> {
     candidate(pid).map(|candidate| candidate.process)
+}
+
+/// Whether `target` is a 64-bit process, asked of the process: its exe may be unreadable (a GDK game's).
+pub fn x64(target: &Process) -> Result<bool> {
+    Ok(!wow64(&open(target, 0)?, target.pid)?)
+}
+
+/// `target` opened with `access` and enough to check it is that process.
+pub(crate) fn open(target: &Process, access: u32) -> Result<Handle> {
+    let process = open_pid(target.pid, PROCESS_QUERY_LIMITED_INFORMATION | access)?;
+    verify(&process, target)?;
+    Ok(process)
+}
+
+/// A denial is `Protected`: run as administrator, or kept by its protection. Not yet verified.
+pub(crate) fn open_pid(pid: u32, access: u32) -> Result<Handle> {
+    // SAFETY: plain Win32 call; the handle is owned by the guard.
+    let handle = unsafe { OpenProcess(access, 0, pid) };
+    if handle.is_null() {
+        let error = io::Error::last_os_error();
+        let denied = error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32);
+        let error = anyhow!("cannot open process {pid}: {error}");
+        return Err(if denied { error.context(Failure::new(FailureKind::Protected)) } else { error });
+    }
+    Ok(Handle(handle))
+}
+
+/// A 32-bit process on 64-bit Windows.
+pub(crate) fn wow64(process: &Handle, pid: u32) -> Result<bool> {
+    let mut wow = 0;
+    // SAFETY: `process` is a live handle and `wow` outlives the call.
+    ensure!(unsafe { IsWow64Process(process.0, &mut wow) } != 0, "cannot query process {pid}: {}", io::Error::last_os_error());
+    Ok(wow != 0)
 }
 
 fn candidate(pid: u32) -> Option<Candidate> {
@@ -156,24 +232,44 @@ fn now() -> u64 {
 mod tests {
     use super::*;
 
+    /// `secs` old: created that much before a common moment.
     fn candidate(path: &str, secs: u64, working_set: usize) -> Candidate {
-        let process = Process { pid: 1, path: PathBuf::from(path), created: 7 };
+        let process = Process { pid: 1, path: PathBuf::from(path), created: 1000 - secs };
         Candidate { process, age: Duration::from_secs(secs), working_set }
     }
 
+    fn rule(pick: Pick) -> Rule {
+        let target = Target { image: None, minimum_age: Duration::from_secs(8), pick, arguments: None };
+        Rule { target, location: PathBuf::from(r"C:\g"), alternates: Vec::new() }
+    }
+
     #[test]
-    fn the_biggest_old_enough_match_is_picked() {
-        let rule = Rule { image: Some("g.exe".into()), location: PathBuf::from(r"C:\g"), minimum_age: Duration::from_secs(8) };
-        let all = || {
-            vec![
-                candidate(r"C:\g\g.exe", 30, 100),
-                candidate(r"C:\g\g.exe", 30, 900),
-                candidate(r"C:\g\g.exe", 2, 5000),
-                candidate(r"C:\other\o.exe", 30, 9000),
-            ]
-        };
-        assert_eq!(pick(all(), &rule), Some(all().swap_remove(1).process));
-        assert_eq!(pick(vec![candidate(r"C:\g\g.exe", 2, 5000)], &rule), None, "too young");
+    fn the_biggest_match_is_the_game_even_while_it_starts_up() {
+        let all = vec![candidate(r"C:\g\helper.exe", 30, 100), candidate(r"C:\g\g.exe", 2, 5000), candidate(r"C:\other\o.exe", 30, 9000)];
+        assert_eq!(pick(all, &rule(Pick::Biggest), |_| true).unwrap().process.path, PathBuf::from(r"C:\g\g.exe"), "not its old helper");
+    }
+
+    #[test]
+    fn the_trainer_may_pick_by_age_and_by_arguments() {
+        let all = || vec![candidate(r"C:\g\a.exe", 30, 100), candidate(r"C:\g\b.exe", 2, 100), candidate(r"C:\g\c.exe", 30, 100)];
+        let picked = |by: Pick, takes: fn(&Process) -> bool| pick(all(), &rule(by), takes).unwrap().process.path.display().to_string();
+        assert_eq!(picked(Pick::Oldest, |_| true), r"C:\g\a.exe", "ties keep the first");
+        assert_eq!(picked(Pick::Newest, |_| true), r"C:\g\b.exe");
+        assert_eq!(picked(Pick::Biggest, |_| true), r"C:\g\a.exe", "ties keep the first");
+        assert_eq!(picked(Pick::Oldest, |process| process.path.ends_with("c.exe")), r"C:\g\c.exe", "only one takes the arguments");
+        let other = vec![candidate(r"C:\other\o.exe", 30, 100)];
+        assert!(pick(other, &rule(Pick::Biggest), |_| panic!("asked of a path that does not match")).is_none());
+    }
+
+    #[test]
+    fn a_command_line_is_read_for_its_arguments() {
+        let me = of(std::process::id()).unwrap();
+        let line = command_line(&me).unwrap();
+        assert!(line.to_lowercase().contains(&me.path.file_name().unwrap().to_string_lossy().to_lowercase()), "{line}");
+        let target = Target { arguments: Some("--no-such-argument".into()), ..rule(Pick::Biggest).target };
+        assert!(!takes(&me, &target));
+        let reused = Process { created: me.created + 1, ..me };
+        assert!(command_line(&reused).is_err(), "never another process's");
     }
 
     #[test]
@@ -186,6 +282,11 @@ mod tests {
         assert!(verify(&ours, &reused).unwrap_err().to_string().contains("reused"));
         let other = Process { path: PathBuf::from(r"C:\elsewhere\other.exe"), ..found };
         assert!(verify(&ours, &other).is_err());
+    }
+
+    #[test]
+    fn this_process_is_told_64_bit() {
+        assert!(x64(&of(std::process::id()).unwrap()).unwrap());
     }
 
     #[test]

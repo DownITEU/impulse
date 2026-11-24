@@ -1635,7 +1635,7 @@ fn parse_normal_key(
 
     let key = parse_immutable(vkey).or_else(|| {
         let scan_code = lparam.hiword() & 0xFF;
-        get_keystroke_key(vkey, scan_code as u32, &mut modifiers)
+        get_keystroke_key(vkey, scan_code as u32, &mut modifiers, current_layout())
     })?;
 
     Some((
@@ -1648,6 +1648,54 @@ fn parse_normal_key(
     ))
 }
 
+/// Impulse: the keystroke a key typed into another thread's window makes, as `WM_KEYDOWN` makes one here, in that
+/// thread's `layout` (an `HKL`) with the keys `keyboard_state` holds (as `GetKeyboardState` gives them); `scan_code` is
+/// the message's high word. `None` for a modifier, Caps Lock, `VK_PACKET`, a key without a name, or a dead key: no
+/// `WM_CHAR` follows to compose it.
+pub fn keystroke_in(
+    vkey: u16,
+    scan_code: u16,
+    mut modifiers: Modifiers,
+    keyboard_state: [u8; 256],
+    layout: isize,
+) -> Option<Keystroke> {
+    let (vkey, layout) = (VIRTUAL_KEY(vkey), HKL(layout as _));
+    if matches!(
+        vkey,
+        VK_SHIFT
+            | VK_LSHIFT
+            | VK_RSHIFT
+            | VK_CONTROL
+            | VK_LCONTROL
+            | VK_RCONTROL
+            | VK_MENU
+            | VK_LMENU
+            | VK_RMENU
+            | VK_LWIN
+            | VK_RWIN
+            | VK_CAPITAL
+            | VK_PACKET
+    ) {
+        return None;
+    }
+    let mut buffer = [0u16; 8];
+    let typed = unsafe {
+        ToUnicodeEx(vkey.0 as u32, scan_code as u32, &keyboard_state, &mut buffer, 0x4, Some(layout))
+    };
+    if typed < 0 {
+        return None;
+    }
+    let (key_char, _) = process_key_in(vkey, scan_code, keyboard_state, layout);
+    let key = parse_immutable(vkey).or_else(|| {
+        get_keystroke_key(vkey, (scan_code & 0xFF) as u32, &mut modifiers, layout)
+    })?;
+    Some(Keystroke {
+        modifiers,
+        key,
+        key_char,
+    })
+}
+
 fn process_key(vkey: VIRTUAL_KEY, scan_code: u16) -> (Option<String>, bool) {
     let mut keyboard_state = [0u8; 256];
     unsafe {
@@ -1655,15 +1703,24 @@ fn process_key(vkey: VIRTUAL_KEY, scan_code: u16) -> (Option<String>, bool) {
             return (None, false);
         }
     }
+    process_key_in(vkey, scan_code, keyboard_state, current_layout())
+}
 
+fn process_key_in(
+    vkey: VIRTUAL_KEY,
+    scan_code: u16,
+    keyboard_state: [u8; 256],
+    layout: HKL,
+) -> (Option<String>, bool) {
     let mut buffer_c = [0u16; 8];
     let result_c = unsafe {
-        ToUnicode(
+        ToUnicodeEx(
             vkey.0 as u32,
             scan_code as u32,
-            Some(&keyboard_state),
+            &keyboard_state,
             &mut buffer_c,
             0x4,
+            Some(layout),
         )
     };
 
@@ -1708,12 +1765,13 @@ fn process_key(vkey: VIRTUAL_KEY, scan_code: u16) -> (Option<String>, bool) {
 
     let mut buffer_c_no_modifiers = [0u16; 8];
     let result_c_no_modifiers = unsafe {
-        ToUnicode(
+        ToUnicodeEx(
             vkey.0 as u32,
             scan_code as u32,
-            Some(&state_no_modifiers),
+            &state_no_modifiers,
             &mut buffer_c_no_modifiers,
             0x4,
+            Some(layout),
         )
     };
 

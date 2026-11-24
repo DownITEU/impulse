@@ -7,6 +7,7 @@ use client::{
 use gpui_kit::{App, Context, FocusHandle, Window};
 
 use super::{Hotkeys, Target};
+use crate::input::Owner;
 
 /// The question asked after a chord was pressed for a slot; the slot keeps its old hotkey until it is answered.
 pub struct Conflict {
@@ -77,8 +78,9 @@ impl Hotkeys {
         let app: &App = cx;
         let Some(sheet) = self.trainers.read(app).sheet(game) else { return };
         let Some(index) = sheet.cheats.iter().position(|found| found.id == cheat) else { return };
-        let asked =
-            self.store.rebind(&sheet.trainer, &sheet.cheats, (index, slot), choice, resolution, |chord| (self.reserved)(chord, app));
+        let asked = self.store.rebind(&sheet.trainer, &sheet.cheats, (index, slot), choice, resolution, |chord| {
+            self.input.read(app).taken(Owner::Trainer, chord)
+        });
         let clash = match asked {
             Ok(()) => {
                 let slots = self.slots(sheet);

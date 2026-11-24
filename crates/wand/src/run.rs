@@ -11,14 +11,14 @@ use futures::{FutureExt, StreamExt, TryFutureExt, future::BoxFuture};
 use model::{Attach, Failure, FailureKind, Live, Origin, Process};
 
 use crate::{
-    attach::{Game, attach},
+    attach::{Attached, Game, attach},
     binary,
     folder::Setting,
     install::PUBLISHERS,
     proxy::{self, Proxy},
     texts::{ACTIVATE_UNSUPPORTED, FOLDER_UNSET, PROXY_FAILED, PROXY_MISSING, PROXY_RESTART, text},
-    tophat::{Event, Outcome, Server, Session},
-    trainer::{Binary, Plan},
+    tophat::{Event, Outcome, Server},
+    trainer::{Activate, Binary, Load},
 };
 
 type Answer<T> = std::result::Result<T, Failure>;
@@ -36,14 +36,8 @@ impl Host {
         Self { data_dir, folder, server: Arc::default() }
     }
 
-    pub fn runner(&self, plan: &Plan) -> Arc<dyn model::Runner> {
-        Arc::new(Runner {
-            host: self.clone(),
-            binary: plan.binary.clone(),
-            variables: plan.variables.clone(),
-            proxy: plan.proxy.clone(),
-            activate: plan.activate,
-        })
+    pub fn runner(&self, load: Load) -> Arc<dyn model::Runner> {
+        Arc::new(Runner { host: self.clone(), load })
     }
 
     fn server(&self) -> Result<Arc<Server>> {
@@ -59,18 +53,16 @@ impl Host {
 
 struct Runner {
     host: Host,
-    binary: Result<Binary, String>,
-    variables: Vec<String>,
-    proxy: Result<Option<Proxy>, String>,
-    activate: u64,
+    load: Load,
 }
 
 impl model::Runner for Runner {
     fn prepare(&self) -> BoxFuture<'_, Answer<Box<dyn Attach>>> {
         async move {
+            let Load { variables, binary, proxy, activate } = &self.load;
             let unsupported = |why: &String| anyhow!("{why}").context(Failure::new(FailureKind::Unsupported));
-            let Binary { url, hash } = self.binary.clone().map_err(|why| unsupported(&why))?;
-            let proxy = self.proxy.clone().map_err(|why| unsupported(&why))?;
+            let Binary { url, hash } = binary.clone().map_err(|why| unsupported(&why))?;
+            let proxy = proxy.clone().map_err(|why| unsupported(&why))?;
             let folder = self.host.folder.clone();
             let install = unblock(move || folder.install()).await;
             let unset = || Failure::new(FailureKind::SetupNeeded).saying(text(FOLDER_UNSET));
@@ -83,8 +75,7 @@ impl model::Runner for Runner {
                 unblock(move || binary::ensure(&data_dir, &crate::install::trainer_caches(), &url, &hash)).await?
             };
             let trainerlib = install.trainerlib();
-            let variables = self.variables.clone();
-            let prepared = Prepared { server, trainerlib, trainer, hash, variables, proxy, activate: self.activate };
+            let prepared = Prepared { server, trainerlib, trainer, hash, variables: variables.clone(), proxy, activate: *activate };
             Ok(Box::new(prepared) as Box<dyn Attach>)
         }
         .boxed()
@@ -97,13 +88,13 @@ struct Prepared {
     trainer: PathBuf,
     hash: String,
     variables: Vec<String>,
-    /// With Wand's stand-in for the game's launcher.
+    /// With the stand-in for the game's launcher.
     proxy: Option<(Proxy, PathBuf)>,
-    activate: u64,
+    activate: Activate,
 }
 
 impl Attach for Prepared {
-    /// Wand's stand-in for a store's start only: like Wand, a picked executable starts as it is.
+    /// The stand-in for a store's start only: a picked executable starts as it is.
     fn before_start(&self, origin: &Origin, install: &Path) -> BoxFuture<'static, Answer<Option<Box<dyn Send>>>> {
         let Some((proxy, stand_in)) = self.proxy.clone().filter(|_| matches!(origin, Origin::Launcher(_))) else {
             return async { Ok(None) }.boxed();
@@ -125,17 +116,19 @@ impl Attach for Prepared {
         .boxed()
     }
 
-    fn attach(self: Box<Self>, process: Process) -> BoxFuture<'static, Answer<Live>> {
+    fn attach(self: Box<Self>, process: Process, build: Option<u32>) -> BoxFuture<'static, Answer<Live>> {
         async move {
-            let game = Game { process: &process, trainer: &self.trainer, trainer_hash: &self.hash, variables: &self.variables };
-            let (session, events) = attach(&self.server, &self.trainerlib, game).await.map_err(|e| {
+            let (trainer, trainer_hash, variables) = (&self.trainer, &self.hash, &self.variables);
+            let activate = self.activate;
+            let game = Game { process: &process, version: build.unwrap_or(0), trainer, trainer_hash, variables, activate };
+            let (attached, events) = attach(&self.server, &self.trainerlib, game).await.map_err(|e| {
                 let failure = Failure::from(e);
                 match failure.kind {
                     // Started elsewhere, the game runs the anti-cheat our start avoids.
                     FailureKind::Protected if self.proxy.is_some() => failure.saying(text(PROXY_RESTART)),
-                    // Wand injects this trainer its own way, which may be why it failed.
-                    FailureKind::Internal if self.activate != 0 => {
-                        let detail = format!("{} (activate.flags {})", failure.detail, self.activate);
+                    // The classic loader takes this trainer, which may be why it failed.
+                    FailureKind::Internal | FailureKind::LoadFailed | FailureKind::TrainerFailed if activate.classic() => {
+                        let detail = format!("{} (activate.flags {})", failure.detail, activate.0);
                         Failure { detail, ..failure.saying(text(ACTIVATE_UNSUPPORTED)) }
                     }
                     _ => failure,
@@ -150,7 +143,7 @@ impl Attach for Prepared {
                     _ => None,
                 }
             });
-            Ok(Live { session: Box::new(Running(session)), events: events.boxed() })
+            Ok(Live { session: Box::new(attached), events: events.boxed() })
         }
         .boxed()
     }
@@ -167,12 +160,10 @@ impl Drop for OffThread {
     }
 }
 
-struct Running(Session);
-
-impl model::Session for Running {
+impl model::Session for Attached {
     fn set<'a>(&'a self, key: &'a str, value: f64) -> BoxFuture<'a, Answer<()>> {
         async move {
-            match self.0.set_value(key, value).await? {
+            match self.session.set_value(key, value).await? {
                 Outcome::Failed => Err(Failure { detail: "the trainer refused it".into(), ..Failure::new(FailureKind::Refused) }),
                 Outcome::Set | Outcome::Changed => Ok(()),
             }
@@ -181,14 +172,14 @@ impl model::Session for Running {
     }
 
     fn stop(&self) -> BoxFuture<'_, Answer<()>> {
-        self.0.stop().map_err(Failure::from).boxed()
+        self.session.stop().map_err(Failure::from).boxed()
     }
 
     fn position(&self) -> BoxFuture<'_, Answer<[f64; 3]>> {
-        self.0.position().map_err(Failure::from).boxed()
+        self.session.position().map_err(Failure::from).boxed()
     }
 
     fn teleport(&self, to: [f64; 3]) -> BoxFuture<'_, Answer<()>> {
-        self.0.teleport(to).map_err(Failure::from).boxed()
+        self.session.teleport(to).map_err(Failure::from).boxed()
     }
 }

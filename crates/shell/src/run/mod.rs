@@ -1,6 +1,7 @@
 //! Running the open game's trainer: LAUNCH + ATTACH, the cheat values going to it, STOP, and what a run keeps.
 
 mod tracker;
+mod unconfirmed;
 mod view;
 
 use crate::ui::{key, text::app_text};
@@ -13,13 +14,14 @@ use std::{
 use client::{
     library::{Game, GameId},
     profile::Values,
-    run::{self, Request, Stage},
+    run::{self, Stage},
     trainer::Step,
 };
 use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
-use model::{Event, Failure, FailureKind, Live, Process, Session};
+use model::{Event, Failure, FailureKind, Installation, Live, Plan, Process, Session};
 pub use tracker::{Fix, Lease, Tracked, Tracker};
+pub use unconfirmed::{Closed as UnconfirmedClosed, Unconfirmed};
 pub use view::{run_button, run_note, session_panel};
 
 use crate::{
@@ -70,8 +72,8 @@ enum Play {
     },
     Live {
         game: GameId,
-        /// The game's process, for hotkeys that fire only while it is in front.
-        pid: u32,
+        /// The game's process: its pid for hotkeys that fire only while it is in front, and what a source's overlay enters.
+        process: Process,
         since: Instant,
         /// Its time and mods are kept.
         closed: bool,
@@ -134,8 +136,12 @@ impl Runs {
     }
 
     pub fn pid(&self) -> Option<u32> {
-        match self.play {
-            Play::Live { pid, .. } => Some(pid),
+        self.process().map(|process| process.pid)
+    }
+
+    pub fn process(&self) -> Option<&Process> {
+        match &self.play {
+            Play::Live { process, .. } => Some(process),
             _ => None,
         }
     }
@@ -183,7 +189,7 @@ impl Runs {
         if self.is_active() {
             return;
         }
-        let request = match self.request(&game, cx) {
+        let (install, plan) = match self.request(&game, cx) {
             Ok(request) => request,
             Err(e) => return self.fail(game, e, cx),
         };
@@ -192,7 +198,7 @@ impl Runs {
         let task = cx.spawn(async move |runs, cx| {
             let outcome = {
                 let (progress, mut progress_cx) = (runs.clone(), cx.clone());
-                run::start(request, move |stage| {
+                run::start(install, plan, move |stage| {
                     progress.update(&mut progress_cx, |runs, cx| runs.staged(stage, cx)).ok();
                 })
                 .await
@@ -298,12 +304,12 @@ impl Runs {
         }
     }
 
-    fn request(&self, game: &GameId, cx: &App) -> Result<Request, Failure> {
+    fn request(&self, game: &GameId, cx: &App) -> Result<(Installation, Plan), Failure> {
         let listed = self.library.read(cx).game(game).ok_or(Failure::new(FailureKind::GameNotFound))?;
         let no_cheats = || Failure::new(FailureKind::NotFound).saying(app_text(key::RUN_NO_CHEATS));
         let sheet = self.trainers.read(cx).sheet(game).ok_or_else(no_cheats)?;
-        let install = listed.install.as_ref().ok_or(Failure::new(FailureKind::GameNotFound))?;
-        Ok(run::request(install, &sheet.plan))
+        let install = listed.install.clone().ok_or(Failure::new(FailureKind::GameNotFound))?;
+        Ok((install, sheet.plan.clone()))
     }
 
     fn staged(&mut self, stage: Stage, cx: &mut Context<Self>) {
@@ -338,7 +344,7 @@ impl Runs {
         self.trainers.update(cx, |trainers, cx| trainers.reset(&game, cx));
         self.play = Play::Live {
             game: game.clone(),
-            pid: process.pid,
+            process,
             since: Instant::now(),
             closed: false,
             run: Run { session, tracker, teleport },

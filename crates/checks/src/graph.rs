@@ -34,7 +34,7 @@ const GRAPH: &[(&str, &[&str])] = &[
     ("tray", &[]),
     ("updater", &["disk", "fetch"]),
     ("video", &[]),
-    ("wand", &["agent", "disk", "fetch", "model", "pe"]),
+    ("wand", &["agent", "disk", "fetch", "model"]),
 ];
 
 /// The packages that may use GPUI: the UI and the app that opens its window.

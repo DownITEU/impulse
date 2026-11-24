@@ -19,7 +19,7 @@ pub fn apps(games: &[Game]) -> Vec<App> {
         .filter(|app| seen.insert(app.store_id.to_ascii_lowercase()))
         .filter_map(|app| {
             let location = app.locators.iter().filter_map(locate).find(|dir| dir.join(&app.launcher).is_file())?;
-            Some(App { store_id: app.store_id.clone(), name: None, location })
+            Some(App::new(app.store_id.clone(), location))
         })
         .collect()
 }

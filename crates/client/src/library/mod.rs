@@ -360,6 +360,7 @@ mod tests {
             exe: None,
             purchase: Vec::new(),
             standalone: Vec::new(),
+            package_apps: Vec::new(),
             cover: None,
             thumbnail: None,
             maps: Vec::new(),
@@ -375,7 +376,14 @@ mod tests {
     fn listed(catalog: Vec<model::Game>, build: Option<u32>) -> Library {
         let paths = paths();
         let origin = Origin::Launcher(StoreId::parse("gog:1").unwrap());
-        let install = Installation { game: catalog[0].id.clone(), origin, location: "c:/games/echoes".into(), build };
+        let install = Installation {
+            game: catalog[0].id.clone(),
+            origin,
+            location: "c:/games/echoes".into(),
+            alternates: Vec::new(),
+            build,
+            app: None,
+        };
         list(&Arc::new(catalog), vec![install], &Picked::load(&paths), &paths)
     }
 

@@ -1,11 +1,15 @@
 //! `overlay.json`: the overlay's and the extra hotkeys' keys.
 
+use keyhook::{Key, Modifiers};
 use serde::{Deserialize, Serialize};
-use topmost::{EXTRAS, Key};
 
 use client::storage::{Paths, Stored};
 
-/// The hotkeys beside the overlay's own, in `topmost`'s numbering.
+const CTRL_SHIFT: Modifiers = Modifiers { control: true, shift: true, alt: false, win: false };
+/// The overlay's own key when none is saved.
+pub(super) const DEFAULT: Key = Key::new(CTRL_SHIFT, b'O');
+
+/// The hotkeys beside the overlay's own.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Slot {
     Minimap,
@@ -14,17 +18,14 @@ pub(crate) enum Slot {
 }
 
 impl Slot {
-    pub const ALL: [Slot; EXTRAS] = [Slot::Minimap, Slot::ZoomIn, Slot::ZoomOut];
-
-    pub fn number(self) -> usize {
-        self as usize
-    }
+    pub const ALL: [Slot; 3] = [Slot::Minimap, Slot::ZoomIn, Slot::ZoomOut];
 
     pub fn default_key(self) -> Key {
         match self {
-            Slot::Minimap => Key::MINIMAP,
-            Slot::ZoomIn => Key::ZOOM_IN,
-            Slot::ZoomOut => Key::ZOOM_OUT,
+            Slot::Minimap => Key::new(CTRL_SHIFT, b'M'),
+            // Plus and Minus of the main block.
+            Slot::ZoomIn => Key::new(CTRL_SHIFT, 0xBB),
+            Slot::ZoomOut => Key::new(CTRL_SHIFT, 0xBD),
         }
     }
 }
@@ -58,7 +59,7 @@ impl Saved {
     }
 
     fn overlay_key(&self) -> Key {
-        self.hotkey.as_ref().and_then(|vks| Key::from_vks(vks.iter().copied())).unwrap_or(Key::DEFAULT)
+        self.hotkey.as_ref().and_then(|vks| Key::from_vks(vks.iter().copied())).unwrap_or(DEFAULT)
     }
 
     /// What the user saved for `slot`, when it is a usable key.
@@ -122,12 +123,6 @@ mod tests {
     }
 
     #[test]
-    fn a_slots_number_is_its_place_in_all() {
-        // The watch registers by `number` and answers by place in `ALL`.
-        assert!(Slot::ALL.into_iter().enumerate().all(|(place, slot)| slot.number() == place));
-    }
-
-    #[test]
     fn an_empty_save_means_no_key() {
         assert_eq!(saved(r#"{"zoom_in":[]}"#).key(Slot::ZoomIn), None);
     }
@@ -136,9 +131,9 @@ mod tests {
     fn a_default_gives_way_to_a_key_the_user_already_holds() {
         // Ctrl, Shift and "=": the zoom-in default, saved earlier as the minimap's key.
         let held = saved(r#"{"minimap":[162,160,187]}"#);
-        assert_eq!(held.key(Slot::Minimap), Some(Key::ZOOM_IN));
+        assert_eq!(held.key(Slot::Minimap), Some(Slot::ZoomIn.default_key()));
         assert_eq!(held.key(Slot::ZoomIn), None);
-        assert_eq!(held.key(Slot::ZoomOut), Some(Key::ZOOM_OUT));
+        assert_eq!(held.key(Slot::ZoomOut), Some(Slot::ZoomOut.default_key()));
         let overlay = saved(r#"{"hotkey":[162,160,189]}"#);
         assert_eq!(overlay.key(Slot::ZoomOut), None);
     }

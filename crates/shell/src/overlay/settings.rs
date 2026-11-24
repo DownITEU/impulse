@@ -2,11 +2,10 @@
 
 use gpui_kit::{App, Context, Entity, IntoElement, Render, SharedString, Window, component::v_flex, prelude::*, px, rgb};
 use i18n::Key as Message;
-use keyhook::Outcome;
+use keyhook::{Key, Outcome};
 use model::Chord;
-use topmost::Key;
 
-use super::{Layer, Slot};
+use super::{Layer, Slot, keys};
 use crate::{
     hotkeys::{Hotkeys, Target},
     settings::{Settings, row},
@@ -22,7 +21,7 @@ use crate::{
 const OVERLAY: Target = Target::Key { name: "overlay", required: true };
 
 /// Each extra hotkey's capture target, cap id, title and hint.
-const EXTRA_ROWS: [(Slot, Target, &str, Message, Message); topmost::EXTRAS] = [
+const EXTRA_ROWS: [(Slot, Target, &str, Message, Message); Slot::ALL.len()] = [
     (
         Slot::Minimap,
         Target::Key { name: "minimap", required: false },
@@ -115,13 +114,11 @@ impl OverlaySettings {
     fn rebind_overlay(&mut self, outcome: Outcome, cx: &mut Context<Self>) {
         let key = match outcome {
             Outcome::Bound(chord) => Key::from_vks(chord.vks()),
-            Outcome::Reset => Some(Key::DEFAULT),
+            Outcome::Reset => Some(keys::DEFAULT),
             _ => None,
         };
-        if let Some(key) = key.filter(|&key| !self.extras_hold(key, None, cx) && !self.cheats_hold(key, cx))
-            && let Err(e) = self.layer.update(cx, |layer, cx| layer.set_hotkey(key, cx))
-        {
-            log::warn!("overlay hotkey not changed: {e}");
+        if let Some(key) = key.filter(|&key| !self.extras_hold(key, None, cx) && !self.cheats_hold(key, cx)) {
+            self.layer.update(cx, |layer, cx| layer.set_hotkey(key, cx));
         }
     }
 
@@ -149,7 +146,7 @@ impl OverlaySettings {
     }
 
     fn cheats_hold(&self, key: Key, cx: &App) -> bool {
-        self.trainers.read(cx).sheets().any(|sheet| sheet.hotkeys.iter().flatten().flatten().any(|bound| key.fired_by(bound.vks())))
+        self.trainers.read(cx).sheets().any(|sheet| sheet.hotkeys.iter().flatten().flatten().any(|&bound| key.clashes(bound)))
     }
 }
 
@@ -165,20 +162,25 @@ impl Render for OverlaySettings {
                 row(t(cx, title), t(cx, hint), 64.).child(self.hotkey_cap(id, target, Some(slot), key, cx))
             })
             .collect();
+        let prefs = self.settings.read(cx).prefs();
         // On until DON'T SHOW AGAIN was pressed in the question itself.
-        let asked = !self.settings.read(cx).prefs().skip_exclusive_warning;
+        let (asked, in_game) = (!prefs.skip_exclusive_warning, prefs.overlay_in_game);
+        let mode = |id: &'static str, label: Message, choose: bool| {
+            choice(id, t(cx, label), in_game == choose, cx).on_click(cx.listener(move |view, _, _, cx| {
+                view.settings.update(cx, |settings, cx| settings.edit(|prefs| prefs.overlay_in_game = choose, cx));
+            }))
+        };
         v_flex()
             .flex_1()
             .px(px(18.))
             .py(px(6.))
-            .child(
-                row(t(cx, key::OVERLAY_MODE), t(cx, key::OVERLAY_MODE_HINT), 64.).child(
-                    segmented()
-                        .h(px(26.))
-                        .child(choice("overlay-over", t(cx, key::OVERLAY_MODE_OVER), true, cx))
-                        .child(choice("overlay-in-game", t(cx, key::OVERLAY_MODE_IN_GAME), false, cx).cursor_default().opacity(0.4)),
-                ),
-            )
+            .child(row(t(cx, key::OVERLAY_MODE), t(cx, key::OVERLAY_MODE_HINT), 64.).child(
+                segmented().h(px(26.)).child(mode("overlay-over", key::OVERLAY_MODE_OVER, false)).child(mode(
+                    "overlay-in-game",
+                    key::OVERLAY_MODE_IN_GAME,
+                    true,
+                )),
+            ))
             .child(row(t(cx, key::OVERLAY_HOTKEY), t(cx, key::OVERLAY_HOTKEY_HINT), 64.).child(self.hotkey_cap(
                 "overlay-hotkey",
                 OVERLAY,
