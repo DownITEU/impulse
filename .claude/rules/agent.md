@@ -32,7 +32,7 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 - `Image::unchecked` exists only under `cfg(test)` or the `test-support` feature, which only dev-dependencies enable.
 - Protected processes that cannot be opened are skipped by the search, not errors.
 - A process that denies `load` or `map` (a game run as administrator) is loaded by the host executable started elevated through UAC (`runas`, the request in hex on its command line; an empty export is a map), only when a host is set and this process is not elevated. The copy checks the image against the host's publishers, never the request's choice, and the process, like any load.
-- Marks: a declined prompt is `Elevation`, denied even elevated `Protected`, as is a denial once the handle is open (allocation, write, remote thread: the game's protection stripped its rights, elevation does not lift that), an image of the other architecture `Architecture`. A failure after the copy may have started its loader keeps the parent's image lock: the copy's ends with it.
+- Marks: a declined prompt is `Elevation`, denied even elevated `Protected`, as is a denial once the handle is open (allocation, write, remote thread: the game's protection stripped its rights, elevation does not lift that), an image of the other architecture `Architecture` (`needs_x64`: the image is x64). A failure after the copy may have started its loader keeps the parent's image lock: the copy's ends with it.
 - `of`, `Image::open` and `load` block: callers use `blocking::unblock`.
 
 ## Traps

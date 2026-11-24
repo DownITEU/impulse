@@ -85,7 +85,8 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
         let startup = Startup { wand_port: port, client_id: &id, trainer_session_id: &Uuid::new_v4().to_string() };
         inject::tophat(&target, &service, &startup)
     })
-    .await?;
+    .await
+    .map_err(unless_marked(FailureKind::LoadFailed))?;
 
     // The game or the host gone ends the wait for the service; the game first, as the host goes with it.
     let watched: Vec<Process> = [Some(game.process), host.as_ref().map(|host| &host.process)].into_iter().flatten().cloned().collect();
@@ -94,7 +95,7 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
         Some(Either::Left((channel, _))) => channel.context("the server dropped the service")?,
         Some(Either::Right((process, _))) => {
             let gone = anyhow!("{} exited before the trainer's service dialed in", process.path.display());
-            return Err(if process == *game.process { gone.context(Failure::new(FailureKind::GameNotFound)) } else { gone });
+            return Err(if process == *game.process { gone.context(Failure::new(FailureKind::GameExited)) } else { gone });
         }
         // Seen with an outdated Wand.
         None => {
@@ -104,14 +105,19 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     };
     let (session, events) = Session::open(server.runtime.clone(), channel, &client_id);
     let run = Run { process_id: game.process.pid, game_version: game.version, trainer, variables: game.variables };
-    session.start(plugin, run).await?;
+    session.start(plugin, run).await.map_err(unless_marked(FailureKind::TrainerFailed))?;
     if let Some(held) = held {
         held.ready(game.activate.resume()).await.context("cannot let the game go after the trainer's setup")?;
     }
     Ok((Attached { session, _host: host }, events))
 }
 
-/// Wand's step before every trainer: the game is let take input first, then held still if the trainer asks.
+/// Marks an error `kind` unless a step inside marked it already.
+fn unless_marked(kind: FailureKind) -> impl FnOnce(anyhow::Error) -> anyhow::Error {
+    move |e| if e.downcast_ref::<Failure>().is_some() { e } else { e.context(Failure::new(kind)) }
+}
+
+/// The step before every trainer: the game is let take input first, then held still if the trainer asks.
 async fn hold(game: &Process, activate: Activate) -> Result<Option<Held>> {
     let game = game.clone();
     unblock(move || {

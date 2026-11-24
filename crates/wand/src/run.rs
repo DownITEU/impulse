@@ -135,8 +135,8 @@ impl Attach for Prepared {
                 match failure.kind {
                     // Started elsewhere, the game runs the anti-cheat our start avoids.
                     FailureKind::Protected if self.proxy.is_some() => failure.saying(text(PROXY_RESTART)),
-                    // Wand's classic loader takes this trainer, which may be why it failed.
-                    FailureKind::Internal if activate.classic() => {
+                    // The classic loader takes this trainer, which may be why it failed.
+                    FailureKind::Internal | FailureKind::LoadFailed | FailureKind::TrainerFailed if activate.classic() => {
                         let detail = format!("{} (activate.flags {})", failure.detail, activate.0);
                         Failure { detail, ..failure.saying(text(ACTIVATE_UNSUPPORTED)) }
                     }

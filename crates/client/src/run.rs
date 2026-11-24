@@ -78,7 +78,13 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
             }
             stage(Stage::WaitingForGame);
             let within = if started { request.launch_within.unwrap_or(LAUNCHED_WITHIN) } else { STARTED_BY_USER_WITHIN };
-            agent::wait(&request.rule, within).await?
+            // Its timeout says who was to start the game.
+            agent::wait(&request.rule, within).await.map_err(Failure::from).map_err(|failure| match failure.kind {
+                FailureKind::GameNotFound => {
+                    Failure { kind: if started { FailureKind::NotStarted } else { FailureKind::NotRunning }, ..failure }
+                }
+                _ => failure,
+            })?
         }
     };
 

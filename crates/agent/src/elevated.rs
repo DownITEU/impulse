@@ -74,10 +74,8 @@ pub(crate) fn load(target: &Process, image: &Image, export: Option<(&str, &[u8])
     match run(exe, &format!("{FLAG} {}", request.encode()), image)? {
         LOADED => Ok(()),
         DENIED => Err(anyhow!("process {pid} denies the load even as administrator").context(Failure::new(FailureKind::Protected))),
-        ARCHITECTURE => {
-            Err(anyhow!("process {pid} and {} differ in architecture", image.path().display())
-                .context(Failure::new(FailureKind::Architecture)))
-        }
+        ARCHITECTURE => Err(anyhow!("process {pid} and {} differ in architecture", image.path().display())
+            .context(Failure::new(FailureKind::Architecture { needs_x64: image.x64() }))),
         REFUSED => bail!("the elevated load refused its request"),
         code => {
             // Its loader may still open the file after the copy exits.
@@ -179,7 +177,7 @@ impl Request {
         match loaded {
             Ok(()) => LOADED,
             Err(e) if inject::marked(&e, FailureKind::Protected) => DENIED,
-            Err(e) if inject::marked(&e, FailureKind::Architecture) => ARCHITECTURE,
+            Err(e) if inject::marked(&e, FailureKind::Architecture { needs_x64: image.x64() }) => ARCHITECTURE,
             Err(_) => FAILED,
         }
     }

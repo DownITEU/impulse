@@ -77,7 +77,7 @@ fn load_image(process: &Handle, target: &Process, image: &Image) -> Result<usize
     if wow64 == image.x64() {
         let (game, dll) = if wow64 { ("32-bit", "x64") } else { ("64-bit", "x86") };
         let error = anyhow!("process {pid} is {game}, {} is {dll}", image.path().display());
-        return Err(error.context(Failure::new(FailureKind::Architecture)));
+        return Err(error.context(Failure::new(FailureKind::Architecture { needs_x64: image.x64() })));
     }
     let load_library = if wow64 { wow64_load_library(process, pid)? } else { load_library()? };
 
@@ -300,7 +300,7 @@ mod tests {
         loaded.unwrap();
         assert!(alive, "the export crashed the process");
         let err = refused.unwrap_err();
-        assert!(marked(&err, FailureKind::Architecture), "{err}");
+        assert!(marked(&err, FailureKind::Architecture { needs_x64: true }), "{err}");
     }
 
     #[test]
@@ -315,13 +315,13 @@ mod tests {
     fn an_x86_image_is_never_mapped_into_an_x64_process() {
         let me = process::of(std::process::id()).unwrap();
         let err = map(&me, &Image::unchecked_x86(KERNEL32_X86)).unwrap_err();
-        assert!(marked(&err, FailureKind::Architecture), "{err}");
+        assert!(marked(&err, FailureKind::Architecture { needs_x64: false }), "{err}");
     }
 
     #[test]
     fn an_x86_image_never_enters_an_x64_process() {
         let me = process::of(std::process::id()).unwrap();
         let err = load(&me, &Image::unchecked_x86(KERNEL32_X86), "lstrlenW", &[]).unwrap_err();
-        assert!(marked(&err, FailureKind::Architecture), "{err}");
+        assert!(marked(&err, FailureKind::Architecture { needs_x64: false }), "{err}");
     }
 }

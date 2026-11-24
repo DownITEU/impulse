@@ -37,7 +37,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - A `Frame` is valid: `axes` a permutation of 0, 1, 2, `scale` never zero.
 - `Map.tile_sets` is never empty; `Map::tile_set` falls back to the first. `Tiles`: `min_zoom <= max_zoom <= Tiles::MAX_ZOOM`; `bounds` excludes its right and bottom edges. `Region.outlines` holds outer rings only.
 - `set_folder` calls are ordered: an older one never saves over a newer.
-- A crate marks an error at its origin with `.context(Failure::new(kind))`; `From<anyhow::Error>` finds the mark at the contract, else `Internal`. `detail` goes to the log only. A source names no UI place: the kind's text does.
+- A crate marks an error at its origin with `.context(Failure::new(kind))`; `From<anyhow::Error>` finds the mark at the contract, else `Internal`. `detail` goes to the log only. A source names no UI place: the kind's text does. A run's kinds name the step that failed (the launch, the wait, the game gone, the load, the trainer's start), as Wand's texts tell them apart.
 - No I/O here, and no source name or UI text except the chord names.
 - `model` names no crate of ours.
 

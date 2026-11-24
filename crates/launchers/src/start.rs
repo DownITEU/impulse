@@ -35,10 +35,11 @@ pub fn start(origin: &Origin, location: &Path, app: Option<&str>, arguments: Opt
         return Ok(false);
     };
     let opened = open(&command);
-    match origin {
-        Origin::Picked(_) => opened.context(Failure::new(FailureKind::GameNotFound)),
-        Origin::Launcher(_) => opened,
-    }
+    let kind = match origin {
+        Origin::Picked(_) => FailureKind::GameNotFound,
+        Origin::Launcher(_) => FailureKind::LaunchFailed,
+    };
+    opened.context(Failure::new(kind))
 }
 
 fn launcher(store: &str) -> Option<PathBuf> {
