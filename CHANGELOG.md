@@ -23,6 +23,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 - Xbox and Game Pass games are found in the folders their package uses, attach without reading the game's protected executable, and start the app the catalog names (Halo: The Master Chief Collection without its anti-cheat). (#21)
 - A game's build is read from its version file whatever its kind (an Xbox package's signature, a Java archive), so the version mark and the trainer's game version match Wand's. (#21)
 - A game you have in several stores uses the store its catalog entry lists first.
+- A game listed under several catalog entries on one install shows once: the edition its launcher names (Mafia III: Definitive Edition), one entry per title otherwise. The games of a collection (Halo: The Master Chief Collection) are still listed apart. (#24; thanks GhostInq)
 - A game whose version file is gone (moved, uninstalled, or rebuilt on a new engine, like RimWorld 1.7) no longer counts as installed, as in Wand, so a trainer that does not fit it is not started. Add it by its executable to play anyway.
 - LAUNCH right after starting the game yourself waits for it instead of starting a second copy, and a small helper process in the game's folder is no longer taken for the game.
 - Slow-loading games get more time: 45 s for the trainer to connect, 90 s for it to get ready.
