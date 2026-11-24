@@ -85,5 +85,6 @@ fn manifest(apps: &Path, file: &Path) -> Option<App> {
     }
     let id: u32 = state.str("appid")?.parse().ok()?;
     // `installdir` is usually relative to steamapps\common; join keeps an absolute one.
-    Some(App::new(format!("steam:{id}"), apps.join("common").join(state.str("installdir")?)))
+    let app = App::new(format!("steam:{id}"), apps.join("common").join(state.str("installdir")?));
+    Some(app.named(state.str("name")))
 }
