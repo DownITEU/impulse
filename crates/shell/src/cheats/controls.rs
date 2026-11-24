@@ -5,8 +5,11 @@ use client::{
     trainer::{Sheet, Span, TOP_TICK},
 };
 use gpui_kit::{
-    AnyElement, App, Context, Div, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful,
-    component::{h_flex, input::Input},
+    AnyElement, App, Context, Div, Entity, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful, Window,
+    component::{
+        h_flex,
+        input::{Input, InputEvent, InputState},
+    },
     div,
     prelude::*,
     px, rgb,
@@ -48,6 +51,37 @@ impl CheatList {
         }
     }
 
+    /// A number without a button takes its typed value on Enter or blur.
+    pub(super) fn follow_fields(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(printed) = self.printed.as_mut() else { return };
+        let game = &printed.game;
+        printed.typed = printed
+            .inputs
+            .iter()
+            .map(|(&index, input)| {
+                let game = game.clone();
+                cx.subscribe_in(input, window, move |list, input, event: &InputEvent, window, cx| {
+                    if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
+                        list.typed(&game, index, input, window, cx);
+                    }
+                })
+            })
+            .collect();
+    }
+
+    /// The typed value within the cheat's limits; `Set` then shows it, else the field shows the value again.
+    fn typed(&mut self, game: &GameId, index: usize, input: &Entity<InputState>, window: &mut Window, cx: &mut Context<Self>) {
+        let running = self.is_running(cx);
+        let Some((cheat, now)) = self.current(game, index, cx) else { return };
+        if cheat.args.button {
+            return;
+        }
+        match field_value(input, cheat, cx) {
+            Some(value) if running && value != now => self.set_value(index, value, cx),
+            _ => input.update(cx, |input, cx| input.set_value(number(now), window, cx)),
+        }
+    }
+
     pub(super) fn control(
         &self,
         index: usize,
@@ -79,19 +113,7 @@ impl CheatList {
                 .into_any_element(),
             Kind::Number if cheat.args.button => h_flex()
                 .gap(px(8.))
-                .when_some(printed.inputs.get(&index), |control, input| {
-                    control.child(
-                        value_box("").w(px(72.)).child(
-                            Input::new(input)
-                                .appearance(false)
-                                .disabled(!running)
-                                .px(px(8.))
-                                .text_center()
-                                .font_family(MONO)
-                                .text_size(px(TYPE_FIELD)),
-                        ),
-                    )
-                })
+                .when_some(printed.inputs.get(&index), |control, input| control.child(field(input, running)))
                 .child(self.press(&printed.game, index, key::CHEATS_SET, key::CHEATS_SET_DONE, running, cx))
                 .into_any_element(),
             Kind::Number => {
@@ -109,7 +131,7 @@ impl CheatList {
                 h_flex()
                     .gap(px(8.))
                     .child(nudge("decrease", "−", -step))
-                    .child(value_box(number(value)).w(px(52.)).justify_center().text_color(value_color))
+                    .when_some(printed.inputs.get(&index), |control, input| control.child(field(input, running).text_color(value_color)))
                     .child(nudge("increase", "+", step))
                     .into_any_element()
             }
@@ -149,7 +171,7 @@ impl CheatList {
                 // keeps no state. A control drawn for another game does nothing.
                 let Some((cheat, _)) = list.current(&game, index, cx) else { return };
                 let input = list.printed.as_ref().filter(|printed| printed.game == game).and_then(|printed| printed.inputs.get(&index));
-                let typed = input.and_then(|input| Some(cheat.args.clamp(input.read(cx).value().parse().ok()?)));
+                let typed = input.and_then(|input| field_value(input, cheat, cx));
                 let button = cheat.kind == Kind::Button;
                 if let Some(value) = typed {
                     list.set_value(index, value, cx);
@@ -246,6 +268,16 @@ impl CheatList {
                     .when(resettable, |button| button.on_click(cx.listener(|list, _, _, cx| list.reset_mods(cx)))),
             )
     }
+}
+
+fn field_value(input: &Entity<InputState>, cheat: &Cheat, cx: &App) -> Option<f64> {
+    input.read(cx).value().trim().parse().ok().map(|value| cheat.args.clamp(value))
+}
+
+fn field(input: &Entity<InputState>, running: bool) -> Div {
+    value_box("")
+        .w(px(72.))
+        .child(Input::new(input).appearance(false).disabled(!running).px(px(8.)).text_center().font_family(MONO).text_size(px(TYPE_FIELD)))
 }
 
 fn value_box(value: impl Into<SharedString>) -> Div {

@@ -8,12 +8,15 @@ paths:
 Small Windows and I/O crates with no dependency on our other crates but `model` (`keyhook`). Each is data in, data out.
 
 ## keyhook
-- `Matcher` over `model::Chord` (matches as Wand does: longest chord wins, a chord bound twice fires both), `Capture`, `Hook`, `foreground_pid`.
-- `Hook` runs on its own thread, never the tao/WebView2 thread: Windows removes a hook that stalls. Its handler returns at once (forward to a channel); true on a down hides it from every app.
-- The mouse hook runs on every move: start it only when a chord `uses_mouse()`. A later hook sees keys first.
+- `Matcher` over `Trigger`s: a `model::Chord` (matches as Wand does: longest active chord wins, a chord bound twice fires both) or a `Key` (modifiers of either side, exactly, and one key, as `RegisterHotKey` matched; fires on its own key's down). `active` is asked only of the bindings that match; `replace` keeps the keys held; `modifiers` (`Modifiers`) reads them; `Key::clashes` tells a chord that fires a key too. Also `Capture`, `Hook`, `Stroke`, `foreground_pid`, `caps_lock`. A feature's default keys are its own (`Key::new`).
+- `Hook` runs on its own thread, never the tao/WebView2 thread: Windows removes a hook that stalls. Its handler returns at once (forward to a channel); true on a down hides it from every app. A repeat reaches it only for a key it showed (`repeat`, its return ignored). The keys down as it starts come first as `held` (read after the hook is set, so their release comes), then only at their release. A key it showed that the system has up at the next press (let go on the lock screen or a UAC prompt) is released then.
+- The mouse hook runs on every move: on only while asked (`set_mouse`, posted to the same thread without waiting, so the held keys stay). A later hook sees keys first.
 
 ## topmost
-- `Key` (modifiers and one key), `Watch` (one thread: `RegisterHotKey`, a foreground hook, `EXTRAS` extra keys by number: `set_extra`, `Event::Extra`), and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `pass_through`, `exclusive`, ...).
+- `Watch` (one thread: the foreground hook) and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `show`, `pass_through`, `exclusive`, ...). `raise` says whether the window took the foreground: a hooked press gives no right to it (a registered hotkey's did), so `take_input` sends an empty input first.
+- `client_area(window)`: a window's client area as an `Area` (screen physical pixels, as `place`, `show` and `resize` take), for placing a layer inside a game's frame; data only, `None` for a gone window. `resize` keeps the z-order; `restore` says how the window was (`Away`) for `put_away`.
+- `post_input(window, message, wparam, lparam)`: posts only mouse messages; a wheel's client point becomes the screen one Win32 wants.
+- `layout(game)` (the `HKL` of `game`'s thread) and `key_state(Held)` (the held modifiers and Caps Lock as `GetKeyboardState` gives them): what the vendored GPUI's `keystroke_in` takes to make a keystroke of a key typed into the game.
 - `exclusive(game)`: `SHQueryUserNotificationState` says D3D fullscreen and `game` is the window in front covering its monitor. The state is the session's and lags a mode change; borderless gives `QUNS_BUSY`.
 - `Watch`'s sink runs on the watch thread: forward to a channel. The calls take `isize` handles and are made outside GPUI updates.
 

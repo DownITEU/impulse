@@ -1,4 +1,4 @@
-//! A Tophat session as Wand drives it: load the trainer plugin, run the mod, set values, stop.
+//! A Tophat session: load the trainer plugin, run the mod, set values, stop.
 //! Timers run on the server's runtime; the async methods can be awaited from any executor.
 
 use std::{
@@ -40,13 +40,13 @@ mod location;
 mod tests;
 
 const PLUGIN: &str = "trainerlib";
-// The service gets Wand's timings: a beat every 5 s, 120 s to answer the first, 60 s after.
+// The service's timings: a beat every 5 s, 120 s to answer the first, 60 s after.
 const BEAT: Duration = Duration::from_secs(5);
 const FIRST_BEAT_LIMIT: Duration = Duration::from_secs(120);
 const BEAT_LIMIT: Duration = Duration::from_secs(60);
 const LOAD_PLUGIN_WITHIN: Duration = Duration::from_secs(30);
 const COMMAND_WITHIN: Duration = Duration::from_secs(5);
-const READY_WITHIN: Duration = Duration::from_secs(60);
+const READY_WITHIN: Duration = Duration::from_secs(90);
 const STOP_WITHIN: Duration = Duration::from_secs(30);
 const TEARDOWN_WITHIN: Duration = Duration::from_secs(5);
 // The service answers a command at its own timeout, so the wait is a little longer.
@@ -176,7 +176,7 @@ impl Session {
         *self.plugin.lock().unwrap() = Some(proto::plugin_handle(&reply).map_err(|err| anyhow!("LoadPlugin: {err}"))?);
         self.execute("trainer_run_mod_json", Some(params), COMMAND_WITHIN).await?;
         let mut phase = self.phase.clone();
-        let Some(settled) = self.within(READY_WITHIN, phase.wait_for(|phase| *phase != Phase::Starting)).await else {
+        let Some(settled) = within(&self.runtime, READY_WITHIN, phase.wait_for(|phase| *phase != Phase::Starting)).await else {
             bail!("the trainer was not ready in {READY_WITHIN:?}");
         };
         let settled = settled.map_err(|_| closed())?;
@@ -193,7 +193,8 @@ impl Session {
         });
         let params = json!({"requestId": id, "name": name, "value": value});
         self.execute("trainer_push_client_req_from_json", Some(params), COMMAND_WITHIN).await?;
-        let code = self.within(COMMAND_WITHIN, verdicts).await.ok_or_else(|| anyhow!("no verdict for {name} in {COMMAND_WITHIN:?}"))?;
+        let code =
+            within(&self.runtime, COMMAND_WITHIN, verdicts).await.ok_or_else(|| anyhow!("no verdict for {name} in {COMMAND_WITHIN:?}"))?;
         Ok(match code.map_err(|_| closed())? {
             0 => Outcome::Set,
             1 => Outcome::Changed,
@@ -201,7 +202,7 @@ impl Session {
         })
     }
 
-    /// Wand's order: stop the mod, unload the plugin, say goodbye, then drop the stream. Every
+    /// In this order: stop the mod, unload the plugin, say goodbye, then drop the stream. Every
     /// step runs even if an earlier one failed; the first error is returned. Cancelling it
     /// closes the session, so the service tears down by itself.
     pub async fn stop(&self) -> Result<()> {
@@ -237,23 +238,23 @@ impl Session {
         let _forget = Forget(|| {
             self.shared.waiting().replies.remove(&seq);
         });
-        let Some(reply) = self.within(limit, reply).await else {
+        let Some(reply) = within(&self.runtime, limit, reply).await else {
             bail!("{kind} got no reply in {limit:?}");
         };
         reply.map_err(|_| closed())
     }
+}
 
-    /// `None` when `limit` passed first.
-    async fn within<T>(&self, limit: Duration, work: impl Future<Output = T>) -> Option<T> {
-        // Built inside the task: `sleep` panics on a caller with no runtime, like GPUI's threads.
-        let timer = self.runtime.spawn(async move { tokio::time::sleep(limit).await });
-        // Also stops the timer when the caller cancels this future instead of letting it run out.
-        let abort = timer.abort_handle();
-        let _abort = Forget(move || abort.abort());
-        match future::select(pin!(work), timer).await {
-            Either::Left((value, _)) => Some(value),
-            Either::Right(_) => None,
-        }
+/// `work`, or `None` when `limit` passed first; the timer runs on `runtime`, so any executor may await this.
+pub async fn within<T>(runtime: &Handle, limit: Duration, work: impl Future<Output = T>) -> Option<T> {
+    // Built inside the task: `sleep` panics on a caller with no runtime, like GPUI's threads.
+    let timer = runtime.spawn(async move { tokio::time::sleep(limit).await });
+    // Also stops the timer when the caller cancels this future instead of letting it run out.
+    let abort = timer.abort_handle();
+    let _abort = Forget(move || abort.abort());
+    match future::select(pin!(work), timer).await {
+        Either::Left((value, _)) => Some(value),
+        Either::Right(_) => None,
     }
 }
 

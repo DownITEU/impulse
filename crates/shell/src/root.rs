@@ -9,6 +9,7 @@ use gpui_kit::{Context, Entity, IntoElement, Render, StyleRefinement, Window, di
 use crate::{
     map::{MapEvent, MapView},
     page::Page,
+    placement::Keeper,
     remote::Serve,
     ui::{dialog::backdrop, theme::*},
 };
@@ -18,6 +19,7 @@ const MAP_INSET: f32 = 40.;
 pub struct Root {
     page: Entity<Page>,
     map: Entity<MapView>,
+    _placement: Entity<Keeper>,
 }
 
 impl Root {
@@ -31,13 +33,15 @@ impl Root {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let page = cx.new(|cx| Page::new(registry, plugins, Paths::new(data_dir), serve, elevated, window, cx));
+        let paths = Paths::new(data_dir);
+        let placement = cx.new(|cx| Keeper::new(&paths, window, cx));
+        let page = cx.new(|cx| Page::new(registry, plugins, paths, serve, elevated, window, cx));
         let map = page.read(cx).map().clone();
         cx.observe(&map, |_, _, cx| cx.notify()).detach();
         // LINK A MAP opens from the page or the map's toolbar: it is drawn over both.
         let linker = map.read(cx).linker().clone();
         cx.observe(&linker, |_, _, cx| cx.notify()).detach();
-        Self { page, map }
+        Self { page, map, _placement: placement }
     }
 
     /// The map over the dimmed page; a click beside it closes it.

@@ -9,6 +9,7 @@ mod inject;
 mod install;
 mod locale;
 mod map;
+mod overlay;
 mod provider;
 mod proxy;
 mod run;
@@ -17,6 +18,7 @@ mod store;
 mod texts;
 mod tophat;
 mod trainer;
+mod trainer_host;
 mod transport;
 
 pub use provider::Wand;

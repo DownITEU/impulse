@@ -8,6 +8,7 @@ use gpui_kit::{
     component::{
         h_flex,
         input::{Input, InputState},
+        scroll::ScrollableElement,
         v_flex,
     },
     div,
@@ -135,7 +136,7 @@ impl Render for TitlePicker {
             .child(Input::new(&open.filter).appearance(false).px_0().font_family(MONO).text_size(px(TYPE_FIELD)));
         let list = match rows.is_empty() {
             true => div().py(px(8.)).child(mono(t(cx, key::MAP_LINK_EMPTY), TYPE_LABEL).text_color(rgb(FAINT))).into_any_element(),
-            false => div().id("titles").max_h(px(320.)).overflow_y_scroll().flex().flex_col().children(rows).into_any_element(),
+            false => div().id("titles").max_h(px(320.)).flex().flex_col().children(rows).overflow_y_scrollbar().into_any_element(),
         };
         let body = v_flex()
             .p(px(16.))

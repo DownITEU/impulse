@@ -35,7 +35,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn side_buttons_and_notches_take_wands_codes() {
+    fn side_buttons_and_notches_take_the_chord_codes() {
         assert_eq!(input(WM_XBUTTONDOWN, 2 << 16), Some((XBUTTON2, true)));
         assert_eq!(input(WM_XBUTTONUP, 1 << 16), Some((XBUTTON1, false)));
         assert_eq!(input(WM_MOUSEWHEEL, 120 << 16), Some((WHEEL_UP, true)));

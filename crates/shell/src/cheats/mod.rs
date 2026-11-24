@@ -131,6 +131,7 @@ impl CheatList {
             let game = game?;
             Some(Printed::new(game.clone(), trainers.sheet(&game)?, window, cx))
         });
+        self.follow_fields(window, cx);
     }
 
     fn trainer_changed(&mut self, trainers: &Entity<Trainers>, event: &TrainerEvent, window: &mut Window, cx: &mut Context<Self>) {

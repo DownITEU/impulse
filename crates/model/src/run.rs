@@ -21,8 +21,9 @@ pub trait Attach: Send {
         async { Ok(None) }.boxed()
     }
 
-    /// `process` as found: an attach refuses a process that is no longer this one.
-    fn attach(self: Box<Self>, process: Process) -> BoxFuture<'static, Result<Live>>;
+    /// `process` as found: an attach refuses a process that is no longer this one. `build` is the install's
+    /// (`Installation::build`), the game's version the trainer is told; `None` when unknown.
+    fn attach(self: Box<Self>, process: Process, build: Option<u32>) -> BoxFuture<'static, Result<Live>>;
 }
 
 /// Dropping it ends the run; `stop` is the clean way.

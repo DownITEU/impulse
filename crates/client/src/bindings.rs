@@ -41,7 +41,7 @@ pub enum Clash {
 /// How a held chord is bound anyway.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Resolution {
-    /// Both fire: Wand fires every cheat bound to a chord.
+    /// Both fire.
     Keep,
     /// Every holder is left unbound.
     Take,
@@ -55,7 +55,7 @@ fn holders(slots: &[Vec<Option<Chord>>], at: (usize, usize), chord: Chord) -> im
         .map(|(cheat, slot, _)| (cheat, slot))
 }
 
-/// The slots whose chord another slot of the sheet holds too, by cheat then slot: Wand fires them all.
+/// The slots whose chord another slot of the sheet holds too, by cheat then slot: all of them fire.
 pub fn shared(slots: &[Vec<Option<Chord>>]) -> Vec<Vec<bool>> {
     let shares = |at, chord| holders(slots, at, chord).next().is_some();
     let rows = slots.iter().enumerate();

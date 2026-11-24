@@ -2,7 +2,10 @@
 
 mod cache;
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::{Arc, PoisonError, RwLock},
+};
 
 use anyhow::{Context, Result};
 use model::{Game, Locator, MapOffer, Offer, Ref, Standalone, StoreId};
@@ -12,6 +15,18 @@ use serde_json::value::RawValue;
 pub use cache::{cached, forget, refresh, size};
 
 pub(crate) const ART_CDN: &str = "https://api-cdn.wemod.com";
+/// A game's `flags` bit: Wand's overlay supports it.
+const OVERLAY_SUPPORTED: u64 = 256;
+
+/// The ids of the games Wand's overlay draws in, from the last catalog read.
+#[derive(Clone, Default)]
+pub struct Overlaid(Arc<RwLock<HashSet<String>>>);
+
+impl Overlaid {
+    pub fn has(&self, id: &str) -> bool {
+        self.0.read().unwrap_or_else(PoisonError::into_inner).contains(id)
+    }
+}
 
 #[derive(Deserialize)]
 struct Catalog {
@@ -34,6 +49,9 @@ struct Entry {
     #[serde(default, deserialize_with = "strings")]
     purchase_uris: Vec<String>,
     trainer: Option<Trainer>,
+    /// Any value: a bad one means no overlay for that game, not an unreadable catalog.
+    #[serde(default)]
+    flags: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -69,6 +87,10 @@ struct Map {
 #[derive(Deserialize)]
 struct Platforms {
     standalone: StandaloneApps,
+    /// `containers`: the application to start by package family (Halo MCC's without its anti-cheat). Any value: a bad one
+    /// is skipped.
+    #[serde(default)]
+    uwp: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -100,8 +122,11 @@ enum LocatorKind {
     Unknown,
 }
 
-fn parse(json: &[u8]) -> Result<Vec<Game>> {
+/// The games, the ones the overlay draws in noted in `overlaid`.
+fn parse(json: &[u8], overlaid: &Overlaid) -> Result<Vec<Game>> {
     let Catalog { games, titles, platforms, maps } = serde_json::from_slice(json).context("parse catalog")?;
+    let drawn = games.values().filter(|entry| entry.flags.as_u64().is_some_and(|flags| flags & OVERLAY_SUPPORTED != 0));
+    *overlaid.0.write().unwrap_or_else(PoisonError::into_inner) = drawn.map(|entry| entry.id.clone()).collect();
     let wand = crate::source();
     let mut maps_of: HashMap<String, Vec<MapOffer>> = HashMap::new();
     for map in maps {
@@ -114,8 +139,15 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
     }
     let standalone: HashMap<String, &StandaloneApp> =
         platforms.standalone.apps.iter().map(|app| (format!("standalone:{}", app.id).to_ascii_lowercase(), app)).collect();
+    let containers = platforms.uwp["containers"].as_object().into_iter().flatten();
+    let containers: HashMap<String, &str> =
+        containers.filter_map(|(family, app)| Some((family.to_ascii_lowercase(), app.as_str()?))).collect();
     let games = games.into_values().filter_map(|entry| {
         let title = titles.get(&entry.title_id)?;
+        let store_ids: Vec<StoreId> = entry.correlation_ids.iter().filter_map(|id| StoreId::parse(id)).collect();
+        let packaged = store_ids.iter().filter(|id| id.store().eq_ignore_ascii_case("uwp"));
+        let package_apps =
+            packaged.filter_map(|id| Some((id.clone(), containers.get(&id.id().to_ascii_lowercase())?.to_string()))).collect();
         let art = |size: u32| title.thumbnail.as_deref().map(|path| format!("{ART_CDN}{}", path.replace("{size}", &size.to_string())));
         let standalone = entry.correlation_ids.iter().filter_map(|id| standalone.get(&id.to_ascii_lowercase()));
         Some(Game {
@@ -128,6 +160,7 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
                     locators: app.locators.iter().filter_map(locator).collect(),
                 })
                 .collect(),
+            package_apps,
             cover: art(460),
             thumbnail: art(100),
             maps: maps_of.get(&entry.title_id).cloned().unwrap_or_default(),
@@ -140,7 +173,7 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
             }),
             id: Ref::new(&wand, &entry.id),
             title_id: entry.title_id,
-            store_ids: entry.correlation_ids.iter().filter_map(|id| StoreId::parse(id)).collect(),
+            store_ids,
             exe: entry.version_path,
             purchase: entry.purchase_uris,
         })
@@ -170,11 +203,16 @@ fn locator(raw: &RawLocator) -> Option<Locator> {
 mod tests {
     use super::*;
 
+    fn read(json: &[u8]) -> Result<Vec<Game>> {
+        parse(json, &Overlaid::default())
+    }
+
     #[test]
     fn reads_games_in_model_terms() {
-        let games = parse(
+        let games = read(
             br#"{"games":{
-                "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App","standalone:other"],"versionPath":"a.exe",
+                "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App","standalone:other","uwp:Game.Pkg_8w","uwp:Odd_8w"],
+                     "versionPath":"a.exe",
                      "purchaseUris":["steam://store/1"],
                      "trainer":{"cheatCount":3,"supportedVersions":[7],"updatedAt":"u"}},
                 "2":{"id":"2","titleId":"gone","purchaseUris":null},
@@ -185,7 +223,8 @@ mod tests {
                        {"id":"3","titleId":"other","externalId":"x3","name":"Elsewhere"}],
               "platforms":{"standalone":{"apps":[{"id":"app","launcher":"l.exe",
                 "locators":[{"type":"directory","value":"C:\\G"},{"type":"from-the-future","value":"x"}]},
-                {"id":"other","launcher":"o.exe","locators":[]}]}}}"#,
+                {"id":"other","launcher":"o.exe","locators":[]}]},
+                "uwp":{"containers":{"game.pkg_8w":"NoEAC","Odd_8w":7},"ignore":["^x"]}}}"#,
         )
         .unwrap();
         let [game] = &games[..] else { panic!("one game with a title") };
@@ -206,5 +245,22 @@ mod tests {
         );
         let standalone: Vec<_> = game.standalone.iter().map(|app| (app.store_id.as_str(), app.locators.len())).collect();
         assert_eq!(standalone, [("standalone:app", 1), ("standalone:other", 0)]);
+        let apps: Vec<_> = game.package_apps.iter().map(|(id, app)| (id.as_str(), app.as_str())).collect();
+        assert_eq!(apps, [("uwp:Game.Pkg_8w", "NoEAC")], "by family in any case; a value not text is skipped");
+        let odd = br#"{"games":{},"titles":{},"platforms":{"standalone":{"apps":[]},"uwp":null}}"#;
+        assert!(read(odd).unwrap().is_empty(), "odd package data is skipped, not the catalog");
+    }
+
+    #[test]
+    fn the_overlay_draws_only_in_a_game_flagged_for_it() {
+        let json = br#"{"games":{"k":{"id":"1739","titleId":"t","flags":772},"2":{"id":"2","titleId":"t","flags":4},
+            "3":{"id":"3","titleId":"t"},"4":{"id":"4","titleId":"t","flags":"256"}},
+            "titles":{},"platforms":{"standalone":{"apps":[]}}}"#;
+        let overlaid = Overlaid::default();
+        parse(json, &overlaid).unwrap();
+        let draws: Vec<bool> = ["1739", "2", "3", "4", "k"].iter().map(|id| overlaid.has(id)).collect();
+        assert_eq!(draws, [true, false, false, false, false]);
+        parse(br#"{"games":{},"titles":{},"platforms":{"standalone":{"apps":[]}}}"#, &overlaid).unwrap();
+        assert!(!overlaid.has("1739"), "a newer catalog replaces the set");
     }
 }

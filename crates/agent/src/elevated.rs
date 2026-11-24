@@ -64,18 +64,18 @@ pub(crate) fn can_elevate() -> bool {
     HOST.get().is_some() && !elevated()
 }
 
-/// Loads through an elevated copy of the host executable, after the user accepts UAC's prompt.
-pub(crate) fn load(target: &Process, image: &Image, export: &str, arg: &[u8]) -> Result<()> {
+/// Loads through an elevated copy of the host executable, after the user accepts UAC's prompt: `export` started with
+/// its argument, or none (a map).
+pub(crate) fn load(target: &Process, image: &Image, export: Option<(&str, &[u8])>) -> Result<()> {
     let Some(exe) = HOST.get() else { bail!("no executable serves elevated loads") };
-    let request = Request { target: target.clone(), image: image.path().to_owned(), export: export.to_owned(), arg: arg.to_vec() };
+    let (export, arg) = export.map_or((None, Vec::new()), |(export, arg)| (Some(export.to_owned()), arg.to_vec()));
+    let request = Request { target: target.clone(), image: image.path().to_owned(), export, arg };
     let pid = target.pid;
     match run(exe, &format!("{FLAG} {}", request.encode()), image)? {
         LOADED => Ok(()),
         DENIED => Err(anyhow!("process {pid} denies the load even as administrator").context(Failure::new(FailureKind::Protected))),
-        ARCHITECTURE => {
-            Err(anyhow!("process {pid} and {} differ in architecture", image.path().display())
-                .context(Failure::new(FailureKind::Architecture)))
-        }
+        ARCHITECTURE => Err(anyhow!("process {pid} and {} differ in architecture", image.path().display())
+            .context(Failure::new(FailureKind::Architecture { needs_x64: image.x64() }))),
         REFUSED => bail!("the elevated load refused its request"),
         code => {
             // Its loader may still open the file after the copy exits.
@@ -137,19 +137,20 @@ pub fn elevated() -> bool {
 struct Request {
     target: Process,
     image: PathBuf,
-    export: String,
+    /// `None`: a map, no export started.
+    export: Option<String>,
     arg: Vec<u8>,
 }
 
 impl Request {
-    /// Fields in hex joined by `.`: nothing on the command line needs quoting.
+    /// Fields in hex joined by `.`: nothing on the command line needs quoting. No export is an empty field.
     fn encode(&self) -> String {
         let fields = [
             self.target.pid.to_string(),
             self.target.created.to_string(),
             hex(&utf16(self.target.path.as_os_str())),
             hex(&utf16(self.image.as_os_str())),
-            hex(self.export.as_bytes()),
+            hex(self.export.as_deref().unwrap_or_default().as_bytes()),
             hex(&self.arg),
         ];
         fields.join(".")
@@ -160,17 +161,23 @@ impl Request {
         let mut next = || fields.next();
         let (pid, created) = (next()?.parse().ok()?, next()?.parse().ok()?);
         let (path, image) = (path(&unhex(next()?)?)?, path(&unhex(next()?)?)?);
-        let export = String::from_utf8(unhex(next()?)?).ok()?;
+        let export = Some(String::from_utf8(unhex(next()?)?).ok()?).filter(|export| !export.is_empty());
         let arg = unhex(next()?)?;
-        next().is_none().then_some(Self { target: Process { pid, path, created }, image, export, arg })
+        // A map carries no argument: one with an argument lost its export.
+        let whole = next().is_none() && (export.is_some() || arg.is_empty());
+        whole.then_some(Self { target: Process { pid, path, created }, image, export, arg })
     }
 
     fn load(self, publishers: &[&str]) -> u32 {
         let Ok(image) = Image::open(&self.image, publishers) else { return REFUSED };
-        match inject::load(&self.target, &image, &self.export, &self.arg) {
+        let loaded = match &self.export {
+            Some(export) => inject::load(&self.target, &image, export, &self.arg),
+            None => inject::map(&self.target, &image),
+        };
+        match loaded {
             Ok(()) => LOADED,
             Err(e) if inject::marked(&e, FailureKind::Protected) => DENIED,
-            Err(e) if inject::marked(&e, FailureKind::Architecture) => ARCHITECTURE,
+            Err(e) if inject::marked(&e, FailureKind::Architecture { needs_x64: image.x64() }) => ARCHITECTURE,
             Err(_) => FAILED,
         }
     }
@@ -209,7 +216,7 @@ mod tests {
         Request {
             target: Process { pid: 19860, path: r"D:\Games\Resident Evil Requiem\re9.exe".into(), created: 134_000_000_000_000_000 },
             image: r"C:\Users\Игрок\AppData\Local\Some App 1.2\service.dll".into(),
-            export: "StartService".into(),
+            export: Some("StartService".into()),
             arg: br#"{"port":5000}"#.iter().copied().chain([0]).collect(),
         }
     }
@@ -219,12 +226,17 @@ mod tests {
         let encoded = request().encode();
         assert!(encoded.bytes().all(|byte| byte.is_ascii_hexdigit() || byte == b'.'), "{encoded}");
         assert_eq!(Request::decode(OsStr::new(&encoded)), Some(request()));
+        let map = Request { export: None, arg: Vec::new(), ..request() };
+        assert_eq!(Request::decode(OsStr::new(&map.encode())), Some(map), "a map starts no export");
     }
 
     #[test]
     fn a_damaged_request_is_refused() {
         let encoded = request().encode();
-        for damaged in [format!("{encoded}.00"), encoded[..encoded.len() - 1].to_owned(), encoded.replacen('.', "x.", 1), String::new()] {
+        let lost_export = Request { export: None, ..request() }.encode();
+        let damaged =
+            [format!("{encoded}.00"), encoded[..encoded.len() - 1].to_owned(), encoded.replacen('.', "x.", 1), String::new(), lost_export];
+        for damaged in damaged {
             assert_eq!(Request::decode(OsStr::new(&damaged)), None, "{damaged}");
         }
     }

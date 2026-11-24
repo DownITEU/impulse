@@ -410,6 +410,7 @@ pub(crate) struct Callbacks {
     pub(crate) close: Cell<Option<Box<dyn FnOnce()>>>,
     pub(crate) hit_test_window_control: Cell<Option<Box<dyn FnMut() -> Option<WindowControlArea>>>>,
     pub(crate) appearance_changed: Cell<Option<Box<dyn FnMut()>>>,
+    pub(crate) mirrored: Cell<Option<Box<dyn FnMut(MirrorFrame)>>>,
 }
 
 struct WindowCreateContext {
@@ -1038,11 +1039,27 @@ impl PlatformWindow for WindowsWindow {
     }
 
     fn draw(&self, scene: &Scene) {
-        self.state
+        let mirrored = self
+            .state
             .renderer
             .borrow_mut()
             .draw(scene, self.state.background_appearance.get())
-            .log_err();
+            .log_err()
+            .flatten();
+        if let Some(frame) = mirrored
+            && let Some(mut on_frame) = self.state.callbacks.mirrored.take()
+        {
+            on_frame(frame);
+            self.state.callbacks.mirrored.set(Some(on_frame));
+        }
+    }
+
+    fn mirror_frames(&self, on_frame: Option<Box<dyn FnMut(MirrorFrame)>>) {
+        self.state
+            .renderer
+            .borrow_mut()
+            .set_mirroring(on_frame.is_some());
+        self.state.callbacks.mirrored.set(on_frame);
     }
 
     #[cfg(feature = "test-support")]

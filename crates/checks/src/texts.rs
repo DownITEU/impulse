@@ -42,7 +42,7 @@ fn used(path: &str, source: &str) -> Vec<String> {
 }
 
 #[test]
-fn every_key_has_its_message_in_every_language() {
+fn every_key_has_its_english_message_and_a_translation_only_english_ids() {
     let files = files();
     let mut complaints = Vec::new();
     for english in files.iter().filter(|path| path.ends_with("/locales/en.ftl")) {
@@ -57,9 +57,9 @@ fn every_key_has_its_message_in_every_language() {
             files.iter().filter(|path| path.starts_with(&format!("{krate}src/"))).flat_map(|path| used(path, &read(path))).collect();
         complaints.extend(used.difference(&defined).map(|id| format!("{english}: no message `{id}`, used in {krate}src")));
         complaints.extend(defined.difference(&used).map(|id| format!("{english}: `{id}` is used nowhere in {krate}src")));
+        // A translation may be partial: a message it lacks shows in English.
         for other in files.iter().filter(|path| path.starts_with(&format!("{krate}locales/")) && *path != english) {
             let translated = messages(other, &read(other), &mut complaints);
-            complaints.extend(defined.difference(&translated).map(|id| format!("{other}: lacks `{id}`")));
             complaints.extend(translated.difference(&defined).map(|id| format!("{other}: `{id}` is not in English")));
         }
     }

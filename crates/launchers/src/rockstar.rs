@@ -3,7 +3,20 @@ use std::{env, fs, path::PathBuf};
 use aes::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
 use serde_json::Value;
 
-use super::App;
+use super::{
+    App,
+    registry::{self, LOCAL_MACHINE, View},
+};
+
+pub const LAUNCHER: &str = "Launcher.exe";
+
+/// The Rockstar Games Launcher's folder, when its launcher is there.
+pub fn launcher() -> Option<PathBuf> {
+    let registered = registry::value(LOCAL_MACHINE, r"SOFTWARE\Rockstar Games\Launcher", "InstallFolder", View::Wow32).map(PathBuf::from);
+    let programs =
+        ["ProgramW6432", "ProgramFiles"].map(|var| env::var_os(var).map(|dir| PathBuf::from(dir).join(r"Rockstar Games\Launcher")));
+    [registered].into_iter().chain(programs).flatten().find(|dir| dir.join(LAUNCHER).is_file())
+}
 
 pub fn apps() -> Vec<App> {
     let Some(data) = env::var_os("ProgramData") else {
@@ -24,7 +37,7 @@ pub fn apps() -> Vec<App> {
             let id = title["ti"].as_str().filter(|id| *id != "launcher")?;
             let location = title["il"].as_str().filter(|l| !l.is_empty())?;
             title["if"].as_i64().filter(|flags| *flags != 0)?;
-            Some(App { store_id: format!("rockstar:{id}"), location: location.into() })
+            Some(App::new(format!("rockstar:{id}"), location.into()))
         })
         .collect()
 }
