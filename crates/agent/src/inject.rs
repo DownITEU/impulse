@@ -21,8 +21,8 @@ use windows_sys::Win32::{
         ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_32BIT, LIST_MODULES_ALL},
         SystemInformation::GetSystemWow64DirectoryW,
         Threading::{
-            CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ,
-            PROCESS_VM_WRITE, WaitForSingleObject,
+            CreateRemoteThread, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+            WaitForSingleObject,
         },
     },
 };
@@ -112,17 +112,7 @@ impl Drop for Remote<'_> {
 }
 
 fn open(pid: u32) -> Result<Handle> {
-    let access = PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ;
-    // SAFETY: plain Win32 call; the handle is owned by the returned guard.
-    let handle = unsafe { OpenProcess(access, 0, pid) };
-    if handle.is_null() {
-        let error = io::Error::last_os_error();
-        let denied = error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32);
-        let error = anyhow!("cannot open process {pid}: {error}");
-        // Run as administrator, or kept by its protection.
-        return Err(if denied { error.context(Failure::new(FailureKind::Protected)) } else { error });
-    }
-    Ok(Handle(handle))
+    process::open_pid(pid, PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ)
 }
 
 pub(crate) fn marked(error: &anyhow::Error, kind: FailureKind) -> bool {

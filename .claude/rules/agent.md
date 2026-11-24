@@ -14,7 +14,8 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 - `x64(&Process)`: whether it is a 64-bit process, asked of the process (blocking), never of its exe: a GDK game's is unreadable.
 - `signaled(name, within)`: waits for a named event a module in a game sets (blocking): `false` when none of that name is held, an error when it is not set in time.
 - `Image::open(path, publishers)`, `Image::path`, `Image::x64` (else x86): the only way to name a DLL that enters a game.
-- `signed(path, publishers)`: the signature check alone (blocking), for a program that runs on its own and never enters a game.
+- `signed(path, publishers)`: the signature check alone (blocking), for a copy the caller made and holds. `Program::open(path, publishers)`, `Program::path`: an `.exe` that runs on its own and never enters a game, locked and resolved like an `Image` (a start appends `.exe` to a bare name too); start it by `path`. Its signature must be embedded: system executables are catalog-signed.
+- `idle(&Process, within)`: `WaitForInputIdle` (blocking); `false` past `within` or on any `WAIT_FAILED` (no GUI), as Wand. `suspend`, `resume(&Process)`: `NtSuspendProcess` / `NtResumeProcess` (ntdll, raw-dylib), each a count: one resume per suspend. A denied open is `Protected`; they never elevate.
 - `load(&Process, &Image, export, arg)`: runs `LoadLibraryW` in the target, then starts `export` with a copy of `arg`.
 - `map(&Process, &Image)`: the same checks and `LoadLibraryW` run, no export started: for a DLL whose `DllMain` does the work (an overlay). Never elevates: a denying process stays `Protected`.
 - `elevated()`: this process runs as administrator (`app` marks it in the title bar).

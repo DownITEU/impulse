@@ -28,7 +28,7 @@ pub fn tophat(target: &Process, service: &Image, startup: &Startup) -> Result<()
 mod tests {
     use std::{
         future::Future,
-        process::{Command, Stdio},
+        process::{Child, Command, Stdio},
         time::Duration,
     };
 
@@ -40,7 +40,10 @@ mod tests {
         super::tophat::{Server, Session},
         *,
     };
-    use crate::install::{PUBLISHERS, binaries, installs};
+    use crate::{
+        install::{PUBLISHERS, binaries, installs, trainer_host},
+        trainer_host::TrainerHost,
+    };
 
     #[test]
     fn startup_is_the_json_the_service_reads() {
@@ -55,32 +58,51 @@ mod tests {
         block_on(timed)?.context("timed out")
     }
 
+    /// Injects the installed service into `target`, waits for it to dial in, then ends the session.
+    fn dials_in_and_ends(target: &Process) -> Result<()> {
+        let [service, _] = binaries(&installs().first().expect("a Wand install").trainerlib(), true);
+        let service = Image::open(&service, PUBLISHERS)?;
+        let server = Server::start()?;
+        let client_id = uuid::Uuid::new_v4().to_string();
+        let waiting = server.expect(&client_id);
+        let startup = Startup { wand_port: server.port, client_id: &client_id, trainer_session_id: &uuid::Uuid::new_v4().to_string() };
+        tophat(target, &service, &startup)?;
+        let channel = bounded(&server.runtime, 20, waiting)?.context("the server dropped the waiter")?;
+        let (session, mut events) = Session::open(server.runtime.clone(), channel, &client_id);
+        // No trainer is running, so the service may refuse the stop; the session must still end.
+        let stopped = block_on(session.stop());
+        println!("stop: {stopped:?}");
+        ensure!(bounded(&server.runtime, 10, async move { events.next().await })?.is_none());
+        Ok(())
+    }
+
+    fn ping() -> Child {
+        Command::new(r"C:\Windows\System32\PING.EXE").args(["-n", "120", "127.0.0.1"]).stdout(Stdio::null()).spawn().unwrap()
+    }
+
     /// Needs a Wand install. The target is a throwaway `ping` we start, never a game.
     #[test]
     #[ignore = "injects the installed tophat_service into a throwaway process"]
     fn the_injected_service_dials_in_and_the_session_ends_cleanly() {
-        let [service, _] = binaries(&installs().first().expect("a Wand install").trainerlib(), true);
-        let service = Image::open(&service, PUBLISHERS).unwrap();
-        let server = Server::start().unwrap();
-        let client_id = uuid::Uuid::new_v4().to_string();
-        let waiting = server.expect(&client_id);
-        let mut target =
-            Command::new(r"C:\Windows\System32\PING.EXE").args(["-n", "120", "127.0.0.1"]).stdout(Stdio::null()).spawn().unwrap();
-
-        let outcome = (|| -> Result<()> {
-            let startup = Startup { wand_port: server.port, client_id: &client_id, trainer_session_id: &uuid::Uuid::new_v4().to_string() };
-            tophat(&agent::of(target.id()).context("the throwaway process")?, &service, &startup)?;
-            let channel = bounded(&server.runtime, 20, waiting)?.context("the server dropped the waiter")?;
-            let (session, mut events) = Session::open(server.runtime.clone(), channel, &client_id);
-            // No trainer is running, so the service may refuse the stop; the session must still end.
-            let stopped = block_on(session.stop());
-            println!("stop: {stopped:?}");
-            ensure!(bounded(&server.runtime, 10, async move { events.next().await })?.is_none());
-            Ok(())
-        })();
-
+        let mut target = ping();
+        let outcome = agent::of(target.id()).context("the throwaway process").and_then(|target| dials_in_and_ends(&target));
         target.kill().unwrap();
         target.wait().unwrap();
+        outcome.unwrap();
+    }
+
+    /// As `activate.flags` 16: the service goes into the external host for a throwaway `ping`.
+    #[test]
+    #[ignore = "starts Wand's TrainerHost_x64.exe and injects the installed tophat_service into it"]
+    fn the_service_dials_in_from_the_external_host() {
+        let mut game = ping();
+        let outcome = (|| -> Result<()> {
+            let exe = trainer_host(&installs().first().expect("a Wand install").trainerlib(), true);
+            let host = TrainerHost::start(&exe, &agent::of(game.id()).context("the throwaway process")?)?;
+            dials_in_and_ends(&host.process)
+        })();
+        game.kill().unwrap();
+        game.wait().unwrap();
         outcome.unwrap();
     }
 }

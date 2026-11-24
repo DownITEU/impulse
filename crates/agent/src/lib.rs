@@ -6,12 +6,14 @@ mod event;
 mod handle;
 mod image;
 mod inject;
+mod pause;
 mod process;
 mod trust;
 
 pub use elevated::{elevated, serve_elevated};
 pub use event::signaled;
-pub use image::Image;
+pub use image::{Image, Program};
 pub use inject::{load, map};
+pub use pause::{idle, resume, suspend};
 pub use process::{of, settled, wait, x64};
 pub use trust::check as signed;

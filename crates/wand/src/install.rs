@@ -73,6 +73,11 @@ pub fn binaries(trainerlib: &Path, x64: bool) -> [PathBuf; 2] {
     [trainerlib.join(format!("tophat_service_{arch}.dll")), trainerlib.join(format!("TrainerLibPlugin_{arch}.dll"))]
 }
 
+/// Wand's external host for a trainer of that architecture (`activate.flags` 16).
+pub fn trainer_host(trainerlib: &Path, x64: bool) -> PathBuf {
+    trainerlib.join(if x64 { "TrainerHost_x64.exe" } else { "TrainerHost_x86.exe" })
+}
+
 fn installs_in(local: &Path) -> Vec<Install> {
     let mut all: Vec<Install> = BRANDS.iter().flat_map(|brand| versions(&local.join(brand))).collect();
     newest_first(&mut all);

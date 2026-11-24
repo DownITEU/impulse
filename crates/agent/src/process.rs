@@ -11,7 +11,7 @@ use anyhow::{Result, anyhow, bail, ensure};
 use blocking::unblock;
 use model::{Failure, FailureKind, Process, Rule};
 use windows_sys::Win32::{
-    Foundation::FILETIME,
+    Foundation::{ERROR_ACCESS_DENIED, FILETIME},
     System::{
         ProcessStatus::{EnumProcesses, GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
         SystemInformation::GetSystemTimeAsFileTime,
@@ -94,12 +94,27 @@ pub fn of(pid: u32) -> Option<Process> {
 
 /// Whether `target` is a 64-bit process, asked of the process: its exe may be unreadable (a GDK game's).
 pub fn x64(target: &Process) -> Result<bool> {
-    // SAFETY: plain Win32 call; the handle is owned by the guard.
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, target.pid) };
-    ensure!(!handle.is_null(), "cannot open process {}: {}", target.pid, io::Error::last_os_error());
-    let process = Handle(handle);
+    Ok(!wow64(&open(target, 0)?, target.pid)?)
+}
+
+/// `target` opened with `access` and enough to check it is that process.
+pub(crate) fn open(target: &Process, access: u32) -> Result<Handle> {
+    let process = open_pid(target.pid, PROCESS_QUERY_LIMITED_INFORMATION | access)?;
     verify(&process, target)?;
-    Ok(!wow64(&process, target.pid)?)
+    Ok(process)
+}
+
+/// A denial is `Protected`: run as administrator, or kept by its protection. Not yet verified.
+pub(crate) fn open_pid(pid: u32, access: u32) -> Result<Handle> {
+    // SAFETY: plain Win32 call; the handle is owned by the guard.
+    let handle = unsafe { OpenProcess(access, 0, pid) };
+    if handle.is_null() {
+        let error = io::Error::last_os_error();
+        let denied = error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32);
+        let error = anyhow!("cannot open process {pid}: {error}");
+        return Err(if denied { error.context(Failure::new(FailureKind::Protected)) } else { error });
+    }
+    Ok(Handle(handle))
 }
 
 /// A 32-bit process on 64-bit Windows.

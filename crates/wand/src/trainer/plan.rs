@@ -33,9 +33,33 @@ pub struct Plan {
     pub launch: Launch,
     /// The stand-in for the game's launcher at a start; `Err` says why the trainer cannot run.
     pub proxy: Result<Option<Proxy>, String>,
-    /// `activate.flags`: how Wand injects it (suspended, hidden threads, masked modules, an external host). Not
-    /// done here; a failed attach names them.
-    pub activate: u64,
+    pub activate: Activate,
+}
+
+/// `activate.flags`: how the trainer is loaded.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Activate(pub u64);
+
+impl Activate {
+    /// The game is held still while the trainer sets up.
+    pub fn suspend(self) -> bool {
+        self.0 & 1 != 0
+    }
+
+    /// A held game is let go once the trainer is ready; without it, it stays held.
+    pub fn resume(self) -> bool {
+        self.0 & 2 != 0
+    }
+
+    /// The external host takes the service in, not the game.
+    pub fn external_host(self) -> bool {
+        self.0 & 16 != 0
+    }
+
+    /// Hidden threads, masked modules: the classic loader only, which is not ours.
+    pub fn classic(self) -> bool {
+        self.0 & (4 | 8) != 0
+    }
 }
 
 impl Trainer {
@@ -60,7 +84,7 @@ impl Trainer {
                 _ => Launch::Start,
             },
             proxy,
-            activate: config["activate"]["flags"].as_u64().unwrap_or(0),
+            activate: Activate(config["activate"]["flags"].as_u64().unwrap_or(0)),
         }
     }
 
@@ -135,13 +159,16 @@ mod tests {
         let ace_combat = r#", "config": {"launch": {"proxy": {"gameExe": "Game\\Binaries\\Win64\\AceCombat8.exe",
             "launcher": "start_protected_game.exe"}, "required": true}}"#;
         let plan = trainer(ace_combat).plan();
-        assert_eq!((plan.image.as_deref(), plan.launch, plan.activate), (Some(r"Game\Binaries\Win64\AceCombat8.exe"), Launch::Required, 0));
+        assert_eq!(
+            (plan.image.as_deref(), plan.launch, plan.activate),
+            (Some(r"Game\Binaries\Win64\AceCombat8.exe"), Launch::Required, Activate(0))
+        );
         assert!(matches!(plan.proxy, Ok(Some(_))));
 
         let elden_ring = r#", "config": {"launch": {"proxy": {"gameExe": "eldenring.exe", "launcher": "Game\\start_protected_game.exe"}},
             "target": {"image": "Game\\eldenring.exe"}, "activate": {"flags": 16}}"#;
         let plan = trainer(elden_ring).plan();
-        assert_eq!((plan.image.as_deref(), plan.launch, plan.activate), (Some(r"Game\eldenring.exe"), Launch::Start, 16));
+        assert_eq!((plan.image.as_deref(), plan.launch, plan.activate), (Some(r"Game\eldenring.exe"), Launch::Start, Activate(16)));
 
         let escaping = r#", "config": {"launch": {"proxy": {"gameExe": "..\\..\\x.exe", "launcher": "start_protected_game.exe"}}}"#;
         let plan = trainer(escaping).plan();

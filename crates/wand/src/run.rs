@@ -11,14 +11,14 @@ use futures::{FutureExt, StreamExt, TryFutureExt, future::BoxFuture};
 use model::{Attach, Failure, FailureKind, Live, Origin, Process};
 
 use crate::{
-    attach::{Game, attach},
+    attach::{Attached, Game, attach},
     binary,
     folder::Setting,
     install::PUBLISHERS,
     proxy::{self, Proxy},
     texts::{ACTIVATE_UNSUPPORTED, FOLDER_UNSET, PROXY_FAILED, PROXY_MISSING, PROXY_RESTART, text},
-    tophat::{Event, Outcome, Server, Session},
-    trainer::{Binary, Plan},
+    tophat::{Event, Outcome, Server},
+    trainer::{Activate, Binary, Plan},
 };
 
 type Answer<T> = std::result::Result<T, Failure>;
@@ -62,7 +62,7 @@ struct Runner {
     binary: Result<Binary, String>,
     variables: Vec<String>,
     proxy: Result<Option<Proxy>, String>,
-    activate: u64,
+    activate: Activate,
 }
 
 impl model::Runner for Runner {
@@ -99,7 +99,7 @@ struct Prepared {
     variables: Vec<String>,
     /// With Wand's stand-in for the game's launcher.
     proxy: Option<(Proxy, PathBuf)>,
-    activate: u64,
+    activate: Activate,
 }
 
 impl Attach for Prepared {
@@ -128,16 +128,16 @@ impl Attach for Prepared {
     fn attach(self: Box<Self>, process: Process, build: Option<u32>) -> BoxFuture<'static, Answer<Live>> {
         async move {
             let (trainer, trainer_hash, variables) = (&self.trainer, &self.hash, &self.variables);
-            // As Wand: `gameVersion ?? 0`.
-            let game = Game { process: &process, version: build.unwrap_or(0), trainer, trainer_hash, variables };
-            let (session, events) = attach(&self.server, &self.trainerlib, game).await.map_err(|e| {
+            let activate = self.activate;
+            let game = Game { process: &process, version: build.unwrap_or(0), trainer, trainer_hash, variables, activate };
+            let (attached, events) = attach(&self.server, &self.trainerlib, game).await.map_err(|e| {
                 let failure = Failure::from(e);
                 match failure.kind {
                     // Started elsewhere, the game runs the anti-cheat our start avoids.
                     FailureKind::Protected if self.proxy.is_some() => failure.saying(text(PROXY_RESTART)),
-                    // Wand injects this trainer its own way, which may be why it failed.
-                    FailureKind::Internal if self.activate != 0 => {
-                        let detail = format!("{} (activate.flags {})", failure.detail, self.activate);
+                    // Wand's classic loader takes this trainer, which may be why it failed.
+                    FailureKind::Internal if activate.classic() => {
+                        let detail = format!("{} (activate.flags {})", failure.detail, activate.0);
                         Failure { detail, ..failure.saying(text(ACTIVATE_UNSUPPORTED)) }
                     }
                     _ => failure,
@@ -152,7 +152,7 @@ impl Attach for Prepared {
                     _ => None,
                 }
             });
-            Ok(Live { session: Box::new(Running(session)), events: events.boxed() })
+            Ok(Live { session: Box::new(attached), events: events.boxed() })
         }
         .boxed()
     }
@@ -169,12 +169,10 @@ impl Drop for OffThread {
     }
 }
 
-struct Running(Session);
-
-impl model::Session for Running {
+impl model::Session for Attached {
     fn set<'a>(&'a self, key: &'a str, value: f64) -> BoxFuture<'a, Answer<()>> {
         async move {
-            match self.0.set_value(key, value).await? {
+            match self.session.set_value(key, value).await? {
                 Outcome::Failed => Err(Failure { detail: "the trainer refused it".into(), ..Failure::new(FailureKind::Refused) }),
                 Outcome::Set | Outcome::Changed => Ok(()),
             }
@@ -183,14 +181,14 @@ impl model::Session for Running {
     }
 
     fn stop(&self) -> BoxFuture<'_, Answer<()>> {
-        self.0.stop().map_err(Failure::from).boxed()
+        self.session.stop().map_err(Failure::from).boxed()
     }
 
     fn position(&self) -> BoxFuture<'_, Answer<[f64; 3]>> {
-        self.0.position().map_err(Failure::from).boxed()
+        self.session.position().map_err(Failure::from).boxed()
     }
 
     fn teleport(&self, to: [f64; 3]) -> BoxFuture<'_, Answer<()>> {
-        self.0.teleport(to).map_err(Failure::from).boxed()
+        self.session.teleport(to).map_err(Failure::from).boxed()
     }
 }
