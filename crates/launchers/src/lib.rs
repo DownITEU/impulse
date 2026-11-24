@@ -12,6 +12,7 @@ mod steam;
 mod store;
 mod ubisoft;
 mod vdf;
+mod version;
 mod xbox;
 
 use std::{
@@ -93,10 +94,11 @@ fn timed(launcher: &str, apps: impl FnOnce() -> Vec<App>) -> Vec<App> {
     apps
 }
 
-/// The build is the PE TimeDateStamp of the game's `exe` in the install. The location's final path is one of its
-/// folders too, as Wand resolves it before it looks for the process: a library behind a junction, a package on a mount.
+/// The build is the stamp of the game's version file in the install (`version::build`). The location's final path is one
+/// of its folders too, for the process search: a library behind a junction, a package on a mount.
 fn installation(game: &Game, origin: Origin, location: PathBuf, mut alternates: Vec<PathBuf>) -> Installation {
-    let build = game.exe.as_deref().and_then(|exe| pe::header(&location.join(exe))).map(|header| header.timestamp);
+    let packaged = matches!(&origin, Origin::Launcher(id) if id.store() == "uwp");
+    let build = game.exe.as_deref().and_then(|exe| version::build(&location, exe, packaged));
     let resolved = final_path(&location).filter(|resolved| !same_path(resolved, &location));
     if let Some(resolved) = resolved.filter(|resolved| !alternates.iter().any(|had| same_path(had, resolved))) {
         alternates.insert(0, resolved);
