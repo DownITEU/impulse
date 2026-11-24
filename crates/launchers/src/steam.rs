@@ -12,6 +12,7 @@ use super::{
 };
 
 const FULLY_INSTALLED: u32 = 4;
+pub const CLIENT: &str = "steam.exe";
 
 pub fn apps() -> Vec<App> {
     let Some(root) = install_dir() else {
@@ -21,7 +22,7 @@ pub fn apps() -> Vec<App> {
     libraries(&root).iter().flat_map(|lib| manifests(lib)).filter(|app| seen.insert(app.store_id.clone())).collect()
 }
 
-fn install_dir() -> Option<PathBuf> {
+pub(crate) fn install_dir() -> Option<PathBuf> {
     let program_files = env::var_os("ProgramFiles(x86)").map(|p| Path::new(&p).join("Steam"));
     [
         value(LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath", View::Wow32).map(PathBuf::from),
@@ -83,9 +84,6 @@ fn manifest(apps: &Path, file: &Path) -> Option<App> {
         return None;
     }
     let id: u32 = state.str("appid")?.parse().ok()?;
-    Some(App {
-        store_id: format!("steam:{id}"),
-        // `installdir` is usually relative to steamapps\common; join keeps an absolute one.
-        location: apps.join("common").join(state.str("installdir")?),
-    })
+    // `installdir` is usually relative to steamapps\common; join keeps an absolute one.
+    Some(App::new(format!("steam:{id}"), apps.join("common").join(state.str("installdir")?)))
 }

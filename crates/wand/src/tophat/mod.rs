@@ -5,4 +5,4 @@ mod wire;
 
 pub use proto::Event;
 pub use server::Server;
-pub use session::{Outcome, Run, Session};
+pub use session::{Outcome, Run, Session, within};

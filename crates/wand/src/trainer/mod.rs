@@ -5,11 +5,12 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::{Context, Result};
 use blocking::unblock;
-use model::Chord;
+use model::{Chord, Runner};
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{DeserializeOwned, Error as _},
@@ -20,7 +21,7 @@ use crate::{session::Session, texts, transport::Transport};
 
 mod plan;
 
-pub use plan::{Binary, Plan};
+pub use plan::{Activate, Binary, Load};
 
 const DIR: &str = "trainers";
 
@@ -122,7 +123,9 @@ struct Args {
 }
 
 impl Trainer {
-    pub fn into_model(self, plan: model::Plan) -> model::Trainer {
+    /// `runner` is the one made from `load`.
+    pub fn into_model(self, runner: Arc<dyn Runner>) -> model::Trainer {
+        let plan = self.plan(runner);
         let flags = self.blueprint.flags;
         let strings = self.strings;
         model::Trainer {

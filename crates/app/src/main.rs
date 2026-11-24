@@ -44,6 +44,7 @@ fn main() {
         trainers: Some(wand.clone()),
         maps: Some(wand.clone()),
         folders: Some(wand.clone()),
+        overlays: Some(wand.clone()),
         caches: Some(wand),
         ..Capabilities::default()
     });

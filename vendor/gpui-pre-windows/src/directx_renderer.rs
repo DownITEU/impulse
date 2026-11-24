@@ -49,6 +49,10 @@ pub(crate) struct DirectXRenderer {
     width: u32,
     height: u32,
 
+    /// Impulse: set while frames are mirrored; the texture is made on the first frame and on a size change.
+    mirroring: bool,
+    mirror: Option<Mirror>,
+
     /// Whether we want to skip drwaing due to device lost events.
     ///
     /// In that case we want to discard the first frame that we draw as we got reset in the middle of a frame
@@ -113,6 +117,48 @@ impl<'a> Annotation<'a> {
 impl Drop for Annotation<'_> {
     fn drop(&mut self) {
         unsafe { self.0.EndEvent() };
+    }
+}
+
+/// The frame's copy that other processes open.
+struct Mirror {
+    texture: ID3D11Texture2D,
+    frame: MirrorFrame,
+}
+
+impl Mirror {
+    fn new(
+        device: &ID3D11Device,
+        adapter: &IDXGIAdapter1,
+        render_target: &ID3D11Texture2D,
+    ) -> Result<Self> {
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        unsafe { render_target.GetDesc(&mut desc) };
+        let desc = D3D11_TEXTURE2D_DESC {
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: D3D11_RESOURCE_MISC_SHARED.0 as u32,
+            MipLevels: 1,
+            ArraySize: 1,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            ..desc
+        };
+        let mut texture = None;
+        unsafe { device.CreateTexture2D(&desc, None, Some(&mut texture))? };
+        let texture = texture.context("creating the mirror texture")?;
+        let handle = unsafe { texture.cast::<IDXGIResource>()?.GetSharedHandle()? };
+        let adapter = unsafe { adapter.GetDesc1()? }.DeviceId;
+        let frame = MirrorFrame {
+            handle: handle.0 as usize,
+            width: desc.Width,
+            height: desc.Height,
+            adapter,
+        };
+        Ok(Self { texture, frame })
     }
 }
 
@@ -194,8 +240,43 @@ impl DirectXRenderer {
             font_info: Self::get_font_info(),
             width: 1,
             height: 1,
+            mirroring: false,
+            mirror: None,
             skip_draws: false,
         })
+    }
+
+    pub(crate) fn set_mirroring(&mut self, on: bool) {
+        self.mirroring = on;
+        if !on {
+            self.mirror = None;
+        }
+    }
+
+    /// Copies the frame just drawn into the mirror texture, made again when the size changes.
+    fn mirror(&mut self) -> Result<MirrorFrame> {
+        // Borrowed, not cloned: no COM reference counting per frame.
+        let devices = self.devices.as_ref().context("devices missing")?;
+        let render_target = self
+            .resources
+            .as_ref()
+            .and_then(|resources| resources.render_target.as_ref())
+            .context("render target missing")?;
+        let size = (self.width, self.height);
+        if self
+            .mirror
+            .as_ref()
+            .is_none_or(|mirror| (mirror.frame.width, mirror.frame.height) != size)
+        {
+            self.mirror = Some(Mirror::new(&devices.device, &devices.adapter, render_target)?);
+        }
+        let mirror = self.mirror.as_ref().context("mirror missing")?;
+        // Flushed, so the other process's device sees the copy.
+        unsafe {
+            devices.device_context.CopyResource(&mirror.texture, render_target);
+            devices.device_context.Flush();
+        }
+        Ok(mirror.frame)
     }
 
     pub(crate) fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {
@@ -324,22 +405,32 @@ impl DirectXRenderer {
         self.globals = globals;
         self.pipelines = pipelines;
         self.direct_composition = direct_composition;
+        // The old device's texture is gone: the next frame makes one with a new handle.
+        self.mirror = None;
         self.skip_draws = true;
         Ok(())
     }
 
+    /// The frame's mirror, when frames are mirrored.
     pub(crate) fn draw(
         &mut self,
         scene: &Scene,
         background_appearance: WindowBackgroundAppearance,
-    ) -> Result<()> {
+    ) -> Result<Option<MirrorFrame>> {
         if self.skip_draws {
             // skip drawing this frame, we just recovered from a device lost event
             // and so likely do not have the textures anymore that are required for drawing
-            return Ok(());
+            return Ok(None);
         }
         self.render(scene, background_appearance)?;
-        self.present()
+        // A failed mirror still presents the window itself.
+        let mirrored = if self.mirroring {
+            self.mirror().log_err()
+        } else {
+            None
+        };
+        self.present()?;
+        Ok(mirrored)
     }
 
     /// Clear the render target for `background_appearance` and encode every

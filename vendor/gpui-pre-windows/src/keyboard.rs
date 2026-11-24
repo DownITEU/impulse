@@ -2,8 +2,8 @@ use anyhow::Result;
 use collections::HashMap;
 use windows::Win32::UI::{
     Input::KeyboardAndMouse::{
-        GetKeyboardLayoutNameW, MAPVK_VK_TO_CHAR, MAPVK_VK_TO_VSC, MapVirtualKeyW, ToUnicode,
-        VIRTUAL_KEY, VK_0, VK_1, VK_2, VK_3, VK_4, VK_5, VK_6, VK_7, VK_8, VK_9, VK_ABNT_C1,
+        GetKeyboardLayout, GetKeyboardLayoutNameW, HKL, MAPVK_VK_TO_CHAR, MAPVK_VK_TO_VSC,
+        MapVirtualKeyExW, MapVirtualKeyW, ToUnicodeEx, VIRTUAL_KEY, VK_0, VK_1, VK_2, VK_3, VK_4, VK_5, VK_6, VK_7, VK_8, VK_9, VK_ABNT_C1,
         VK_CONTROL, VK_MENU, VK_OEM_1, VK_OEM_2, VK_OEM_3, VK_OEM_4, VK_OEM_5, VK_OEM_6, VK_OEM_7,
         VK_OEM_8, VK_OEM_102, VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PERIOD, VK_OEM_PLUS, VK_SHIFT,
     },
@@ -115,8 +115,9 @@ impl WindowsKeyboardMapper {
         let mut key_to_vkey = HashMap::default();
         let mut vkey_to_key = HashMap::default();
         let mut vkey_to_shifted = HashMap::default();
+        let layout = current_layout();
         for vkey in CANDIDATE_VKEYS {
-            if let Some(key) = get_key_from_vkey(*vkey) {
+            if let Some(key) = get_key_from_vkey(*vkey, layout) {
                 key_to_vkey.insert(key.clone(), (vkey.0, false));
                 vkey_to_key.insert(vkey.0, key);
             }
@@ -124,7 +125,7 @@ impl WindowsKeyboardMapper {
             if scan_code == 0 {
                 continue;
             }
-            if let Some(shifted_key) = get_shifted_key(*vkey, scan_code) {
+            if let Some(shifted_key) = get_shifted_key(*vkey, scan_code, layout) {
                 key_to_vkey.insert(shifted_key.clone(), (vkey.0, true));
                 vkey_to_shifted.insert(vkey.0, shifted_key);
             }
@@ -145,22 +146,28 @@ impl WindowsKeyboardMapper {
     }
 }
 
+/// Impulse: this thread's layout, which `ToUnicode` and `MapVirtualKeyW` read.
+pub(crate) fn current_layout() -> HKL {
+    unsafe { GetKeyboardLayout(0) }
+}
+
 pub(crate) fn get_keystroke_key(
     vkey: VIRTUAL_KEY,
     scan_code: u32,
     modifiers: &mut Modifiers,
+    layout: HKL,
 ) -> Option<String> {
     if modifiers.shift && need_to_convert_to_shifted_key(vkey) {
-        get_shifted_key(vkey, scan_code).inspect(|_| {
+        get_shifted_key(vkey, scan_code, layout).inspect(|_| {
             modifiers.shift = false;
         })
     } else {
-        get_key_from_vkey(vkey)
+        get_key_from_vkey(vkey, layout)
     }
 }
 
-fn get_key_from_vkey(vkey: VIRTUAL_KEY) -> Option<String> {
-    let key_data = unsafe { MapVirtualKeyW(vkey.0 as u32, MAPVK_VK_TO_CHAR) };
+fn get_key_from_vkey(vkey: VIRTUAL_KEY, layout: HKL) -> Option<String> {
+    let key_data = unsafe { MapVirtualKeyExW(vkey.0 as u32, MAPVK_VK_TO_CHAR, Some(layout)) };
     if key_data == 0 {
         return None;
     }
@@ -202,8 +209,8 @@ fn need_to_convert_to_shifted_key(vkey: VIRTUAL_KEY) -> bool {
     )
 }
 
-fn get_shifted_key(vkey: VIRTUAL_KEY, scan_code: u32) -> Option<String> {
-    generate_key_char(vkey, scan_code, false, true, false)
+fn get_shifted_key(vkey: VIRTUAL_KEY, scan_code: u32, layout: HKL) -> Option<String> {
+    generate_key_char(vkey, scan_code, false, true, false, layout)
 }
 
 pub(crate) fn generate_key_char(
@@ -212,6 +219,7 @@ pub(crate) fn generate_key_char(
     control: bool,
     shift: bool,
     alt: bool,
+    layout: HKL,
 ) -> Option<String> {
     let mut state = [0; 256];
     if control {
@@ -225,7 +233,7 @@ pub(crate) fn generate_key_char(
     }
 
     let mut buffer = [0; 8];
-    let len = unsafe { ToUnicode(vkey.0 as u32, scan_code, Some(&state), &mut buffer, 0x5) };
+    let len = unsafe { ToUnicodeEx(vkey.0 as u32, scan_code, &state, &mut buffer, 0x5, Some(layout)) };
 
     match len {
         len if len > 0 => String::from_utf16(&buffer[..len as usize])

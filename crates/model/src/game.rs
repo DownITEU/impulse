@@ -18,6 +18,8 @@ pub struct Game {
     pub exe: Option<String>,
     /// One per `standalone:` store id.
     pub standalone: Vec<Standalone>,
+    /// The application a package's start opens, by its `uwp:` store id, when the source names one; remote data.
+    pub package_apps: Vec<(StoreId, String)>,
     /// A wide picture, then a small one.
     pub cover: Option<String>,
     pub thumbnail: Option<String>,
@@ -60,6 +62,10 @@ pub struct Installation {
     pub game: Ref,
     pub origin: Origin,
     pub location: PathBuf,
+    /// Other folders its process may run from: the location's final path, a package's other folders.
+    pub alternates: Vec<PathBuf>,
     /// `None` when the exe could not be read.
     pub build: Option<u32>,
+    /// The package application to start, its game's `package_apps` entry for this origin.
+    pub app: Option<String>,
 }

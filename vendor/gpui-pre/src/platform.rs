@@ -1242,6 +1242,21 @@ pub enum TextInputStateChange {
     ContentChanged,
 }
 
+/// A drawn frame in a texture any process on the same adapter opens by its legacy (KMT) shared handle.
+#[cfg(target_os = "windows")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MirrorFrame {
+    /// The texture's legacy shared handle, the same while the size and the device stay.
+    pub handle: usize,
+    /// In device pixels.
+    pub width: u32,
+    /// In device pixels.
+    pub height: u32,
+    /// The PCI device id (`DXGI_ADAPTER_DESC.DeviceId`) of the GPU the texture lives on: another process opens it
+    /// only on the same one.
+    pub adapter: u32,
+}
+
 #[expect(missing_docs)]
 pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn bounds(&self) -> Bounds<Pixels>;
@@ -1374,6 +1389,10 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn d3d11_device(&self) -> Option<windows::Win32::Graphics::Direct3D11::ID3D11Device> {
         None
     }
+
+    /// Copies each drawn frame into a shared texture and calls `on_frame` after the copy; `None` stops.
+    #[cfg(target_os = "windows")]
+    fn mirror_frames(&self, _on_frame: Option<Box<dyn FnMut(MirrorFrame)>>) {}
 
     // Linux specific methods
     fn inner_window_bounds(&self) -> WindowBounds {

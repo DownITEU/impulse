@@ -114,6 +114,10 @@ pub struct Prefs {
     pub disclaimer_seen: bool,
     /// The overlay no longer asks about an exclusive fullscreen game.
     pub skip_exclusive_warning: bool,
+    /// LAUNCH no longer asks about a build newer than the trainer's.
+    pub skip_unconfirmed_warning: bool,
+    /// IN-GAME: the HUD draws inside the game's frame where its source can. Off, the default: over the game.
+    pub overlay_in_game: bool,
     /// On, Impulse does not look for a new version by itself; CHECK NOW still does.
     pub no_update_check: bool,
     pub update_channel: updater::Channel,

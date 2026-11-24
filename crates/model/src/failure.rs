@@ -13,13 +13,23 @@ pub enum FailureKind {
     /// Something the user sets up is missing, such as a folder.
     SetupNeeded,
     GameNotFound,
+    LaunchFailed,
+    /// Started by the run, the game did not show in time.
+    NotStarted,
+    /// The run waited for the user to start the game, and it did not show in time.
+    NotRunning,
+    GameExited,
     Refused,
     /// The game runs as administrator and the user did not let the app be one too.
     Elevation,
     /// The game's process cannot be opened, even as administrator: its protection keeps trainers out.
     Protected,
-    /// The trainer is built for the game's other architecture (32 or 64-bit), such as another of its executables.
-    Architecture,
+    /// The trainer is built for the game's other architecture, such as another of its executables: 64-bit when `needs_x64`.
+    Architecture {
+        needs_x64: bool,
+    },
+    LoadFailed,
+    TrainerFailed,
     /// The game runs, but only one the run starts itself may be used: close it and start again.
     Restart,
     Internal,

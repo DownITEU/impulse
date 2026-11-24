@@ -15,7 +15,7 @@ The remote panel: a Preact page `remote` embeds from `web/panel/dist`. It shows 
 - Feature folders: `app/` (the frame: top bar, dock, drawers, placeholders, notes), `library/` (the games, the open game's header with its run, favorite, start and stop), `trainer/` (sections, tiles, controls, collections), `shared/` (primitives). `app` composes the features; a feature reaches only `shared`, `session` and `i18n`.
 
 ## Rules
-- Everything shown comes from the app: names, sections, options and failures arrive worded. The panel's own captions are `t('id')` with a literal id; `checks` matches them to `locales/en.ftl`, and every language to English.
+- Everything shown comes from the app: names, sections, options and failures arrive worded. The panel's own captions are `t('id')` with a literal id; `checks` matches them to `locales/en.ftl`, and every language's ids to English's (a partial one shows English for the rest).
 - No browser storage. Favorites, pins, collections and RESET are commands; the app owns them.
 - A command names the sheet of the trainer view it acts on; a refusal comes back as a note. Values show only for the trainer view they name. Controls act only while `isLive`.
 - pnpm only. `scripts\panel.ps1` builds `dist`; `scripts\check.ps1` runs `pnpm verify` once the panel is installed. Source files stay under 500 lines (`checks`).

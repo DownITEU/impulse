@@ -21,8 +21,8 @@ use windows_sys::Win32::{
         ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_32BIT, LIST_MODULES_ALL},
         SystemInformation::GetSystemWow64DirectoryW,
         Threading::{
-            CreateRemoteThread, IsWow64Process, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION,
-            PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
+            CreateRemoteThread, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+            WaitForSingleObject,
         },
     },
 };
@@ -39,30 +39,51 @@ type ThreadStart = unsafe extern "system" fn(*mut c_void) -> u32;
 /// reused pid must not receive the DLL. A process that denies us (a game run as administrator) is loaded by an
 /// elevated copy of the host executable, once the user accepts UAC's prompt (`serve_elevated`).
 pub fn load(target: &Process, image: &Image, export: &str, arg: &[u8]) -> Result<()> {
-    let pid = target.pid;
     let start = pe::export(image.path(), export).with_context(|| format!("{} has no {export}", image.path().display()))?;
-    let process = match open(pid) {
-        Ok(process) => process,
+    let Some(process) = open_or_elevate(target, image, Some((export, arg)))? else { return Ok(()) };
+    let base = load_image(&process, target, image)?;
+
+    let arg = write(&process, arg)?;
+    spawn(&process, start_address(base, start), arg.ptr)?;
+    arg.leak();
+    Ok(())
+}
+
+/// Loads `image` into `target` like `load` and starts no export: for a DLL whose `DllMain` does the work. A process
+/// that denies us is mapped by the elevated copy too.
+pub fn map(target: &Process, image: &Image) -> Result<()> {
+    let Some(process) = open_or_elevate(target, image, None)? else { return Ok(()) };
+    load_image(&process, target, image).map(drop)
+}
+
+/// `target` opened for a load, or `None` once a denying one was served by the elevated copy (`export` and its argument,
+/// none for a map).
+fn open_or_elevate(target: &Process, image: &Image, export: Option<(&str, &[u8])>) -> Result<Option<Handle>> {
+    match open(target.pid) {
+        Ok(process) => Ok(Some(process)),
         Err(denied) if marked(&denied, FailureKind::Protected) && elevated::can_elevate() => {
-            return elevated::load(target, image, export, arg);
+            elevated::load(target, image, export).map(|()| None)
         }
-        Err(e) => return Err(e),
-    };
-    process::verify(&process, target)?;
-    let mut wow = 0;
-    // SAFETY: `process` is a live handle and `wow` outlives the call.
-    ensure!(unsafe { IsWow64Process(process.0, &mut wow) } != 0, "cannot query process {pid}: {}", io::Error::last_os_error());
-    let wow64 = wow != 0;
+        Err(e) => Err(e),
+    }
+}
+
+/// The checks and the `LoadLibraryW` run shared by `load` and `map`, on a process just opened. Returns the
+/// image's base in the target.
+fn load_image(process: &Handle, target: &Process, image: &Image) -> Result<usize> {
+    let pid = target.pid;
+    process::verify(process, target)?;
+    let wow64 = process::wow64(process, pid)?;
     if wow64 == image.x64() {
         let (game, dll) = if wow64 { ("32-bit", "x64") } else { ("64-bit", "x86") };
         let error = anyhow!("process {pid} is {game}, {} is {dll}", image.path().display());
-        return Err(error.context(Failure::new(FailureKind::Architecture)));
+        return Err(error.context(Failure::new(FailureKind::Architecture { needs_x64: image.x64() })));
     }
-    let load_library = if wow64 { wow64_load_library(&process, pid)? } else { load_library()? };
+    let load_library = if wow64 { wow64_load_library(process, pid)? } else { load_library()? };
 
     let wide: Vec<u8> = image.path().as_os_str().encode_wide().chain([0]).flat_map(u16::to_le_bytes).collect();
-    let path = write(&process, &wide)?;
-    let loader = spawn(&process, load_library, path.ptr)?;
+    let path = write(process, &wide)?;
+    let loader = spawn(process, load_library, path.ptr)?;
     if let Err(err) = wait(&loader) {
         // The loader may yet read the path and open the file, so both must outlive this call.
         path.leak();
@@ -73,13 +94,8 @@ pub fn load(target: &Process, image: &Image, export: &str, arg: &[u8]) -> Result
     // The thread's exit code is only the low half of the module handle, so the module list decides.
     // Exactly the image's path: a copy of the same file name from elsewhere is a different module.
     let wanted = image.path().to_string_lossy();
-    let base = module_base(&process, pid, LIST_MODULES_ALL, |path| path.eq_ignore_ascii_case(&wanted))?
-        .with_context(|| format!("{} did not load in process {pid}: a dependency may be missing", image.path().display()))?;
-
-    let arg = write(&process, arg)?;
-    spawn(&process, start_address(base, start), arg.ptr)?;
-    arg.leak();
-    Ok(())
+    module_base(process, pid, LIST_MODULES_ALL, |path| path.eq_ignore_ascii_case(&wanted))?
+        .with_context(|| format!("{} did not load in process {pid}: a dependency may be missing", image.path().display()))
 }
 
 /// Memory allocated in the target, released on drop unless `leak`ed.
@@ -102,17 +118,7 @@ impl Drop for Remote<'_> {
 }
 
 fn open(pid: u32) -> Result<Handle> {
-    let access = PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ;
-    // SAFETY: plain Win32 call; the handle is owned by the returned guard.
-    let handle = unsafe { OpenProcess(access, 0, pid) };
-    if handle.is_null() {
-        let error = io::Error::last_os_error();
-        let denied = error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32);
-        let error = anyhow!("cannot open process {pid}: {error}");
-        // Run as administrator, or kept by its protection.
-        return Err(if denied { error.context(Failure::new(FailureKind::Protected)) } else { error });
-    }
-    Ok(Handle(handle))
+    process::open_pid(pid, PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ)
 }
 
 pub(crate) fn marked(error: &anyhow::Error, kind: FailureKind) -> bool {
@@ -294,13 +300,28 @@ mod tests {
         loaded.unwrap();
         assert!(alive, "the export crashed the process");
         let err = refused.unwrap_err();
-        assert!(marked(&err, FailureKind::Architecture), "{err}");
+        assert!(marked(&err, FailureKind::Architecture { needs_x64: true }), "{err}");
+    }
+
+    #[test]
+    fn a_mapped_process_that_is_not_the_one_found_is_never_injected() {
+        let mut me = process::of(std::process::id()).unwrap();
+        me.created += 1;
+        let err = map(&me, &Image::unchecked(KERNEL32)).unwrap_err();
+        assert!(err.to_string().contains("reused"), "{err}");
+    }
+
+    #[test]
+    fn an_x86_image_is_never_mapped_into_an_x64_process() {
+        let me = process::of(std::process::id()).unwrap();
+        let err = map(&me, &Image::unchecked_x86(KERNEL32_X86)).unwrap_err();
+        assert!(marked(&err, FailureKind::Architecture { needs_x64: false }), "{err}");
     }
 
     #[test]
     fn an_x86_image_never_enters_an_x64_process() {
         let me = process::of(std::process::id()).unwrap();
         let err = load(&me, &Image::unchecked_x86(KERNEL32_X86), "lstrlenW", &[]).unwrap_err();
-        assert!(marked(&err, FailureKind::Architecture), "{err}");
+        assert!(marked(&err, FailureKind::Architecture { needs_x64: false }), "{err}");
     }
 }

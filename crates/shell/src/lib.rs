@@ -6,6 +6,7 @@ mod account;
 mod cheats;
 mod crash;
 mod hotkeys;
+mod input;
 mod library;
 mod log_view;
 mod map;

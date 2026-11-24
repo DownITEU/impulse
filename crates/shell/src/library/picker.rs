@@ -12,6 +12,7 @@ use gpui_kit::{
     component::{
         h_flex,
         input::{Input, InputEvent, InputState, MoveDown, MoveUp},
+        scroll::ScrollableElement,
         v_flex,
     },
     div,
@@ -300,7 +301,21 @@ impl Render for GamePicker {
             })
             .child(mono(t(cx, caption), TYPE_CAPTION).text_color(rgb(DIM)))
             .child(field)
-            .child(div().id("choices").max_h(px(320.)).overflow_y_scroll().track_scroll(&picker.scroll).flex().flex_col().children(rows));
+            .child(
+                div()
+                    .relative()
+                    .child(
+                        div()
+                            .id("choices")
+                            .max_h(px(320.))
+                            .overflow_y_scroll()
+                            .track_scroll(&picker.scroll)
+                            .flex()
+                            .flex_col()
+                            .children(rows),
+                    )
+                    .vertical_scrollbar(&picker.scroll),
+            );
         dialog("picker", t(cx, title), 520., &self.focus, Self::close, body, cx).into_any_element()
     }
 }

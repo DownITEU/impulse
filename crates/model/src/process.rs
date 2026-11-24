@@ -14,27 +14,61 @@ pub struct Process {
     pub created: u64,
 }
 
-/// Selects a game process by executable path or install folder and a minimum process age.
-#[derive(Clone)]
-pub struct Rule {
+/// How a trainer names its game's process, wherever the game is installed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Target {
     /// Path suffix of the executable, `*` matching inside one folder or file name. Without it
     /// the install folder decides.
     pub image: Option<String>,
-    pub location: PathBuf,
     /// A younger process is still starting up.
     pub minimum_age: Duration,
+    pub pick: Pick,
+    /// Text the process's command line holds, after the program's name when quoted; case-sensitive.
+    pub arguments: Option<String>,
+}
+
+/// Which of several matching processes is the game.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Pick {
+    /// The one with the most memory.
+    #[default]
+    Biggest,
+    Oldest,
+    Newest,
+}
+
+/// Selects a game process: the trainer's `Target` in this install.
+#[derive(Clone)]
+pub struct Rule {
+    pub target: Target,
+    pub location: PathBuf,
+    /// Without an image, these folders count as the install's too (`Installation::alternates`).
+    pub alternates: Vec<PathBuf>,
 }
 
 impl Rule {
     pub fn matches(&self, path: &Path) -> bool {
         let path = path.to_string_lossy().to_lowercase();
-        match &self.image {
+        let inside = |folder: &PathBuf| {
+            // Steam's own registry path has forward slashes.
+            let folder = folder.to_string_lossy().replace('/', "\\").to_lowercase();
+            path.strip_prefix(folder.trim_end_matches('\\')).is_some_and(|rest| rest.starts_with('\\'))
+        };
+        match &self.target.image {
             Some(image) => ends_with_image(&path, &image.to_lowercase()),
-            None => {
-                let folder = self.location.to_string_lossy().to_lowercase();
-                path.strip_prefix(folder.trim_end_matches('\\')).is_some_and(|rest| rest.starts_with('\\'))
-            }
+            None => inside(&self.location) || self.alternates.iter().any(inside),
         }
+    }
+}
+
+impl Target {
+    /// Whether `command_line` holds the arguments: a quoted program name cut, the rest trimmed.
+    pub fn takes(&self, command_line: &str) -> bool {
+        let Some(arguments) = &self.arguments else {
+            return true;
+        };
+        let rest = command_line.strip_prefix('"').and_then(|quoted| quoted.split_once('"')).map_or(command_line, |(_, rest)| rest.trim());
+        rest.contains(arguments.as_str())
     }
 }
 
@@ -95,10 +129,26 @@ mod tests {
     }
 
     #[test]
-    fn without_an_image_the_install_folder_decides() {
-        let rule = Rule { image: None, location: PathBuf::from(r"D:\Steam\common\Game\"), minimum_age: Duration::ZERO };
+    fn without_an_image_the_install_folders_decide() {
+        let location = PathBuf::from(r"D:\Steam\common\Game\");
+        let target = Target { image: None, minimum_age: Duration::ZERO, pick: Pick::Biggest, arguments: None };
+        let rule = Rule { target, location, alternates: vec![PathBuf::from(r"E:\XboxGames\Game\Content")] };
         assert!(rule.matches(Path::new(r"D:\STEAM\common\game\bin\x64\g.exe")));
+        assert!(rule.matches(Path::new(r"E:\XboxGames\Game\Content\g.exe")), "an alternate folder");
         assert!(!rule.matches(Path::new(r"D:\Steam\common\Game2\g.exe")), "a sibling folder with the same prefix");
         assert!(!rule.matches(Path::new(r"D:\Steam\common\g.exe")));
+        let slashed = Rule { location: PathBuf::from("c:/program files (x86)/steam/steamapps/common/Game"), ..rule };
+        assert!(slashed.matches(Path::new(r"C:\Program Files (x86)\Steam\steamapps\common\Game\g.exe")), "Steam's own slashes");
+    }
+
+    #[test]
+    fn the_arguments_are_looked_for_after_a_quoted_program_name() {
+        let target =
+            |arguments: &str| Target { image: None, minimum_age: Duration::ZERO, pick: Pick::Biggest, arguments: Some(arguments.into()) };
+        assert!(target("-server").takes(r#""C:\g\game -server.exe"  -server -port 1"#));
+        assert!(!target("-server").takes(r#""C:\g\game -server.exe" -client"#), "the program's own name does not count");
+        assert!(target("game.exe").takes(r"C:\g\game.exe -client"), "an unquoted name is searched too");
+        assert!(!target("-Server").takes(r#""g.exe" -server"#), "case-sensitive");
+        assert!(Target { arguments: None, ..target("") }.takes(""));
     }
 }
