@@ -15,7 +15,7 @@ The installed games, from each launcher's own records, and the start of a game.
 - `launchers::start(&Origin)`: starts a Steam app or a picked executable (blocking).
 
 ## Rules
-- launchers: each launcher module's `apps()` returns `App` (the store id it mints, location) from local records. `scan` maps them to games by lower-cased store id (editions share one) and keeps one launcher install per game, its picked one after it.
+- launchers: each launcher module's `apps()` returns `App` (the store id it mints, location) from local records. `scan` maps them to games by lower-cased store id (editions share one) and keeps one launcher install per game, of the store id the game's record lists first (Wand's preference), its picked one after it.
 - Every `Installation` is made by `installation`: the build is the PE timestamp of `location\exe`, `None` when unreadable.
 - Only plain ids reach a URI in `page`: digits for Steam and GOG, letters, digits and `._-` for UWP. Ids come from local records.
 - `store_link` takes links from a remote catalog: a store app's page route (`APP_PAGES`) only while Windows has a handler for its scheme (`HKCR\<scheme>` with `URL Protocol`), else an `https://` page on a store's host (`WEB_STORES`); never another scheme, route or host, nor one with a space, a quote, a backtick or any of `<>\^{|}`.

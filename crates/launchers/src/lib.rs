@@ -15,7 +15,7 @@ mod vdf;
 mod xbox;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -52,20 +52,27 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
         timed("standalone", || standalone::apps(games)),
     ];
     let builds = Instant::now();
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for app in apps.into_iter().flatten() {
-        let Some(id) = StoreId::parse(&app.store_id) else { continue };
-        for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
-            if seen.insert(&game.id) {
-                out.push(installation(game, Origin::Launcher(id.clone()), app.location.clone()));
-            }
-        }
-    }
+    let mut out = launched(games, &by_store_id, apps.into_iter().flatten());
     let by_id: HashMap<&Ref, &Game> = games.iter().map(|game| (&game.id, game)).collect();
     out.extend(custom.iter().filter_map(|picked| custom::install(by_id.get(&picked.game)?, &picked.exe)));
     log::debug!("builds: {} read in {:?}", out.len(), builds.elapsed());
     out
+}
+
+/// One install per game: of its store ids found, the one its record lists first, as Wand prefers them.
+fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: impl Iterator<Item = App>) -> Vec<Installation> {
+    let mut best = HashMap::<&Ref, (usize, StoreId, PathBuf)>::new();
+    for app in apps {
+        let Some(id) = StoreId::parse(&app.store_id) else { continue };
+        for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
+            let rank = game.store_ids.iter().position(|own| own.as_str().eq_ignore_ascii_case(id.as_str())).unwrap_or(usize::MAX);
+            if best.get(&game.id).is_none_or(|(had, ..)| rank < *had) {
+                best.insert(&game.id, (rank, id.clone(), app.location.clone()));
+            }
+        }
+    }
+    let found = games.iter().filter_map(|game| Some((game, best.remove(&game.id)?)));
+    found.map(|(game, (_, id, location))| installation(game, Origin::Launcher(id), location)).collect()
 }
 
 /// One launcher's records, timed: a slow disk or a scanning antivirus shows in the log.
@@ -125,6 +132,21 @@ pub(crate) mod tests {
             maps: Vec::new(),
             trainer: None,
         }
+    }
+
+    #[test]
+    fn a_game_found_by_several_launchers_takes_the_store_its_record_lists_first() {
+        let games = [game("1", None, &["gog:7", "steam:5"]), game("2", None, &["steam:6"])];
+        let mut by_store_id = HashMap::<String, Vec<&Game>>::new();
+        for game in &games {
+            for id in &game.store_ids {
+                by_store_id.entry(id.as_str().to_owned()).or_default().push(game);
+            }
+        }
+        let app = |id: &str| App { store_id: id.into(), location: id.into() };
+        let installs = launched(&games, &by_store_id, [app("steam:5"), app("steam:6"), app("gog:7")].into_iter());
+        let origins: Vec<_> = installs.iter().map(|install| install.origin.store_id().unwrap().as_str()).collect();
+        assert_eq!(origins, ["gog:7", "steam:6"]);
     }
 
     #[test]
