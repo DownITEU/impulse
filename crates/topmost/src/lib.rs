@@ -13,8 +13,8 @@ use std::{
 
 pub use typed::{Held, key_state, layout};
 pub use window::{
-    Area, Away, Monitor, client_area, cloak, exclude_from_capture, exclusive, foreground, give_back, hide, is_window, lower, monitor_of,
-    owner, pass_through, place, post_input, put_away, raise, resize, restore, show, window_of,
+    Area, Away, Monitor, client_area, cloak, exclude_from_capture, exclusive, foreground, give_back, hide, is_minimized, is_window, lower,
+    monitor_of, owner, pass_through, place, post_input, put_away, raise, resize, restore, show, window_of,
 };
 use windows_sys::Win32::{
     Foundation::HWND,

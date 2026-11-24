@@ -10,6 +10,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 - IN-GAME overlay mode (Settings, OVERLAY, MODE): the overlay is drawn inside the game's picture where the game allows it, with mouse and keyboard, and the game keeps the focus. Its fields take typing, and hotkeys can be bound in it.
 - The in-game overlay also works in a game run as administrator, after the UAC prompt, as the trainer does.
 - The overlay's hotkeys are held only while the game is in front: other apps get those keys the rest of the time.
+- The window opens where you left it: on its monitor, at its size and place, maximized or not. (#26; thanks GhostInq)
 - Games start through their store's launcher: Epic, GOG Galaxy, Ubisoft Connect, Rockstar and Xbox, besides Steam. Before, Impulse waited for you to start them. (#21)
 - A Steam game with a launch option that turns its anti-cheat off starts through that option. (#21)
 - A trainer that asks for a special way of loading gets it: the game is first given time to take input, held still while the trainer sets up, or the trainer runs outside the game in Wand's trainer host. (#21)
