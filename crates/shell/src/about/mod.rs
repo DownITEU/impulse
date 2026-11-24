@@ -5,5 +5,5 @@
 mod links;
 mod view;
 
-pub use links::{FEED, Link};
+pub use links::{FEED, Link, issue, profile};
 pub use view::{AboutView, stacked_row, tab_row};

@@ -203,11 +203,11 @@ impl Updates {
 
     /// The markdown a dialog shows; empty when there is nothing to say.
     pub fn notes(&self, mode: Mode) -> SharedString {
-        match mode {
+        notes::linked(&match mode {
             Mode::Available => notes::available(&self.offer),
             Mode::New => notes::of(&self.sections, &self.current),
             Mode::Changelog => notes::all(&self.sections),
-        }
+        })
         .into()
     }
 

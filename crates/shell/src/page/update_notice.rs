@@ -114,7 +114,14 @@ impl Render for UpdateNotice {
         });
         let notes = match notes.is_empty() {
             true => mono(t(cx, key::UPDATE_NO_NOTES), TYPE_LABEL).text_color(rgb(FAINT)).into_any_element(),
-            false => TextView::markdown(("update-notes", mode as usize), notes).into_any_element(),
+            false => TextView::markdown(("update-notes", mode as usize), notes)
+                .on_link_click(|url, _, _, cx| {
+                    // A feed's notes may hold links into other apps: not followed from here.
+                    if url.starts_with("https://") || url.starts_with("http://") {
+                        cx.open_url(url);
+                    }
+                })
+                .into_any_element(),
         };
         let busy = matches!(status, Status::Ready(_)) && !updates.can_restart(cx);
         let body = v_flex()
