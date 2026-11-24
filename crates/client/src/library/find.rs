@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use model::Ref;
 
-use super::{Library, one_install};
+use super::{Library, by_name, one_install};
 
 /// A row of the search.
 pub struct Find {
@@ -39,7 +39,7 @@ impl Library {
         }
         rows.extend(titles.into_values().map(|at| (at, false)));
         let mut finds: Vec<Find> = rows.into_iter().map(|(at, listed)| Find { at, listed, search: search(&self.catalog[at]) }).collect();
-        finds.sort_by(|a, b| a.search.cmp(&b.search).then(a.at.cmp(&b.at)));
+        finds.sort_by(|a, b| by_name(&a.search, &b.search).then(a.at.cmp(&b.at)));
         finds
     }
 }
@@ -104,5 +104,12 @@ mod tests {
     fn a_listed_game_comes_first_among_equals() {
         let finds = [find("doom", false), find("doom eternal", true)];
         assert_eq!(rank(&finds, "DOOM"), [1, 0]);
+    }
+
+    #[test]
+    fn a_leading_the_does_not_count_in_the_order() {
+        let mut names = ["the witcher 3", "theme hospital", "tetris", "the forest", "witcher"];
+        names.sort_by(|a, b| by_name(a, b));
+        assert_eq!(names, ["the forest", "tetris", "theme hospital", "witcher", "the witcher 3"]);
     }
 }

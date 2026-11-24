@@ -1,7 +1,12 @@
 ## What and why
 
-## Checked
+<!-- Closes #N, if there is an issue. -->
+
+## How you tested it
+
+<!-- The game or the steps; a screenshot for a UI change. -->
+
+## Checklist
 
 - [ ] `scripts\check.ps1` passes
-- [ ] No WeMod binaries, tokens or auth data in the change
-- [ ] A change to a boundary or a public surface updates its file in `.claude/rules/`
+- [ ] No WeMod files (trainers, TrainerLib, Tophat), tokens or account data in the change

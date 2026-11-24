@@ -10,6 +10,7 @@ pub mod sources;
 pub mod titles;
 
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, HashMap},
     mem,
     path::Path,
@@ -217,6 +218,12 @@ fn trainer_id(record: &model::Game) -> Option<&Ref> {
     record.trainer.as_ref().map(|offer| &offer.id)
 }
 
+/// Lower-case names in the list's order: a leading "the" is skipped, as Steam's library does.
+pub fn by_name(a: &str, b: &str) -> Ordering {
+    let (x, y) = (a.strip_prefix("the ").unwrap_or(a), b.strip_prefix("the ").unwrap_or(b));
+    x.cmp(y).then(a.cmp(b))
+}
+
 /// A record's first store in upper case, as the app prints it.
 pub fn store_of(record: &model::Game) -> String {
     record.store_ids.first().map_or(String::new(), |id| launchers::store_name(id.store()))
@@ -294,7 +301,7 @@ fn list(all: &Arc<Vec<model::Game>>, installed: Vec<Installation>, picked: &Pick
             games.push(listed);
         }
     }
-    games.sort_by(|a, b| a.search.cmp(&b.search));
+    games.sort_by(|a, b| by_name(&a.search, &b.search));
     Library { games: games.into_iter().map(Arc::new).collect(), trainers: with_trainer.len(), catalog: all.clone() }
 }
 

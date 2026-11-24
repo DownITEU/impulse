@@ -8,7 +8,7 @@ use std::{
 
 use client::{
     Load,
-    library::{Game, GameId, Support},
+    library::{Game, GameId, Support, by_name},
 };
 use gpui_kit::{
     Animation, AnimationExt, App, Context, Div, Entity, FontWeight, IntoElement, ObjectFit, Render, SharedString, Stateful, Window,
@@ -108,7 +108,7 @@ impl Sidebar {
                 thumbnail: record.thumbnail.clone(),
             })
             .collect();
-        self.away.sort_by(|a, b| a.search.cmp(&b.search));
+        self.away.sort_by(|a, b| by_name(&a.search, &b.search));
         self.away_of = (catalog, ids);
     }
 

@@ -14,6 +14,15 @@ const REPO: &str = concat!("https://github.com/", slug!());
 /// The release list `updater` reads; a host with the same JSON shape (Gitea, Forgejo) can take its place.
 pub const FEED: &str = concat!("https://api.github.com/repos/", slug!(), "/releases?per_page=30");
 
+/// An issue or a pull request: GitHub sends an issue's address on to a pull request's.
+pub fn issue(number: &str) -> String {
+    format!("{REPO}/issues/{number}")
+}
+
+pub fn profile(login: &str) -> String {
+    format!("https://github.com/{login}")
+}
+
 /// Every address the app sends the user to; the one place to change when one moves.
 #[derive(Clone, Copy)]
 pub enum Link {

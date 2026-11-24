@@ -1,6 +1,51 @@
 //! The markdown a dialog shows, made from release notes and `CHANGELOG.md`'s sections.
 
+use std::fmt::Write;
+
 use updater::{Release, Section, Version};
+
+use crate::about::{issue, profile};
+
+/// `#12` and `@login` as GitHub reads them, made links to the issue and the account; code spans keep them as text.
+pub fn linked(markdown: &str) -> String {
+    let mut out = String::with_capacity(markdown.len());
+    for (at, part) in markdown.split('`').enumerate() {
+        if at > 0 {
+            out.push('`');
+        }
+        if at % 2 == 1 {
+            out.push_str(part);
+            continue;
+        }
+        let mut rest = part;
+        while let Some(found) = rest.find(['#', '@']) {
+            let (before, from) = rest.split_at(found);
+            out.push_str(before);
+            let name = &from[1..];
+            let name = &name[..name.find(|c: char| !c.is_ascii_alphanumeric() && c != '-').unwrap_or(name.len())];
+            // Not inside a word: a mail address, a URL's anchor, a heading's next mark.
+            let free = out.chars().last().is_none_or(|c| c.is_whitespace() || c == '(');
+            let url = match from.as_bytes()[0] {
+                b'#' if free && !name.is_empty() && name.bytes().all(|b| b.is_ascii_digit()) => Some(issue(name)),
+                b'@' if free && login(name) => Some(profile(name)),
+                _ => None,
+            };
+            let taken = url.as_ref().map_or(1, |_| 1 + name.len());
+            match url {
+                Some(url) => _ = write!(out, "[{}]({url})", &from[..taken]),
+                None => out.push_str(&from[..1]),
+            }
+            rest = &from[taken..];
+        }
+        out.push_str(rest);
+    }
+    out
+}
+
+/// GitHub's rule for a login: letters, digits and single inner hyphens, 39 at most.
+fn login(name: &str) -> bool {
+    (1..=39).contains(&name.len()) && !name.starts_with('-') && !name.ends_with('-') && !name.contains("--")
+}
 
 /// Each release under a heading of its version and date, in the order given.
 pub fn available(releases: &[Release]) -> String {
@@ -45,5 +90,15 @@ mod tests {
         assert_eq!(of(&sections, &Version::parse("0.2.0-pre").unwrap()), "- B");
         assert_eq!(of(&sections, &Version::new(0, 3, 0)), "");
         assert_eq!(all(&[]), "");
+    }
+
+    #[test]
+    fn an_issue_and_a_login_become_links_but_not_in_a_word_or_code() {
+        assert_eq!(
+            linked("- A fix. (#26; thanks @Ghost-Inq)"),
+            format!("- A fix. ([#26]({}); thanks [@Ghost-Inq]({}))", issue("26"), profile("Ghost-Inq"))
+        );
+        let kept = "### Fixes\n\nmail a@b.dev, page x#12, #12a, @-x, `@types/node` and `#3`";
+        assert_eq!(linked(kept), kept);
     }
 }

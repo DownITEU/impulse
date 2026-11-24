@@ -3,29 +3,32 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
-## [0.5.0] - 2026-11-24
+## [0.5.0] - 2026-11-25
 
 ### Features
 
 - IN-GAME overlay mode (Settings, OVERLAY, MODE): the overlay is drawn inside the game's picture where the game allows it, with mouse and keyboard, and the game keeps the focus. Its fields take typing, and hotkeys can be bound in it.
 - The in-game overlay also works in a game run as administrator, after the UAC prompt, as the trainer does.
 - The overlay's hotkeys are held only while the game is in front: other apps get those keys the rest of the time.
-- The window opens where you left it: on its monitor, at its size and place, maximized or not. (#26; thanks GhostInq)
+- The window opens where you left it: on its monitor, at its size and place, maximized or not. (#26; thanks @GhostInq)
 - Games start through their store's launcher: Epic, GOG Galaxy, Ubisoft Connect, Rockstar and Xbox, besides Steam. Before, Impulse waited for you to start them. (#21)
 - A Steam game with a launch option that turns its anti-cheat off starts through that option. (#21)
 - A trainer that asks for a special way of loading gets it: the game is first given time to take input, held still while the trainer sets up, or the trainer runs outside the game in Wand's trainer host. (#21)
 - A trainer's own launch arguments and its rules for finding the game's process (its command line, the oldest or newest copy, how long to wait) are followed.
 - LAUNCH asks first when the game's build is newer than the trainer supports: PLAY ANYWAY, CANCEL or ALWAYS PLAY. ASK ON A GAME UPDATE in Settings, APP turns the question back on.
 - A number mod has a field between its - and + buttons: type a value, then press Enter or click away. The value stays within the mod's limits. (#22)
-- Simplified Chinese (Settings, APP, LANGUAGE). (#23; thanks yzxxy010)
+- Simplified Chinese (Settings, APP, LANGUAGE). (#23; thanks @yzxxy010)
 - A failed launch says which step failed: the launcher did not start the game, the game did not start in time, the game you start yourself did not appear in time, the game closed before the trainer got in, the trainer could not get in or did not start, or the trainer needs the game's other (64-bit or 32-bit) build.
+- A translation can ship before all of it is done: a text not translated yet shows in English.
+- The game list sorts as Steam's library does: a leading "The" does not count, so THE WITCHER 3 is under W. (#27)
+- In the release notes, an issue number or a contributor's name opens its GitHub page.
 
 ### Fixes
 
 - Xbox and Game Pass games are found in the folders their package uses, attach without reading the game's protected executable, and start the app the catalog names (Halo: The Master Chief Collection without its anti-cheat). (#21)
 - A game's build is read from its version file whatever its kind (an Xbox package's signature, a Java archive), so the version mark and the trainer's game version match Wand's. (#21)
 - A game you have in several stores uses the store its catalog entry lists first.
-- A game listed under several catalog entries on one install shows once: the edition its launcher names (Mafia III: Definitive Edition), one entry per title otherwise. The games of a collection (Halo: The Master Chief Collection) are still listed apart. (#24; thanks GhostInq)
+- A game listed under several catalog entries on one install shows once: the edition its launcher names (Mafia III: Definitive Edition), one entry per title otherwise. The games of a collection (Halo: The Master Chief Collection) are still listed apart. (#24; thanks @GhostInq)
 - A game whose version file is gone (moved, uninstalled, or rebuilt on a new engine, like RimWorld 1.7) no longer counts as installed, as in Wand, so a trainer that does not fit it is not started. Add it by its executable to play anyway.
 - LAUNCH right after starting the game yourself waits for it instead of starting a second copy, and a small helper process in the game's folder is no longer taken for the game.
 - Slow-loading games get more time: 45 s for the trainer to connect, 90 s for it to get ready.
