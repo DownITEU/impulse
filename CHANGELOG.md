@@ -3,7 +3,7 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
-## [0.5.0] - 2026-11-24
+## [0.5.0] - 2026-11-25
 
 ### Features
 
