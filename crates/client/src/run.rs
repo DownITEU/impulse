@@ -44,15 +44,18 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
     stage(Stage::Preparing);
     let prepared = request.runner.prepare().await?;
 
-    let required = request.launch == Launch::Required;
-    // A game the run must start counts at any age: one started a moment ago runs all the same.
-    let minimum_age = if required { Duration::ZERO } else { request.rule.minimum_age };
-    let rule = Rule { minimum_age, ..request.rule.clone() };
+    // Any age counts: one started a moment ago runs all the same.
+    let rule = Rule { minimum_age: Duration::ZERO, ..request.rule.clone() };
     let running = unblock(move || agent::find(&rule)).await?;
+    let running = match running {
+        Some(_) if request.launch == Launch::Required => return Err(Failure::new(FailureKind::Restart)),
+        // Still starting up, as Wand waits for it; one that exits meanwhile is started anew.
+        Some(_) => agent::wait(&request.rule, request.rule.minimum_age).await.ok(),
+        None => None,
+    };
     // Held until the run ends, whatever the outcome.
     let mut _ready = None;
     let process = match running {
-        Some(_) if required => return Err(Failure::new(FailureKind::Restart)),
         Some(process) => process,
         None => {
             let mut started = false;
@@ -145,6 +148,21 @@ mod tests {
 
         let attached = block_on(start(request(Launch::Start, Duration::ZERO), |_| {})).err().unwrap();
         assert_eq!(attached.kind, FailureKind::Refused, "a run that may attach does");
+        assert_eq!((probe.readied.load(Ordering::SeqCst), probe.attached.load(Ordering::SeqCst)), (0, 1));
+    }
+
+    #[test]
+    fn a_game_still_starting_up_is_waited_for_not_started_again() {
+        let probe = Arc::new(Probe::default());
+        let me = std::env::current_exe().unwrap();
+        let image = Some(me.file_name().unwrap().to_string_lossy().into_owned());
+        // Longer than the tests have run: a start would ready the install first. No launcher starts that store.
+        let rule = Rule { image, location: PathBuf::from(me.parent().unwrap()), minimum_age: Duration::from_secs(3) };
+        let origin = Origin::Launcher(model::StoreId::parse("itch:0").unwrap());
+        let request = Request { runner: Arc::new(Prepare(probe.clone())), origin, rule, launch: Launch::Start };
+
+        let attached = block_on(start(request, |_| {})).err().unwrap();
+        assert_eq!(attached.kind, FailureKind::Refused);
         assert_eq!((probe.readied.load(Ordering::SeqCst), probe.attached.load(Ordering::SeqCst)), (0, 1));
     }
 
