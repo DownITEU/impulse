@@ -12,7 +12,7 @@ The installed games, from each launcher's own records, and the start of a game.
 - `launchers::owners`, `launchers::install`, `Custom`: the games a picked executable belongs to, and the install it gives a game (blocking).
 - `launchers::page(&StoreId)`: the launcher's name and the URI of the game's page.
 - `launchers::store_link(&[String])`: the page to open for a game the user does not have (blocking: the registry); `store_name`: a store id's prefix as the app prints it (XBOX, EA, UBISOFT, else upper case).
-- `launchers::start(&Origin)`: starts a Steam app or a picked executable (blocking).
+- `launchers::start(&Origin, location)`: starts the game through its launcher, or a picked executable (blocking).
 
 ## Rules
 - launchers: each launcher module's `apps()` returns `App` (the store id it mints, location) from local records. `scan` maps them to games by lower-cased store id (editions share one) and keeps one launcher install per game, of the store id the game's record lists first (Wand's preference), its picked one after it.
@@ -22,11 +22,12 @@ The installed games, from each launcher's own records, and the start of a game.
 - Only `xbox`, `ea` and `standalone` read the games. The others work from local records alone.
 - Launchers' files and registry are only read. Registry views: launchers write under `WOW6432Node` (`View::Wow32`), packaged apps are in the 64-bit view.
 - A picked executable that cannot be opened is `GameNotFound`.
-- Only Steam games (`steam://rungameid/<appid>`) and picked executables (started in their own folder) are started. Any other store returns `false`: a run waits for the user.
+- `start` as Wand's: Steam `steam://rungameid/<appid>`, Epic `com.epicgames.launcher://apps/<id, percent-encoded>?action=launch&silent=true`, GOG `GalaxyClient.exe /command=runGame /gameId=<id> /path="<folder>"` in Galaxy's folder, Ubisoft `UbisoftGameLauncher.exe -upc_uplay_id <id>`, Rockstar `Launcher.exe -minmodeApp=<id>`, Xbox `shell:AppsFolder\<family>!<the manifest's first Application Id, else App>`; a picked executable in its own folder. EA and standalone games are not started (a standalone launcher file is the catalog's: never run), nor is one whose launcher is missing or whose URI no program handles: `false`, a run waits for the user.
+- Only plain ids reach a URI or an argument: digits for GOG and Ubisoft, also `_` for Rockstar and `._-` for a package family; Epic's is percent-encoded; a GOG folder with a quote is refused. A launcher runs by its absolute path from its registry key (where Wand looks), through `ShellExecuteW` with the arguments apart: nothing a shell parses.
 - Only a number reaches a `steam://` URI: the id comes from a remote catalog. A bad id is an error, never a launch.
 
 ## Traps
-- A Steam start returns once the URI is handed over, not when the game runs: the wait after it is needed.
+- A start returns once the shell has it, not when the game runs: the wait after it is needed.
 - `ShellExecuteW` returns a value above 32 on success.
 
 ## New code

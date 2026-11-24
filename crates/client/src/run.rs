@@ -67,8 +67,8 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
             if request.launch != Launch::User {
                 _ready = prepared.before_start(&request.origin, &request.rule.location).await?;
                 stage(Stage::Launching);
-                let origin = request.origin.clone();
-                started = unblock(move || launchers::start(&origin)).await?;
+                let (origin, location) = (request.origin.clone(), request.rule.location.clone());
+                started = unblock(move || launchers::start(&origin, &location)).await?;
             }
             stage(Stage::WaitingForGame);
             let within = if started { LAUNCHED_WITHIN } else { STARTED_BY_USER_WITHIN };

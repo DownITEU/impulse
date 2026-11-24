@@ -6,6 +6,13 @@ use super::{
 };
 
 const INSTALLS: &str = r"SOFTWARE\Ubisoft\Launcher\Installs";
+pub const LAUNCHER: &str = "UbisoftGameLauncher.exe";
+
+/// Ubisoft Connect's folder, when its game launcher is there.
+pub fn launcher() -> Option<PathBuf> {
+    let dir = PathBuf::from(registry::value(LOCAL_MACHINE, r"SOFTWARE\Ubisoft\Launcher", "InstallDir", View::Wow32)?);
+    dir.join(LAUNCHER).is_file().then_some(dir)
+}
 
 pub fn apps() -> Vec<App> {
     let Some(installs) = registry::open(LOCAL_MACHINE, INSTALLS, View::Wow32) else {
