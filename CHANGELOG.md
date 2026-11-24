@@ -17,6 +17,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 - A trainer's own launch arguments and its rules for finding the game's process (its command line, the oldest or newest copy, how long to wait) are followed.
 - LAUNCH asks first when the game's build is newer than the trainer supports: PLAY ANYWAY, CANCEL or ALWAYS PLAY. ASK ON A GAME UPDATE in Settings, APP turns the question back on.
 - A number mod has a field between its - and + buttons: type a value, then press Enter or click away. The value stays within the mod's limits. (#22)
+- Simplified Chinese (Settings, APP, LANGUAGE). (#23; thanks yzxxy010)
 - A failed launch says which step failed: the launcher did not start the game, the game did not start in time, the game you start yourself did not appear in time, the game closed before the trainer got in, the trainer could not get in or did not start, or the trainer needs the game's other (64-bit or 32-bit) build.
 
 ### Fixes
