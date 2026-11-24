@@ -14,12 +14,12 @@ use std::{
 use client::{
     library::{Game, GameId},
     profile::Values,
-    run::{self, Request, Stage},
+    run::{self, Stage},
     trainer::Step,
 };
 use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
-use model::{Event, Failure, FailureKind, Live, Process, Session};
+use model::{Event, Failure, FailureKind, Installation, Live, Plan, Process, Session};
 pub use tracker::{Fix, Lease, Tracked, Tracker};
 pub use unconfirmed::{Closed as UnconfirmedClosed, Unconfirmed};
 pub use view::{run_button, run_note, session_panel};
@@ -189,7 +189,7 @@ impl Runs {
         if self.is_active() {
             return;
         }
-        let request = match self.request(&game, cx) {
+        let (install, plan) = match self.request(&game, cx) {
             Ok(request) => request,
             Err(e) => return self.fail(game, e, cx),
         };
@@ -198,7 +198,7 @@ impl Runs {
         let task = cx.spawn(async move |runs, cx| {
             let outcome = {
                 let (progress, mut progress_cx) = (runs.clone(), cx.clone());
-                run::start(request, move |stage| {
+                run::start(install, plan, move |stage| {
                     progress.update(&mut progress_cx, |runs, cx| runs.staged(stage, cx)).ok();
                 })
                 .await
@@ -304,12 +304,12 @@ impl Runs {
         }
     }
 
-    fn request(&self, game: &GameId, cx: &App) -> Result<Request, Failure> {
+    fn request(&self, game: &GameId, cx: &App) -> Result<(Installation, Plan), Failure> {
         let listed = self.library.read(cx).game(game).ok_or(Failure::new(FailureKind::GameNotFound))?;
         let no_cheats = || Failure::new(FailureKind::NotFound).saying(app_text(key::RUN_NO_CHEATS));
         let sheet = self.trainers.read(cx).sheet(game).ok_or_else(no_cheats)?;
-        let install = listed.install.as_ref().ok_or(Failure::new(FailureKind::GameNotFound))?;
-        Ok(run::request(install, &sheet.plan))
+        let install = listed.install.clone().ok_or(Failure::new(FailureKind::GameNotFound))?;
+        Ok((install, sheet.plan.clone()))
     }
 
     fn staged(&mut self, stage: Stage, cx: &mut Context<Self>) {

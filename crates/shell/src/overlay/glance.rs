@@ -14,6 +14,7 @@ use gpui_kit::{
     prelude::*, px, size,
 };
 use model::CanvasEvent;
+use topmost::Area;
 
 use super::{
     Layer, Playing,
@@ -26,9 +27,6 @@ use crate::{
     settings::Settings,
     ui::{theme::*, widgets::brackets},
 };
-
-/// Left, top, width, height in physical pixels.
-type Rect = (i32, i32, i32, i32);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
@@ -44,16 +42,16 @@ enum Call {
     /// The window's frames go into `game` at the dock's screen `rect`, as a place in its client area.
     Mirror {
         game: isize,
-        rect: Rect,
+        rect: Area,
     },
     /// Cloaked at `rect`, out of the topmost band: its frames reach the game.
     Embed {
         hwnd: isize,
-        rect: Rect,
+        rect: Area,
     },
     Place {
         hwnd: isize,
-        rect: Rect,
+        rect: Area,
         uncloak: bool,
     },
     Hide {
@@ -65,7 +63,7 @@ enum Call {
 struct Popup {
     window: WindowHandle<Card>,
     hwnd: isize,
-    placed: Option<(Mode, Rect)>,
+    placed: Option<(Mode, Area)>,
 }
 
 pub(super) struct Glance {
@@ -81,7 +79,7 @@ pub(super) struct Glance {
     // A frame of the window reached the canvas: the mirror works.
     delivered: Rc<Cell<bool>>,
     // The screen rect the window's frames go into the game for.
-    mirrored: Option<Rect>,
+    mirrored: Option<Area>,
     // The game's client area may have moved or changed size: place the layer again.
     refit: bool,
     wake: mpsc::UnboundedSender<()>,
@@ -176,9 +174,8 @@ impl Glance {
             let monitor = topmost::monitor_of(game)?;
             let screen = size(px(monitor.size.0 as f32 / monitor.scale), px(monitor.size.1 as f32 / monitor.scale));
             let bounds = docks::below_header(self.docks.read(cx).bounds(&MINIMAP_DOCK, screen)).to_device_pixels(monitor.scale);
-            let rect =
-                (monitor.origin.0 + bounds.origin.x.0, monitor.origin.1 + bounds.origin.y.0, bounds.size.width.0, bounds.size.height.0);
-            Some((rect, game))
+            let (left, top) = (monitor.origin.0 + bounds.origin.x.0, monitor.origin.1 + bounds.origin.y.0);
+            Some((Area { left, top, width: bounds.size.width.0, height: bounds.size.height.0 }, game))
         });
         let refit = mem::take(&mut self.refit);
         let Some(hud) = &self.hud else { return want.map(|_| Call::Open) };
@@ -329,27 +326,31 @@ impl Render for Card {
 
 /// Where a layer of size `rect` goes in the game's client area: the screen `rect`'s place relative to the client area's
 /// origin, shifted to fit inside it (at the origin when the area is smaller).
-fn fit((left, top, width, height): Rect, (area_left, area_top, area_width, area_height): Rect) -> (i32, i32) {
-    ((left - area_left).min(area_width - width).max(0), (top - area_top).min(area_height - height).max(0))
+fn fit(rect: Area, area: Area) -> (i32, i32) {
+    ((rect.left - area.left).min(area.width - rect.width).max(0), (rect.top - area.top).min(area.height - rect.height).max(0))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn area(left: i32, top: i32, width: i32, height: i32) -> Area {
+        Area { left, top, width, height }
+    }
+
     #[test]
     fn a_layer_keeps_its_place_relative_to_the_client_area() {
-        assert_eq!(fit((1500, 700, 300, 300), (100, 50, 1920, 1080)), (1400, 650));
+        assert_eq!(fit(area(1500, 700, 300, 300), area(100, 50, 1920, 1080)), (1400, 650));
     }
 
     #[test]
     fn a_layer_is_shifted_back_inside_the_client_area() {
-        assert_eq!(fit((1900, 900, 300, 300), (0, 0, 1280, 720)), (980, 420));
-        assert_eq!(fit((-40, -20, 300, 300), (0, 0, 1280, 720)), (0, 0));
+        assert_eq!(fit(area(1900, 900, 300, 300), area(0, 0, 1280, 720)), (980, 420));
+        assert_eq!(fit(area(-40, -20, 300, 300), area(0, 0, 1280, 720)), (0, 0));
     }
 
     #[test]
     fn a_layer_larger_than_the_client_area_sits_at_its_origin() {
-        assert_eq!(fit((500, 500, 300, 300), (0, 0, 200, 200)), (0, 0));
+        assert_eq!(fit(area(500, 500, 300, 300), area(0, 0, 200, 200)), (0, 0));
     }
 }

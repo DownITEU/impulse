@@ -283,8 +283,8 @@ fn connect(client: isize) {
 /// The DLL left (unloaded, or its game closes): the canvas there ends.
 fn closed(window: HWND, pid: u32) {
     let mut state = state();
-    if state.clients.remove(&pid).is_some() {
-        state.canvases.remove(&pid);
+    if state.clients.contains_key(&pid) {
+        state.forget(pid);
         drop(state);
         log::debug!("overlay: the DLL in process {pid} closed the link");
         retire_if_gone(pid);
@@ -361,8 +361,7 @@ fn flush() {
                 let mut state = state();
                 // Only this link: the pid may have a new process and link by now.
                 if state.clients.get(&pid).is_some_and(|link| link.window == client) {
-                    state.clients.remove(&pid);
-                    state.canvases.remove(&pid);
+                    state.forget(pid);
                 }
                 drop(state);
                 log::debug!("overlay: the DLL in process {pid} is gone");
@@ -419,7 +418,6 @@ fn retire_if_gone(pid: u32) {
     let mut state = state();
     if state.mapped.get(&pid).is_some_and(|(known, _)| *known == process) {
         state.mapped.remove(&pid);
-        state.clients.remove(&pid);
-        state.canvases.remove(&pid);
+        state.forget(pid);
     }
 }

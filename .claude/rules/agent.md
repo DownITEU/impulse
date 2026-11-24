@@ -9,7 +9,7 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 
 ## Surface
 - `settled(&Rule)`: the matching process its `Pick` names (the biggest working set by default, or the oldest, the newest by creation time; ties keep the first listed, as Wand) running now, waited for while younger than `minimum_age`; `None` once nothing matches. Ranked before the age is checked, as Wand: a small old helper in the folder is not taken for a game still starting up. With `Target::arguments`, only a process whose path matches has its command line read (`NtQueryInformationProcess`, `ProcessCommandLineInformation`, through a verified handle; any arch, unlike Wand's x64 PEB read); one unreadable does not match. Age, working set and command lines never leave the crate.
-- `wait(&Rule, within)`: polls once a second until that process is old enough; needs no runtime; dropping either stops it within one poll. Its timeout is marked `GameNotFound`.
+- `wait(&Rule, within)`: polls once a second until that process is old enough, `None` past `within`; needs no runtime; dropping either stops it within one poll.
 - `of(pid)`: the identity of one process now (blocking), `None` when it cannot be looked at.
 - `x64(&Process)`: whether it is a 64-bit process, asked of the process (blocking), never of its exe: a GDK game's is unreadable.
 - `signaled(name, within)`: waits for a named event a module in a game sets (blocking): `false` when none of that name is held, an error when it is not set in time.

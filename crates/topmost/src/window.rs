@@ -26,6 +26,15 @@ use windows_sys::Win32::{
     },
 };
 
+/// A rect on the screen in physical pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Area {
+    pub left: i32,
+    pub top: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 /// A monitor's top left and size in physical pixels, and its scale.
 #[derive(Clone, Copy)]
 pub struct Monitor {
@@ -177,8 +186,8 @@ pub fn put_away(window: isize, away: Away) {
     unsafe { ShowWindow(window as HWND, show) };
 }
 
-/// Moves and sizes `window` (left, top, width, height in physical pixels), keeping its place in the z-order.
-pub fn resize(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
+/// Moves and sizes `window`, keeping its place in the z-order.
+pub fn resize(window: isize, Area { left, top, width, height }: Area) {
     // SAFETY: a gone window fails it.
     unsafe { SetWindowPos(window as HWND, ptr::null_mut(), left, top, width, height, SWP_NOZORDER | SWP_NOACTIVATE) };
 }
@@ -240,15 +249,15 @@ pub fn monitor_of(window: isize) -> Option<Monitor> {
     }
 }
 
-/// The client area of `window` (left, top, width, height) in screen physical pixels; `None` for a gone window.
-pub fn client_area(window: isize) -> Option<(i32, i32, i32, i32)> {
+/// The client area of `window` on the screen; `None` for a gone window.
+pub fn client_area(window: isize) -> Option<Area> {
     let window = window as HWND;
     let mut origin = POINT { x: 0, y: 0 };
     // SAFETY: RECT is plain integers, so all zeros is a valid value.
     let mut rect: RECT = unsafe { mem::zeroed() };
     // SAFETY: plain Win32 calls; `origin` and `rect` outlive them, and a gone window fails them.
     let known = unsafe { GetClientRect(window, &mut rect) != 0 && ClientToScreen(window, &mut origin) != 0 };
-    known.then_some((origin.x, origin.y, rect.right - rect.left, rect.bottom - rect.top))
+    known.then_some(Area { left: origin.x, top: origin.y, width: rect.right - rect.left, height: rect.bottom - rect.top })
 }
 
 /// Lets every click and key through `window` to what is under it; it never takes the input.
@@ -263,14 +272,14 @@ pub fn pass_through(window: isize) {
     }
 }
 
-/// Shows `window` topmost at `rect` (left, top, width, height in physical pixels), without the input.
-pub fn place(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
+/// Shows `window` topmost at `area`, without the input.
+pub fn place(window: isize, Area { left, top, width, height }: Area) {
     // SAFETY: a gone window fails it.
     unsafe { SetWindowPos(window as HWND, HWND_TOPMOST, left, top, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
 }
 
-/// Shows `window` at `rect` (left, top, width, height in physical pixels) out of the topmost band, without the input.
-pub fn show(window: isize, (left, top, width, height): (i32, i32, i32, i32)) {
+/// Shows `window` at `area` out of the topmost band, without the input.
+pub fn show(window: isize, Area { left, top, width, height }: Area) {
     // SAFETY: a gone window fails it.
     unsafe { SetWindowPos(window as HWND, HWND_NOTOPMOST, left, top, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
 }

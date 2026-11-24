@@ -151,10 +151,15 @@ impl State {
     /// A process the DLL goes into; another of the same pid (the old game exited) takes its link and canvas with it.
     pub fn record(&mut self, process: &Process, load: Load) {
         if self.mapped.get(&process.pid).is_some_and(|(known, _)| known != process) {
-            self.clients.remove(&process.pid);
-            self.canvases.remove(&process.pid);
+            self.forget(process.pid);
         }
         self.mapped.insert(process.pid, (process.clone(), load));
+    }
+
+    /// The link to `pid` and its canvas go; the canvas's events end.
+    pub fn forget(&mut self, pid: u32) {
+        self.clients.remove(&pid);
+        self.canvases.remove(&pid);
     }
 
     /// A new canvas for `pid` in place of the one there, whose events end; the old one's layers close unless shown again.

@@ -6927,6 +6927,7 @@ dependencies = [
  "disk",
  "futures",
  "gpui-kit",
+ "gpui-pre-windows",
  "i18n",
  "image",
  "journal",

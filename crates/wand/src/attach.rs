@@ -44,7 +44,7 @@ pub struct Game<'a> {
 /// then the host.
 pub struct Attached {
     pub session: Session,
-    pub _host: Option<TrainerHost>,
+    _host: Option<TrainerHost>,
 }
 
 /// `trainerlib` is the directory of Wand's service and plugin DLLs. Every DLL is checked before

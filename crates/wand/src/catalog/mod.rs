@@ -2,18 +2,31 @@
 
 mod cache;
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::{Arc, PoisonError, RwLock},
+};
 
 use anyhow::{Context, Result};
 use model::{Game, Locator, MapOffer, Offer, Ref, Standalone, StoreId};
 use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 
-pub use cache::{cached, draws_overlay, forget, refresh, size};
+pub use cache::{cached, forget, refresh, size};
 
 pub(crate) const ART_CDN: &str = "https://api-cdn.wemod.com";
 /// A game's `flags` bit: Wand's overlay supports it.
 const OVERLAY_SUPPORTED: u64 = 256;
+
+/// The ids of the games Wand's overlay draws in, from the last catalog read.
+#[derive(Clone, Default)]
+pub struct Overlaid(Arc<RwLock<HashSet<String>>>);
+
+impl Overlaid {
+    pub fn has(&self, id: &str) -> bool {
+        self.0.read().unwrap_or_else(PoisonError::into_inner).contains(id)
+    }
+}
 
 #[derive(Deserialize)]
 struct Catalog {
@@ -36,6 +49,9 @@ struct Entry {
     #[serde(default, deserialize_with = "strings")]
     purchase_uris: Vec<String>,
     trainer: Option<Trainer>,
+    /// Any value: a bad one means no overlay for that game, not an unreadable catalog.
+    #[serde(default)]
+    flags: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -106,8 +122,11 @@ enum LocatorKind {
     Unknown,
 }
 
-fn parse(json: &[u8]) -> Result<Vec<Game>> {
+/// The games, the ones the overlay draws in noted in `overlaid`.
+fn parse(json: &[u8], overlaid: &Overlaid) -> Result<Vec<Game>> {
     let Catalog { games, titles, platforms, maps } = serde_json::from_slice(json).context("parse catalog")?;
+    let drawn = games.values().filter(|entry| entry.flags.as_u64().is_some_and(|flags| flags & OVERLAY_SUPPORTED != 0));
+    *overlaid.0.write().unwrap_or_else(PoisonError::into_inner) = drawn.map(|entry| entry.id.clone()).collect();
     let wand = crate::source();
     let mut maps_of: HashMap<String, Vec<MapOffer>> = HashMap::new();
     for map in maps {
@@ -162,26 +181,6 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
     Ok(games.collect())
 }
 
-/// Read on its own: only the run of a game that may get the overlay asks, once.
-fn flagged_for_overlay(json: &[u8], id: &str) -> bool {
-    #[derive(Deserialize)]
-    struct Flags {
-        games: HashMap<String, Flagged>,
-    }
-    // Any values: a bad one means no overlay for that game, not an unreadable catalog.
-    #[derive(Deserialize)]
-    struct Flagged {
-        #[serde(default)]
-        id: serde_json::Value,
-        #[serde(default)]
-        flags: serde_json::Value,
-    }
-    let games = serde_json::from_slice::<Flags>(json).map(|catalog| catalog.games).unwrap_or_default();
-    // By the entry's own id, as `parse` names the game.
-    let game = games.values().find(|game| game.id.as_str() == Some(id));
-    game.and_then(|game| game.flags.as_u64()).is_some_and(|flags| flags & OVERLAY_SUPPORTED != 0)
-}
-
 /// The strings of a list; anything else, a null or an item of another kind, is skipped. Read as raw text first: no
 /// value is parsed before it is known to be a string.
 fn strings<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
@@ -204,9 +203,13 @@ fn locator(raw: &RawLocator) -> Option<Locator> {
 mod tests {
     use super::*;
 
+    fn read(json: &[u8]) -> Result<Vec<Game>> {
+        parse(json, &Overlaid::default())
+    }
+
     #[test]
     fn reads_games_in_model_terms() {
-        let games = parse(
+        let games = read(
             br#"{"games":{
                 "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App","standalone:other","uwp:Game.Pkg_8w","uwp:Odd_8w"],
                      "versionPath":"a.exe",
@@ -245,15 +248,19 @@ mod tests {
         let apps: Vec<_> = game.package_apps.iter().map(|(id, app)| (id.as_str(), app.as_str())).collect();
         assert_eq!(apps, [("uwp:Game.Pkg_8w", "NoEAC")], "by family in any case; a value not text is skipped");
         let odd = br#"{"games":{},"titles":{},"platforms":{"standalone":{"apps":[]},"uwp":null}}"#;
-        assert!(parse(odd).unwrap().is_empty(), "odd package data is skipped, not the catalog");
+        assert!(read(odd).unwrap().is_empty(), "odd package data is skipped, not the catalog");
     }
 
     #[test]
     fn the_overlay_draws_only_in_a_game_flagged_for_it() {
-        let json = br#"{"games":{"k":{"id":"1739","flags":772},"2":{"id":"2","flags":4},"3":{"id":"3"},"4":{"id":"4","flags":"256"},
-            "5":{"flags":256}},"titles":{}}"#;
-        let draws: Vec<bool> = ["1739", "2", "3", "4", "5", "k"].iter().map(|id| flagged_for_overlay(json, id)).collect();
-        assert_eq!(draws, [true, false, false, false, false, false]);
-        assert!(!flagged_for_overlay(b"not json", "1739"));
+        let json = br#"{"games":{"k":{"id":"1739","titleId":"t","flags":772},"2":{"id":"2","titleId":"t","flags":4},
+            "3":{"id":"3","titleId":"t"},"4":{"id":"4","titleId":"t","flags":"256"}},
+            "titles":{},"platforms":{"standalone":{"apps":[]}}}"#;
+        let overlaid = Overlaid::default();
+        parse(json, &overlaid).unwrap();
+        let draws: Vec<bool> = ["1739", "2", "3", "4", "k"].iter().map(|id| overlaid.has(id)).collect();
+        assert_eq!(draws, [true, false, false, false, false]);
+        parse(br#"{"games":{},"titles":{},"platforms":{"standalone":{"apps":[]}}}"#, &overlaid).unwrap();
+        assert!(!overlaid.has("1739"), "a newer catalog replaces the set");
     }
 }

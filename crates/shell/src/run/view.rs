@@ -38,8 +38,8 @@ fn label(stage: Stage, cx: &App) -> SharedString {
     )
 }
 
-/// LAUNCH + ATTACH (through `launch`'s question), the run's stage, or STOP.
-pub fn run_button(runs: &Entity<Runs>, launch: &Entity<Unconfirmed>, game: &Game, cx: &App) -> impl IntoElement {
+/// LAUNCH + ATTACH (through the `Unconfirmed` question), the run's stage, or STOP.
+pub fn run_button(runs: &Entity<Runs>, unconfirmed: &Entity<Unconfirmed>, game: &Game, cx: &App) -> impl IntoElement {
     let accent = rgb(accent(cx));
     let run = runs.read(cx);
     let state = run.state(&game.id);
@@ -54,7 +54,7 @@ pub fn run_button(runs: &Entity<Runs>, launch: &Entity<Unconfirmed>, game: &Game
     let stop_text = t(cx, key::RUN_STOP);
     let launch_text = t(cx, key::RUN_LAUNCH);
     let enter_text = t(cx, key::RUN_ENTER);
-    let (stop, start, id, support) = (runs.clone(), launch.clone(), game.id.clone(), game.support);
+    let (stop, start, id, support) = (runs.clone(), unconfirmed.clone(), game.id.clone(), game.support);
     h_flex()
         .gap(px(8.))
         .when_some(starting, |bar, stage| bar.child(tracked(&label(stage, cx), TYPE_FIELD, 0.14).text_color(accent)))
@@ -76,7 +76,7 @@ pub fn run_button(runs: &Entity<Runs>, launch: &Entity<Unconfirmed>, game: &Game
                     .pl(px(16.))
                     .pr(px(10.))
                     .gap(px(12.))
-                    .on_click(move |_, window, cx| start.update(cx, |launch, cx| launch.launch(id.clone(), support, window, cx)))
+                    .on_click(move |_, window, cx| start.update(cx, |unconfirmed, cx| unconfirmed.launch(id.clone(), support, window, cx)))
                     .child(icon(Icon::Play, 13., rgb(BG)))
                     .child(tracked(&launch_text, TYPE_FIELD, 0.14))
                     .child(

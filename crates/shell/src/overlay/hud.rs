@@ -124,7 +124,7 @@ pub struct Hud {
     library: Entity<Library>,
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
-    launch: Entity<Unconfirmed>,
+    unconfirmed: Entity<Unconfirmed>,
     hotkeys: Entity<Hotkeys>,
     maps: Entity<Maps>,
     map: Entity<MapView>,
@@ -149,7 +149,7 @@ impl Hud {
         library: Entity<Library>,
         trainers: Entity<Trainers>,
         runs: Entity<Runs>,
-        launch: Entity<Unconfirmed>,
+        unconfirmed: Entity<Unconfirmed>,
         hotkeys: Entity<Hotkeys>,
         maps: Entity<Maps>,
         map: Entity<MapView>,
@@ -172,8 +172,8 @@ impl Hud {
             hud.focus.focus(window, cx);
         })
         .detach();
-        cx.observe(&launch, |_, _, cx| cx.notify()).detach();
-        cx.subscribe_in(&launch, window, |hud, _, _: &UnconfirmedClosed, window, cx| {
+        cx.observe(&unconfirmed, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&unconfirmed, window, |hud, _, _: &UnconfirmedClosed, window, cx| {
             if hud.over {
                 hud.focus.focus(window, cx);
             }
@@ -240,7 +240,7 @@ impl Hud {
             library,
             trainers,
             runs,
-            launch,
+            unconfirmed,
             hotkeys,
             maps,
             map,
@@ -426,7 +426,10 @@ impl Render for Hud {
                     ),
             )
             .child(
-                h_flex().flex_1().justify_end().when_some(game, |right, game| right.child(run_button(&self.runs, &self.launch, game, cx))),
+                h_flex()
+                    .flex_1()
+                    .justify_end()
+                    .when_some(game, |right, game| right.child(run_button(&self.runs, &self.unconfirmed, game, cx))),
             );
         div()
             .id("hud")
@@ -442,6 +445,6 @@ impl Render for Hud {
             .children(self.cheat_list.read(cx).editor().cloned())
             .children(Some(self.picker.clone()).filter(|picker| picker.read(cx).is_open()))
             .children(Some(self.warning.clone()).filter(|warning| warning.read(cx).is_open()))
-            .children(Some(self.launch.clone()).filter(|launch| launch.read(cx).is_open()))
+            .children(Some(self.unconfirmed.clone()).filter(|unconfirmed| unconfirmed.read(cx).is_open()))
     }
 }

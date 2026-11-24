@@ -18,7 +18,7 @@ use crate::{
     proxy::{self, Proxy},
     texts::{ACTIVATE_UNSUPPORTED, FOLDER_UNSET, PROXY_FAILED, PROXY_MISSING, PROXY_RESTART, text},
     tophat::{Event, Outcome, Server},
-    trainer::{Activate, Binary, Plan},
+    trainer::{Activate, Binary, Load},
 };
 
 type Answer<T> = std::result::Result<T, Failure>;
@@ -36,14 +36,8 @@ impl Host {
         Self { data_dir, folder, server: Arc::default() }
     }
 
-    pub fn runner(&self, plan: &Plan) -> Arc<dyn model::Runner> {
-        Arc::new(Runner {
-            host: self.clone(),
-            binary: plan.binary.clone(),
-            variables: plan.variables.clone(),
-            proxy: plan.proxy.clone(),
-            activate: plan.activate,
-        })
+    pub fn runner(&self, load: Load) -> Arc<dyn model::Runner> {
+        Arc::new(Runner { host: self.clone(), load })
     }
 
     fn server(&self) -> Result<Arc<Server>> {
@@ -59,18 +53,16 @@ impl Host {
 
 struct Runner {
     host: Host,
-    binary: Result<Binary, String>,
-    variables: Vec<String>,
-    proxy: Result<Option<Proxy>, String>,
-    activate: Activate,
+    load: Load,
 }
 
 impl model::Runner for Runner {
     fn prepare(&self) -> BoxFuture<'_, Answer<Box<dyn Attach>>> {
         async move {
+            let Load { variables, binary, proxy, activate } = &self.load;
             let unsupported = |why: &String| anyhow!("{why}").context(Failure::new(FailureKind::Unsupported));
-            let Binary { url, hash } = self.binary.clone().map_err(|why| unsupported(&why))?;
-            let proxy = self.proxy.clone().map_err(|why| unsupported(&why))?;
+            let Binary { url, hash } = binary.clone().map_err(|why| unsupported(&why))?;
+            let proxy = proxy.clone().map_err(|why| unsupported(&why))?;
             let folder = self.host.folder.clone();
             let install = unblock(move || folder.install()).await;
             let unset = || Failure::new(FailureKind::SetupNeeded).saying(text(FOLDER_UNSET));
@@ -83,8 +75,7 @@ impl model::Runner for Runner {
                 unblock(move || binary::ensure(&data_dir, &crate::install::trainer_caches(), &url, &hash)).await?
             };
             let trainerlib = install.trainerlib();
-            let variables = self.variables.clone();
-            let prepared = Prepared { server, trainerlib, trainer, hash, variables, proxy, activate: self.activate };
+            let prepared = Prepared { server, trainerlib, trainer, hash, variables: variables.clone(), proxy, activate: *activate };
             Ok(Box::new(prepared) as Box<dyn Attach>)
         }
         .boxed()

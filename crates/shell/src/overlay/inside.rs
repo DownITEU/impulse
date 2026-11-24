@@ -4,9 +4,9 @@
 
 use anyhow::Result;
 use futures::{StreamExt, channel::mpsc};
-use gpui_kit::{AsyncWindowContext, Keystroke, Modifiers, WeakEntity};
+use gpui_kit::{AsyncWindowContext, Modifiers, WeakEntity};
 use model::CanvasEvent;
-use topmost::{Away, Typed};
+use topmost::{Area, Away};
 
 use super::{
     Ask, Layer, Mode, fullscreen,
@@ -130,21 +130,37 @@ pub(super) async fn type_keys(
     while let Some(HudKey { vk, scan, held }) = keys.next().await {
         // A key queued before the HUD was ready or after it began to leave goes nowhere.
         let Some(game) = layer.read_with(cx, |layer, _| layer.typing_into())? else { continue };
-        let Some(Typed { key, text, shifted }) = topmost::typed(game, vk, scan, held) else { continue };
-        let modifiers = Modifiers { control: held.control, alt: held.alt, shift: held.shift && !shifted, ..Modifiers::default() };
-        cx.update(|window, cx| window.dispatch_keystroke(Keystroke { modifiers, key, key_char: text }, cx))?;
+        let modifiers = Modifiers { control: held.control, alt: held.alt, shift: held.shift, ..Modifiers::default() };
+        let keystroke = gpui_windows::keystroke_in(vk.into(), scan, modifiers, topmost::key_state(held), topmost::layout(game));
+        let Some(keystroke) = keystroke else { continue };
+        cx.update(|window, cx| window.dispatch_keystroke(keystroke, cx))?;
     }
     Ok(())
 }
 
 /// The window at the game's client area with the size the overlay draws in, right behind the game.
 pub(super) fn fit(hwnd: isize, game: isize, size: Option<(u32, u32)>) {
-    let (Some((left, top, ..)), Some((width, height))) = (topmost::client_area(game), size) else { return };
-    let rect = (left, top, width as i32, height as i32);
+    let (Some(Area { left, top, .. }), Some((width, height))) = (topmost::client_area(game), size) else { return };
+    let area = Area { left, top, width: width as i32, height: height as i32 };
     topmost::lower(hwnd, Some(game));
-    topmost::resize(hwnd, rect);
+    topmost::resize(hwnd, area);
     // Moved onto a monitor of another scale, GPUI's fullscreen fills that monitor: once more there.
-    if topmost::client_area(hwnd).is_some_and(|(.., w, h)| (w, h) != (rect.2, rect.3)) {
-        topmost::resize(hwnd, rect);
+    if topmost::client_area(hwnd).is_some_and(|now| (now.width, now.height) != (area.width, area.height)) {
+        topmost::resize(hwnd, area);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_key_typed_in_the_game_is_named_as_gpui_names_it_and_a_modifier_is_no_key() {
+        let key = |vk: u16| gpui_windows::keystroke_in(vk, 0, Modifiers::default(), [0; 256], topmost::layout(0)).map(|stroke| stroke.key);
+        assert_eq!((key(0x0D).as_deref(), key(0x7B).as_deref()), (Some("enter"), Some("f12")));
+        // Sided too: the hook reports them so.
+        for vk in [0x10, 0xA0, 0xA1, 0x11, 0xA2, 0xA3, 0x12, 0xA4, 0xA5, 0x5B, 0x5C, 0x14, 0xE7] {
+            assert_eq!(key(vk), None, "{vk:#x}");
+        }
     }
 }

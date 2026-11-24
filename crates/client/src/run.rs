@@ -1,10 +1,10 @@
 //! A run of a game's trainer: the trainer prepared, the game's process found or started, the trainer inside it; and
 //! what a run leaves in the game's profile.
 
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use blocking::unblock;
-use model::{Failure, FailureKind, Installation, Launch, Live, Origin, Plan, Process, Rule, Runner};
+use model::{Failure, FailureKind, Installation, Launch, Live, Plan, Process, Rule};
 
 use crate::profile::{GameProfile, TrainerProfile, Values};
 
@@ -14,18 +14,6 @@ type Result<T> = std::result::Result<T, Failure>;
 const LAUNCHED_WITHIN: Duration = Duration::from_secs(45);
 const STARTED_BY_USER_WITHIN: Duration = Duration::from_secs(180);
 
-pub struct Request {
-    pub runner: Arc<dyn Runner>,
-    pub origin: Origin,
-    pub rule: Rule,
-    pub launch: Launch,
-    /// The trainer's, for a start of ours.
-    pub launch_arguments: Option<String>,
-    pub launch_within: Option<Duration>,
-    pub build: Option<u32>,
-    pub app: Option<String>,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Stage {
     Preparing,
@@ -34,27 +22,15 @@ pub enum Stage {
     Attaching,
 }
 
-pub fn request(install: &Installation, plan: &Plan) -> Request {
-    Request {
-        runner: plan.runner.clone(),
-        origin: install.origin.clone(),
-        rule: Rule { target: plan.target.clone(), location: install.location.clone(), alternates: install.alternates.clone() },
-        launch: plan.launch,
-        launch_arguments: plan.launch_arguments.clone(),
-        launch_within: plan.launch_within,
-        build: install.build,
-        app: install.app.clone(),
-    }
-}
-
 /// The game's process and the live trainer. Dropping the future abandons the run; a trainer that is
 /// already in the game ends with its session.
-pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Process, Live)> {
+pub async fn start(install: Installation, plan: Plan, mut stage: impl FnMut(Stage)) -> Result<(Process, Live)> {
     stage(Stage::Preparing);
-    let prepared = request.runner.prepare().await?;
+    let prepared = plan.runner.prepare().await?;
 
-    let required = request.launch == Launch::Required;
-    let mut running_now = request.rule.clone();
+    let required = plan.launch == Launch::Required;
+    let rule = Rule { target: plan.target, location: install.location, alternates: install.alternates };
+    let mut running_now = rule.clone();
     // A game the run must start counts at any age: one started a moment ago runs all the same.
     if required {
         running_now.target.minimum_age = Duration::ZERO;
@@ -69,27 +45,23 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
         Some(process) => process,
         None => {
             let mut started = false;
-            if request.launch != Launch::User {
-                _ready = prepared.before_start(&request.origin, &request.rule.location).await?;
+            if plan.launch != Launch::User {
+                _ready = prepared.before_start(&install.origin, &rule.location).await?;
                 stage(Stage::Launching);
-                let (origin, location, app) = (request.origin.clone(), request.rule.location.clone(), request.app.clone());
-                let arguments = request.launch_arguments.clone();
+                let (origin, location, app, arguments) = (install.origin, rule.location.clone(), install.app, plan.launch_arguments);
                 started = unblock(move || launchers::start(&origin, &location, app.as_deref(), arguments.as_deref())).await?;
             }
             stage(Stage::WaitingForGame);
-            let within = if started { request.launch_within.unwrap_or(LAUNCHED_WITHIN) } else { STARTED_BY_USER_WITHIN };
+            let within = if started { plan.launch_within.unwrap_or(LAUNCHED_WITHIN) } else { STARTED_BY_USER_WITHIN };
             // Its timeout says who was to start the game.
-            agent::wait(&request.rule, within).await.map_err(Failure::from).map_err(|failure| match failure.kind {
-                FailureKind::GameNotFound => {
-                    Failure { kind: if started { FailureKind::NotStarted } else { FailureKind::NotRunning }, ..failure }
-                }
-                _ => failure,
-            })?
+            let kind = if started { FailureKind::NotStarted } else { FailureKind::NotRunning };
+            let late = || Failure { detail: format!("the game did not start in {} s", within.as_secs()), ..Failure::new(kind) };
+            agent::wait(&rule, within).await?.ok_or_else(late)?
         }
     };
 
     stage(Stage::Attaching);
-    Ok((process.clone(), prepared.attach(process, request.build).await?))
+    Ok((process.clone(), prepared.attach(process, install.build).await?))
 }
 
 /// Counts a run that went live; the mods it starts with, when the game keeps them.
@@ -111,11 +83,14 @@ pub fn closed(game: &mut GameProfile, trainer: &mut TrainerProfile, secs: u64, l
 mod tests {
     use std::{
         path::{Path, PathBuf},
-        sync::atomic::{AtomicUsize, Ordering},
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
     };
 
     use futures::{FutureExt, executor::block_on, future::BoxFuture};
-    use model::{Attach, Pick, Target};
+    use model::{Attach, Origin, Pick, Ref, Runner, Target};
 
     use super::*;
 
@@ -149,27 +124,32 @@ mod tests {
     }
 
     /// A run of this test process as the game, younger than `minimum_age` counts as starting up.
-    fn of_me(probe: &Arc<Probe>, origin: Origin, launch: Launch, minimum_age: Duration) -> Request {
+    fn of_me(probe: &Arc<Probe>, origin: Origin, launch: Launch, minimum_age: Duration) -> (Installation, Plan) {
         let me = std::env::current_exe().unwrap();
         let image = Some(me.file_name().unwrap().to_string_lossy().into_owned());
         let target = Target { image, minimum_age, pick: Pick::Biggest, arguments: None };
-        let rule = Rule { target, location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new() };
+        let (game, location) = (Ref::parse("test:me").unwrap(), PathBuf::from(me.parent().unwrap()));
+        let install = Installation { game, origin, location, alternates: Vec::new(), build: None, app: None };
         let runner = Arc::new(Prepare(probe.clone()));
-        Request { runner, origin, rule, launch, launch_arguments: None, launch_within: None, build: None, app: None }
+        (install, Plan { target, launch, launch_arguments: None, launch_within: None, runner })
+    }
+
+    fn start_of(run: (Installation, Plan)) -> Failure {
+        block_on(start(run.0, run.1, |_| {})).err().unwrap()
     }
 
     #[test]
     fn a_running_game_is_refused_untouched_when_the_run_must_start_it() {
         let probe = Arc::new(Probe::default());
         let me = std::env::current_exe().unwrap();
-        let request = |launch, minimum_age| of_me(&probe, Origin::Picked(me.clone()), launch, minimum_age);
+        let run = |launch, minimum_age| of_me(&probe, Origin::Picked(me.clone()), launch, minimum_age);
 
         // Younger than the rule's age, and still refused.
-        let refused = block_on(start(request(Launch::Required, Duration::from_secs(3600)), |_| {})).err().unwrap();
+        let refused = start_of(run(Launch::Required, Duration::from_secs(3600)));
         assert_eq!(refused.kind, FailureKind::Restart);
         assert_eq!((probe.readied.load(Ordering::SeqCst), probe.attached.load(Ordering::SeqCst)), (0, 0));
 
-        let attached = block_on(start(request(Launch::Start, Duration::ZERO), |_| {})).err().unwrap();
+        let attached = start_of(run(Launch::Start, Duration::ZERO));
         assert_eq!(attached.kind, FailureKind::Refused, "a run that may attach does");
         assert_eq!((probe.readied.load(Ordering::SeqCst), probe.attached.load(Ordering::SeqCst)), (0, 1));
     }
@@ -179,9 +159,7 @@ mod tests {
         let probe = Arc::new(Probe::default());
         // Longer than the tests have run: a start would ready the install first. No launcher starts that store.
         let origin = Origin::Launcher(model::StoreId::parse("itch:0").unwrap());
-        let request = of_me(&probe, origin, Launch::Start, Duration::from_secs(3));
-
-        let attached = block_on(start(request, |_| {})).err().unwrap();
+        let attached = start_of(of_me(&probe, origin, Launch::Start, Duration::from_secs(3)));
         assert_eq!(attached.kind, FailureKind::Refused);
         assert_eq!((probe.readied.load(Ordering::SeqCst), probe.attached.load(Ordering::SeqCst)), (0, 1));
     }

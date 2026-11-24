@@ -92,8 +92,6 @@ pub(super) struct Layer {
     hwnd: Option<isize>,
     watch: Option<Watch>,
     input: Entity<Input>,
-    // The last `input::Hud` emitted.
-    hud: input::Hud,
     // Inside and ready for keys: set once the layer takes input in the game, cleared first on the way out.
     typing: bool,
     // The game in front was in exclusive fullscreen when the overlay went over it.
@@ -169,7 +167,6 @@ impl Layer {
             hwnd,
             watch,
             input,
-            hud: input::Hud::Off,
             typing: false,
             exclusive: false,
             runs: runs.downgrade(),
@@ -247,17 +244,14 @@ impl Layer {
         cx.notify();
     }
 
-    /// The overlay as the keys see it, emitted on change.
-    fn publish(&mut self, cx: &mut Context<Self>) {
+    /// Tells `Input` the overlay as the keys see it.
+    fn publish(&self, cx: &mut Context<Self>) {
         let hud = match self.mode {
             Mode::Window { .. } => input::Hud::Off,
             Mode::Over { inside: Some(_), .. } if self.typing => input::Hud::Inside,
             Mode::Over { .. } => input::Hud::Over,
         };
-        if hud != self.hud {
-            self.hud = hud;
-            cx.emit(hud);
-        }
+        self.input.update(cx, |input, _| input.set_hud(hud));
     }
 
     /// `set` with the window's look: over a game it is transparent and frameless.
@@ -289,7 +283,6 @@ impl Layer {
 
 impl EventEmitter<Playing> for Layer {}
 impl EventEmitter<Pressed> for Layer {}
-impl EventEmitter<input::Hud> for Layer {}
 
 fn watch(asks: &mpsc::UnboundedSender<Ask>) -> std::io::Result<Watch> {
     let asks = asks.clone();

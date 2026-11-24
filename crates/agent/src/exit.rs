@@ -11,13 +11,13 @@ use std::{
 
 use anyhow::{Result, ensure};
 use blocking::unblock;
-use model::{Failure, Process};
+use model::{FailureKind, Process};
 use windows_sys::Win32::{
     Foundation::{HANDLE, INVALID_HANDLE_VALUE},
     System::Threading::{INFINITE, PROCESS_SYNCHRONIZE, RegisterWaitForSingleObject, UnregisterWaitEx, WT_EXECUTEONLYONCE},
 };
 
-use crate::{handle::Handle, process};
+use crate::{handle::Handle, inject, process};
 
 /// Resolves with the first of its processes to exit; dropping it ends the waits.
 pub struct Exit {
@@ -55,7 +55,7 @@ pub fn exit(targets: &[Process]) -> Result<Exit> {
     for (index, target) in targets.iter().enumerate() {
         let process = match process::open(target, PROCESS_SYNCHRONIZE) {
             Ok(process) => process,
-            Err(e) if e.downcast_ref::<Failure>().is_some() => return Err(e),
+            Err(e) if inject::marked(&e, FailureKind::Protected) => return Err(e),
             Err(_) => {
                 shared.lock().unwrap_or_else(PoisonError::into_inner).exited.get_or_insert(index);
                 break;

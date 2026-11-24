@@ -40,10 +40,9 @@ pub async fn settled(rule: &Rule) -> Result<Option<Process>> {
     poll(rule, None).await
 }
 
-/// Polls until that process is old enough. Dropping the future stops it within one poll.
-pub async fn wait(rule: &Rule, timeout: Duration) -> Result<Process> {
-    let found = poll(rule, Some(timeout)).await?;
-    found.ok_or_else(|| anyhow!("the game did not start in {} s", timeout.as_secs()).context(Failure::new(FailureKind::GameNotFound)))
+/// Polls until that process is old enough; `None` past `within`. Dropping the future stops it within one poll.
+pub async fn wait(rule: &Rule, within: Duration) -> Result<Option<Process>> {
+    poll(rule, Some(within)).await
 }
 
 /// `None`: past `within`; without one, as soon as nothing matches.
@@ -100,10 +99,12 @@ fn command_line(target: &Process) -> Result<String> {
     // SAFETY: the call wrote a UNICODE_STRING at the head of `buffer`, which is aligned for it.
     let string = unsafe { buffer.as_ptr().cast::<UNICODE_STRING>().read() };
     // Its text follows it in `buffer`: read by offset, never through the pointer.
-    let at = (string.Buffer as usize).checked_sub(buffer.as_ptr() as usize);
-    let bytes: Vec<u8> = buffer.iter().flat_map(|word| word.to_ne_bytes()).collect();
-    let text = at.and_then(|at| bytes.get(at..at + usize::from(string.Length))).context("odd command line")?;
-    Ok(String::from_utf16_lossy(&text.as_chunks().0.iter().map(|pair| u16::from_ne_bytes(*pair)).collect::<Vec<_>>()))
+    let at = (string.Buffer as usize).checked_sub(buffer.as_ptr() as usize).filter(|at| at % 2 == 0).map(|at| at / 2);
+    let len = usize::from(string.Length) / 2;
+    let at = at.filter(|at| at + len <= buffer.len() * 4).context("odd command line")?;
+    // UTF-16 units in memory order: Windows is little-endian.
+    let units = buffer.iter().flat_map(|&word| (0..4).map(move |unit| (word >> (16 * unit)) as u16));
+    Ok(char::decode_utf16(units.skip(at).take(len)).map(|unit| unit.unwrap_or(char::REPLACEMENT_CHARACTER)).collect())
 }
 
 /// Every process we may look at (blocking). Protected ones are skipped.
