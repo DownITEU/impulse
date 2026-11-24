@@ -190,13 +190,13 @@ impl Registry {
         routed.map_or_else(|| missing(title), |(titles, ended)| cut(titles.offers(title, locale), ended))
     }
 
-    /// The bytes behind a URL a source gave, `<source>:...` (blocking).
     /// Blocking: the game's source loads its overlay into `process`; `Unsupported` without one.
     pub fn enter(&self, game: &Ref, process: &Process) -> Result<Canvas, Failure> {
         let routed = self.route(game.source(), |c| c.overlays.as_ref());
         routed.map_or_else(|| Err(unserved(game)), |(source, _)| source.enter(game, process))
     }
 
+    /// The bytes behind a URL a source gave, `<source>:...` (blocking).
     pub fn download(&self, url: &str) -> Result<Vec<u8>, Failure> {
         let routed = Ref::parse(url).and_then(|id| self.route(id.source(), |c| c.downloads.as_ref()));
         routed.map_or_else(|| Err(unserved(url)), |(source, _)| source.download(url))

@@ -162,7 +162,7 @@ impl SettingsView {
                 ),
             )
             .child(row(t(cx, key::RUN_UNCONFIRMED_ASK), t(cx, key::RUN_UNCONFIRMED_ASK_HINT), 64.).child(
-                // On until DON'T ASK AGAIN was pressed in the question itself.
+                // On until ALWAYS PLAY was pressed in the question itself.
                 switch("unconfirmed-ask", ask_unconfirmed, cx).on_click(
                     cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.skip_unconfirmed_warning = ask_unconfirmed, cx)),
                 ),

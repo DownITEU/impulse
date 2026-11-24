@@ -10,7 +10,7 @@ pub struct Binding<T> {
     pub block: bool,
 }
 
-/// What fires a binding: a chord, matched as Wand does, or a hotkey, matched as RegisterHotKey did.
+/// What fires a binding: a chord, or a hotkey, matched as RegisterHotKey did.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Trigger {
     Chord(Chord),

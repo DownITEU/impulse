@@ -9,6 +9,11 @@ const MODIFIERS: [(HOT_KEY_MODIFIERS, [u8; 2]); 4] =
 // Side-less Ctrl, Shift and Alt.
 const GENERIC: [(u8, HOT_KEY_MODIFIERS); 3] = [(0x11, MOD_CONTROL), (0x10, MOD_SHIFT), (0x12, MOD_ALT)];
 
+/// Side-less Ctrl, Shift or Alt: the low-level hook reports the sided keys instead.
+pub(crate) fn is_generic(vk: u8) -> bool {
+    GENERIC.iter().any(|&(generic, _)| generic == vk)
+}
+
 /// Which modifiers, of either side.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Modifiers {
@@ -56,8 +61,7 @@ impl Key {
             let generic = GENERIC.iter().find(|(generic, _)| *generic == vk).map(|(_, modifier)| *modifier);
             match modifier.or(generic) {
                 Some(modifier) => modifiers |= modifier,
-                // The buttons are 1, 2 and 4 to 6, the notches 10 and 11.
-                None if matches!(vk, 1..=6 | 10 | 11) || key.replace(vk).is_some() => return None,
+                None if model::mouse::is_mouse(vk) || key.replace(vk).is_some() => return None,
                 None => {}
             }
         }

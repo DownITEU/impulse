@@ -97,13 +97,13 @@ struct Prepared {
     trainer: PathBuf,
     hash: String,
     variables: Vec<String>,
-    /// With Wand's stand-in for the game's launcher.
+    /// With the stand-in for the game's launcher.
     proxy: Option<(Proxy, PathBuf)>,
     activate: Activate,
 }
 
 impl Attach for Prepared {
-    /// Wand's stand-in for a store's start only: like Wand, a picked executable starts as it is.
+    /// The stand-in for a store's start only: a picked executable starts as it is.
     fn before_start(&self, origin: &Origin, install: &Path) -> BoxFuture<'static, Answer<Option<Box<dyn Send>>>> {
         let Some((proxy, stand_in)) = self.proxy.clone().filter(|_| matches!(origin, Origin::Launcher(_))) else {
             return async { Ok(None) }.boxed();

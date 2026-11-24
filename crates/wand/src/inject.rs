@@ -1,4 +1,4 @@
-//! Puts `tophat_service` into a running process and starts it, as Wand's auxiliary service does.
+//! Puts `tophat_service` into a running process and starts it.
 
 use agent::Image;
 use anyhow::Result;

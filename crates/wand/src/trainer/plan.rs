@@ -8,7 +8,7 @@ use serde_json::Value;
 use super::Trainer;
 use crate::proxy::Proxy;
 
-// Wand's default: a process younger than this is still starting up.
+// A process younger than this is still starting up.
 const MINIMUM_AGE: Duration = Duration::from_secs(8);
 const EVENT_KEY_CHARS: usize = 22;
 

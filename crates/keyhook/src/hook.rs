@@ -20,7 +20,7 @@ use windows_sys::Win32::{
     },
 };
 
-use crate::mouse;
+use crate::{key, mouse};
 
 type Handler = Box<dyn FnMut(Stroke) -> bool>;
 
@@ -108,10 +108,11 @@ impl Hook {
     }
 }
 
-// The keyboard keys down now, by the sided codes the hook reports (no side-less modifier, no button).
+// The keyboard keys down now, by the sided codes the hook reports.
 fn held_keys() -> impl Iterator<Item = u8> {
+    let keyboard = (1..=0xFE).filter(|&vk| !model::mouse::is_mouse(vk) && !key::is_generic(vk));
     // SAFETY: a plain query of the system's key state.
-    (0x08..=0xFE).filter(|vk| !matches!(vk, 0x0A | 0x0B | 0x10..=0x12)).filter(|&vk| unsafe { GetAsyncKeyState(i32::from(vk)) } < 0)
+    keyboard.filter(|&vk| unsafe { GetAsyncKeyState(i32::from(vk)) } < 0)
 }
 
 /// Whether Caps Lock is on, as the system has it; read on a thread that takes no keyboard messages (the hook's).

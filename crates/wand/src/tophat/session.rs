@@ -1,4 +1,4 @@
-//! A Tophat session as Wand drives it: load the trainer plugin, run the mod, set values, stop.
+//! A Tophat session: load the trainer plugin, run the mod, set values, stop.
 //! Timers run on the server's runtime; the async methods can be awaited from any executor.
 
 use std::{
@@ -40,7 +40,7 @@ mod location;
 mod tests;
 
 const PLUGIN: &str = "trainerlib";
-// The service gets Wand's timings: a beat every 5 s, 120 s to answer the first, 60 s after.
+// The service's timings: a beat every 5 s, 120 s to answer the first, 60 s after.
 const BEAT: Duration = Duration::from_secs(5);
 const FIRST_BEAT_LIMIT: Duration = Duration::from_secs(120);
 const BEAT_LIMIT: Duration = Duration::from_secs(60);
@@ -202,7 +202,7 @@ impl Session {
         })
     }
 
-    /// Wand's order: stop the mod, unload the plugin, say goodbye, then drop the stream. Every
+    /// In this order: stop the mod, unload the plugin, say goodbye, then drop the stream. Every
     /// step runs even if an earlier one failed; the first error is returned. Cancelling it
     /// closes the session, so the service tears down by itself.
     pub async fn stop(&self) -> Result<()> {

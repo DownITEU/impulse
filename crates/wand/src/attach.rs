@@ -58,7 +58,7 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
             // The download was checked earlier; the file may have been swapped before it was locked.
             let found = binary::hash_of(trainer.path()).context("cannot read the trainer")?;
             ensure!(found.eq_ignore_ascii_case(&hash), "the trainer on disk does not match its hash");
-            // Of the trainer's architecture, as Wand picks them; the injection checks it against the game's.
+            // Of the trainer's architecture; the injection checks it against the game's.
             let [service, plugin] = binaries(&trainerlib, trainer.x64());
             let (service, plugin) = (Image::open(&service, PUBLISHERS)?, Image::open(&plugin, PUBLISHERS)?);
             let host = external.then(|| TrainerHost::start(&trainer_host(&trainerlib, trainer.x64()), &process)).transpose()?;
