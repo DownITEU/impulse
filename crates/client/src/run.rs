@@ -20,6 +20,7 @@ pub struct Request {
     pub rule: Rule,
     pub launch: Launch,
     pub build: Option<u32>,
+    pub app: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -42,6 +43,7 @@ pub fn request(install: &Installation, plan: &Plan) -> Request {
         },
         launch: plan.launch,
         build: install.build,
+        app: install.app.clone(),
     }
 }
 
@@ -67,8 +69,8 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
             if request.launch != Launch::User {
                 _ready = prepared.before_start(&request.origin, &request.rule.location).await?;
                 stage(Stage::Launching);
-                let (origin, location) = (request.origin.clone(), request.rule.location.clone());
-                started = unblock(move || launchers::start(&origin, &location)).await?;
+                let (origin, location, app) = (request.origin.clone(), request.rule.location.clone(), request.app.clone());
+                started = unblock(move || launchers::start(&origin, &location, app.as_deref())).await?;
             }
             stage(Stage::WaitingForGame);
             let within = if started { LAUNCHED_WITHIN } else { STARTED_BY_USER_WITHIN };
@@ -144,7 +146,7 @@ mod tests {
         let request = |launch, minimum_age| {
             let rule =
                 Rule { image: Some(image.clone()), location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new(), minimum_age };
-            Request { runner: Arc::new(Prepare(probe.clone())), origin: Origin::Picked(me.clone()), rule, launch, build: None }
+            Request { runner: Arc::new(Prepare(probe.clone())), origin: Origin::Picked(me.clone()), rule, launch, build: None, app: None }
         };
 
         // Younger than the rule's age, and still refused.
@@ -166,7 +168,7 @@ mod tests {
         let rule =
             Rule { image, location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new(), minimum_age: Duration::from_secs(3) };
         let origin = Origin::Launcher(model::StoreId::parse("itch:0").unwrap());
-        let request = Request { runner: Arc::new(Prepare(probe.clone())), origin, rule, launch: Launch::Start, build: None };
+        let request = Request { runner: Arc::new(Prepare(probe.clone())), origin, rule, launch: Launch::Start, build: None, app: None };
 
         let attached = block_on(start(request, |_| {})).err().unwrap();
         assert_eq!(attached.kind, FailureKind::Refused);

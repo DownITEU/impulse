@@ -25,10 +25,11 @@ struct Command {
     dir: Option<PathBuf>,
 }
 
-/// Starts the game through its launcher, or the executable the user picked in its own folder (blocking).
+/// Starts the game through its launcher, or the executable the user picked in its own folder (blocking). `app`: the
+/// package application to open (`Installation::app`), else the manifest's first.
 /// `false`: its launcher is not here or cannot start it (EA, a standalone game), so the user starts the game and the run waits.
-pub fn start(origin: &Origin, location: &Path) -> Result<bool> {
-    let Some(command) = command(origin, location, launcher)? else {
+pub fn start(origin: &Origin, location: &Path, app: Option<&str>) -> Result<bool> {
+    let Some(command) = command(origin, location, app, launcher)? else {
         return Ok(false);
     };
     let opened = open(&command);
@@ -51,7 +52,7 @@ fn launcher(store: &str) -> Option<PathBuf> {
 
 /// Ids come from local records, the folders from the launchers' registry: each is checked to be plain before it reaches
 /// a URI or an argument. `launcher` is a store's launcher folder, when it is installed.
-fn command(origin: &Origin, location: &Path, launcher: impl Fn(&str) -> Option<PathBuf>) -> Result<Option<Command>> {
+fn command(origin: &Origin, location: &Path, app: Option<&str>, launcher: impl Fn(&str) -> Option<PathBuf>) -> Result<Option<Command>> {
     let id = match origin {
         Origin::Picked(exe) => return Ok(Some(Command { target: exe.into(), params: None, dir: exe.parent().map(Path::to_owned) })),
         Origin::Launcher(id) => id,
@@ -84,9 +85,11 @@ fn command(origin: &Origin, location: &Path, launcher: impl Fn(&str) -> Option<P
             dir.map(|dir| run(dir, rockstar::LAUNCHER, format!("-minmodeApp={game}")))
         }
         "uwp" => {
-            let family = plain(b"._-")?;
-            let manifest = fs::read_to_string(location.join("AppxManifest.xml")).unwrap_or_default();
-            uri(format!(r"shell:AppsFolder\{family}!{}", app_id(&manifest).unwrap_or("App")))
+            let family = plain_id(b"._-")?;
+            let manifest = || fs::read_to_string(location.join("AppxManifest.xml")).unwrap_or_default();
+            // The source's choice is remote data: only a plain one, else the manifest's.
+            let app = app.filter(|app| plain(app, b".")).map(str::to_owned).or_else(|| app_id(&manifest()).map(str::to_owned));
+            uri(format!(r"shell:AppsFolder\{family}!{}", app.as_deref().unwrap_or("App")))
         }
         _ => None,
     })
@@ -98,7 +101,12 @@ fn app_id(manifest: &str) -> Option<&str> {
     let tag = &manifest[at..at + manifest[at..].find('>')?];
     let value = tag.match_indices("Id=\"").find(|(i, _)| tag[..*i].ends_with(char::is_whitespace))?.0 + "Id=\"".len();
     let id = tag[value..].split('"').next()?;
-    (!id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.')).then_some(id)
+    plain(id, b".").then_some(id)
+}
+
+/// Letters and digits, and `extra`.
+fn plain(value: &str, extra: &[u8]) -> bool {
+    !value.is_empty() && value.bytes().all(|b| b.is_ascii_alphanumeric() || extra.contains(&b))
 }
 
 fn percent(text: &str) -> String {
@@ -131,8 +139,12 @@ mod tests {
     use super::*;
 
     fn command_of(id: &str, location: &str) -> Result<Option<Command>> {
+        command_with(id, location, None)
+    }
+
+    fn command_with(id: &str, location: &str, app: Option<&str>) -> Result<Option<Command>> {
         let installed = |store: &str| (store != "rockstar").then(|| PathBuf::from(format!(r"C:\{store}")));
-        command(&Origin::Launcher(StoreId::parse(id).unwrap()), Path::new(location), installed)
+        command(&Origin::Launcher(StoreId::parse(id).unwrap()), Path::new(location), app, installed)
     }
 
     fn params(id: &str, location: &str) -> Option<String> {
@@ -148,6 +160,9 @@ mod tests {
         assert_eq!(params("gog:1207", r"D:\GOG Games\X\").unwrap(), r#"/command=runGame /gameId=1207 /path="D:\GOG Games\X""#);
         assert_eq!(params("uplay:635", "").unwrap(), "-upc_uplay_id 635");
         assert_eq!(target("uwp:Game.Name_8wekyb3d8bbwe"), r"shell:AppsFolder\Game.Name_8wekyb3d8bbwe!App", "no manifest: App");
+        let package = |app| command_with("uwp:Halo_8w", r"D:\Games\X", Some(app)).unwrap().unwrap().target;
+        assert_eq!(package("HaloMCCShippingNoEAC"), r"shell:AppsFolder\Halo_8w!HaloMCCShippingNoEAC", "the source's application");
+        assert_eq!(package("a!b"), r"shell:AppsFolder\Halo_8w!App", "an odd one is not used");
         assert_eq!(command_of("rockstar:rdr2", "").unwrap(), None, "its launcher is not installed");
         assert_eq!(command_of("ea:Origin.OFR.1", "").unwrap(), None);
         assert_eq!(command_of("standalone:gta", "").unwrap(), None, "the catalog's own launcher file is not run");

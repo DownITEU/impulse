@@ -64,13 +64,14 @@ mod tests {
             exe: None,
             purchase: Vec::new(),
             standalone: Vec::new(),
+            package_apps: Vec::new(),
             cover: None,
             thumbnail: None,
             maps: Vec::new(),
             trainer: None,
         };
         let origin = Origin::Launcher(StoreId::parse(installed).unwrap());
-        let install = Installation { game: id, origin, location: "c:/games".into(), alternates: Vec::new(), build: None };
+        let install = Installation { game: id, origin, location: "c:/games".into(), alternates: Vec::new(), build: None, app: None };
         super::super::game(record, Some(install), None, Path::new("."))
     }
 

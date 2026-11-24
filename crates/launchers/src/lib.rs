@@ -97,13 +97,15 @@ fn timed(launcher: &str, apps: impl FnOnce() -> Vec<App>) -> Vec<App> {
 /// The build is the stamp of the game's version file in the install (`version::build`). The location's final path is one
 /// of its folders too, for the process search: a library behind a junction, a package on a mount.
 fn installation(game: &Game, origin: Origin, location: PathBuf, mut alternates: Vec<PathBuf>) -> Installation {
-    let packaged = matches!(&origin, Origin::Launcher(id) if id.store() == "uwp");
-    let build = game.exe.as_deref().and_then(|exe| version::build(&location, exe, packaged));
+    let package = origin.store_id().filter(|id| id.store() == "uwp");
+    let build = game.exe.as_deref().and_then(|exe| version::build(&location, exe, package.is_some()));
+    let app = package.and_then(|id| game.package_apps.iter().find(|(of, _)| of.as_str().eq_ignore_ascii_case(id.as_str())));
+    let app = app.map(|(_, app)| app.clone());
     let resolved = final_path(&location).filter(|resolved| !same_path(resolved, &location));
     if let Some(resolved) = resolved.filter(|resolved| !alternates.iter().any(|had| same_path(had, resolved))) {
         alternates.insert(0, resolved);
     }
-    Installation { game: game.id.clone(), origin, location, alternates, build }
+    Installation { game: game.id.clone(), origin, location, alternates, build, app }
 }
 
 /// The path once links resolve, written as a process's image path is (blocking).
@@ -154,6 +156,7 @@ pub(crate) mod tests {
             exe: exe.map(str::to_owned),
             purchase: Vec::new(),
             standalone: Vec::new(),
+            package_apps: Vec::new(),
             cover: None,
             thumbnail: None,
             maps: Vec::new(),
@@ -189,6 +192,14 @@ pub(crate) mod tests {
         assert!(!final_real.to_string_lossy().starts_with(r"\\?\"), "{final_real:?}");
         assert!(install.alternates.iter().any(|folder| same_path(folder, &final_real)), "{:?}", install.alternates);
         fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_package_takes_the_application_its_game_names_for_it() {
+        let mut halo = game("1", None, &["uwp:Halo_8w", "uwp:Other_8w"]);
+        halo.package_apps = vec![(StoreId::parse("uwp:Halo_8w").unwrap(), "NoEAC".into())];
+        let install = |id: &str| installation(&halo, Origin::Launcher(StoreId::parse(id).unwrap()), "C:\\nowhere".into(), Vec::new()).app;
+        assert_eq!((install("uwp:halo_8w").as_deref(), install("uwp:Other_8w")), (Some("NoEAC"), None));
     }
 
     #[test]

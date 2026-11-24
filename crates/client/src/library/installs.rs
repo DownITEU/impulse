@@ -22,6 +22,8 @@ struct Install {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     alternates: Vec<PathBuf>,
     build: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    app: Option<String>,
 }
 
 #[derive(PartialEq, Serialize, Deserialize)]
@@ -37,8 +39,8 @@ impl Install {
             Origin::Launcher(id) => Kept::Launcher(id.as_str().to_owned()),
             Origin::Picked(exe) => Kept::Picked(exe.clone()),
         };
-        let (location, alternates) = (install.location.clone(), install.alternates.clone());
-        Self { game: install.game.to_string(), origin, location, alternates, build: install.build }
+        let (location, alternates, app) = (install.location.clone(), install.alternates.clone(), install.app.clone());
+        Self { game: install.game.to_string(), origin, location, alternates, build: install.build, app }
     }
 
     fn installation(&self) -> Option<Installation> {
@@ -46,8 +48,8 @@ impl Install {
             Kept::Launcher(id) => Origin::Launcher(StoreId::parse(id)?),
             Kept::Picked(exe) => Origin::Picked(exe.clone()),
         };
-        let (location, alternates) = (self.location.clone(), self.alternates.clone());
-        Some(Installation { game: Ref::parse(&self.game)?, origin, location, alternates, build: self.build })
+        let (location, alternates, app) = (self.location.clone(), self.alternates.clone(), self.app.clone());
+        Some(Installation { game: Ref::parse(&self.game)?, origin, location, alternates, build: self.build, app })
     }
 }
 
@@ -81,19 +83,21 @@ mod tests {
         let game = Ref::new(&SourceId::new("wand").unwrap(), "82102");
         let launcher = Installation {
             game: game.clone(),
-            origin: Origin::Launcher(StoreId::parse("steam:1203620").unwrap()),
+            origin: Origin::Launcher(StoreId::parse("uwp:Enshrouded_8w").unwrap()),
             location: r"C:\Games\Enshrouded".into(),
             alternates: vec![r"E:\Library\Enshrouded".into()],
             build: Some(1793791052),
+            app: Some("NoEAC".into()),
         };
         let origin = Origin::Picked(r"D:\Copy\game.exe".into());
-        let picked = Installation { game, origin, location: r"D:\Copy".into(), alternates: Vec::new(), build: None };
+        let picked = Installation { game, origin, location: r"D:\Copy".into(), alternates: Vec::new(), build: None, app: None };
         keep(&paths, &[launcher.clone(), picked.clone()]);
         let again = kept(&paths);
         assert_eq!(again.len(), 2);
         assert!(again.iter().zip([&launcher, &picked]).all(|(a, b)| a.game == b.game && a.origin == b.origin && a.location == b.location));
         assert_eq!((again[0].build, again[1].build), (Some(1793791052), None));
         assert_eq!((&again[0].alternates, &again[1].alternates), (&launcher.alternates, &picked.alternates));
+        assert_eq!((again[0].app.as_deref(), &again[1].app), (Some("NoEAC"), &None));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

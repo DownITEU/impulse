@@ -71,6 +71,10 @@ struct Map {
 #[derive(Deserialize)]
 struct Platforms {
     standalone: StandaloneApps,
+    /// `containers`: the application to start by package family (Halo MCC's without its anti-cheat). Any value: a bad one
+    /// is skipped.
+    #[serde(default)]
+    uwp: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -116,8 +120,15 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
     }
     let standalone: HashMap<String, &StandaloneApp> =
         platforms.standalone.apps.iter().map(|app| (format!("standalone:{}", app.id).to_ascii_lowercase(), app)).collect();
+    let containers = platforms.uwp["containers"].as_object().into_iter().flatten();
+    let containers: HashMap<String, &str> =
+        containers.filter_map(|(family, app)| Some((family.to_ascii_lowercase(), app.as_str()?))).collect();
     let games = games.into_values().filter_map(|entry| {
         let title = titles.get(&entry.title_id)?;
+        let store_ids: Vec<StoreId> = entry.correlation_ids.iter().filter_map(|id| StoreId::parse(id)).collect();
+        let packaged = store_ids.iter().filter(|id| id.store().eq_ignore_ascii_case("uwp"));
+        let package_apps =
+            packaged.filter_map(|id| Some((id.clone(), containers.get(&id.id().to_ascii_lowercase())?.to_string()))).collect();
         let art = |size: u32| title.thumbnail.as_deref().map(|path| format!("{ART_CDN}{}", path.replace("{size}", &size.to_string())));
         let standalone = entry.correlation_ids.iter().filter_map(|id| standalone.get(&id.to_ascii_lowercase()));
         Some(Game {
@@ -130,6 +141,7 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
                     locators: app.locators.iter().filter_map(locator).collect(),
                 })
                 .collect(),
+            package_apps,
             cover: art(460),
             thumbnail: art(100),
             maps: maps_of.get(&entry.title_id).cloned().unwrap_or_default(),
@@ -142,7 +154,7 @@ fn parse(json: &[u8]) -> Result<Vec<Game>> {
             }),
             id: Ref::new(&wand, &entry.id),
             title_id: entry.title_id,
-            store_ids: entry.correlation_ids.iter().filter_map(|id| StoreId::parse(id)).collect(),
+            store_ids,
             exe: entry.version_path,
             purchase: entry.purchase_uris,
         })
@@ -196,7 +208,8 @@ mod tests {
     fn reads_games_in_model_terms() {
         let games = parse(
             br#"{"games":{
-                "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App","standalone:other"],"versionPath":"a.exe",
+                "1":{"id":"1","titleId":"t","correlationIds":["steam:1","Standalone:App","standalone:other","uwp:Game.Pkg_8w","uwp:Odd_8w"],
+                     "versionPath":"a.exe",
                      "purchaseUris":["steam://store/1"],
                      "trainer":{"cheatCount":3,"supportedVersions":[7],"updatedAt":"u"}},
                 "2":{"id":"2","titleId":"gone","purchaseUris":null},
@@ -207,7 +220,8 @@ mod tests {
                        {"id":"3","titleId":"other","externalId":"x3","name":"Elsewhere"}],
               "platforms":{"standalone":{"apps":[{"id":"app","launcher":"l.exe",
                 "locators":[{"type":"directory","value":"C:\\G"},{"type":"from-the-future","value":"x"}]},
-                {"id":"other","launcher":"o.exe","locators":[]}]}}}"#,
+                {"id":"other","launcher":"o.exe","locators":[]}]},
+                "uwp":{"containers":{"game.pkg_8w":"NoEAC","Odd_8w":7},"ignore":["^x"]}}}"#,
         )
         .unwrap();
         let [game] = &games[..] else { panic!("one game with a title") };
@@ -228,6 +242,10 @@ mod tests {
         );
         let standalone: Vec<_> = game.standalone.iter().map(|app| (app.store_id.as_str(), app.locators.len())).collect();
         assert_eq!(standalone, [("standalone:app", 1), ("standalone:other", 0)]);
+        let apps: Vec<_> = game.package_apps.iter().map(|(id, app)| (id.as_str(), app.as_str())).collect();
+        assert_eq!(apps, [("uwp:Game.Pkg_8w", "NoEAC")], "by family in any case; a value not text is skipped");
+        let odd = br#"{"games":{},"titles":{},"platforms":{"standalone":{"apps":[]},"uwp":null}}"#;
+        assert!(parse(odd).unwrap().is_empty(), "odd package data is skipped, not the catalog");
     }
 
     #[test]
