@@ -3,12 +3,13 @@
 use std::collections::HashMap;
 
 use client::{bindings, library::GameId, trainer::Sheet};
-use gpui_kit::{App, AppContext as _, Entity, SharedString, Window, component::input::InputState};
+use gpui_kit::{App, AppContext as _, Entity, SharedString, Subscription, Window, component::input::InputState};
 use model::{Cheat, Chord, Kind};
 
 use crate::{hotkeys::cap, ui::text::text};
 
-const INPUT_DIGITS: usize = 6;
+// Room for the largest amounts trainers take.
+const INPUT_CHARS: usize = 12;
 
 /// What a cheat row prints, made once so a frame allocates nothing for it.
 pub struct Row {
@@ -26,8 +27,10 @@ pub struct Row {
 pub struct Printed {
     pub game: GameId,
     pub rows: Vec<Row>,
-    /// Text fields of the cheats applied with a button, by cheat index.
+    /// The number cheats' text fields, by cheat index.
     pub inputs: HashMap<usize, Entity<InputState>>,
+    /// What the fields of numbers without a button send on Enter or blur.
+    pub typed: Vec<Subscription>,
     /// The control column's least width: the widest control here, so the caps sit next to it. A longer button text widens
     /// its own row instead of running over the caps.
     pub control_width: f32,
@@ -41,11 +44,11 @@ impl Printed {
             .cheats
             .iter()
             .enumerate()
-            .filter(|(_, cheat)| cheat.kind == Kind::Number && cheat.args.button)
+            .filter(|(_, cheat)| cheat.kind == Kind::Number)
             .map(|(index, _)| {
                 let input = cx.new(|cx| {
                     InputState::new(window, cx)
-                        .validate(|text, _| text.len() <= INPUT_DIGITS && text.bytes().all(|b| b.is_ascii_digit()))
+                        .validate(|text, _| text.len() <= INPUT_CHARS && text.bytes().all(|b| b.is_ascii_digit() || b == b'-' || b == b'.'))
                         .default_value(number(sheet.values[index]))
                 });
                 (index, input)
@@ -63,6 +66,7 @@ impl Printed {
                 .collect(),
             control_width: sheet.cheats.iter().map(control_width).fold(0., f32::max),
             inputs,
+            typed: Vec::new(),
             notes: sheet.notes.clone().map(SharedString::from),
         }
     }
@@ -88,8 +92,7 @@ fn control_width(cheat: &Cheat) -> f32 {
     match cheat.kind {
         Kind::Toggle => 70.,
         Kind::Slider => 134.,
-        Kind::Number if cheat.args.button => 140.,
-        Kind::Number => 120.,
+        Kind::Number => 140.,
         Kind::Button => 100.,
         Kind::Selection => 112.,
         Kind::Unknown => 0.,
