@@ -40,13 +40,7 @@ type ThreadStart = unsafe extern "system" fn(*mut c_void) -> u32;
 /// elevated copy of the host executable, once the user accepts UAC's prompt (`serve_elevated`).
 pub fn load(target: &Process, image: &Image, export: &str, arg: &[u8]) -> Result<()> {
     let start = pe::export(image.path(), export).with_context(|| format!("{} has no {export}", image.path().display()))?;
-    let process = match open(target.pid) {
-        Ok(process) => process,
-        Err(denied) if marked(&denied, FailureKind::Protected) && elevated::can_elevate() => {
-            return elevated::load(target, image, export, arg);
-        }
-        Err(e) => return Err(e),
-    };
+    let Some(process) = open_or_elevate(target, image, Some((export, arg)))? else { return Ok(()) };
     let base = load_image(&process, target, image)?;
 
     let arg = write(&process, arg)?;
@@ -55,11 +49,23 @@ pub fn load(target: &Process, image: &Image, export: &str, arg: &[u8]) -> Result
     Ok(())
 }
 
-/// Loads `image` into `target` like `load` and starts no export: for a DLL whose `DllMain` does the work. A
-/// process that denies us stays the `Protected` error, never elevated, so the caller can fall back quietly.
+/// Loads `image` into `target` like `load` and starts no export: for a DLL whose `DllMain` does the work. A process
+/// that denies us is mapped by the elevated copy too.
 pub fn map(target: &Process, image: &Image) -> Result<()> {
-    let process = open(target.pid)?;
+    let Some(process) = open_or_elevate(target, image, None)? else { return Ok(()) };
     load_image(&process, target, image).map(drop)
+}
+
+/// `target` opened for a load, or `None` once a denying one was served by the elevated copy (`export` and its argument,
+/// none for a map).
+fn open_or_elevate(target: &Process, image: &Image, export: Option<(&str, &[u8])>) -> Result<Option<Handle>> {
+    match open(target.pid) {
+        Ok(process) => Ok(Some(process)),
+        Err(denied) if marked(&denied, FailureKind::Protected) && elevated::can_elevate() => {
+            elevated::load(target, image, export).map(|()| None)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// The checks and the `LoadLibraryW` run shared by `load` and `map`, on a process just opened. Returns the

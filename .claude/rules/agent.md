@@ -18,7 +18,7 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 - `signed(path, publishers)`: the signature check alone (blocking), for a copy the caller made and holds. `Program::open(path, publishers)`, `Program::path`: an `.exe` that runs on its own and never enters a game, locked and resolved like an `Image` (a start appends `.exe` to a bare name too); start it by `path`. Its signature must be embedded: system executables are catalog-signed.
 - `idle(&Process, within)`: `WaitForInputIdle` (blocking); `false` past `within` or on any `WAIT_FAILED` (no GUI), as Wand. `suspend`, `resume(&Process)`: `NtSuspendProcess` / `NtResumeProcess` (ntdll, raw-dylib), each a count: one resume per suspend. A denied open is `Protected`; they never elevate.
 - `load(&Process, &Image, export, arg)`: runs `LoadLibraryW` in the target, then starts `export` with a copy of `arg`.
-- `map(&Process, &Image)`: the same checks and `LoadLibraryW` run, no export started: for a DLL whose `DllMain` does the work (an overlay). Never elevates: a denying process stays `Protected`.
+- `map(&Process, &Image)`: the same checks and `LoadLibraryW` run, no export started: for a DLL whose `DllMain` does the work (an overlay). Elevates as `load` does (Wand's service does too).
 - `elevated()`: this process runs as administrator (`app` marks it in the title bar).
 - `serve_elevated(publishers)`: first thing in the host's `main`. `Some(exit code)` when the command line asks for an elevated load; else makes this executable the one a denied `load` starts elevated.
 - `Image::unchecked`: tests only.
@@ -31,7 +31,7 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 - No handle (`Handle`, `HANDLE`) crosses the interface: only data (`Process`, `Image`, bytes, strings), so it can later run as a helper in a Proton prefix.
 - `Image::unchecked` exists only under `cfg(test)` or the `test-support` feature, which only dev-dependencies enable.
 - Protected processes that cannot be opened are skipped by the search, not errors.
-- A process that denies `load` (a game run as administrator; not `map`, which returns the `Protected` error) is loaded by the host executable started elevated through UAC (`runas`, the request in hex on its command line), only when a host is set and this process is not elevated. The copy checks the image against the host's publishers, never the request's choice, and the process, like any load.
+- A process that denies `load` or `map` (a game run as administrator) is loaded by the host executable started elevated through UAC (`runas`, the request in hex on its command line; an empty export is a map), only when a host is set and this process is not elevated. The copy checks the image against the host's publishers, never the request's choice, and the process, like any load.
 - Marks: a declined prompt is `Elevation`, denied even elevated `Protected`, as is a denial once the handle is open (allocation, write, remote thread: the game's protection stripped its rights, elevation does not lift that), an image of the other architecture `Architecture`. A failure after the copy may have started its loader keeps the parent's image lock: the copy's ends with it.
 - `of`, `Image::open` and `load` block: callers use `blocking::unblock`.
 

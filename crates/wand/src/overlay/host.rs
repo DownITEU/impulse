@@ -272,8 +272,12 @@ fn connect(client: isize) {
     retire_if_gone(pid);
     state().linked(pid, client);
     // SAFETY: a post to the window the DLL gave; our pid as tinyipc wants it.
-    unsafe { PostMessageA(client as HWND, CONNECT_ACK, GetCurrentProcessId() as usize, 0) };
-    log::debug!("overlay: the DLL in process {pid} linked");
+    if unsafe { PostMessageA(client as HWND, CONNECT_ACK, GetCurrentProcessId() as usize, 0) } == 0 {
+        // An elevated game's window takes it only if the DLL lifted UIPI's filter.
+        log::warn!("overlay: the DLL in process {pid} cannot be answered: {}", std::io::Error::last_os_error());
+    } else {
+        log::debug!("overlay: the DLL in process {pid} linked");
+    }
 }
 
 /// The DLL left (unloaded, or its game closes): the canvas there ends.
