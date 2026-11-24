@@ -138,8 +138,8 @@ impl Layer {
                 let _ = inside::type_keys(layer, keyed, cx).await;
             }
         });
-        // A foreground event can be missed; the overlay losing the input is one too. Inside, the window never takes
-        // the input itself.
+        // A foreground event can be missed; the overlay losing the input is one too. Inside, the window is only held
+        // active (`inside::enter`): `switch` asks the system.
         cx.observe_window_activation(window, |layer, window, _| {
             let ask = match (layer.is_inside(), window.is_window_active()) {
                 (true, true) => Ask::Shown,

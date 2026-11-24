@@ -91,7 +91,7 @@ impl Hotkeys {
                 return;
             }
             // A press that ended as the window went inactive has no one to answer it.
-            Err(_) if !self.attended(window, app) => return,
+            Err(_) if !window.is_window_active() => return,
             Err(clash) => clash,
         };
         let keys = choice.chord(&sheet.cheats[index], slot).map(|chord| chord.to_string()).unwrap_or_default();

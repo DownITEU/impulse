@@ -3208,6 +3208,16 @@ impl Window {
         self.active.get()
     }
 
+    /// Counts the window as active while `held`, as if the system said so: its keys come from elsewhere (drawn
+    /// into another app's frame). Released, the system's state rules again; observers hear a change.
+    pub fn hold_active(&mut self, held: bool, cx: &mut App) {
+        let active = held || self.platform_window.is_active();
+        if self.active.replace(active) != active {
+            self.activation_observers.clone().retain(|callback| callback(self, cx));
+            self.refresh();
+        }
+    }
+
     /// Returns whether this window is considered to be the window
     /// that currently owns the mouse cursor.
     /// On mac, this is equivalent to `is_window_active`.

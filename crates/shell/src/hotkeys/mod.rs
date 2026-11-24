@@ -19,12 +19,12 @@ use futures::{
     StreamExt,
     channel::{mpsc, oneshot},
 };
-use gpui_kit::{App, Context, Entity, FocusHandle, Task, Window};
+use gpui_kit::{Context, Entity, FocusHandle, Task, Window};
 use keyhook::{Outcome, Step, Trigger};
 use model::Chord;
 
 use crate::{
-    input::{Action, Hud, Input, Owner, Scope},
+    input::{Action, Input, Owner, Scope},
     library::{Library, LibraryEvent},
     run::{RunEvent, Runs},
     trainer::{TrainerEvent, Trainers},
@@ -163,12 +163,13 @@ impl Hotkeys {
         self.arm(cx);
     }
 
-    /// Starts binding `target`; its outcome goes to the asker. `None` when the user is not typing for the window,
-    /// or when it was being bound: a second click ends that.
+    /// Starts binding `target`; its outcome goes to the asker. `None` when the window is not active, or when it
+    /// was being bound: a second click ends that.
     pub fn capture(&mut self, target: Target, window: &Window, cx: &mut Context<Self>) -> Option<oneshot::Receiver<Outcome>> {
         let again = self.capturing() == Some(&target);
         self.cancel(cx);
-        if again || !self.attended(window, cx) {
+        // Only the active window's user may be typing for it.
+        if again || !window.is_window_active() {
             return None;
         }
         let mut steps = self.input.update(cx, |input, _| input.capture())?;
@@ -183,11 +184,6 @@ impl Hotkeys {
         self.capture = Some(Capturing { target, held: None, asker, _steps: task });
         cx.notify();
         Some(outcome)
-    }
-
-    /// Whether the user's keys are for the window: it is active, or the HUD is inside the game, which keeps the focus.
-    fn attended(&self, window: &Window, cx: &App) -> bool {
-        window.is_window_active() || self.input.read(cx).hud() == Hud::Inside
     }
 
     /// Ends a capture and drops a question with no focus to give back: its window is not at hand.

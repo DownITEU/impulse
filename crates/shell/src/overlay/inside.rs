@@ -82,7 +82,8 @@ pub(super) async fn enter(
     if !drawn {
         return leave(layer, hwnd, game, Some(away), cx).await;
     }
-    Ok(())
+    // Outside the layer's update: its own observer hears this. GPUI's inputs draw the caret in an active window only.
+    cx.update(|window, cx| window.hold_active(true, cx))
 }
 
 /// Out of the game's frame: put back as it was, behind the game, or in front where the user asked for it (`away`: `None`).
@@ -104,6 +105,8 @@ pub(super) async fn leave(
         }
         layer.turn(Mode::Window { armed: None }, window, cx);
     })?;
+    // A capture or a question made inside ends here, as with any window going inactive.
+    cx.update(|window, cx| window.hold_active(false, cx))?;
     fullscreen(false, cx).await?;
     match away {
         Some(Away::Shown) => topmost::lower(hwnd, Some(game)),

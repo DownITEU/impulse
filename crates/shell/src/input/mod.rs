@@ -12,7 +12,7 @@ use std::{
 
 use futures::channel::mpsc;
 use gpui_kit::{Context, Entity};
-use keyhook::{Binding, Capture, Hook, Matcher, Modifiers, Outcome, Step, Stroke, Trigger};
+use keyhook::{Binding, Capture, Hook, Matcher, Modifiers, Step, Stroke, Trigger};
 use model::{Chord, mouse};
 use topmost::Held;
 
@@ -123,19 +123,8 @@ impl Input {
         })
     }
 
-    pub fn hud(&self) -> Hud {
-        self.shared.hud()
-    }
-
     pub fn set_hud(&mut self, hud: Hud) {
-        let was = self.shared.hud();
-        if hud != was {
-            // Inside, the window never goes inactive, so a capture made there ends with the HUD.
-            if was == Hud::Inside
-                && let Some(steps) = self.capture.take()
-            {
-                let _ = steps.unbounded_send(Step::Done(Outcome::Cancelled));
-            }
+        if hud != self.shared.hud() {
             self.shared.hud.store(hud as u8, Relaxed);
             self.sync();
         }
