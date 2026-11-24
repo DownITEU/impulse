@@ -4,7 +4,7 @@ use model::Text;
 
 const FILES: [(&str, &str); 11] = [
     ("en", include_str!("../locales/en.ftl")),
-    ("zh", include_str!("../locales/zh.ftl")),
+    ("zh-CN", include_str!("../locales/zh-CN.ftl")),
     ("fr", include_str!("../locales/fr.ftl")),
     ("de", include_str!("../locales/de.ftl")),
     ("es", include_str!("../locales/es.ftl")),

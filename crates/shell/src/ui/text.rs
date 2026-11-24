@@ -20,7 +20,7 @@ const APP: &str = SourceId::APP;
 static FILES: LazyLock<Files> = LazyLock::new(|| {
     [
         (ENGLISH, include_str!("../../locales/en.ftl")),
-        (CHINESE, include_str!("../../locales/zh.ftl")),
+        (CHINESE, include_str!("../../locales/zh-CN.ftl")),
         (FRENCH, include_str!("../../locales/fr.ftl")),
         (GERMAN, include_str!("../../locales/de.ftl")),
         (SPANISH, include_str!("../../locales/es.ftl")),

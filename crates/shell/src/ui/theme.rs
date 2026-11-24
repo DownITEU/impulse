@@ -81,6 +81,9 @@ macro_rules! font {
 pub struct Look {
     pub accent: u32,
     ui: &'static str,
+    /// `ui` falling back to the CJK family: DirectWrite shapes a run with the one face it is given, so han in a game's
+    /// title, a pin's name or a mono field would take a family Windows picks.
+    font: gpui_kit::Font,
 }
 
 impl Global for Look {}
@@ -93,16 +96,9 @@ pub fn ui_font(cx: &App) -> &'static str {
     cx.global::<Look>().ui
 }
 
-/// The UI font with the fallback its family lacks. DirectWrite shapes a run with the one face it is
-/// given, and content in another script (a Chinese game title, a pin the user named) would fall to
-/// Windows' own choice; naming the CJK family keeps it in the same look.
+/// The UI font with its fallback, for the window's root; made once per look.
 pub fn ui_font_of(cx: &App) -> gpui_kit::Font {
-    let ui = cx.global::<Look>().ui;
-    let mut font = gpui_kit::font(ui);
-    if ui != UI_CJK {
-        font.fallbacks = Some(gpui_kit::FontFallbacks::from_fonts(vec![UI_CJK.to_owned()]));
-    }
-    font
+    cx.global::<Look>().font.clone()
 }
 
 fn ui_family(language: Language) -> &'static str {
@@ -129,7 +125,9 @@ pub fn set_look(cx: &mut App, accent: u32, language: Language) -> bool {
         });
     }
     Theme::global_mut(cx).font_family = ui.into();
-    cx.set_global(Look { accent, ui });
+    let mut font = gpui_kit::font(ui);
+    font.fallbacks = Some(gpui_kit::FontFallbacks::from_fonts(vec![UI_CJK.to_owned()]));
+    cx.set_global(Look { accent, ui, font });
     true
 }
 

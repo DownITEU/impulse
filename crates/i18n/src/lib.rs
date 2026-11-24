@@ -14,7 +14,7 @@ pub struct Language {
 }
 
 pub const ENGLISH: Language = Language { tag: "en", name: "ENGLISH" };
-pub const CHINESE: Language = Language { tag: "zh", name: "简体中文" };
+pub const CHINESE: Language = Language { tag: "zh-CN", name: "简体中文" };
 pub const FRENCH: Language = Language { tag: "fr", name: "FRANÇAIS" };
 pub const GERMAN: Language = Language { tag: "de", name: "DEUTSCH" };
 pub const SPANISH: Language = Language { tag: "es", name: "ESPAÑOL" };
@@ -35,7 +35,7 @@ impl Language {
 
     /// Written in han: the UI's Latin font has none of the characters.
     pub fn is_cjk(&self) -> bool {
-        matches!(self.tag, "zh")
+        matches!(self.tag, "zh-CN")
     }
 
     pub fn find(tag: &str) -> Option<Self> {
