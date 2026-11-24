@@ -222,6 +222,13 @@ run-last-session = ПРОШЛАЯ СЕССИЯ
 run-active = АКТИВНО
 run-hotkeys = ХОТКЕИ
 run-idle = МОДЫ СТАНУТ ДОСТУПНЫ ПОСЛЕ ЗАПУСКА ТРЕЙНЕРА
+run-unconfirmed-title = ИГРА ОБНОВЛЕНА
+run-unconfirmed-body = Трейнер пока не поддерживает эту версию игры. Некоторые моды могут не работать до обновления трейнера. Всё равно запустить?
+run-unconfirmed-skip = ЗАПУСКАТЬ ВСЕГДА
+run-unconfirmed-cancel = ОТМЕНА
+run-unconfirmed-play = ВСЁ РАВНО ЗАПУСТИТЬ
+run-unconfirmed-ask = СПРАШИВАТЬ ПОСЛЕ ОБНОВЛЕНИЯ ИГРЫ
+run-unconfirmed-ask-hint = спрашивать перед запуском, если версия игры новее той, что поддерживает трейнер
 
 ## Map
 

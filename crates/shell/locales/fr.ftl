@@ -217,6 +217,13 @@ run-last-session = DERNIÈRE SESSION
 run-active = ACTIFS
 run-hotkeys = RACCOURCIS
 run-idle = LANCEZ LE JEU POUR UTILISER LES MODS
+run-unconfirmed-title = JEU MIS À JOUR
+run-unconfirmed-body = Le jeu est plus récent que le trainer. Certains mods risquent de ne pas fonctionner tant que le trainer n'aura pas été mis à jour. Jouer quand même ?
+run-unconfirmed-skip = TOUJOURS JOUER
+run-unconfirmed-cancel = ANNULER
+run-unconfirmed-play = JOUER QUAND MÊME
+run-unconfirmed-ask = DEMANDER APRÈS UNE MISE À JOUR
+run-unconfirmed-ask-hint = demander avant de lancer quand le jeu est plus récent que la version prise en charge par le trainer
 
 ## Map
 

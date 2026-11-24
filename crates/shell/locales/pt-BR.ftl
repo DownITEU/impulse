@@ -223,6 +223,13 @@ run-last-session = ÚLTIMA SESSÃO
 run-active = ATIVOS
 run-hotkeys = ATALHOS
 run-idle = TRAINER PARADO · INICIE O JOGO PARA USAR OS MODS
+run-unconfirmed-title = JOGO ATUALIZADO
+run-unconfirmed-body = O trainer ainda não é compatível com esta versão do jogo. Alguns mods podem não funcionar até sair uma atualização do trainer. Jogar mesmo assim?
+run-unconfirmed-skip = SEMPRE JOGAR
+run-unconfirmed-cancel = CANCELAR
+run-unconfirmed-play = JOGAR MESMO ASSIM
+run-unconfirmed-ask = AVISAR QUANDO O JOGO ATUALIZAR
+run-unconfirmed-ask-hint = perguntar antes de jogar quando a versão do jogo for mais nova que a suportada pelo trainer
 
 ## Map
 

@@ -200,6 +200,13 @@ run-last-session = LAST SESSION
 run-active = ACTIVE
 run-hotkeys = HOTKEYS
 run-idle = TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH
+run-unconfirmed-title = GAME UPDATED
+run-unconfirmed-body = This build is newer than the trainer supports, so some mods may not work until the trainer is updated. Play anyway?
+run-unconfirmed-skip = ALWAYS PLAY
+run-unconfirmed-cancel = CANCEL
+run-unconfirmed-play = PLAY ANYWAY
+run-unconfirmed-ask = ASK ON A GAME UPDATE
+run-unconfirmed-ask-hint = ask before a launch when the game's build is newer than the trainer supports
 
 ## Map
 

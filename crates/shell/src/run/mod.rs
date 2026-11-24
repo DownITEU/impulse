@@ -1,6 +1,7 @@
 //! Running the open game's trainer: LAUNCH + ATTACH, the cheat values going to it, STOP, and what a run keeps.
 
 mod tracker;
+mod unconfirmed;
 mod view;
 
 use crate::ui::{key, text::app_text};
@@ -20,6 +21,7 @@ use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
 use model::{Event, Failure, FailureKind, Live, Process, Session};
 pub use tracker::{Fix, Lease, Tracked, Tracker};
+pub use unconfirmed::{Closed as UnconfirmedClosed, Unconfirmed};
 pub use view::{run_button, run_note, session_panel};
 
 use crate::{

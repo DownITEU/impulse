@@ -37,7 +37,7 @@ use crate::{
     plugins::{Plugins, PluginsView},
     remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
-    run::{Runs, session_panel},
+    run::{Runs, Unconfirmed, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
     sounds::{Cues, SoundsView},
     sources::Sources,
@@ -76,6 +76,7 @@ pub struct Page {
     layer: Entity<Layer>,
     // Drawn in place of the page while over a game.
     hud: Entity<Hud>,
+    launch: Entity<Unconfirmed>,
     log: Entity<LogView>,
     maps: Entity<Maps>,
     map: Entity<MapView>,
@@ -164,7 +165,10 @@ impl Page {
         let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, input.clone(), in_game.clone(), window, cx));
         let keys = input.clone();
         cx.subscribe(&layer, move |_, _, hud: &InputHud, cx| keys.update(cx, |input, _| input.set_hud(*hud))).detach();
-        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), picker.clone(), cx));
+        let launch = cx.new(|cx| Unconfirmed::new(runs.clone(), settings.clone(), cx));
+        cx.observe(&launch, |_, _, cx| cx.notify()).detach();
+        let hero =
+            cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), launch.clone(), layer.clone(), picker.clone(), cx));
         let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), input, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         let cheat_list =
@@ -207,6 +211,7 @@ impl Page {
                 library,
                 trainers,
                 runs,
+                launch.clone(),
                 hotkeys,
                 maps.clone(),
                 map.clone(),
@@ -248,6 +253,7 @@ impl Page {
             _tray: tray,
             layer,
             hud,
+            launch,
             log,
             maps,
             map,
@@ -339,7 +345,7 @@ impl Page {
     }
 
     /// The dialogs open over the page, bottom to top: what draws them and what they cover read this one list.
-    fn dialogs(&self, cx: &App) -> [Option<AnyElement>; 7] {
+    fn dialogs(&self, cx: &App) -> [Option<AnyElement>; 8] {
         // Typed, not `AnyView`: a debug build keeps a name per `AnyView` it draws, and each editor is a new one.
         fn shown<V: Render>(view: &Entity<V>, open: bool) -> Option<AnyElement> {
             open.then(|| view.clone().into_any_element())
@@ -349,6 +355,7 @@ impl Page {
             self.remote_view.as_ref().and_then(|view| shown(view, view.read(cx).is_open())),
             self.cheat_list.read(cx).editor().and_then(|editor| shown(editor, true)),
             shown(&self.picker, self.picker.read(cx).is_open()),
+            shown(&self.launch, self.launch.read(cx).is_open()),
             shown(&self.disclaimer, self.disclaimer.read(cx).is_open(cx)),
             shown(&self.signed_out, self.signed_out.read(cx).is_open(cx)),
             shown(&self.update_notice, self.update_notice.read(cx).is_open(cx)),

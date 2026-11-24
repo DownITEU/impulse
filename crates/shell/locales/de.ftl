@@ -209,6 +209,13 @@ run-last-session = LETZTE SITZUNG
 run-active = AKTIV
 run-hotkeys = HOTKEYS
 run-idle = TRAINER INAKTIV · MODS ERST NACH DEM START
+run-unconfirmed-title = SPIEL-UPDATE
+run-unconfirmed-body = Der Trainer unterstützt diese Spielversion noch nicht. Manche Mods funktionieren eventuell erst nach einem Trainer-Update. Trotzdem spielen?
+run-unconfirmed-skip = IMMER SPIELEN
+run-unconfirmed-cancel = ABBRECHEN
+run-unconfirmed-play = TROTZDEM SPIELEN
+run-unconfirmed-ask = BEI SPIEL-UPDATE FRAGEN
+run-unconfirmed-ask-hint = vor dem Start fragen, wenn die Spielversion neuer ist als die vom Trainer unterstützte
 
 ## Map
 

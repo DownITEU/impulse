@@ -200,6 +200,13 @@ run-last-session = SON OTURUM
 run-active = AÇIK
 run-hotkeys = KISAYOL
 run-idle = TRAİNER KAPALI · HİLELER İÇİN BAŞLAT
+run-unconfirmed-title = OYUN GÜNCELLENDİ
+run-unconfirmed-body = Oyunun sürümü trainerın desteklediği sürümden daha yeni. Trainer güncellenene kadar bazı hileler çalışmayabilir. Yine de başlatılsın mı?
+run-unconfirmed-skip = HER ZAMAN BAŞLAT
+run-unconfirmed-cancel = İPTAL
+run-unconfirmed-play = YİNE DE BAŞLAT
+run-unconfirmed-ask = OYUN GÜNCELLENİNCE SOR
+run-unconfirmed-ask-hint = oyunun sürümü trainerın desteklediğinden yeniyse başlatmadan önce sor
 
 ## Map
 

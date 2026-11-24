@@ -137,7 +137,7 @@ impl SettingsView {
     fn app(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let folders = self.folder_rows(cx);
         let prefs = self.settings.read(cx).prefs();
-        let (close_to_tray, hidden) = (!prefs.quit_on_close, prefs.hide_from_capture);
+        let (close_to_tray, hidden, ask_unconfirmed) = (!prefs.quit_on_close, prefs.hide_from_capture, !prefs.skip_unconfirmed_warning);
         let names: Vec<SharedString> =
             languages().map(|ours| ours.map_or_else(|| t(cx, key::LANGUAGE_SYSTEM), |ours| ours.name.into())).collect();
         let current = languages().position(|ours| ours == prefs.chosen()).unwrap_or_default();
@@ -161,6 +161,12 @@ impl SettingsView {
                         .on_click(cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.quit_on_close = close_to_tray, cx))),
                 ),
             )
+            .child(row(t(cx, key::RUN_UNCONFIRMED_ASK), t(cx, key::RUN_UNCONFIRMED_ASK_HINT), 64.).child(
+                // On until DON'T ASK AGAIN was pressed in the question itself.
+                switch("unconfirmed-ask", ask_unconfirmed, cx).on_click(
+                    cx.listener(move |view, _, _, cx| view.edit_prefs(|prefs| prefs.skip_unconfirmed_warning = ask_unconfirmed, cx)),
+                ),
+            ))
             .child(
                 row(t(cx, key::HIDE_FROM_CAPTURE), t(cx, key::HIDE_FROM_CAPTURE_HINT), 64.).child(
                     switch("hide-from-capture", hidden, cx)

@@ -206,6 +206,13 @@ run-last-session = ULTIMA SESSIONE
 run-active = ATTIVE
 run-hotkeys = HOTKEY
 run-idle = TRAINER FERMO · COMANDI DISPONIBILI DOPO L'AVVIO
+run-unconfirmed-title = GIOCO AGGIORNATO
+run-unconfirmed-body = Il gioco è più recente della versione supportata dal trainer. Le mod potrebbero non funzionare fino al prossimo aggiornamento del trainer. Giocare comunque?
+run-unconfirmed-skip = GIOCA SEMPRE
+run-unconfirmed-cancel = ANNULLA
+run-unconfirmed-play = GIOCA COMUNQUE
+run-unconfirmed-ask = CHIEDI SE IL GIOCO SI AGGIORNA
+run-unconfirmed-ask-hint = chiedi prima di avviare quando il gioco è più recente della versione supportata dal trainer
 
 ## Map
 

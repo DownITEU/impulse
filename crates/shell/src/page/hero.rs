@@ -10,7 +10,7 @@ use i18n::Arg;
 use crate::{
     library::{GamePicker, Library, pick_source, source_options},
     overlay::{Layer, overlay_hotkey},
-    run::{Runs, run_button},
+    run::{Runs, Unconfirmed, run_button},
     trainer::{Trainers, title},
     ui::{
         assets::Icon,
@@ -26,6 +26,7 @@ pub struct Hero {
     library: Entity<Library>,
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
+    launch: Entity<Unconfirmed>,
     layer: Entity<Layer>,
     picker: Entity<GamePicker>,
     /// The sources menu is open.
@@ -37,6 +38,7 @@ impl Hero {
         library: Entity<Library>,
         trainers: Entity<Trainers>,
         runs: Entity<Runs>,
+        launch: Entity<Unconfirmed>,
         layer: Entity<Layer>,
         picker: Entity<GamePicker>,
         cx: &mut Context<Self>,
@@ -45,7 +47,7 @@ impl Hero {
         cx.observe(&trainers, |_, _, cx| cx.notify()).detach();
         cx.observe(&runs, |_, _, cx| cx.notify()).detach();
         cx.observe(&layer, |_, _, cx| cx.notify()).detach();
-        Self { library, trainers, runs, layer, picker, menu: None }
+        Self { library, trainers, runs, launch, layer, picker, menu: None }
     }
 
     pub fn close(&mut self, cx: &mut Context<Self>) {
@@ -90,7 +92,7 @@ impl Hero {
             return bar.child(self.add_game(game, cx)).child(star);
         };
         let layer = self.layer.clone();
-        bar.child(run_button(&self.runs, game, cx))
+        bar.child(run_button(&self.runs, &self.launch, game, cx))
             // Over the running game; the mode and the hotkey are in Settings.
             .when(running, |bar| {
                 bar.child(

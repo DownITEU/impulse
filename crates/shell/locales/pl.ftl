@@ -222,6 +222,13 @@ run-last-session = OSTATNIA SESJA
 run-active = AKTYWNE
 run-hotkeys = SKRÓTY
 run-idle = TRAINER WYŁ. · MODY DOSTĘPNE PO STARCIE
+run-unconfirmed-title = NOWA WERSJA GRY
+run-unconfirmed-body = Trainer nie obsługuje jeszcze tej wersji gry. Do czasu aktualizacji trainera mody mogą nie działać. Uruchomić mimo to?
+run-unconfirmed-skip = ZAWSZE URUCHAMIAJ
+run-unconfirmed-cancel = ANULUJ
+run-unconfirmed-play = URUCHOM MIMO TO
+run-unconfirmed-ask = PYTAJ PO AKTUALIZACJI GRY
+run-unconfirmed-ask-hint = pytaj przed uruchomieniem, gdy wersja gry jest nowsza niż obsługiwana przez trainer
 
 ## Map
 
