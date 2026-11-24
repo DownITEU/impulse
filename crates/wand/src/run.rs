@@ -125,9 +125,11 @@ impl Attach for Prepared {
         .boxed()
     }
 
-    fn attach(self: Box<Self>, process: Process) -> BoxFuture<'static, Answer<Live>> {
+    fn attach(self: Box<Self>, process: Process, build: Option<u32>) -> BoxFuture<'static, Answer<Live>> {
         async move {
-            let game = Game { process: &process, trainer: &self.trainer, trainer_hash: &self.hash, variables: &self.variables };
+            let (trainer, trainer_hash, variables) = (&self.trainer, &self.hash, &self.variables);
+            // As Wand: `gameVersion ?? 0`.
+            let game = Game { process: &process, version: build.unwrap_or(0), trainer, trainer_hash, variables };
             let (session, events) = attach(&self.server, &self.trainerlib, game).await.map_err(|e| {
                 let failure = Failure::from(e);
                 match failure.kind {

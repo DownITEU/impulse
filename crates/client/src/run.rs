@@ -19,6 +19,7 @@ pub struct Request {
     pub origin: Origin,
     pub rule: Rule,
     pub launch: Launch,
+    pub build: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,6 +36,7 @@ pub fn request(install: &Installation, plan: &Plan) -> Request {
         origin: install.origin.clone(),
         rule: Rule { image: plan.image.clone(), location: install.location.clone(), minimum_age: plan.minimum_age },
         launch: plan.launch,
+        build: install.build,
     }
 }
 
@@ -69,7 +71,7 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
     };
 
     stage(Stage::Attaching);
-    Ok((process.clone(), prepared.attach(process).await?))
+    Ok((process.clone(), prepared.attach(process, request.build).await?))
 }
 
 /// Counts a run that went live; the mods it starts with, when the game keeps them.
@@ -122,7 +124,7 @@ mod tests {
             async { Ok(None) }.boxed()
         }
 
-        fn attach(self: Box<Self>, _: Process) -> BoxFuture<'static, Result<Live>> {
+        fn attach(self: Box<Self>, _: Process, _: Option<u32>) -> BoxFuture<'static, Result<Live>> {
             self.0.attached.fetch_add(1, Ordering::SeqCst);
             async { Err(Failure::new(FailureKind::Refused)) }.boxed()
         }
@@ -135,7 +137,7 @@ mod tests {
         let image = me.file_name().unwrap().to_string_lossy().into_owned();
         let request = |launch, minimum_age| {
             let rule = Rule { image: Some(image.clone()), location: PathBuf::from(me.parent().unwrap()), minimum_age };
-            Request { runner: Arc::new(Prepare(probe.clone())), origin: Origin::Picked(me.clone()), rule, launch }
+            Request { runner: Arc::new(Prepare(probe.clone())), origin: Origin::Picked(me.clone()), rule, launch, build: None }
         };
 
         // Younger than the rule's age, and still refused.
@@ -156,7 +158,7 @@ mod tests {
         // Longer than the tests have run: a start would ready the install first. No launcher starts that store.
         let rule = Rule { image, location: PathBuf::from(me.parent().unwrap()), minimum_age: Duration::from_secs(3) };
         let origin = Origin::Launcher(model::StoreId::parse("itch:0").unwrap());
-        let request = Request { runner: Arc::new(Prepare(probe.clone())), origin, rule, launch: Launch::Start };
+        let request = Request { runner: Arc::new(Prepare(probe.clone())), origin, rule, launch: Launch::Start, build: None };
 
         let attached = block_on(start(request, |_| {})).err().unwrap();
         assert_eq!(attached.kind, FailureKind::Refused);

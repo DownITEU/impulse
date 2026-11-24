@@ -22,6 +22,8 @@ const DIAL_IN_WITHIN: Duration = Duration::from_secs(45);
 pub struct Game<'a> {
     /// As found: injection refuses a process that is no longer this one.
     pub process: &'a Process,
+    /// The game's version for the trainer: the install's build, 0 when unknown.
+    pub version: u32,
     pub trainer: &'a Path,
     /// SHA-256 the trainer must have: checked on the locked file, not on the download.
     pub trainer_hash: &'a str,
@@ -31,8 +33,6 @@ pub struct Game<'a> {
 /// `trainerlib` is the directory of Wand's service and plugin DLLs. Every DLL is checked before
 /// it enters the game. Dropping the returned session ends it; `stop` is the clean way.
 pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Result<(Session, Receiver<Event>)> {
-    let exe = &game.process.path;
-    let version = pe::header(exe).with_context(|| format!("{} is not a PE image", exe.display()))?.timestamp;
     let (service, plugin, trainer) = {
         let (trainerlib, trainer) = (trainerlib.to_owned(), game.trainer.to_owned());
         let hash = game.trainer_hash.to_owned();
@@ -64,7 +64,7 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     let dialed = dialed.with_context(|| format!("the service from {} did not dial in", trainerlib.display())).context(silent)?;
     let channel = dialed.context("the server dropped the service")?;
     let (session, events) = Session::open(server.runtime.clone(), channel, &client_id);
-    let run = Run { process_id: game.process.pid, game_version: version, trainer, variables: game.variables };
+    let run = Run { process_id: game.process.pid, game_version: game.version, trainer, variables: game.variables };
     session.start(plugin, run).await?;
     Ok((session, events))
 }
@@ -85,7 +85,7 @@ mod tests {
     /// Hand-run against a game at its main menu; the variables are in the ignore reason below.
     /// Sets the values and stops the trainer cleanly. The game keeps running.
     #[test]
-    #[ignore = "injects into a running game; needs IMPULSE_E2E_{PID,GAME_EXE,TRAINER,BLUEPRINT}, optional _SET=name=1;name=2 and _HOLD=secs"]
+    #[ignore = "injects into a running game; needs IMPULSE_E2E_{PID,GAME_EXE,TRAINER,BLUEPRINT}, optional _VERSION, _SET=name=1;name=2 and _HOLD=secs"]
     fn a_running_game_takes_values() {
         let pid: u32 = var("PID").expect("IMPULSE_E2E_PID").parse().unwrap();
         let exe = PathBuf::from(var("GAME_EXE").expect("IMPULSE_E2E_GAME_EXE"));
@@ -106,7 +106,8 @@ mod tests {
         let server = Server::start().unwrap();
         let trainerlib = crate::install::installs().first().expect("a Wand install").trainerlib();
         let hash = binary::hash_of(&trainer).unwrap();
-        let game = Game { process: &process, trainer: &trainer, trainer_hash: &hash, variables: &variables };
+        let version = var("VERSION").map_or(0, |version| version.parse().unwrap());
+        let game = Game { process: &process, version, trainer: &trainer, trainer_hash: &hash, variables: &variables };
         let (session, mut events) = block_on(attach(&server, &trainerlib, game)).unwrap();
         println!("attached, phase {:?}", session.phase());
 
