@@ -17,7 +17,7 @@ use crate::{
     tophat::{Event, Run, Server, Session},
 };
 
-const DIAL_IN_WITHIN: Duration = Duration::from_secs(15);
+const DIAL_IN_WITHIN: Duration = Duration::from_secs(45);
 
 pub struct Game<'a> {
     /// As found: injection refuses a process that is no longer this one.

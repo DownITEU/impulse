@@ -46,7 +46,7 @@ const FIRST_BEAT_LIMIT: Duration = Duration::from_secs(120);
 const BEAT_LIMIT: Duration = Duration::from_secs(60);
 const LOAD_PLUGIN_WITHIN: Duration = Duration::from_secs(30);
 const COMMAND_WITHIN: Duration = Duration::from_secs(5);
-const READY_WITHIN: Duration = Duration::from_secs(60);
+const READY_WITHIN: Duration = Duration::from_secs(90);
 const STOP_WITHIN: Duration = Duration::from_secs(30);
 const TEARDOWN_WITHIN: Duration = Duration::from_secs(5);
 // The service answers a command at its own timeout, so the wait is a little longer.
