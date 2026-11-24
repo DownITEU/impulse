@@ -18,6 +18,8 @@ use crate::{
 };
 
 const DIAL_IN_WITHIN: Duration = Duration::from_secs(45);
+// The wait for the last session's service to leave the process.
+const TEARDOWN_WITHIN: Duration = Duration::from_secs(30);
 
 pub struct Game<'a> {
     /// As found: injection refuses a process that is no longer this one.
@@ -53,6 +55,11 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     let waiting = server.expect(&client_id);
     let (target, port, id) = (game.process.clone(), server.port, client_id.clone());
     unblock(move || {
+        // A trainer stopped a moment ago may still be tearing its service down in this process.
+        let torn_down = format!(r"Local\TophatService_TeardownComplete_{}", target.pid);
+        if let Err(e) = agent::signaled(&torn_down, TEARDOWN_WITHIN) {
+            log::warn!("{e:#}");
+        }
         let startup = Startup { wand_port: port, client_id: &id, trainer_session_id: &Uuid::new_v4().to_string() };
         inject::tophat(&target, &service, &startup)
     })

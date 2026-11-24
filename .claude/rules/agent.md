@@ -12,6 +12,7 @@ The game's process: find it, check what may enter it, load a DLL into it, start 
 - `wait(&Rule, within)`: polls once a second until that process is old enough; needs no runtime; dropping either stops it within one poll. Its timeout is marked `GameNotFound`.
 - `of(pid)`: the identity of one process now (blocking), `None` when it cannot be looked at.
 - `x64(&Process)`: whether it is a 64-bit process, asked of the process (blocking), never of its exe: a GDK game's is unreadable.
+- `signaled(name, within)`: waits for a named event a module in a game sets (blocking): `false` when none of that name is held, an error when it is not set in time.
 - `Image::open(path, publishers)`, `Image::path`, `Image::x64` (else x86): the only way to name a DLL that enters a game.
 - `signed(path, publishers)`: the signature check alone (blocking), for a program that runs on its own and never enters a game.
 - `load(&Process, &Image, export, arg)`: runs `LoadLibraryW` in the target, then starts `export` with a copy of `arg`.
