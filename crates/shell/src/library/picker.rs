@@ -32,7 +32,7 @@ use crate::ui::{
 };
 use client::{
     Load,
-    library::{Find, GameId, rank, store_of},
+    library::{Find, GameId, by_name, rank, store_of},
 };
 
 /// Rows shown at once: the filter narrows the rest.
@@ -149,7 +149,7 @@ impl GamePicker {
             false => (0..games.len()).filter(|&at| games[at].trainer.is_some()).collect(),
         };
         let mut choices: Vec<Choice> = shown.into_iter().map(|at| Choice::of(&games, at)).collect();
-        choices.sort_by(|a, b| a.search.cmp(&b.search));
+        choices.sort_by(|a, b| by_name(&a.search, &b.search));
         let subject = exe.display().to_string().into();
         self.open(Purpose::Add { exe, owned }, games, choices, subject, window, cx);
     }

@@ -20,6 +20,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 - Simplified Chinese (Settings, APP, LANGUAGE). (#23; thanks yzxxy010)
 - A failed launch says which step failed: the launcher did not start the game, the game did not start in time, the game you start yourself did not appear in time, the game closed before the trainer got in, the trainer could not get in or did not start, or the trainer needs the game's other (64-bit or 32-bit) build.
 - A translation can ship before all of it is done: a text not translated yet shows in English.
+- The game list sorts as Steam's library does: a leading "The" does not count, so THE WITCHER 3 is under W. (#27)
 
 ### Fixes
 
