@@ -13,8 +13,8 @@ use std::{
 
 pub use key::Key;
 pub use window::{
-    Monitor, cloak, exclude_from_capture, exclusive, foreground, give_back, hide, is_window, lower, monitor_of, owner, pass_through, place,
-    raise, restore, window_of,
+    Monitor, cloak, exclude_from_capture, exclusive, foreground, give_back, hide, is_minimized, is_window, lower, monitor_of, owner,
+    pass_through, place, raise, restore, window_of,
 };
 use windows_sys::Win32::{
     Foundation::HWND,

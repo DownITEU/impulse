@@ -11,6 +11,7 @@ mod log_view;
 mod map;
 mod overlay;
 mod page;
+mod placement;
 mod plugins;
 mod remote;
 mod resources;
@@ -30,6 +31,7 @@ use client::{Load, Registry, media::Media, storage::Paths};
 use gpui_kit::{App, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
+pub use placement::restore as window_placement;
 pub use remote::Serve;
 pub use root::Root;
 pub use ui::assets::Assets;

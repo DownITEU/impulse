@@ -50,6 +50,7 @@ entries! {
     plugin_lock: "plugins.lock",
     plugin_cache: "plugin-cache",
     update: "update.json",
+    window: "window.json",
 }
 
 impl Paths {

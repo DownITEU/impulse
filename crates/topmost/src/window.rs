@@ -43,6 +43,12 @@ pub fn is_window(window: isize) -> bool {
     unsafe { IsWindow(window as HWND) != 0 }
 }
 
+/// Minimized to the taskbar.
+pub fn is_minimized(window: isize) -> bool {
+    // SAFETY: any value is a valid question.
+    unsafe { IsIconic(window as HWND) != 0 }
+}
+
 /// The main window of process `pid`: its largest visible top-level window without an owner.
 pub fn window_of(pid: u32) -> Option<isize> {
     unsafe extern "system" fn each(window: HWND, found: LPARAM) -> i32 {

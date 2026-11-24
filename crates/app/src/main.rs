@@ -8,7 +8,7 @@ use client::{
     Capabilities, Registry,
     storage::{self, Paths},
 };
-use gpui_kit::{AppContext as _, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use gpui_kit::{AppContext as _, TitlebarOptions, WindowOptions, px, size};
 use model::SourceId;
 use shell::Root;
 use wand::Wand;
@@ -54,8 +54,11 @@ fn main() {
     gpui_kit::application().with_assets(shell::Assets).run(move |cx| {
         gpui_kit::init(cx);
         shell::init(&data_dir, registry.clone(), cx);
+        // Where the window was last time, else centered.
+        let (window_bounds, display_id) = shell::window_placement(&data_dir, size(px(1280.), px(800.)), cx);
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1280.), px(800.)), cx))),
+            window_bounds: Some(window_bounds),
+            display_id,
             titlebar: Some(TitlebarOptions { title: Some("Impulse".into()), appears_transparent: true, ..Default::default() }),
             window_min_size: Some(size(px(1024.), px(640.))),
             ..Default::default()
