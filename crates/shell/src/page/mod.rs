@@ -29,14 +29,15 @@ use crate::{
     cheats::CheatList,
     crash,
     hotkeys::{HotkeySettings, Hotkeys, hotkeys_scope},
+    input::Input,
     library::{GamePicker, Library, Marks, SIDEBAR_WIDTH, Sidebar, vacant},
     log_view::{LogEvent, LogView},
     map::{MapEvent, MapView, Maps, map_panel, paneled},
-    overlay::{Entered, Hud, Layer, OverlaySettings},
+    overlay::{Entered, Hud, InGame, Layer, OverlaySettings},
     plugins::{Plugins, PluginsView},
     remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
-    run::{Runs, session_panel},
+    run::{Runs, Unconfirmed, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
     sounds::{Cues, SoundsView},
     sources::Sources,
@@ -75,6 +76,7 @@ pub struct Page {
     layer: Entity<Layer>,
     // Drawn in place of the page while over a game.
     hud: Entity<Hud>,
+    unconfirmed: Entity<Unconfirmed>,
     log: Entity<LogView>,
     maps: Entity<Maps>,
     map: Entity<MapView>,
@@ -133,8 +135,9 @@ impl Page {
         let resources = cx.new(|cx| Resources::new(registry.clone(), &paths, &sources, cx));
         let plugins = cx.new(|cx| Plugins::new(plugins, cx));
         // Only a source the page reads from reloads it: a plugin's answer cache must not stop a live trainer.
+        let plays = registry.clone();
         cx.subscribe(&resources, move |page, _, event: &ResourcesEvent, cx| match event {
-            ResourcesEvent::Cleared(sources) if sources.iter().any(|source| registry.plays(source)) => page.reload(cx),
+            ResourcesEvent::Cleared(sources) if sources.iter().any(|source| plays.plays(source)) => page.reload(cx),
             ResourcesEvent::Cleared(_) => {}
         })
         .detach();
@@ -157,12 +160,14 @@ impl Page {
             cx.observe(&runs, |_, _, cx| cx.notify()).detach();
             Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, starred, window, cx)
         });
-        let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, window, cx));
-        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), layer.clone(), picker.clone(), cx));
-        // The overlay's and the minimap's hotkeys are not the trainer's to take.
-        let reserved = layer.downgrade();
-        let reserved = move |chord, cx: &App| reserved.upgrade().is_some_and(|layer| layer.read(cx).takes(chord));
-        let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), reserved, window, cx));
+        let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, cx));
+        let input = cx.new(|cx| Input::new(&runs, cx));
+        let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, input.clone(), in_game.clone(), window, cx));
+        let unconfirmed = cx.new(|cx| Unconfirmed::new(runs.clone(), settings.clone(), cx));
+        cx.observe(&unconfirmed, |_, _, cx| cx.notify()).detach();
+        let hero =
+            cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), unconfirmed.clone(), layer.clone(), picker.clone(), cx));
+        let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), input, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         let cheat_list =
             cx.new(|cx| CheatList::new(library.clone(), trainers.clone(), runs.clone(), hotkeys.clone(), picker.clone(), window, cx));
@@ -204,11 +209,13 @@ impl Page {
                 library,
                 trainers,
                 runs,
+                unconfirmed.clone(),
                 hotkeys,
                 maps.clone(),
                 map.clone(),
                 cheat_list.clone(),
                 picker.clone(),
+                in_game,
                 &settings,
                 &paths,
                 window,
@@ -244,6 +251,7 @@ impl Page {
             _tray: tray,
             layer,
             hud,
+            unconfirmed,
             log,
             maps,
             map,
@@ -335,7 +343,7 @@ impl Page {
     }
 
     /// The dialogs open over the page, bottom to top: what draws them and what they cover read this one list.
-    fn dialogs(&self, cx: &App) -> [Option<AnyElement>; 7] {
+    fn dialogs(&self, cx: &App) -> [Option<AnyElement>; 8] {
         // Typed, not `AnyView`: a debug build keeps a name per `AnyView` it draws, and each editor is a new one.
         fn shown<V: Render>(view: &Entity<V>, open: bool) -> Option<AnyElement> {
             open.then(|| view.clone().into_any_element())
@@ -345,6 +353,7 @@ impl Page {
             self.remote_view.as_ref().and_then(|view| shown(view, view.read(cx).is_open())),
             self.cheat_list.read(cx).editor().and_then(|editor| shown(editor, true)),
             shown(&self.picker, self.picker.read(cx).is_open()),
+            shown(&self.unconfirmed, self.unconfirmed.read(cx).is_open()),
             shown(&self.disclaimer, self.disclaimer.read(cx).is_open(cx)),
             shown(&self.signed_out, self.signed_out.read(cx).is_open(cx)),
             shown(&self.update_notice, self.update_notice.read(cx).is_open(cx)),

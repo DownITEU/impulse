@@ -19,21 +19,34 @@ pub struct Image {
     lock: Option<File>,
 }
 
+/// A program that runs on its own, never in a game, signed and held open against replacement like an `Image`.
+pub struct Program {
+    path: PathBuf,
+    _lock: File,
+}
+
+impl Program {
+    /// `publishers`: the signers' display names the file may carry.
+    pub fn open(path: &Path, publishers: &[&str]) -> Result<Self> {
+        let (lock, path) = locked(path)?;
+        // A start appends ".exe" to a name without an extension and would run a sibling.
+        ensure!(has_extension(&path, "exe"), "{} is not an .exe", path.display());
+        trust::check(&path, publishers)?;
+        Ok(Self { path, _lock: lock })
+    }
+
+    /// The file checked, every link resolved: the one to start.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
 impl Image {
     /// `publishers`: the signers' display names the file may carry.
     pub fn open(path: &Path, publishers: &[&str]) -> Result<Self> {
-        // Denies writes and deletes while this value lives: the file checked is the file loaded.
-        let lock = OpenOptions::new()
-            .read(true)
-            .share_mode(FILE_SHARE_READ)
-            .open(path)
-            .with_context(|| format!("cannot open {}", path.display()))?;
-        // The opened file's own path: a junction or symlink swapped later cannot redirect a
-        // loader that opens it by path, and it is the form the loader records for the module.
-        let path = final_path(&lock)?;
+        let (lock, path) = locked(path)?;
         // `LoadLibraryW` appends ".dll" to a name without an extension and would load a sibling.
-        let dll = path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("dll"));
-        ensure!(dll, "{} is not a .dll", path.display());
+        ensure!(has_extension(&path, "dll"), "{} is not a .dll", path.display());
         trust::check(&path, publishers)?;
         let x64 = match pe::header(&path).map(|header| header.machine) {
             Some(pe::X64) => true,
@@ -71,6 +84,19 @@ impl Image {
     }
 }
 
+/// The file opened without write or delete sharing, so the file checked is the file used, and its own path: a junction
+/// or symlink swapped later cannot redirect what opens it by that path (the loader records a module so too).
+fn locked(path: &Path) -> Result<(File, PathBuf)> {
+    let lock =
+        OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(path).with_context(|| format!("cannot open {}", path.display()))?;
+    let path = final_path(&lock)?;
+    Ok((lock, path))
+}
+
+fn has_extension(path: &Path, wanted: &str) -> bool {
+    path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case(wanted))
+}
+
 /// A local drive path with every link resolved.
 fn final_path(file: &File) -> Result<PathBuf> {
     let mut buf = vec![0u16; 512];
@@ -105,6 +131,15 @@ mod tests {
         let err = Image::open(kernel32, &["Someone Else", "Another Publisher"]).err().unwrap();
         assert!(err.to_string().contains("not by Someone Else or Another Publisher"), "{err}");
         assert!(Image::open(Path::new(r"C:\no\such.dll"), &["Microsoft Windows"]).is_err());
+    }
+
+    /// System executables are catalog-signed, not embedded: a signed one opens in the trainer host test (`wand`).
+    #[test]
+    fn a_program_is_a_signed_exe() {
+        let dll = Program::open(Path::new(r"C:\Windows\System32\kernel32.dll"), &["Microsoft Windows"]).err().unwrap();
+        assert!(dll.to_string().contains("is not an .exe"), "{dll}");
+        let unsigned = Program::open(&std::env::current_exe().unwrap(), &["Microsoft Windows"]).err().unwrap();
+        assert!(unsigned.to_string().contains("no valid signature"), "{unsigned}");
     }
 
     #[test]

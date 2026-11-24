@@ -475,9 +475,13 @@ impl WindowsPlatform {
                                     hwnd.frame_signal.take();
                                 }
                             }
-                            RedrawWindow(Some(hwnd.as_raw()), None, None, RDW_INVALIDATE)
-                                .ok()
-                                .log_err();
+                            // A destroyed window stays listed until the main thread handles its close.
+                            if let Err(e) =
+                                RedrawWindow(Some(hwnd.as_raw()), None, None, RDW_INVALIDATE).ok()
+                                && e.code() != ERROR_INVALID_WINDOW_HANDLE.to_hresult()
+                            {
+                                log::error!("{e}");
+                            }
                         }
                     }
                 }

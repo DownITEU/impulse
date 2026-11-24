@@ -1,11 +1,13 @@
-//! Trainer hotkeys: the live run's hook, binding a slot or someone else's hotkey by pressing its keys or buttons, and
-//! the saved choices. Every hook is global: a capture's runs first and hides what it takes from every app.
+//! Trainer hotkeys: the live run's chords, binding a slot or someone else's hotkey by pressing its keys or buttons, and
+//! the saved choices. Both go through the app's one hook (`Input`); a capture hides what it takes from every app.
 
 mod caps;
 mod clash;
 mod popover;
 mod scope;
 mod settings;
+
+use std::sync::Arc;
 
 use client::{
     bindings::{Choice, Store},
@@ -17,11 +19,12 @@ use futures::{
     StreamExt,
     channel::{mpsc, oneshot},
 };
-use gpui_kit::{App, Context, Entity, FocusHandle, Task, Window};
-use keyhook::{Binding, Capture, Fired, Hook, Matcher, Outcome, Step};
+use gpui_kit::{Context, Entity, FocusHandle, Task, Window};
+use keyhook::{Outcome, Step, Trigger};
 use model::Chord;
 
 use crate::{
+    input::{Action, Input, Owner, Scope},
     library::{Library, LibraryEvent},
     run::{RunEvent, Runs},
     trainer::{TrainerEvent, Trainers},
@@ -54,20 +57,16 @@ struct Capturing {
     held: Option<Chord>,
     // Dropped unsent when the capture is cancelled.
     asker: oneshot::Sender<Outcome>,
-    _hook: Hook,
     _steps: Task<()>,
 }
-
-/// Tells whether a chord is someone else's hotkey.
-type Reserved = Box<dyn Fn(Chord, &App) -> bool>;
 
 pub struct Hotkeys {
     store: Store,
     trainers: Entity<Trainers>,
     runs: Entity<Runs>,
-    reserved: Reserved,
-    // Dropping it stops the hotkeys.
-    armed: Option<(Hook, Task<()>)>,
+    input: Entity<Input>,
+    // Dropping it drops the presses of chords bound before.
+    armed: Option<Task<()>>,
     capture: Option<Capturing>,
     // A pressed chord that another hotkey holds, waiting for its answer.
     conflict: Option<Conflict>,
@@ -80,7 +79,7 @@ impl Hotkeys {
         library: &Entity<Library>,
         trainers: Entity<Trainers>,
         runs: Entity<Runs>,
-        reserved: impl Fn(Chord, &App) -> bool + 'static,
+        input: Entity<Input>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -118,7 +117,7 @@ impl Hotkeys {
         })
         .detach();
         let focus = cx.focus_handle();
-        Self { store: Store::load(paths), trainers, runs, reserved: Box::new(reserved), armed: None, capture: None, conflict: None, focus }
+        Self { store: Store::load(paths), trainers, runs, input, armed: None, capture: None, conflict: None, focus }
     }
 
     /// Each cheat's slots, with the user's choices laid over the source's.
@@ -173,23 +172,7 @@ impl Hotkeys {
         if again || !window.is_window_active() {
             return None;
         }
-        let (tx, mut steps) = mpsc::unbounded();
-        let mut capture = Capture::default();
-        let hook = Hook::start(true, move |vk, down| {
-            let step = capture.key(vk, down);
-            if let Some(step) = step {
-                let _ = tx.unbounded_send(step);
-            }
-            // A click it passes on still reaches the window and ends the capture there.
-            down && step.is_some()
-        });
-        let hook = match hook {
-            Ok(hook) => hook,
-            Err(e) => {
-                log::warn!("cannot read the keys to bind: {e}");
-                return None;
-            }
-        };
+        let mut steps = self.input.update(cx, |input, _| input.capture())?;
         let task = cx.spawn(async move |hotkeys, cx| {
             while let Some(step) = steps.next().await {
                 if hotkeys.update(cx, |hotkeys, cx| hotkeys.step(step, cx)).is_err() {
@@ -198,17 +181,25 @@ impl Hotkeys {
             }
         });
         let (asker, outcome) = oneshot::channel();
-        self.capture = Some(Capturing { target, held: None, asker, _hook: hook, _steps: task });
+        self.capture = Some(Capturing { target, held: None, asker, _steps: task });
         cx.notify();
         Some(outcome)
     }
 
     /// Ends a capture and drops a question with no focus to give back: its window is not at hand.
     pub fn cancel(&mut self, cx: &mut Context<Self>) {
-        let (capture, conflict) = (self.capture.take(), self.conflict.take());
+        let (capture, conflict) = (self.end_capture(cx), self.conflict.take());
         if capture.is_some() || conflict.is_some() {
             cx.notify();
         }
+    }
+
+    fn end_capture(&mut self, cx: &mut Context<Self>) -> Option<Capturing> {
+        let capture = self.capture.take();
+        if capture.is_some() {
+            self.input.update(cx, |input, _| input.end_capture());
+        }
+        capture
     }
 
     /// Binds a cheat's slot as a capture ended; a chord another hotkey holds becomes a question over the slot's cap.
@@ -230,7 +221,7 @@ impl Hotkeys {
                 }
             }
             Step::Done(outcome) => {
-                if let Some(capture) = self.capture.take() {
+                if let Some(capture) = self.end_capture(cx) {
                     let _ = capture.asker.send(outcome);
                 }
             }
@@ -238,47 +229,38 @@ impl Hotkeys {
         cx.notify();
     }
 
-    /// Hooks the live run's hotkeys, or stops them when no run is live or they are off.
+    /// Binds the live run's hotkeys, or none when no run is live or they are off.
     fn arm(&mut self, cx: &mut Context<Self>) {
         self.armed = None;
         cx.notify();
-        let runs = self.runs.read(cx);
-        let (Some(game), Some(pid)) = (runs.live(), runs.pid()) else { return };
-        let Some(sheet) = self.trainers.read(cx).sheet(game).filter(|_| self.store.enabled()) else { return };
-        let mut matcher = Matcher::default();
-        for (index, slots) in sheet.hotkeys.iter().enumerate() {
+        let (tx, mut presses) = mpsc::unbounded();
+        let scope = if self.store.game_only() { Scope::Game } else { Scope::Anywhere };
+        let live = self.runs.read(cx).live().filter(|_| self.store.enabled());
+        let sheet = live.and_then(|game| self.trainers.read(cx).sheet(game));
+        let mut bound = Vec::new();
+        for (index, slots) in sheet.iter().flat_map(|sheet| sheet.hotkeys.iter().enumerate()) {
             for (slot, chord) in slots.iter().enumerate() {
-                if let Some(chord) = chord {
-                    matcher.bind(*chord, Binding { action: (index, slot), block: false });
+                if let Some(chord) = *chord {
+                    let tx = tx.clone();
+                    let press: Action = Arc::new(move || {
+                        let _ = tx.unbounded_send((index, slot));
+                    });
+                    bound.push((Trigger::Chord(chord), scope, press));
                 }
             }
         }
-        let mouse = sheet.hotkeys.iter().flatten().flatten().any(|chord| chord.uses_mouse());
-        // A newer hook sees keys first, so it must not get ahead of a capture.
-        self.capture = None;
-        let (tx, mut presses) = mpsc::unbounded();
-        let game_only = self.store.game_only();
-        let hook = Hook::start(mouse, move |vk, down| {
-            matcher.key(vk, down, |fired| {
-                if let Fired::Press(action) = fired
-                    && (!game_only || keyhook::foreground_pid() == pid)
-                {
-                    let _ = tx.unbounded_send(action);
-                }
-            })
-        });
-        let hook = match hook {
-            Ok(hook) => hook,
-            Err(e) => return log::warn!("hotkeys are off: {e}"),
-        };
+        let armed = sheet.is_some();
+        self.input.update(cx, |input, _| input.bind(Owner::Trainer, bound));
+        if !armed {
+            return;
+        }
         let runs = self.runs.downgrade();
-        let task = cx.spawn(async move |_, cx| {
+        self.armed = Some(cx.spawn(async move |_, cx| {
             while let Some((index, slot)) = presses.next().await {
                 if runs.update(cx, |runs, cx| runs.step(index, slot, cx)).is_err() {
                     break;
                 }
             }
-        });
-        self.armed = Some((hook, task));
+        }));
     }
 }

@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::{Chord, Runner, Text};
+use crate::{Chord, Runner, Target, Text};
 
 /// A trainer's cheat list, as the user sees it, and what running exactly this list takes.
 pub struct Trainer {
@@ -17,11 +17,12 @@ pub struct Trainer {
 
 #[derive(Clone)]
 pub struct Plan {
-    /// Path suffix of the game's executable, `*` allowed; without it the install folder decides.
-    pub image: Option<String>,
-    /// A younger process is still starting.
-    pub minimum_age: Duration,
+    pub target: Target,
     pub launch: Launch,
+    /// What a start of ours passes the game, remote text; a launcher that takes none ignores it.
+    pub launch_arguments: Option<String>,
+    /// How long a start of ours waits for the game, when the trainer says.
+    pub launch_within: Option<Duration>,
     pub runner: Arc<dyn Runner>,
 }
 

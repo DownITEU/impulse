@@ -50,7 +50,7 @@ pub fn install(game: &Game, exe: &Path) -> Option<Installation> {
         return None;
     }
     let location = owners(slice::from_ref(game), exe).pop().map(|(_, dir)| dir).or_else(|| exe.parent().map(Path::to_owned))?;
-    Some(installation(game, Origin::Picked(exe.to_owned()), location))
+    Some(installation(game, Origin::Picked(exe.to_owned()), location, Vec::new()))
 }
 
 #[cfg(test)]

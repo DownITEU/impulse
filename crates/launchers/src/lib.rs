@@ -1,5 +1,6 @@
 //! Installed games, found through each launcher's own records.
 
+mod appinfo;
 mod custom;
 mod ea;
 mod epic;
@@ -12,10 +13,12 @@ mod steam;
 mod store;
 mod ubisoft;
 mod vdf;
+mod version;
 mod xbox;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
+    fs,
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -29,6 +32,14 @@ pub use store::{store_link, store_name};
 struct App {
     store_id: String,
     location: PathBuf,
+    /// The install's other folders its process may run from.
+    alternates: Vec<PathBuf>,
+}
+
+impl App {
+    fn new(store_id: String, location: PathBuf) -> Self {
+        Self { store_id, location, alternates: Vec::new() }
+    }
 }
 
 /// Scans every launcher for `games`, then the executables the user picked (blocking: registry and
@@ -52,20 +63,31 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
         timed("standalone", || standalone::apps(games)),
     ];
     let builds = Instant::now();
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for app in apps.into_iter().flatten() {
-        let Some(id) = StoreId::parse(&app.store_id) else { continue };
-        for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
-            if seen.insert(&game.id) {
-                out.push(installation(game, Origin::Launcher(id.clone()), app.location.clone()));
-            }
-        }
-    }
+    let mut out = launched(games, &by_store_id, apps.into_iter().flatten());
     let by_id: HashMap<&Ref, &Game> = games.iter().map(|game| (&game.id, game)).collect();
     out.extend(custom.iter().filter_map(|picked| custom::install(by_id.get(&picked.game)?, &picked.exe)));
     log::debug!("builds: {} read in {:?}", out.len(), builds.elapsed());
     out
+}
+
+/// One install per game: of its store ids found, the one its record lists first. An install whose version file gives
+/// no build is none: the game is gone or no longer the one the record describes.
+fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: impl Iterator<Item = App>) -> Vec<Installation> {
+    let mut best = HashMap::<&Ref, (usize, Installation)>::new();
+    for app in apps {
+        let Some(id) = StoreId::parse(&app.store_id) else { continue };
+        for game in by_store_id.get(&app.store_id.to_ascii_lowercase()).into_iter().flatten() {
+            let rank = game.store_ids.iter().position(|own| own.as_str().eq_ignore_ascii_case(id.as_str())).unwrap_or(usize::MAX);
+            if best.get(&game.id).is_some_and(|(had, _)| *had <= rank) {
+                continue;
+            }
+            let install = installation(game, Origin::Launcher(id.clone()), app.location.clone(), app.alternates.clone());
+            if install.build.is_some() {
+                best.insert(&game.id, (rank, install));
+            }
+        }
+    }
+    games.iter().filter_map(|game| Some(best.remove(&game.id)?.1)).collect()
 }
 
 /// One launcher's records, timed: a slow disk or a scanning antivirus shows in the log.
@@ -76,10 +98,28 @@ fn timed(launcher: &str, apps: impl FnOnce() -> Vec<App>) -> Vec<App> {
     apps
 }
 
-/// The build is the PE TimeDateStamp of the game's `exe` in the install.
-fn installation(game: &Game, origin: Origin, location: PathBuf) -> Installation {
-    let build = game.exe.as_deref().and_then(|exe| pe::header(&location.join(exe))).map(|header| header.timestamp);
-    Installation { game: game.id.clone(), origin, location, build }
+/// The build is the stamp of the game's version file in the install (`version::build`). The location's final path is one
+/// of its folders too, for the process search: a library behind a junction, a package on a mount.
+fn installation(game: &Game, origin: Origin, location: PathBuf, mut alternates: Vec<PathBuf>) -> Installation {
+    let package = origin.store_id().filter(|id| id.store() == "uwp");
+    let build = game.exe.as_deref().and_then(|exe| version::build(&location, exe, package.is_some()));
+    let app = package.and_then(|id| game.package_apps.iter().find(|(of, _)| of.as_str().eq_ignore_ascii_case(id.as_str())));
+    let app = app.map(|(_, app)| app.clone());
+    let resolved = final_path(&location).filter(|resolved| !same_path(resolved, &location));
+    if let Some(resolved) = resolved.filter(|resolved| !alternates.iter().any(|had| same_path(had, resolved))) {
+        alternates.insert(0, resolved);
+    }
+    Installation { game: game.id.clone(), origin, location, alternates, build, app }
+}
+
+/// The path once links resolve, written as a process's image path is (blocking).
+fn final_path(path: &Path) -> Option<PathBuf> {
+    let resolved = fs::canonicalize(path).ok()?;
+    let text = resolved.to_str()?;
+    Some(match text.strip_prefix(r"\\?\UNC\") {
+        Some(share) => format!(r"\\{share}").into(),
+        None => text.strip_prefix(r"\\?\").unwrap_or(text).into(),
+    })
 }
 
 /// The launcher's name and the URI of the game's page in it, for the stores that have one.
@@ -120,11 +160,66 @@ pub(crate) mod tests {
             exe: exe.map(str::to_owned),
             purchase: Vec::new(),
             standalone: Vec::new(),
+            package_apps: Vec::new(),
             cover: None,
             thumbnail: None,
             maps: Vec::new(),
             trainer: None,
         }
+    }
+
+    #[test]
+    fn a_game_found_by_several_launchers_takes_the_store_its_record_lists_first() {
+        let base = std::env::temp_dir().join(format!("impulse-launched-{}", std::process::id()));
+        // An archive as the version file: its first entry date is the build.
+        for store in ["steam_5", "steam_6", "gog_7", "gog_8"] {
+            fs::create_dir_all(base.join(store)).unwrap();
+            fs::write(base.join(store).join("v.jar"), b"PK\x03\x04\0\0\0\0\0\0\0\0\x84\x52").unwrap();
+        }
+        fs::create_dir_all(base.join("steam_9")).unwrap();
+        let versioned = |id, ids| game(id, Some("v.jar"), ids);
+        let games = [
+            versioned("1", &["gog:7", "steam:5"]),
+            versioned("2", &["steam:6"]),
+            // No build where its record lists first: the other store's install is the one.
+            versioned("3", &["steam:9", "gog:8"]),
+            game("4", None, &["steam:5"]),
+        ];
+        let mut by_store_id = HashMap::<String, Vec<&Game>>::new();
+        for game in &games {
+            for id in &game.store_ids {
+                by_store_id.entry(id.as_str().to_owned()).or_default().push(game);
+            }
+        }
+        let app = |id: &str| App::new(id.into(), base.join(id.replace(':', "_")));
+        let apps = ["steam:5", "steam:6", "gog:7", "steam:9", "gog:8"].map(app);
+        let installs = launched(&games, &by_store_id, apps.into_iter());
+        let found: Vec<_> = installs.iter().map(|install| (install.game.id(), install.origin.store_id().unwrap().as_str())).collect();
+        assert_eq!(found, [("1", "gog:7"), ("2", "steam:6"), ("3", "gog:8")], "a game without a version file is not installed");
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_location_behind_a_junction_also_counts_as_its_final_path() {
+        let base = std::env::temp_dir().join(format!("impulse-junction-{}", std::process::id()));
+        let (real, link) = (base.join("real"), base.join("link"));
+        fs::create_dir_all(&real).unwrap();
+        let made = std::process::Command::new("cmd").args(["/c", "mklink", "/J"]).arg(&link).arg(&real).output().unwrap();
+        assert!(made.status.success(), "{made:?}");
+
+        let install = installation(&game("1", None, &[]), Origin::Picked(link.join("g.exe")), link.clone(), Vec::new());
+        let final_real = final_path(&real).unwrap();
+        assert!(!final_real.to_string_lossy().starts_with(r"\\?\"), "{final_real:?}");
+        assert!(install.alternates.iter().any(|folder| same_path(folder, &final_real)), "{:?}", install.alternates);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_package_takes_the_application_its_game_names_for_it() {
+        let mut halo = game("1", None, &["uwp:Halo_8w", "uwp:Other_8w"]);
+        halo.package_apps = vec![(StoreId::parse("uwp:Halo_8w").unwrap(), "NoEAC".into())];
+        let install = |id: &str| installation(&halo, Origin::Launcher(StoreId::parse(id).unwrap()), "C:\\nowhere".into(), Vec::new()).app;
+        assert_eq!((install("uwp:halo_8w").as_deref(), install("uwp:Other_8w")), (Some("NoEAC"), None));
     }
 
     #[test]

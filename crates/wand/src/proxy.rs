@@ -74,7 +74,7 @@ fn inside(field: &str, path: &str, exe: bool) -> Result<String, String> {
     plain.ok_or_else(|| format!("launch.proxy.{field} '{path}' is not a file in the game's folder"))
 }
 
-/// The stand-in in place of the launcher; dropping it puts the launcher back, as Wand's service does. Blocks.
+/// The stand-in in place of the launcher; dropping it puts the launcher back. Blocks.
 pub struct Mounted {
     launcher: PathBuf,
     _lease: Lease,

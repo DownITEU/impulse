@@ -12,7 +12,6 @@ agent.workspace = true
 disk.workspace = true
 fetch.workspace = true
 model.workspace = true
-pe.workspace = true
 
 anyhow.workspace = true
 blocking.workspace = true
@@ -33,7 +32,15 @@ url.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 webview2-com.workspace = true
 windows.workspace = true
-windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
 wry.workspace = true
 
 [dev-dependencies]
