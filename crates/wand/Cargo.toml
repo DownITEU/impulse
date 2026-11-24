@@ -12,7 +12,6 @@ agent.workspace = true
 disk.workspace = true
 fetch.workspace = true
 model.workspace = true
-pe.workspace = true
 
 anyhow.workspace = true
 blocking.workspace = true

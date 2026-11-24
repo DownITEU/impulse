@@ -21,8 +21,8 @@ use windows_sys::Win32::{
         ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_32BIT, LIST_MODULES_ALL},
         SystemInformation::GetSystemWow64DirectoryW,
         Threading::{
-            CreateRemoteThread, IsWow64Process, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION,
-            PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
+            CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ,
+            PROCESS_VM_WRITE, WaitForSingleObject,
         },
     },
 };
@@ -67,10 +67,7 @@ pub fn map(target: &Process, image: &Image) -> Result<()> {
 fn load_image(process: &Handle, target: &Process, image: &Image) -> Result<usize> {
     let pid = target.pid;
     process::verify(process, target)?;
-    let mut wow = 0;
-    // SAFETY: `process` is a live handle and `wow` outlives the call.
-    ensure!(unsafe { IsWow64Process(process.0, &mut wow) } != 0, "cannot query process {pid}: {}", io::Error::last_os_error());
-    let wow64 = wow != 0;
+    let wow64 = process::wow64(process, pid)?;
     if wow64 == image.x64() {
         let (game, dll) = if wow64 { ("32-bit", "x64") } else { ("64-bit", "x86") };
         let error = anyhow!("process {pid} is {game}, {} is {dll}", image.path().display());

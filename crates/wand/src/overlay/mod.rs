@@ -34,8 +34,7 @@ pub fn enter(data_dir: &Path, folder: &Setting, game: &Ref, process: &Process) -
         Some(false) => return Err(anyhow!("the overlay failed to enter process {} before", process.pid).context(unsupported())),
         None => {
             let install = folder.install().context("Wand's folder is not set").context(Failure::new(FailureKind::SetupNeeded))?;
-            let header = pe::header(&process.path).with_context(|| format!("{} is not a PE image", process.path.display()))?;
-            let image = Image::open(&install.overlay(header.machine == pe::X64), PUBLISHERS)?;
+            let image = Image::open(&install.overlay(agent::x64(process)?), PUBLISHERS)?;
             host::record(process, Load::Running);
             if let Err(e) = agent::map(process, &image) {
                 host::record(process, Load::Failed);

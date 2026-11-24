@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail, ensure};
 use blocking::unblock;
 use model::{Failure, FailureKind, Process, Rule};
 use windows_sys::Win32::{
@@ -15,7 +15,7 @@ use windows_sys::Win32::{
     System::{
         ProcessStatus::{EnumProcesses, GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
         SystemInformation::GetSystemTimeAsFileTime,
-        Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW},
+        Threading::{GetProcessTimes, IsWow64Process, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW},
     },
 };
 
@@ -102,6 +102,24 @@ fn running() -> Result<Vec<Candidate>> {
 /// The process `pid` is now, if it can be looked at (blocking).
 pub fn of(pid: u32) -> Option<Process> {
     candidate(pid).map(|candidate| candidate.process)
+}
+
+/// Whether `target` is a 64-bit process, asked of the process: its exe may be unreadable (a GDK game's).
+pub fn x64(target: &Process) -> Result<bool> {
+    // SAFETY: plain Win32 call; the handle is owned by the guard.
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, target.pid) };
+    ensure!(!handle.is_null(), "cannot open process {}: {}", target.pid, io::Error::last_os_error());
+    let process = Handle(handle);
+    verify(&process, target)?;
+    Ok(!wow64(&process, target.pid)?)
+}
+
+/// A 32-bit process on 64-bit Windows.
+pub(crate) fn wow64(process: &Handle, pid: u32) -> Result<bool> {
+    let mut wow = 0;
+    // SAFETY: `process` is a live handle and `wow` outlives the call.
+    ensure!(unsafe { IsWow64Process(process.0, &mut wow) } != 0, "cannot query process {pid}: {}", io::Error::last_os_error());
+    Ok(wow != 0)
 }
 
 fn candidate(pid: u32) -> Option<Candidate> {
@@ -197,6 +215,11 @@ mod tests {
         assert!(verify(&ours, &reused).unwrap_err().to_string().contains("reused"));
         let other = Process { path: PathBuf::from(r"C:\elsewhere\other.exe"), ..found };
         assert!(verify(&ours, &other).is_err());
+    }
+
+    #[test]
+    fn this_process_is_told_64_bit() {
+        assert!(x64(&of(std::process::id()).unwrap()).unwrap());
     }
 
     #[test]

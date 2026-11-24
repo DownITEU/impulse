@@ -8368,7 +8368,6 @@ dependencies = [
  "http",
  "log",
  "model",
- "pe",
  "rusty-leveldb",
  "serde",
  "serde_json",
