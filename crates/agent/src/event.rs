@@ -2,9 +2,9 @@
 
 use std::{ffi::OsStr, io, os::windows::ffi::OsStrExt, time::Duration};
 
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 use windows_sys::Win32::{
-    Foundation::WAIT_OBJECT_0,
+    Foundation::{ERROR_FILE_NOT_FOUND, WAIT_OBJECT_0, WAIT_TIMEOUT},
     System::Threading::{OpenEventW, SYNCHRONIZATION_SYNCHRONIZE, WaitForSingleObject},
 };
 
@@ -17,15 +17,19 @@ pub fn signaled(name: &str, within: Duration) -> Result<bool> {
     // SAFETY: the name is NUL-terminated and outlives the call.
     let handle = unsafe { OpenEventW(SYNCHRONIZATION_SYNCHRONIZE, 0, wide.as_ptr()) };
     if handle.is_null() {
+        let error = io::Error::last_os_error();
+        // Held but denied to us is not absent.
+        ensure!(error.raw_os_error() == Some(ERROR_FILE_NOT_FOUND as i32), "cannot open {name}: {error}");
         return Ok(false);
     }
     let event = Handle(handle);
     let ms = u32::try_from(within.as_millis()).unwrap_or(u32::MAX - 1);
     // SAFETY: the guard holds a live event handle.
-    if unsafe { WaitForSingleObject(event.0, ms) } != WAIT_OBJECT_0 {
-        bail!("{name} was not set in {within:?}: {}", io::Error::last_os_error());
+    match unsafe { WaitForSingleObject(event.0, ms) } {
+        WAIT_OBJECT_0 => Ok(true),
+        WAIT_TIMEOUT => bail!("{name} was not set in {within:?}"),
+        _ => bail!("cannot wait for {name}: {}", io::Error::last_os_error()),
     }
-    Ok(true)
 }
 
 #[cfg(test)]

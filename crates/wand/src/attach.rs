@@ -50,16 +50,18 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
         .await?
     };
 
+    // A trainer stopped a moment ago may still be tearing its service down in this process. Apart from the
+    // injection: a run dropped while it waits injects nothing.
+    let torn_down = format!(r"Local\TophatService_TeardownComplete_{}", game.process.pid);
+    if let Err(e) = unblock(move || agent::signaled(&torn_down, TEARDOWN_WITHIN)).await {
+        log::warn!("{e:#}");
+    }
+
     let client_id = Uuid::new_v4().to_string();
     // Before the injection: the service dials in as soon as it starts.
     let waiting = server.expect(&client_id);
     let (target, port, id) = (game.process.clone(), server.port, client_id.clone());
     unblock(move || {
-        // A trainer stopped a moment ago may still be tearing its service down in this process.
-        let torn_down = format!(r"Local\TophatService_TeardownComplete_{}", target.pid);
-        if let Err(e) = agent::signaled(&torn_down, TEARDOWN_WITHIN) {
-            log::warn!("{e:#}");
-        }
         let startup = Startup { wand_port: port, client_id: &id, trainer_session_id: &Uuid::new_v4().to_string() };
         inject::tophat(&target, &service, &startup)
     })

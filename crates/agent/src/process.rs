@@ -31,53 +31,41 @@ struct Candidate {
     working_set: usize,
 }
 
-/// The matching process with the most memory, once it is old enough (blocking).
-fn find(rule: &Rule) -> Result<Option<Process>> {
-    Ok(pick(running()?, rule))
-}
-
-// Ranked before the age, as Wand does: a small old helper in the game's folder is not the game still starting up.
-fn pick(candidates: Vec<Candidate>, rule: &Rule) -> Option<Process> {
-    biggest(candidates, rule).filter(|candidate| candidate.age >= rule.minimum_age).map(|candidate| candidate.process)
-}
-
-fn biggest(candidates: Vec<Candidate>, rule: &Rule) -> Option<Candidate> {
-    candidates.into_iter().filter(|candidate| rule.matches(&candidate.process.path)).max_by_key(|candidate| candidate.working_set)
-}
-
-/// What `find` takes from the processes running now, waited for while it is younger than `minimum_age`; `None` once
-/// nothing matches. Dropping the future stops it within one poll.
+/// The matching process with the most memory, waited for while it is younger than `minimum_age`; `None` once nothing
+/// matches. Dropping the future stops it within one poll.
 pub async fn settled(rule: &Rule) -> Result<Option<Process>> {
-    loop {
-        let found = {
-            let rule = rule.clone();
-            unblock(move || running().map(|candidates| biggest(candidates, &rule))).await?
-        };
-        match found {
-            Some(candidate) if candidate.age < rule.minimum_age => unblock(|| thread::sleep(POLL)).await,
-            found => return Ok(found.map(|candidate| candidate.process)),
-        }
-    }
+    poll(rule, None).await
 }
 
-/// Polls until `find` finds a process. Dropping the future stops it within one poll.
+/// Polls until that process is old enough. Dropping the future stops it within one poll.
 pub async fn wait(rule: &Rule, timeout: Duration) -> Result<Process> {
+    let found = poll(rule, Some(timeout)).await?;
+    found.ok_or_else(|| anyhow!("the game did not start in {} s", timeout.as_secs()).context(Failure::new(FailureKind::GameNotFound)))
+}
+
+/// `None`: past `within`; without one, as soon as nothing matches.
+async fn poll(rule: &Rule, within: Option<Duration>) -> Result<Option<Process>> {
     let mut waited = Duration::ZERO;
     loop {
         let found = {
             let rule = rule.clone();
-            unblock(move || find(&rule)).await?
+            unblock(move || running().map(|candidates| pick(candidates, &rule))).await?
         };
-        if let Some(process) = found {
-            return Ok(process);
-        }
-        if waited >= timeout {
-            return Err(anyhow!("the game did not start in {} s", timeout.as_secs()).context(Failure::new(FailureKind::GameNotFound)));
+        match found {
+            Some(candidate) if candidate.age >= rule.minimum_age => return Ok(Some(candidate.process)),
+            None if within.is_none() => return Ok(None),
+            _ if within.is_some_and(|within| waited >= within) => return Ok(None),
+            _ => {}
         }
         // A blocking-pool sleep: the caller's executor may have no timer.
         unblock(|| thread::sleep(POLL)).await;
         waited += POLL;
     }
+}
+
+// Ranked before the age is checked, as Wand does: a small old helper in the game's folder is not the game starting up.
+fn pick(candidates: Vec<Candidate>, rule: &Rule) -> Option<Candidate> {
+    candidates.into_iter().filter(|candidate| rule.matches(&candidate.process.path)).max_by_key(|candidate| candidate.working_set)
 }
 
 /// Every process we may look at (blocking). Protected ones are skipped.
@@ -196,13 +184,10 @@ mod tests {
     }
 
     #[test]
-    fn the_biggest_match_is_picked_once_old_enough() {
+    fn the_biggest_match_is_the_game_even_while_it_starts_up() {
         let rule = Rule { image: None, location: PathBuf::from(r"C:\g"), minimum_age: Duration::from_secs(8) };
-        let all = |game_age| {
-            vec![candidate(r"C:\g\helper.exe", 30, 100), candidate(r"C:\g\g.exe", game_age, 5000), candidate(r"C:\other\o.exe", 30, 9000)]
-        };
-        assert_eq!(pick(all(30), &rule), Some(all(30).swap_remove(1).process));
-        assert_eq!(pick(all(2), &rule), None, "the game is still starting up: not its old helper");
+        let all = vec![candidate(r"C:\g\helper.exe", 30, 100), candidate(r"C:\g\g.exe", 2, 5000), candidate(r"C:\other\o.exe", 30, 9000)];
+        assert_eq!(pick(all, &rule).unwrap().process.path, PathBuf::from(r"C:\g\g.exe"), "not its old helper");
     }
 
     #[test]

@@ -50,6 +50,7 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
     // A game the run must start counts at any age: one started a moment ago runs all the same.
     let minimum_age = if required { Duration::ZERO } else { request.rule.minimum_age };
     // Still starting up, it is waited for, never started a second time.
+    stage(Stage::WaitingForGame);
     let running = agent::settled(&Rule { minimum_age, ..request.rule.clone() }).await?;
     // Held until the run ends, whatever the outcome.
     let mut _ready = None;
