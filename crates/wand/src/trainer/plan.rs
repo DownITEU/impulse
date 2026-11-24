@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, time::Duration};
 
-use model::Launch;
+use model::{Launch, Pick, Target};
 use serde_json::Value;
 
 use super::Trainer;
@@ -27,10 +27,12 @@ pub struct Plan {
     pub variables: Vec<String>,
     /// `Err` says why this trainer cannot run here.
     pub binary: Result<Binary, String>,
-    /// Path suffix of the game's executable, `*` allowed. Without it the install folder decides.
-    pub image: Option<String>,
-    pub minimum_age: Duration,
+    pub target: Target,
     pub launch: Launch,
+    /// `launch.cliArgs`: what a start passes the game.
+    pub launch_arguments: Option<String>,
+    /// `target.timeout`: the wait for the game after a start.
+    pub launch_within: Option<Duration>,
     /// The stand-in for the game's launcher at a start; `Err` says why the trainer cannot run.
     pub proxy: Result<Option<Proxy>, String>,
     pub activate: Activate,
@@ -65,24 +67,35 @@ impl Activate {
 impl Trainer {
     pub fn plan(&self) -> Plan {
         let config = &self.blueprint.config;
-        let launch = &config["launch"];
+        let (launch, target) = (&config["launch"], &config["target"]);
         let proxy = Proxy::parse(launch);
-        for unread in ["bypass", "cliArgs"].into_iter().filter(|field| !launch[field].is_null()) {
-            log::debug!("launch.{unread} is not supported");
+        if !launch["bypass"].is_null() {
+            log::debug!("launch.bypass is not supported");
         }
         // A proxy's game is the process to look for, never its launcher.
-        let image = config["target"]["image"].as_str().map(str::to_owned);
+        let image = target["image"].as_str().map(str::to_owned);
         let image = image.or_else(|| proxy.as_ref().ok().and_then(Option::as_ref).map(Proxy::game));
         Plan {
             variables: self.variables(),
             binary: self.binary(),
-            image,
-            minimum_age: config["target"]["minimumAge"].as_u64().map_or(MINIMUM_AGE, Duration::from_millis),
+            target: Target {
+                image,
+                minimum_age: target["minimumAge"].as_u64().map_or(MINIMUM_AGE, Duration::from_millis),
+                // 1 oldest, 2 newest, anything else the most memory; JS compares the number, `1.0` too.
+                pick: match target["reducer"].as_f64() {
+                    Some(1.0) => Pick::Oldest,
+                    Some(2.0) => Pick::Newest,
+                    _ => Pick::Biggest,
+                },
+                arguments: target["cliArgs"].as_str().map(str::to_owned),
+            },
             launch: match launch {
                 Value::Bool(false) => Launch::User,
                 _ if launch["required"] == Value::Bool(true) => Launch::Required,
                 _ => Launch::Start,
             },
+            launch_arguments: launch["cliArgs"].as_str().filter(|args| !args.is_empty()).map(str::to_owned),
+            launch_within: target["timeout"].as_u64().map(Duration::from_millis),
             proxy,
             activate: Activate(config["activate"]["flags"].as_u64().unwrap_or(0)),
         }
@@ -135,22 +148,33 @@ mod tests {
 
     #[test]
     fn reads_what_wand_reads() {
-        let plan = trainer(r#", "config": {"target": {"image": "enshrouded.exe", "minimumAge": 3000}}"#).plan();
+        let config = r#", "config": {"target": {"image": "enshrouded.exe", "minimumAge": 3000, "reducer": 1, "cliArgs": "-server",
+            "timeout": 90000}, "launch": {"cliArgs": "-dx11"}}"#;
+        let plan = trainer(config).plan();
         assert_eq!(plan.variables, ["infinite_health", "set_game_speed", "wm_event_a_rather_long_event_ke"]);
         assert_eq!(plan.binary, Ok(Binary { url: "https://cdn.example/bin/1".into(), hash: HASH.into() }));
-        assert_eq!(plan.image.as_deref(), Some("enshrouded.exe"));
-        assert_eq!(plan.minimum_age, Duration::from_secs(3));
+        let target = Target {
+            image: Some("enshrouded.exe".into()),
+            minimum_age: Duration::from_secs(3),
+            pick: Pick::Oldest,
+            arguments: Some("-server".into()),
+        };
+        assert_eq!(plan.target, target);
+        assert_eq!((plan.launch_arguments.as_deref(), plan.launch_within), (Some("-dx11"), Some(Duration::from_secs(90))));
         assert_eq!((plan.launch, plan.proxy), (Launch::Start, Ok(None)));
+        let pick = |reducer: &str| trainer(&format!(r#", "config": {{"target": {{"reducer": {reducer}}}}}"#)).plan().target.pick;
+        let picks = [pick("2"), pick("1.0"), pick("2e0"), pick("0"), pick(r#""1""#), pick("7")];
+        assert_eq!(picks, [Pick::Newest, Pick::Oldest, Pick::Newest, Pick::Biggest, Pick::Biggest, Pick::Biggest]);
     }
 
     #[test]
     fn defaults_when_the_config_is_empty_or_odd() {
         for extra in ["", r#", "config": {"launch": false, "target": {"image": ["x"]}}"#, r#", "config": 7"#] {
             let plan = trainer(extra).plan();
-            assert_eq!(plan.image, None, "{extra}");
-            assert_eq!(plan.minimum_age, MINIMUM_AGE, "{extra}");
+            assert_eq!(plan.target, Target { image: None, minimum_age: MINIMUM_AGE, pick: Pick::Biggest, arguments: None }, "{extra}");
             let launch = if extra.contains("false") { Launch::User } else { Launch::Start };
             assert_eq!((plan.launch, plan.proxy), (launch, Ok(None)), "{extra}");
+            assert_eq!((plan.launch_arguments, plan.launch_within), (None, None), "{extra}");
         }
     }
 
@@ -160,7 +184,7 @@ mod tests {
             "launcher": "start_protected_game.exe"}, "required": true}}"#;
         let plan = trainer(ace_combat).plan();
         assert_eq!(
-            (plan.image.as_deref(), plan.launch, plan.activate),
+            (plan.target.image.as_deref(), plan.launch, plan.activate),
             (Some(r"Game\Binaries\Win64\AceCombat8.exe"), Launch::Required, Activate(0))
         );
         assert!(matches!(plan.proxy, Ok(Some(_))));
@@ -168,11 +192,11 @@ mod tests {
         let elden_ring = r#", "config": {"launch": {"proxy": {"gameExe": "eldenring.exe", "launcher": "Game\\start_protected_game.exe"}},
             "target": {"image": "Game\\eldenring.exe"}, "activate": {"flags": 16}}"#;
         let plan = trainer(elden_ring).plan();
-        assert_eq!((plan.image.as_deref(), plan.launch, plan.activate), (Some(r"Game\eldenring.exe"), Launch::Start, Activate(16)));
+        assert_eq!((plan.target.image.as_deref(), plan.launch, plan.activate), (Some(r"Game\eldenring.exe"), Launch::Start, Activate(16)));
 
         let escaping = r#", "config": {"launch": {"proxy": {"gameExe": "..\\..\\x.exe", "launcher": "start_protected_game.exe"}}}"#;
         let plan = trainer(escaping).plan();
-        assert_eq!(plan.image, None);
+        assert_eq!(plan.target.image, None);
         assert!(plan.proxy.unwrap_err().contains("gameExe"));
     }
 

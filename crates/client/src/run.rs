@@ -19,6 +19,9 @@ pub struct Request {
     pub origin: Origin,
     pub rule: Rule,
     pub launch: Launch,
+    /// The trainer's, for a start of ours.
+    pub launch_arguments: Option<String>,
+    pub launch_within: Option<Duration>,
     pub build: Option<u32>,
     pub app: Option<String>,
 }
@@ -35,13 +38,10 @@ pub fn request(install: &Installation, plan: &Plan) -> Request {
     Request {
         runner: plan.runner.clone(),
         origin: install.origin.clone(),
-        rule: Rule {
-            image: plan.image.clone(),
-            location: install.location.clone(),
-            alternates: install.alternates.clone(),
-            minimum_age: plan.minimum_age,
-        },
+        rule: Rule { target: plan.target.clone(), location: install.location.clone(), alternates: install.alternates.clone() },
         launch: plan.launch,
+        launch_arguments: plan.launch_arguments.clone(),
+        launch_within: plan.launch_within,
         build: install.build,
         app: install.app.clone(),
     }
@@ -54,11 +54,14 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
     let prepared = request.runner.prepare().await?;
 
     let required = request.launch == Launch::Required;
+    let mut running_now = request.rule.clone();
     // A game the run must start counts at any age: one started a moment ago runs all the same.
-    let minimum_age = if required { Duration::ZERO } else { request.rule.minimum_age };
+    if required {
+        running_now.target.minimum_age = Duration::ZERO;
+    }
     // Still starting up, it is waited for, never started a second time.
     stage(Stage::WaitingForGame);
-    let running = agent::settled(&Rule { minimum_age, ..request.rule.clone() }).await?;
+    let running = agent::settled(&running_now).await?;
     // Held until the run ends, whatever the outcome.
     let mut _ready = None;
     let process = match running {
@@ -70,10 +73,11 @@ pub async fn start(request: Request, mut stage: impl FnMut(Stage)) -> Result<(Pr
                 _ready = prepared.before_start(&request.origin, &request.rule.location).await?;
                 stage(Stage::Launching);
                 let (origin, location, app) = (request.origin.clone(), request.rule.location.clone(), request.app.clone());
-                started = unblock(move || launchers::start(&origin, &location, app.as_deref())).await?;
+                let arguments = request.launch_arguments.clone();
+                started = unblock(move || launchers::start(&origin, &location, app.as_deref(), arguments.as_deref())).await?;
             }
             stage(Stage::WaitingForGame);
-            let within = if started { LAUNCHED_WITHIN } else { STARTED_BY_USER_WITHIN };
+            let within = if started { request.launch_within.unwrap_or(LAUNCHED_WITHIN) } else { STARTED_BY_USER_WITHIN };
             agent::wait(&request.rule, within).await?
         }
     };
@@ -105,7 +109,7 @@ mod tests {
     };
 
     use futures::{FutureExt, executor::block_on, future::BoxFuture};
-    use model::Attach;
+    use model::{Attach, Pick, Target};
 
     use super::*;
 
@@ -138,16 +142,21 @@ mod tests {
         }
     }
 
+    /// A run of this test process as the game, younger than `minimum_age` counts as starting up.
+    fn of_me(probe: &Arc<Probe>, origin: Origin, launch: Launch, minimum_age: Duration) -> Request {
+        let me = std::env::current_exe().unwrap();
+        let image = Some(me.file_name().unwrap().to_string_lossy().into_owned());
+        let target = Target { image, minimum_age, pick: Pick::Biggest, arguments: None };
+        let rule = Rule { target, location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new() };
+        let runner = Arc::new(Prepare(probe.clone()));
+        Request { runner, origin, rule, launch, launch_arguments: None, launch_within: None, build: None, app: None }
+    }
+
     #[test]
     fn a_running_game_is_refused_untouched_when_the_run_must_start_it() {
         let probe = Arc::new(Probe::default());
         let me = std::env::current_exe().unwrap();
-        let image = me.file_name().unwrap().to_string_lossy().into_owned();
-        let request = |launch, minimum_age| {
-            let rule =
-                Rule { image: Some(image.clone()), location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new(), minimum_age };
-            Request { runner: Arc::new(Prepare(probe.clone())), origin: Origin::Picked(me.clone()), rule, launch, build: None, app: None }
-        };
+        let request = |launch, minimum_age| of_me(&probe, Origin::Picked(me.clone()), launch, minimum_age);
 
         // Younger than the rule's age, and still refused.
         let refused = block_on(start(request(Launch::Required, Duration::from_secs(3600)), |_| {})).err().unwrap();
@@ -162,13 +171,9 @@ mod tests {
     #[test]
     fn a_game_still_starting_up_is_waited_for_not_started_again() {
         let probe = Arc::new(Probe::default());
-        let me = std::env::current_exe().unwrap();
-        let image = Some(me.file_name().unwrap().to_string_lossy().into_owned());
         // Longer than the tests have run: a start would ready the install first. No launcher starts that store.
-        let rule =
-            Rule { image, location: PathBuf::from(me.parent().unwrap()), alternates: Vec::new(), minimum_age: Duration::from_secs(3) };
         let origin = Origin::Launcher(model::StoreId::parse("itch:0").unwrap());
-        let request = Request { runner: Arc::new(Prepare(probe.clone())), origin, rule, launch: Launch::Start, build: None, app: None };
+        let request = of_me(&probe, origin, Launch::Start, Duration::from_secs(3));
 
         let attached = block_on(start(request, |_| {})).err().unwrap();
         assert_eq!(attached.kind, FailureKind::Refused);

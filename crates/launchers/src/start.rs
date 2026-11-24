@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use model::{Failure, FailureKind, Origin};
 use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
@@ -26,10 +27,11 @@ struct Command {
 }
 
 /// Starts the game through its launcher, or the executable the user picked in its own folder (blocking). `app`: the
-/// package application to open (`Installation::app`), else the manifest's first.
+/// package application to open (`Installation::app`), else the manifest's first. `arguments`: the trainer's for the
+/// game, remote text, for the launchers that pass any on.
 /// `false`: its launcher is not here or cannot start it (EA, a standalone game), so the user starts the game and the run waits.
-pub fn start(origin: &Origin, location: &Path, app: Option<&str>) -> Result<bool> {
-    let Some(command) = command(origin, location, app, launcher)? else {
+pub fn start(origin: &Origin, location: &Path, app: Option<&str>, arguments: Option<&str>) -> Result<bool> {
+    let Some(command) = command(origin, location, app, arguments, launcher)? else {
         return Ok(false);
     };
     let opened = open(&command);
@@ -53,9 +55,18 @@ fn launcher(store: &str) -> Option<PathBuf> {
 
 /// Ids come from local records, the folders from the launchers' registry: each is checked to be plain before it reaches
 /// a URI or an argument. `launcher` is a store's launcher folder, when it is installed.
-fn command(origin: &Origin, location: &Path, app: Option<&str>, launcher: impl Fn(&str) -> Option<PathBuf>) -> Result<Option<Command>> {
+fn command(
+    origin: &Origin,
+    location: &Path,
+    app: Option<&str>,
+    arguments: Option<&str>,
+    launcher: impl Fn(&str) -> Option<PathBuf>,
+) -> Result<Option<Command>> {
     let id = match origin {
-        Origin::Picked(exe) => return Ok(Some(Command { target: exe.into(), params: None, dir: exe.parent().map(Path::to_owned) })),
+        Origin::Picked(exe) => {
+            let params = arguments.map(passed).transpose()?.map(str::to_owned);
+            return Ok(Some(Command { target: exe.into(), params, dir: exe.parent().map(Path::to_owned) }));
+        }
         Origin::Launcher(id) => id,
     };
     let uri = |uri: String| Some(Command { target: uri.into(), params: None, dir: None });
@@ -70,10 +81,19 @@ fn command(origin: &Origin, location: &Path, app: Option<&str>, launcher: impl F
         // The id comes from a remote catalog: only a number reaches the URI.
         "steam" => {
             let app = id.steam_app().with_context(|| format!("unexpected Steam app id '{}'", id.id()))?;
-            // As Wand: the game's launch option without its anti-cheat, when Steam lists one.
-            match launcher("steam").and_then(|steam| appinfo::anti_cheat_off(&steam, app)) {
-                Some(kind) => uri(format!("steam://launch/{app}/{kind}")),
-                None => uri(format!("steam://rungameid/{app}")),
+            // The launch option without anti-cheat, when Steam lists one, wins over the trainer's arguments.
+            match (dir.as_ref().and_then(|steam| appinfo::anti_cheat_off(steam, app)), arguments) {
+                (Some(kind), _) => uri(format!("steam://launch/{app}/{kind}")),
+                (None, None) => uri(format!("steam://rungameid/{app}")),
+                (None, Some(arguments)) if arguments.starts_with(['-', '/']) => {
+                    let arguments = passed(arguments)?;
+                    dir.map(|dir| run(dir, steam::CLIENT, format!("-applaunch {app} {arguments}")))
+                }
+                // Else they go in Steam's route as a launch type: only a plain word does.
+                (None, Some(kind)) => {
+                    ensure!(plain(kind, b""), "unexpected Steam start arguments");
+                    uri(format!("steam://launch/{app}/{kind}"))
+                }
             }
         }
         "epic" => uri(format!("com.epicgames.launcher://apps/{}?action=launch&silent=true", percent(id.id()))),
@@ -86,7 +106,15 @@ fn command(origin: &Origin, location: &Path, app: Option<&str>, launcher: impl F
         }
         "uplay" => {
             let game = plain_id(b"")?;
-            launcher("uplay").map(|dir| run(dir, ubisoft::LAUNCHER, format!("-upc_uplay_id {game}")))
+            let encoded = match arguments {
+                // Like JS `btoa`: a byte per character, Latin-1 only.
+                Some(arguments) => {
+                    let bytes: Option<Vec<u8>> = arguments.chars().map(|c| u8::try_from(c).ok()).collect();
+                    format!(" -upc_arguments {}", STANDARD.encode(bytes.context("unexpected Ubisoft start arguments")?))
+                }
+                None => String::new(),
+            };
+            dir.map(|dir| run(dir, ubisoft::LAUNCHER, format!("-upc_uplay_id {game}{encoded}")))
         }
         "rockstar" => {
             let game = plain_id(b"_")?;
@@ -112,7 +140,12 @@ fn app_id(manifest: &str) -> Option<&str> {
     plain(id, b".").then_some(id)
 }
 
-/// Letters and digits, and `extra`.
+/// The trainer's arguments as they reach a command line: remote text, so no control character.
+fn passed(arguments: &str) -> Result<&str> {
+    ensure!(!arguments.contains(char::is_control), "unexpected start arguments");
+    Ok(arguments)
+}
+
 fn plain(value: &str, extra: &[u8]) -> bool {
     !value.is_empty() && value.bytes().all(|b| b.is_ascii_alphanumeric() || extra.contains(&b))
 }
@@ -142,6 +175,8 @@ fn open(command: &Command) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use model::StoreId;
 
     use super::*;
@@ -153,7 +188,13 @@ mod tests {
     fn command_with(id: &str, location: &str, app: Option<&str>) -> Result<Option<Command>> {
         // Steam's folder would be read for its app cache.
         let installed = |store: &str| (!["rockstar", "steam"].contains(&store)).then(|| PathBuf::from(format!(r"C:\{store}")));
-        command(&Origin::Launcher(StoreId::parse(id).unwrap()), Path::new(location), app, installed)
+        command(&Origin::Launcher(StoreId::parse(id).unwrap()), Path::new(location), app, None, installed)
+    }
+
+    /// With the trainer's `arguments`; every launcher is in a folder of its name that does not exist (no Steam cache).
+    fn passing(id: &str, arguments: &str) -> Result<Option<Command>> {
+        let nowhere = |store: &str| Some(env::temp_dir().join(format!("impulse-nowhere-{store}")));
+        command(&Origin::Launcher(StoreId::parse(id).unwrap()), Path::new(r"D:\G"), None, Some(arguments), nowhere)
     }
 
     fn params(id: &str, location: &str) -> Option<String> {
@@ -181,9 +222,28 @@ mod tests {
     fn a_steam_game_starts_through_its_option_without_anti_cheat() {
         let steam = crate::appinfo::tests::steam_folder("start", 976730, &[("0", "Play without EAC", Some("option1"))]);
         let origin = Origin::Launcher(StoreId::parse("steam:976730").unwrap());
-        let target = command(&origin, Path::new(""), None, |_| Some(steam.clone())).unwrap().unwrap().target;
-        assert_eq!(target, "steam://launch/976730/option1");
+        let target = command(&origin, Path::new(""), None, Some("-dx11"), |_| Some(steam.clone())).unwrap().unwrap().target;
+        assert_eq!(target, "steam://launch/976730/option1", "over the trainer's arguments");
         fs::remove_dir_all(&steam).unwrap();
+    }
+
+    #[test]
+    fn the_trainers_arguments_reach_the_launchers_that_pass_them_on() {
+        let steam = passing("steam:7", "-dx11 -windowed").unwrap().unwrap();
+        assert_eq!(steam.target, env::temp_dir().join(r"impulse-nowhere-steam\steam.exe").into_os_string());
+        assert_eq!(steam.params.as_deref(), Some("-applaunch 7 -dx11 -windowed"));
+        assert_eq!(passing("steam:7", "dialog").unwrap().unwrap().target, "steam://launch/7/dialog", "a word goes in Steam's route");
+        assert!(passing("steam:7", "a/b").is_err(), "nothing else goes there");
+        let uplay = passing("uplay:635", "-x 1").unwrap().unwrap().params;
+        assert_eq!(uplay.as_deref(), Some("-upc_uplay_id 635 -upc_arguments LXggMQ=="), "base64");
+        let latin = passing("uplay:635", "-é").unwrap().unwrap().params;
+        assert_eq!(latin.as_deref(), Some("-upc_uplay_id 635 -upc_arguments Lek="), "a byte per character, as btoa");
+        assert!(passing("uplay:635", "-ő").is_err(), "beyond what btoa takes");
+        assert!(passing("steam:7", "-a\0b").is_err() && passing("steam:7", "-a\nb").is_err());
+        assert_eq!(passing("epic:x", "-x\n").unwrap().unwrap().params, None, "Epic passes none on, and so checks none");
+        let exe = PathBuf::from(r"D:\G\g.exe");
+        let picked = command(&Origin::Picked(exe), Path::new(r"D:\G"), None, Some("-x"), |_| None).unwrap().unwrap();
+        assert_eq!(picked.params.as_deref(), Some("-x"));
     }
 
     #[test]

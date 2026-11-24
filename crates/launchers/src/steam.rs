@@ -12,6 +12,7 @@ use super::{
 };
 
 const FULLY_INSTALLED: u32 = 4;
+pub const CLIENT: &str = "steam.exe";
 
 pub fn apps() -> Vec<App> {
     let Some(root) = install_dir() else {

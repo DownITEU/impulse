@@ -291,7 +291,8 @@ impl model::Caches for Wand {
 fn snapshot(trainer: Trainer, host: &Host, custom: Option<&HashMap<String, store::Slots>>) -> model::Trainer {
     let plan = trainer.plan();
     let runner = host.runner(&plan);
-    let mut trainer = trainer.into_model(model::Plan { image: plan.image, minimum_age: plan.minimum_age, launch: plan.launch, runner });
+    let (target, launch, launch_arguments, launch_within) = (plan.target, plan.launch, plan.launch_arguments, plan.launch_within);
+    let mut trainer = trainer.into_model(model::Plan { target, launch, launch_arguments, launch_within, runner });
     if let Some(custom) = custom {
         store::customize(&mut trainer.cheats, custom);
     }

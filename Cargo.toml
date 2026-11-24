@@ -36,6 +36,7 @@ anyhow = "1"
 async-io = "2"
 async-net = "2"
 async-tungstenite = { version = "0.35", default-features = false }
+base64 = "0.22"
 blocking = "1"
 bytes = "1"
 cbc = "0.1"

@@ -21,7 +21,7 @@ pub use ids::{Ref, SourceId};
 pub use map::{Category, Frame, Glyph, Group, Icon, Label, Level, Map, MapOffer, PIN_LINK, Picture, Pin, Point, Region, TileSet, Tiles};
 pub use overlay::{Canvas, CanvasEvent, Cursor, Layers, Overlays, Rect, Texture};
 pub use plugin::{Approval, Installed, Setting, SettingKind, Value};
-pub use process::{Process, Rule};
+pub use process::{Pick, Process, Rule, Target};
 pub use run::{Attach, Event, Live, Runner, Session};
 pub use source::{
     Account, Accounts, Caches, Clear, Downloads, Files, Folder, Folders, Games, Maps, SignIn, Snapshot, Source, Store, Title, Titles,
