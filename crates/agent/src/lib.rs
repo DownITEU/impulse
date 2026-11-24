@@ -3,6 +3,7 @@
 
 mod elevated;
 mod event;
+mod exit;
 mod handle;
 mod image;
 mod inject;
@@ -12,6 +13,7 @@ mod trust;
 
 pub use elevated::{elevated, serve_elevated};
 pub use event::signaled;
+pub use exit::{Exit, exit};
 pub use image::{Image, Program};
 pub use inject::{load, map};
 pub use pause::{idle, resume, suspend};

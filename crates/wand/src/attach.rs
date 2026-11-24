@@ -3,9 +3,12 @@
 use std::{path::Path, time::Duration};
 
 use agent::Image;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use blocking::unblock;
-use futures::channel::mpsc::Receiver;
+use futures::{
+    channel::mpsc::Receiver,
+    future::{self, Either},
+};
 use model::{Failure, FailureKind, Process};
 use uuid::Uuid;
 
@@ -14,7 +17,7 @@ use crate::{
     inject::{self, Startup},
     install::{PUBLISHERS, binaries, trainer_host},
     texts::{SERVICE_SILENT, text},
-    tophat::{Event, Run, Server, Session},
+    tophat::{Event, Run, Server, Session, within},
     trainer::Activate,
     trainer_host::TrainerHost,
 };
@@ -84,11 +87,21 @@ pub async fn attach(server: &Server, trainerlib: &Path, game: Game<'_>) -> Resul
     })
     .await?;
 
-    let dialed = server.runtime.spawn(async move { tokio::time::timeout(DIAL_IN_WITHIN, waiting).await }).await?;
-    // Seen with an outdated Wand.
-    let silent = Failure::new(FailureKind::SetupNeeded).saying(text(SERVICE_SILENT));
-    let dialed = dialed.with_context(|| format!("the service from {} did not dial in", trainerlib.display())).context(silent)?;
-    let channel = dialed.context("the server dropped the service")?;
+    // The game or the host gone ends the wait for the service; the game first, as the host goes with it.
+    let watched: Vec<Process> = [Some(game.process), host.as_ref().map(|host| &host.process)].into_iter().flatten().cloned().collect();
+    let exit = unblock(move || agent::exit(&watched)).await?;
+    let channel = match within(&server.runtime, DIAL_IN_WITHIN, future::select(waiting, exit)).await {
+        Some(Either::Left((channel, _))) => channel.context("the server dropped the service")?,
+        Some(Either::Right((process, _))) => {
+            let gone = anyhow!("{} exited before the trainer's service dialed in", process.path.display());
+            return Err(if process == *game.process { gone.context(Failure::new(FailureKind::GameNotFound)) } else { gone });
+        }
+        // Seen with an outdated Wand.
+        None => {
+            let silent = Failure::new(FailureKind::SetupNeeded).saying(text(SERVICE_SILENT));
+            return Err(anyhow!("the service from {} did not dial in", trainerlib.display()).context(silent));
+        }
+    };
     let (session, events) = Session::open(server.runtime.clone(), channel, &client_id);
     let run = Run { process_id: game.process.pid, game_version: game.version, trainer, variables: game.variables };
     session.start(plugin, run).await?;
