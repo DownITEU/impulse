@@ -42,29 +42,37 @@ impl Placement {
 }
 
 /// The window's bounds and monitor from its last run, else `default` centered on the primary monitor (blocking: a
-/// tiny file). A monitor gone opens on the primary one, and bounds off every monitor take the platform's default.
+/// tiny file). A monitor gone opens `default` on the primary one, and bounds off every monitor take the platform's
+/// default.
 pub fn restore(data_dir: &Path, default: Size<Pixels>, cx: &App) -> (WindowBounds, Option<DisplayId>) {
     let saved: Stored<Placement> = Stored::load(Paths::new(data_dir.to_owned()).window());
-    let Some(bounds) = saved.window_bounds() else {
-        return (WindowBounds::Windowed(Bounds::centered(None, default, cx)), None);
-    };
     let display = saved.display.as_deref().and_then(|wanted| {
         cx.displays().into_iter().find(|display| display.uuid().is_ok_and(|uuid| uuid.to_string() == wanted)).map(|display| display.id())
     });
+    // A gone monitor's bounds would open off screen or at its scale.
+    let Some(bounds) = saved.window_bounds().filter(|_| display.is_some()) else {
+        let centered = Bounds::centered(None, default, cx);
+        return (if saved.maximized { WindowBounds::Maximized(centered) } else { WindowBounds::Windowed(centered) }, None);
+    };
     (bounds, display)
 }
 
-/// Saves the window's placement once it settles after a move or a resize.
+/// Saves the window's placement once it settles after a move or a resize, or at quit.
 pub struct Keeper {
     saved: Stored<Placement>,
+    pending: Option<Placement>,
     save: Task<()>,
-    _moved: Subscription,
+    _subscriptions: [Subscription; 2],
 }
 
 impl Keeper {
     pub fn new(paths: &Paths, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let moved = cx.observe_window_bounds(window, |keeper, window, cx| keeper.moved(window, cx));
-        Self { saved: Stored::load(paths.window()), save: Task::ready(()), _moved: moved }
+        let quit = cx.on_app_quit(|keeper, _| {
+            keeper.flush();
+            async {}
+        });
+        Self { saved: Stored::load(paths.window()), pending: None, save: Task::ready(()), _subscriptions: [moved, quit] }
     }
 
     fn moved(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -73,11 +81,21 @@ impl Keeper {
             return;
         }
         let display = window.display(cx).and_then(|display| display.uuid().ok()).map(|uuid| uuid.to_string());
-        let Some(placement) = Placement::of(window.window_bounds(), display).filter(|placement| *placement != *self.saved) else { return };
-        self.save = cx.spawn(async move |keeper, cx| {
-            cx.background_executor().timer(SETTLE).await;
-            let _ = keeper.update(cx, |keeper, _| keeper.saved.edit(|saved| *saved = placement));
-        });
+        self.pending = Placement::of(window.window_bounds(), display).filter(|placement| *placement != *self.saved);
+        // Fullscreen drops the wait too: the window shown on the overlay's way there is not where it lives.
+        self.save = match self.pending {
+            Some(_) => cx.spawn(async move |keeper, cx| {
+                cx.background_executor().timer(SETTLE).await;
+                let _ = keeper.update(cx, |keeper, _| keeper.flush());
+            }),
+            None => Task::ready(()),
+        };
+    }
+
+    fn flush(&mut self) {
+        if let Some(placement) = self.pending.take() {
+            self.saved.edit(|saved| *saved = placement);
+        }
     }
 }
 
