@@ -123,16 +123,25 @@ fn row(cheat: &Cheat, slots: &[Option<Chord>], shared: Vec<bool>, cx: &App) -> R
     }
 }
 
-/// `3`, `0.5`: one decimal only when there is a fraction.
+/// `3`, `0.5`, `0.25`: the value's own decimals, four at most, so a field left as shown sends nothing.
 pub fn number(value: f64) -> String {
-    if value.fract() == 0. { format!("{value:.0}") } else { format!("{value:.1}") }
+    let text = format!("{value:.4}");
+    match text.trim_end_matches('0').trim_end_matches('.') {
+        "-0" => "0".to_owned(),
+        text => text.to_owned(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use model::{Chord, Kind};
 
-    use super::caps;
+    use super::{caps, number};
+
+    #[test]
+    fn a_value_prints_its_own_decimals_up_to_four() {
+        assert_eq!([3., 0.5, 0.25, -1.5, 100., 0.1 + 0.2, -0.].map(number), ["3", "0.5", "0.25", "-1.5", "100", "0.3", "0"]);
+    }
 
     #[test]
     fn every_slot_gets_a_cap_with_its_pair_arrow() {
