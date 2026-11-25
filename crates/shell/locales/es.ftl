@@ -24,6 +24,7 @@ failure-game-not-found = no se encontró el juego
 failure-launch-failed = el launcher no pudo iniciar el juego: consulta el log para ver los detalles
 failure-not-started = el juego no se inició a tiempo: revisa su launcher y vuelve a intentarlo
 failure-not-running = el juego no fue iniciado a tiempo: inícialo tú y vuelve a intentarlo
+failure-external-launch = este trainer solo funciona con un juego que inicias tú: inícialo y pulsa JUGAR + TRAINER
 failure-game-exited = el juego se cerró antes de que entrara el trainer
 failure-refused = solicitud rechazada
 failure-elevation = el juego se ejecuta como administrador: acepta el aviso para conectar
@@ -58,7 +59,10 @@ page-overlay = OVERLAY
 page-star = Favorito
 page-folder = Abrir la carpeta del juego
 page-launcher = Abrir en { $launcher }
-page-source = Origen del juego
+page-source = Opciones del juego
+page-overlay-default = OVERLAY: COMO EN AJUSTES
+page-overlay-in-game = OVERLAY: EN JUEGO
+page-overlay-over = OVERLAY: SOBRE EL JUEGO
 page-custom = MANUAL
 page-live = ACTIVO
 page-active = { $active ->
@@ -221,10 +225,13 @@ run-idle = TRAINER INACTIVO · INICIA EL JUEGO PARA USAR LOS MODS
 run-unconfirmed-title = JUEGO ACTUALIZADO
 run-unconfirmed-body = El trainer aún no es compatible con esta versión del juego. Puede que algunos mods no funcionen hasta que se actualice el trainer. ¿Jugar de todos modos?
 run-unconfirmed-skip = JUGAR SIEMPRE
-run-unconfirmed-cancel = CANCELAR
+run-ask-cancel = CANCELAR
 run-unconfirmed-play = JUGAR IGUALMENTE
 run-unconfirmed-ask = AVISAR SI EL JUEGO SE ACTUALIZA
 run-unconfirmed-ask-hint = preguntar antes de jugar si la versión del juego es más nueva que la que admite el trainer
+run-outside-title = INICIA EL JUEGO TÚ
+run-outside-body = Este trainer solo se conecta a un juego iniciado fuera de Impulse, y el juego no está abierto. Inícialo, espera a que cargue y pulsa JUGAR + TRAINER.
+run-outside-start = INICIAR JUEGO
 
 ## Map
 

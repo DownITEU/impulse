@@ -2,22 +2,30 @@
 //! live and dropped when it ends. The in-game HUD (`Layer`) and `Glance` draw their layers on it; whatever fails
 //! leaves them over the game.
 
-use std::{rc::Rc, sync::Arc};
+use std::{
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use blocking::unblock;
 use client::{Registry, library::GameId};
 use futures::StreamExt;
-use gpui_kit::{Context, CursorStyle, Entity, EventEmitter, MirrorFrame, Task};
-use model::{Canvas, CanvasEvent, Cursor, Failure, Layers, Rect, Texture};
+use gpui_kit::{App, AsyncApp, Context, CursorStyle, Entity, EventEmitter, MirrorFrame, Task, WeakEntity};
+use model::{Canvas, CanvasEvent, Cursor, Failure, Layers, Process, Rect, Texture};
 
 use crate::{
     run::{RunEvent, Runs},
     settings::Settings,
+    trainer::{TrainerEvent, Trainers},
 };
 
 /// The HUD's layer, the whole game's frame with the input, and the minimap window's.
 pub(super) const HUD_LAYER: u32 = 0;
 pub(super) const GLANCE_LAYER: u32 = 1;
+// Past it the overlay enters anyway: a small windowed game.
+const MAIN_WINDOW_WITHIN: Duration = Duration::from_secs(60);
+const MAIN_WINDOW_POLL: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Copy)]
 pub(super) enum InGameEvent {
@@ -30,12 +38,16 @@ pub(super) enum InGameEvent {
 pub struct InGame {
     registry: Arc<Registry>,
     runs: Entity<Runs>,
-    // The user's MODE: IN-GAME.
+    settings: Entity<Settings>,
+    trainers: Entity<Trainers>,
+    // IN-GAME is the live game's MODE: its own, else the OVERLAY tab's.
     wanted: bool,
     // Bumped whenever the canvas is dropped or asked for again: an answer or an event of an older one is ignored.
     generation: u64,
     // One ask at a time: an older one landing later would take the game's canvas from the newer.
     asking: bool,
+    // The overlay went into it, bound to its window already: no wait for one.
+    entered: Option<Process>,
     // Frame callbacks hold a `Weak`, so dropping this closes the layers whatever they do.
     layers: Option<Rc<dyn Layers>>,
     ready: bool,
@@ -46,23 +58,59 @@ pub struct InGame {
 impl EventEmitter<InGameEvent> for InGame {}
 
 impl InGame {
-    pub fn new(registry: Arc<Registry>, runs: &Entity<Runs>, settings: &Entity<Settings>, cx: &mut Context<Self>) -> Self {
-        cx.observe(settings, |in_game, settings, cx| {
-            let on = settings.read(cx).prefs().overlay_in_game;
-            if on != in_game.wanted {
-                in_game.wanted = on;
-                in_game.enter(cx);
+    pub fn new(
+        registry: Arc<Registry>,
+        runs: &Entity<Runs>,
+        settings: &Entity<Settings>,
+        trainers: &Entity<Trainers>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        cx.observe(settings, |in_game, _, cx| in_game.rewant(cx)).detach();
+        cx.subscribe(trainers, |in_game, _, event: &TrainerEvent, cx| {
+            if matches!(event, TrainerEvent::Changed(game) if in_game.runs.read(cx).is_live(game)) {
+                in_game.rewant(cx);
             }
         })
         .detach();
         cx.subscribe(runs, |in_game, _, event: &RunEvent, cx| match event {
-            RunEvent::Live => in_game.enter(cx),
+            RunEvent::Live => {
+                in_game.wanted = in_game.wants(cx);
+                in_game.enter(cx);
+            }
             RunEvent::Pressed(_) => {}
             RunEvent::Starting | RunEvent::Failed | RunEvent::Stopping | RunEvent::Ended => in_game.leave(cx),
         })
         .detach();
+        let (runs, settings, trainers) = (runs.clone(), settings.clone(), trainers.clone());
         let wanted = settings.read(cx).prefs().overlay_in_game;
-        Self { registry, runs: runs.clone(), wanted, generation: 0, asking: false, layers: None, ready: false, size: None, reader: None }
+        let reader = None;
+        Self {
+            registry,
+            runs,
+            settings,
+            trainers,
+            wanted,
+            generation: 0,
+            asking: false,
+            entered: None,
+            layers: None,
+            ready: false,
+            size: None,
+            reader,
+        }
+    }
+
+    fn wants(&self, cx: &App) -> bool {
+        let own = self.runs.read(cx).live().and_then(|game| self.trainers.read(cx).game_profile(game).overlay_in_game);
+        own.unwrap_or(self.settings.read(cx).prefs().overlay_in_game)
+    }
+
+    fn rewant(&mut self, cx: &mut Context<Self>) {
+        let on = self.wants(cx);
+        if on != self.wanted {
+            self.wanted = on;
+            self.enter(cx);
+        }
     }
 
     /// The overlay in the game answered: layers show from now on.
@@ -119,17 +167,29 @@ impl InGame {
         let runs = self.runs.read(cx);
         let (Some(game), Some(process)) = (runs.live().and_then(GameId::game), runs.process().cloned()) else { return };
         self.asking = true;
-        let (generation, registry) = (self.generation, self.registry.clone());
+        let bound = self.entered.as_ref() == Some(&process);
+        let (generation, registry, pid, entering) = (self.generation, self.registry.clone(), process.pid, process.clone());
         cx.spawn(async move |in_game, cx| {
-            let answer = unblock(move || registry.enter(&game, &process)).await;
+            // The overlay binds to a window once, as it loads: a game still loading must show its own first.
+            let until = Instant::now() + MAIN_WINDOW_WITHIN;
+            let stale = |in_game: &WeakEntity<Self>, cx: &mut AsyncApp| {
+                in_game.update(cx, |in_game, _| in_game.generation != generation).unwrap_or(true)
+            };
+            while !bound && !unblock(move || main_window(pid)).await && Instant::now() < until && !stale(&in_game, cx) {
+                cx.background_executor().timer(MAIN_WINDOW_POLL).await;
+            }
+            let answer = if stale(&in_game, cx) { None } else { Some(unblock(move || registry.enter(&game, &process)).await) };
             in_game
                 .update(cx, |in_game, cx| {
                     in_game.asking = false;
-                    if generation == in_game.generation {
-                        in_game.arrived(generation, answer, cx);
-                    } else {
-                        drop(answer);
-                        in_game.ask(cx);
+                    match answer {
+                        Some(answer) if generation == in_game.generation => {
+                            if answer.is_ok() {
+                                in_game.entered = Some(entering);
+                            }
+                            in_game.arrived(generation, answer, cx)
+                        }
+                        _ => in_game.ask(cx),
                     }
                 })
                 .ok();
@@ -188,6 +248,13 @@ impl InGame {
             self.drop_canvas(cx);
         }
     }
+}
+
+/// The window the overlay would bind to, the game's in front, else its first visible one, is of a game's size: not a
+/// splash screen nor the hidden window an Unreal game holds in front while it loads.
+fn main_window(pid: u32) -> bool {
+    let window = topmost::foreground().filter(|&window| topmost::owner(window) == pid).or_else(|| topmost::first_window_of(pid));
+    window.and_then(topmost::client_area).is_some_and(|area| area.width >= 640 && area.height >= 480)
 }
 
 /// As GPUI shows it on Windows.

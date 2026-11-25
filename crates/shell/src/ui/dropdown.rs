@@ -20,7 +20,21 @@ use super::{
 /// Where a view keeps its open menu.
 pub type Slot<V, M> = fn(&mut V) -> &mut Option<M>;
 
-/// Makes `trigger` open `options` under its right edge, at least `width` wide, inside the window; `open`: `menu` is the open one.
+/// A menu's marked options: the chosen ones, and the first of a second group, under a line.
+#[derive(Clone, Copy, Default)]
+pub struct Marked<'a> {
+    pub chosen: &'a [usize],
+    pub group: Option<usize>,
+}
+
+impl<'a> Marked<'a> {
+    pub fn chosen(chosen: &'a [usize]) -> Self {
+        Self { chosen, group: None }
+    }
+}
+
+/// Makes `trigger` open `options` under its right edge, at least `width` wide, inside the window; `open`: `menu` is the open one;
+/// `marks`: the chosen options and the lines between groups.
 #[expect(clippy::too_many_arguments, reason = "a menu's trigger, its slot, options, width and pick")]
 pub fn dropdown<V: 'static, M: Copy + PartialEq + 'static>(
     trigger: Stateful<Div>,
@@ -28,10 +42,10 @@ pub fn dropdown<V: 'static, M: Copy + PartialEq + 'static>(
     slot: Slot<V, M>,
     open: bool,
     options: Vec<SharedString>,
-    current: usize,
+    marks: Marked<'_>,
     width: Pixels,
     cx: &Context<V>,
-    pick: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Copy + 'static,
+    pick: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Clone + 'static,
 ) -> Stateful<Div> {
     trigger
         .relative()
@@ -56,7 +70,7 @@ pub fn dropdown<V: 'static, M: Copy + PartialEq + 'static>(
                         cx.defer(move |cx| drop(view.update(cx, |view, cx| close(view, slot, menu, cx))));
                     }
                 })
-                .child(deferred(fitted.child(picks(options, current, slot, cx, pick).min_w(width))))
+                .child(deferred(fitted.child(picks(options, marks, slot, cx, pick).min_w(width))))
         })
 }
 
@@ -88,10 +102,10 @@ pub fn close<V: 'static, M: PartialEq>(view: &mut V, slot: Slot<V, M>, menu: M, 
 /// An open menu's list; the caller places it.
 pub fn picks<V: 'static, M: 'static>(
     options: Vec<SharedString>,
-    current: usize,
+    marks: Marked<'_>,
     slot: Slot<V, M>,
     cx: &Context<V>,
-    pick: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Copy + 'static,
+    pick: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Clone + 'static,
 ) -> Stateful<Div> {
     let accent = rgb(accent(cx));
     v_flex()
@@ -105,11 +119,13 @@ pub fn picks<V: 'static, M: 'static>(
         .border_color(line(0.2))
         .bg(rgb(PANEL))
         .children(options.into_iter().enumerate().map(|(at, option)| {
+            let pick = pick.clone();
             list_row(("option", at), false)
                 .flex_none()
                 .h(px(28.))
                 .px(px(10.))
-                .text_color(if at == current { accent } else { rgb(TEXT_2) })
+                .text_color(if marks.chosen.contains(&at) { accent } else { rgb(TEXT_2) })
+                .when(at > 0 && marks.group == Some(at), |row| row.mt(px(4.)).border_t_1().border_color(line(0.12)))
                 // Mouse down, not click: the outside-press close removes the list first.
                 .on_mouse_down(
                     MouseButton::Left,

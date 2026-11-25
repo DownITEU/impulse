@@ -104,8 +104,15 @@ impl Tracker {
 
     /// How long to wait before asking again.
     fn answered(&mut self, answer: Result<[f64; 3], Failure>, every: Duration, cx: &mut Context<Self>) -> Duration {
-        match answer {
-            Ok(position) => {
+        let fix = match answer {
+            Ok(position) => placed(self.frame.as_ref(), position),
+            Err(e) => {
+                log::debug!("player position: {e}");
+                None
+            }
+        };
+        match fix {
+            Some(position) => {
                 self.failures = 0;
                 let at = Instant::now();
                 if let Some(frame) = &self.frame {
@@ -115,8 +122,7 @@ impl Tracker {
                 cx.emit(Tracked::Fix(Fix { position, bearing: self.heading.bearing(at) }));
                 every
             }
-            Err(e) => {
-                log::debug!("player position: {e}");
+            None => {
                 self.failures += 1;
                 if self.failures == GIVE_UP {
                     log::warn!("the trainer does not tell where the player is");
@@ -126,5 +132,34 @@ impl Tracker {
                 (every * 2u32.saturating_pow(self.failures)).min(SLOWEST)
             }
         }
+    }
+}
+
+/// The plane's two axes must be numbers; a height the trainer does not tell is 0 (many trainers send none).
+fn placed(frame: Option<&Frame>, mut position: [f64; 3]) -> Option<[f64; 3]> {
+    let Some(frame) = frame else { return Some(position) };
+    let up = frame.axes[2];
+    if !position[up].is_finite() {
+        position[up] = 0.;
+    }
+    let at = frame.to_map(position);
+    let on = at.x.is_finite() && at.y.is_finite();
+    if !on {
+        log::debug!("player position off the map's axes");
+    }
+    on.then_some(position)
+}
+
+#[cfg(test)]
+mod tests {
+    use model::{Frame, Point};
+
+    use super::placed;
+
+    #[test]
+    fn a_missing_height_is_zero_and_a_missing_plane_axis_no_fix() {
+        let frame = Frame { axes: [0, 2, 1], origin: Point { x: 0.5, y: 0.5 }, scale: (1e-4, -1e-4) };
+        assert_eq!(placed(Some(&frame), [1., f64::NAN, 2.]), Some([1., 0., 2.]));
+        assert_eq!(placed(Some(&frame), [1., 3., f64::NAN]), None);
     }
 }

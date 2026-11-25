@@ -16,7 +16,8 @@ use futures::{
 use model::{Account, Clear, Failure, FailureKind, Folder, Game, Locale, MapOffer, Offer, Ref, SignIn, Snapshot, SourceId, Store};
 
 use crate::{
-    binary, catalog,
+    binary,
+    catalog::{self, Mark},
     folder::Setting,
     locale, map, overlay,
     run::Host,
@@ -43,7 +44,8 @@ pub struct Wand {
     session: Mutex<(Shared<BoxFuture<'static, Link>>, bool)>,
     folder: Arc<Setting>,
     host: Host,
-    overlaid: catalog::Overlaid,
+    marks: catalog::Marks,
+    archives: map::Archives,
     // The hotkeys the user changed in Wand, read when a trainer first needs them.
     hotkeys: Shared<BoxFuture<'static, Arc<store::Custom>>>,
 }
@@ -64,7 +66,8 @@ impl Wand {
         Self {
             session: Mutex::new((connect(&transport, &data_dir, false), false)),
             host: Host::new(data_dir.clone(), folder.clone()),
-            overlaid: catalog::Overlaid::default(),
+            marks: catalog::Marks::default(),
+            archives: map::Archives::default(),
             transport,
             folder,
             data_dir,
@@ -144,15 +147,15 @@ impl model::Accounts for Wand {
 
 impl model::Games for Wand {
     fn games(&self) -> BoxStream<'static, Snapshot<Vec<Game>>> {
-        let (dir, overlaid) = (self.data_dir.clone(), self.overlaid.clone());
+        let (dir, marks) = (self.data_dir.clone(), self.marks.clone());
         channel(|tx| async move {
             let cached = {
-                let (dir, overlaid) = (dir.clone(), overlaid.clone());
-                unblock(move || catalog::cached(&dir, &overlaid)).await
+                let (dir, marks) = (dir.clone(), marks.clone());
+                unblock(move || catalog::cached(&dir, &marks)).await
             };
             let have_copy = cached.is_some();
             send(&tx, Snapshot::Cached(cached));
-            match unblock(move || catalog::refresh(&dir, have_copy, &overlaid)).await {
+            match unblock(move || catalog::refresh(&dir, have_copy, &marks)).await {
                 Ok(Some(games)) => {
                     log::info!("catalog updated");
                     send(&tx, Snapshot::Fresh(Ok(games)));
@@ -169,7 +172,7 @@ impl model::Games for Wand {
 
 impl model::Overlays for Wand {
     fn enter(&self, game: &Ref, process: &model::Process) -> Result<model::Canvas, Failure> {
-        overlay::enter(&self.overlaid, &self.folder, game, process).map_err(Failure::from)
+        overlay::enter(&self.marks, &self.folder, game, process).map_err(Failure::from)
     }
 }
 
@@ -179,7 +182,7 @@ impl model::Trainers for Wand {
         let stamp = Stamp { updated_at: offer.revision.clone(), version: build, locale: locale::served(locale).to_owned() };
         // A trainer's id is its game's.
         let (dir, id, session, host) = (self.data_dir.clone(), offer.id.id().to_owned(), self.session(), self.host.clone());
-        let hotkeys = self.hotkeys.clone();
+        let (hotkeys, mark) = (self.hotkeys.clone(), self.marks.of(offer.id.id()));
         channel(|tx| async move {
             let copy = {
                 let (dir, id) = (dir.clone(), id.clone());
@@ -187,7 +190,7 @@ impl model::Trainers for Wand {
             };
             let custom = hotkeys.await;
             let custom = custom.get(&*id);
-            let snapshot = |trainer| snapshot(trainer, &host, custom);
+            let snapshot = |trainer| snapshot(trainer, &host, custom, mark);
             let fresh = copy.as_ref().is_some_and(|(_, found)| *found == stamp);
             send(&tx, Snapshot::Cached(copy.map(|(trainer, _)| snapshot(trainer))));
             if fresh {
@@ -237,6 +240,13 @@ impl model::Maps for Wand {
                 send(&tx, Snapshot::Fresh(Ok(map)));
             }
         })
+    }
+}
+
+/// The tiles of the maps kept in PMTiles archives.
+impl model::Downloads for Wand {
+    fn download(&self, url: &str) -> Result<Vec<u8>, Failure> {
+        self.archives.tile(url)
     }
 }
 
@@ -290,9 +300,12 @@ impl model::Caches for Wand {
 
 /// The cheat list with a runner for exactly its plan.
 /// `custom` holds the hotkeys the user changed in Wand for this game.
-fn snapshot(trainer: Trainer, host: &Host, custom: Option<&HashMap<String, store::Slots>>) -> model::Trainer {
+fn snapshot(trainer: Trainer, host: &Host, custom: Option<&HashMap<String, store::Slots>>, mark: Mark) -> model::Trainer {
     let runner = host.runner(trainer.load());
     let mut trainer = trainer.into_model(runner);
+    // A title's map flags say it too: many blueprints leave their own bits out.
+    trainer.location |= mark.live;
+    trainer.teleport |= mark.teleport;
     if let Some(custom) = custom {
         store::customize(&mut trainer.cheats, custom);
     }

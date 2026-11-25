@@ -7,15 +7,17 @@ use gpui_kit::{
     component::{Theme, ThemeMode},
     px, rgb,
 };
-use i18n::{Key, Language};
+use i18n::{CHINESE_TRADITIONAL, Key, Language};
 
 use super::key;
 
 const UI: &str = "Chakra Petch";
 /// The UI font of Cyrillic languages: Chakra Petch has none, and Exo 2 is the closest in metrics.
 const UI_CYRILLIC: &str = "Exo 2";
-/// The UI font of Chinese: Chakra Petch has no han, and Windows ships this one with its own faces.
+/// The UI font of Simplified Chinese: Chakra Petch has no han, and Windows ships this one with its own faces.
 const UI_CJK: &str = "Microsoft YaHei UI";
+/// The UI font of Traditional Chinese: Windows ships this one with Traditional glyph forms.
+const UI_CJK_TRADITIONAL: &str = "Microsoft JhengHei UI";
 pub const MONO: &str = "JetBrains Mono";
 
 // The type scale, px: every fixed text size is one of these.
@@ -104,6 +106,8 @@ pub fn ui_font_of(cx: &App) -> gpui_kit::Font {
 fn ui_family(language: Language) -> &'static str {
     if language.is_cyrillic() {
         UI_CYRILLIC
+    } else if language == CHINESE_TRADITIONAL {
+        UI_CJK_TRADITIONAL
     } else if language.is_cjk() {
         UI_CJK
     } else {
@@ -171,7 +175,7 @@ pub fn init(cx: &mut App) {
 
 #[cfg(test)]
 mod tests {
-    use i18n::{CHINESE, ENGLISH, RUSSIAN, UKRAINIAN};
+    use i18n::{CHINESE, CHINESE_TRADITIONAL, ENGLISH, RUSSIAN, UKRAINIAN};
 
     use super::*;
 
@@ -181,5 +185,6 @@ mod tests {
         assert_eq!(ui_family(RUSSIAN), UI_CYRILLIC);
         assert_eq!(ui_family(UKRAINIAN), UI_CYRILLIC);
         assert_eq!(ui_family(CHINESE), UI_CJK);
+        assert_eq!(ui_family(CHINESE_TRADITIONAL), UI_CJK_TRADITIONAL);
     }
 }

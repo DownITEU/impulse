@@ -3,6 +3,27 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
+## [0.6.0] - 2026-11-25
+
+### Features
+
+- Each game has its own overlay mode in its ⋯ menu: AS IN SETTINGS, IN-GAME or OVER THE GAME. It changes at once, even while the game runs. For a game where the in-game overlay shows nothing (007 First Light), choose OVER THE GAME.
+- A slider mod's value is a field beside its slider: type a value, then press Enter or click away. It takes any value as precise as the slider's step (any whole number when the step is whole) and stays within its limits; the phone panel's field does the same. (#34)
+- The run's button and the game's actions stay at the top of the page while it scrolls, so STOP is always in reach. (#33; thanks @GhostInq)
+- Traditional Chinese (Settings, APP, LANGUAGE). (#31; thanks @toby0622)
+
+### Fixes
+
+- A number mod's field shows every decimal of its value (0.25, not 0.3), so clicking in and out of it no longer changes the value.
+- The map follows the player and offers teleport wherever Wand's does: the game's maps decide it, not only the trainer's own flags.
+- A trainer that reports the player's position without a height is placed on the map with height 0, as in Wand, instead of not at all.
+- Maps stored in a single archive file (Phantom Blade Zero) show instead of "unsupported tile source".
+- Map tiles load while you zoom, twice as many at once, and a blurry version of the view comes first, so zooming out or panning far no longer shows empty patches.
+- Games whose own store's release has no trainer (most often GOG) are found again, as in 0.4.0, and can use another store's trainer. Only a game whose version file is gone stays out.
+- The search finds a game under the name of another edition on the same install (World War Z: Aftermath under World War Z).
+- A trainer that works only with a game you start yourself (007 First Light) says so at once when the game is not running, with START GAME to start it through its store, instead of waiting for it. Press LAUNCH + ATTACH once the game runs.
+- The in-game overlay waits for the game's own window before it goes in. In an Unreal game started from Impulse (Deep Rock Galactic), it no longer took a hidden window of the game's loading screen, which left its cursor stuck as a pointer.
+
 ## [0.5.0] - 2026-11-25
 
 ### Features

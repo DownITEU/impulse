@@ -45,6 +45,7 @@ fn main() {
         maps: Some(wand.clone()),
         folders: Some(wand.clone()),
         overlays: Some(wand.clone()),
+        downloads: Some(wand.clone()),
         caches: Some(wand),
         ..Capabilities::default()
     });

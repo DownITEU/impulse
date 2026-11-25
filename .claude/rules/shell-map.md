@@ -13,7 +13,7 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 - `MapView`: the modal's window parts (`show`, `hide`, `set_docked`) and `linker`, the LINK A MAP dialog (`TitlePicker`) `Root` draws while open, over the map; the panel opens it for a game without maps, the toolbar's LINK A MAP for any game while a source has titles or one has none yet (`Titles::pending`: the picker asks it; not in a dock); UNLINK MAP stands beside LINK A MAP (toolbar and empty panel) while the open game has a link set by hand, and drops it (`Library::unlink`: the offers are gathered again, so a store-id match or nothing takes its place); emits `MapEvent::Close`. `map_panel` is the page's preview that opens it, `paneled` whether the page shows it.
 - `Minimap`: a mini `Stage` over the live board, one per window; `hide(window)` lets go of its tiles.
 - `LiveMap`: the live game's map for the minimap.
-- `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it.
+- `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it. As Wand's: a fix needs the leaseholder's plane axes, a height not told is 0.
 - `bind_keys`.
 
 ## Rules
@@ -31,11 +31,11 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 - Snapshots reach a board through `board::show`: a `Cached` one is skipped when the board already holds a shared copy.
 - A board keeps the map and locale it asked for (`asked`); a copy is shared or reused only between the same two. A board that takes the other's copy before that board's load is done (`settled`) loads its own too. Another content language: the open map loads again through `choose`, a closed one lets go of its copy, and the minimap's search starts over (`Maps::relocalize`).
 - Tiles, icon sheets and clips load through `client::media` (`tile`, `load`, `path`).
-- A tile is asked only when `Tiles::covers` it; stand-ins go down to `min_zoom`. The stage's load is `media::tile` then `art::picture`: `Absent` for a 403, 404 or 410 (kept on disk) or bytes that are no WebP, PNG or JPEG within its side (not asked again while the map shows) or `Retry` (asked again on a draw after a wait doubling from 1 s to 64 s; no timer).
+- A tile is asked only when `Tiles::covers` it; stand-ins go down to `min_zoom`. A view asks for its backdrop (`BACKDROP` levels up, kept while it covers the view) first, then its own tiles from the middle out; a zoom asks for the view its glide ends at, a followed player for the view on its last fix. The stage's load is `media::tile` then `art::picture`: `Absent` for a 403, 404 or 410 (kept on disk) or bytes that are no WebP, PNG or JPEG within its side (not asked again while the map shows) or `Retry` (asked again on a draw after a wait doubling from 1 s to 64 s; no timer).
 - The chosen tile set is `Saved::tile_set`, changed through `Board::filter`; the stage drops its tiles when the set it draws changes.
 - Picture icons are cut once per copy of a map (`Icons`, made at `install`, a sheet at a time; dropped with the last board holding the copy, it fetches no more) and travel with it to a board that takes the copy (`Shared`); views make device-sized images of them in `Images`, the default mark until they are in. A selected marker turns bright: its picture is drawn as its shape in the mark's ink (`Marker::ink`), as a glyph is.
 - The camera's span stays within the drawn set's levels each frame; a bounded map zooms out until its bounds fit (its smallest level's tiles at an eighth at most) and the view stays inside them.
-- `Tiles` drops the least recently drawn, never what the last frame drew or a load just brought. Whatever leaves `Tiles` or `Images` goes to `window.drop_image` (`stale`), in the window it was drawn in: `hide(window)` when a window stops showing a part.
+- `Tiles` drops the least recently drawn or needed, never what the last frame drew or needed or a load just brought. Whatever leaves `Tiles` or `Images` goes to `window.drop_image` (`stale`), in the window it was drawn in: `hide(window)` when a window stops showing a part.
 - `Stage::mini` only draws: no input, hover, chip or menu; its tile cache is small.
 - Clips: `ClipView` downloads through `media::path`, decodes with `video` on the window's D3D11 device, paints with `paint_surface` (never the atlas), and starts again when the device changed. A clip no frame asked for stops.
 - Pin links: `PIN_LINK` selects a pin; only `http://` and `https://` open in the browser; any other link, `wemod:` included, does nothing.

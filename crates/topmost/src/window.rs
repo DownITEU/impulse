@@ -60,11 +60,22 @@ pub fn is_minimized(window: isize) -> bool {
     unsafe { IsIconic(window as HWND) != 0 }
 }
 
-/// The main window of process `pid`: its largest visible top-level window without an owner.
+/// The main window of process `pid`: its largest visible top-level window without an owner, the first of equals.
 pub fn window_of(pid: u32) -> Option<isize> {
+    let unowned = visible_of(pid).into_iter().rev().filter(|&(_, owned, _)| !owned);
+    unowned.max_by_key(|&(.., area)| area).map(|(window, ..)| window)
+}
+
+/// The first visible top-level window of process `pid`, front to back, owned or not.
+pub fn first_window_of(pid: u32) -> Option<isize> {
+    visible_of(pid).first().map(|&(window, ..)| window)
+}
+
+/// The visible top-level windows of process `pid`, front to back: each with whether it has an owner, and its area.
+fn visible_of(pid: u32) -> Vec<(isize, bool, i64)> {
     unsafe extern "system" fn each(window: HWND, found: LPARAM) -> i32 {
-        // SAFETY: `found` is the `(pid, best)` below, alive for the whole enumeration.
-        let (pid, best) = unsafe { &mut *(found as *mut (u32, Option<(i64, isize)>)) };
+        // SAFETY: `found` is the `(pid, windows)` below, alive for the whole enumeration.
+        let (pid, windows) = unsafe { &mut *(found as *mut (u32, Vec<(isize, bool, i64)>)) };
         let mut owner = 0;
         // SAFETY: RECT is plain integers, so all zeros is a valid value.
         let mut rect: RECT = unsafe { mem::zeroed() };
@@ -73,19 +84,19 @@ pub fn window_of(pid: u32) -> Option<isize> {
             GetWindowThreadProcessId(window, &mut owner) != 0
                 && owner == *pid
                 && IsWindowVisible(window) != 0
-                && GetWindow(window, GW_OWNER).is_null()
                 && GetWindowRect(window, &mut rect) != 0
         };
-        let area = i64::from(rect.right - rect.left) * i64::from(rect.bottom - rect.top);
-        if ours && best.is_none_or(|(most, _)| area > most) {
-            *best = Some((area, window as isize));
+        if ours {
+            // SAFETY: a plain query on a window Windows just named.
+            let owned = unsafe { !GetWindow(window, GW_OWNER).is_null() };
+            windows.push((window as isize, owned, i64::from(rect.right - rect.left) * i64::from(rect.bottom - rect.top)));
         }
         1
     }
-    let mut found: (u32, Option<(i64, isize)>) = (pid, None);
+    let mut found: (u32, Vec<(isize, bool, i64)>) = (pid, Vec::new());
     // SAFETY: `found` outlives the enumeration, which calls `each` synchronously.
     unsafe { EnumWindows(Some(each), (&raw mut found) as LPARAM) };
-    found.1.map(|(_, window)| window)
+    found.1
 }
 
 /// Whether `game` is in front in exclusive fullscreen, or in an optimized one that asked for it: a layer over it may

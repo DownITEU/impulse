@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use model::{Failure, FailureKind, Game};
 
-use super::Overlaid;
+use super::Marks;
 
 const URL: &str = "https://storage-cdn.wemod.com/catalog.json";
 const BODY: &str = "catalog.json";
@@ -13,8 +13,8 @@ const ETAG: &str = "catalog.etag";
 const MAX_AGE: Duration = Duration::from_secs(3600);
 
 /// The disk copy, without the network (blocking). An unparsable copy counts as none.
-pub fn cached(data_dir: &Path, overlaid: &Overlaid) -> Option<Vec<Game>> {
-    super::parse(&fs::read(data_dir.join(BODY)).ok()?, overlaid).ok()
+pub fn cached(data_dir: &Path, marks: &Marks) -> Option<Vec<Game>> {
+    super::parse(&fs::read(data_dir.join(BODY)).ok()?, marks).ok()
 }
 
 pub fn size(data_dir: &Path) -> u64 {
@@ -28,7 +28,7 @@ pub fn forget(data_dir: &Path) {
 
 /// Asks the CDN for a newer catalog (blocking); `None` means the disk copy is current.
 /// `have_copy` is false when `cached` found nothing usable, which makes the request unconditional.
-pub fn refresh(data_dir: &Path, have_copy: bool, overlaid: &Overlaid) -> Result<Option<Vec<Game>>> {
+pub fn refresh(data_dir: &Path, have_copy: bool, marks: &Marks) -> Result<Option<Vec<Game>>> {
     let tag_file = data_dir.join(ETAG);
     // The tag file's time is the last check: it is rewritten on every answer.
     let checked = fs::metadata(&tag_file).and_then(|meta| meta.modified());
@@ -40,7 +40,7 @@ pub fn refresh(data_dir: &Path, have_copy: bool, overlaid: &Overlaid) -> Result<
     match response.status {
         // A 200 that does not parse (captive portal, cut body) is a failure too.
         200 => {
-            let games = super::parse(&response.body, overlaid)?;
+            let games = super::parse(&response.body, marks)?;
             if let Err(e) = write(data_dir, response.etag.as_deref(), &response.body) {
                 log::warn!("catalog not cached: {e:#}");
             }

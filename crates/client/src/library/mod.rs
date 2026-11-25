@@ -467,13 +467,16 @@ mod tests {
         all[0].exe = Some("echoes.exe".into());
         all.extend([record("wand:6", "x", "epic:6", Some(&[1])), record("wand:7", "x", "steam:7", Some(&[1]))]);
         // Another title's record of the listed install, with its files: the listed game stands for that title.
-        all.extend([with_exe(record("wand:8", "dx", "gog:1", Some(&[1])), "Echoes.exe"), record("wand:9", "dx", "steam:9", Some(&[1]))]);
+        let edition =
+            model::Game { name: "Chained Echoes: Deluxe".into(), ..with_exe(record("wand:8", "dx", "gog:1", Some(&[1])), "Echoes.exe") };
+        all.extend([edition, record("wand:9", "dx", "steam:9", Some(&[1]))]);
         // A collection's other game shares the store id, not the files.
         all.push(with_exe(record("wand:10", "pack", "gog:1", Some(&[1])), "other.exe"));
         let list = listed(all, None);
         let finds: Vec<_> = list.finds().iter().map(|find| (list.catalog[find.at].id.to_string(), find.listed)).collect();
         let row = |id: &str, listed| (id.to_owned(), listed);
         assert_eq!(finds, [row("wand:1", true), row("wand:3", false), row("wand:7", false), row("wand:10", false)]);
+        assert_eq!(rank(&list.finds(), "deluxe"), [0], "the edition's name finds the install standing for it");
     }
 
     #[test]

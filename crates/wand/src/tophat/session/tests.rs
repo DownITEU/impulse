@@ -218,6 +218,16 @@ async fn position_is_what_the_trainer_pushes_for_this_request() {
 }
 
 #[tokio::test]
+async fn an_axis_the_trainer_never_sends_is_nan() {
+    let (session, mut fake, _events) = started().await;
+    let flat = [("wm_coord_x", 4.), ("wm_coord_y", 5.), ("wm_coord_get", 1.)];
+    let (position, _) = tokio::join!(session.position(), fake.take_value(&flat, 1));
+    let [x, y, z] = position.unwrap();
+    assert_eq!((x, y), (4., 5.));
+    assert!(z.is_nan());
+}
+
+#[tokio::test]
 async fn teleport_sets_the_axes_then_asks_the_trainer_to_move() {
     let (session, mut fake, _events) = started().await;
     let service = async {

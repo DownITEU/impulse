@@ -1,7 +1,7 @@
 //! Running the open game's trainer: LAUNCH + ATTACH, the cheat values going to it, STOP, and what a run keeps.
 
+mod ask;
 mod tracker;
-mod unconfirmed;
 mod view;
 
 use crate::ui::{key, text::app_text};
@@ -11,6 +11,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub use ask::{Ask, Closed as AskClosed};
+use blocking::unblock;
 use client::{
     library::{Game, GameId},
     profile::Values,
@@ -21,7 +23,6 @@ use futures::{StreamExt, stream::BoxStream};
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
 use model::{Event, Failure, FailureKind, Installation, Live, Plan, Process, Session};
 pub use tracker::{Fix, Lease, Tracked, Tracker};
-pub use unconfirmed::{Closed as UnconfirmedClosed, Unconfirmed};
 pub use view::{run_button, run_note, session_panel};
 
 use crate::{
@@ -98,6 +99,8 @@ pub struct Runs {
     library: Entity<Library>,
     trainers: Entity<Trainers>,
     play: Play,
+    // Counts starts: a late answer to an older one changes nothing.
+    starts: u64,
 }
 
 impl EventEmitter<RunEvent> for Runs {}
@@ -117,7 +120,7 @@ impl Runs {
         })
         .detach();
         cx.on_release(|runs, cx| runs.close(cx)).detach();
-        Self { library, trainers, play: Play::Idle }
+        Self { library, trainers, play: Play::Idle, starts: 0 }
     }
 
     pub fn live(&self) -> Option<&GameId> {
@@ -189,6 +192,7 @@ impl Runs {
         if self.is_active() {
             return;
         }
+        self.starts += 1;
         let (install, plan) = match self.request(&game, cx) {
             Ok(request) => request,
             Err(e) => return self.fail(game, e, cx),
@@ -208,6 +212,24 @@ impl Runs {
         self.play = Play::Busy { game, stage: Stage::Preparing, hold, _run: task };
         cx.emit(RunEvent::Starting);
         cx.notify();
+    }
+
+    /// The game alone through its launcher, for a trainer that attaches only to a game the user started: LAUNCH then
+    /// attaches. A failure shows in place of that run's, unless another run came since.
+    pub fn start_game(&mut self, game: GameId, cx: &mut Context<Self>) {
+        let Some(install) = self.library.read(cx).game(&game).and_then(|listed| listed.install.clone()) else { return };
+        let starts = self.starts;
+        cx.spawn(async move |runs, cx| {
+            if let Err(e) = unblock(move || run::start_game(&install)).await {
+                runs.update(cx, |runs, cx| {
+                    if runs.starts == starts && matches!(runs.state(&game), State::Failed(_)) {
+                        runs.fail(game, e, cx)
+                    }
+                })
+                .ok();
+            }
+        })
+        .detach();
     }
 
     /// A live run stays active until the session stops. Cancelling startup drops the session.

@@ -21,7 +21,7 @@ use super::{
 };
 use crate::ui::{
     assets::Icon,
-    dropdown::dropdown,
+    dropdown::{Marked, dropdown},
     key,
     text::{said, t, text},
     theme::*,
@@ -106,13 +106,22 @@ impl SettingsView {
             })));
 
         let menu = Menu::Folder(at);
-        let field =
-            dropdown(field, menu, open_menu, self.menu == Some(menu), choices, current, px(200.), cx, move |view, pick, window, cx| {
+        let field = dropdown(
+            field,
+            menu,
+            open_menu,
+            self.menu == Some(menu),
+            choices,
+            Marked::chosen(&[current]),
+            px(200.),
+            cx,
+            move |view, pick, window, cx| {
                 let path = view.folders.read(cx).get(at).choices.get(pick).map(|(_, path)| path.clone());
                 if let Some(path) = path {
                     view.pick_folder(at, path, window, cx);
                 }
-            });
+            },
+        );
         let status = match &folder.status {
             Ok(found) => mono(text(cx, found), TYPE_LABEL).text_color(rgb(accent(cx))),
             Err(failure) => mono(said(cx, failure), TYPE_LABEL).text_color(rgb(WARN)),

@@ -91,8 +91,8 @@ pub fn scan(games: &[Game], custom: &[Custom]) -> Vec<Installation> {
     out
 }
 
-/// One install per game: of its store ids found, the one its record lists first. An install whose version file gives
-/// no build is none: the game is gone or no longer the one the record describes. A record gives way to one with its
+/// One install per game: of its store ids found, the one its record lists first. An install whose record's version file
+/// gives no build is none: the game is gone or no longer the one the record describes. A record gives way to one with its
 /// version file that the launcher names; then a title has one install per location.
 fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: impl Iterator<Item = App>) -> Vec<Installation> {
     let mut best = HashMap::<&Ref, (usize, Installation)>::new();
@@ -107,7 +107,8 @@ fn launched(games: &[Game], by_store_id: &HashMap<String, Vec<&Game>>, apps: imp
                 continue;
             }
             let install = installation(game, Origin::Launcher(id.clone()), app.location.clone(), app.alternates.clone());
-            if install.build.is_some() {
+            // A record naming no version file stays: another release of its title may have the trainer.
+            if install.build.is_some() || game.exe.is_none() {
                 best.insert(&game.id, (rank, install));
             }
         }
@@ -226,7 +227,9 @@ pub(crate) mod tests {
             versioned("2", &["steam:6"]),
             // No build where its record lists first: the other store's install is the one.
             versioned("3", &["steam:9", "gog:8"]),
+            // No version file named: listed, for another release's trainer.
             game("4", None, &["steam:5"]),
+            versioned("5", &["steam:9"]),
         ];
         let mut by_store_id = HashMap::<String, Vec<&Game>>::new();
         for game in &games {
@@ -238,7 +241,8 @@ pub(crate) mod tests {
         let apps = ["steam:5", "steam:6", "gog:7", "steam:9", "gog:8"].map(app);
         let installs = launched(&games, &by_store_id, apps.into_iter());
         let found: Vec<_> = installs.iter().map(|install| (install.game.id(), install.origin.store_id().unwrap().as_str())).collect();
-        assert_eq!(found, [("1", "gog:7"), ("2", "steam:6"), ("3", "gog:8")], "a game without a version file is not installed");
+        let expected = [("1", "gog:7"), ("2", "steam:6"), ("3", "gog:8"), ("4", "steam:5")];
+        assert_eq!(found, expected, "a game whose version file is missing is not installed");
         fs::remove_dir_all(&base).unwrap();
     }
 

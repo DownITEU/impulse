@@ -3,7 +3,7 @@
 mod cache;
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     sync::{Arc, PoisonError, RwLock},
 };
 
@@ -17,14 +17,27 @@ pub use cache::{cached, forget, refresh, size};
 pub(crate) const ART_CDN: &str = "https://api-cdn.wemod.com";
 /// A game's `flags` bit: Wand's overlay supports it.
 const OVERLAY_SUPPORTED: u64 = 256;
+// Bits of a map's `flags`.
+const LIVE_LOCATION: u64 = 2;
+const TELEPORT: u64 = 4;
 
-/// The ids of the games Wand's overlay draws in, from the last catalog read.
+/// What the last catalog read says of each game beyond its record, by game id.
 #[derive(Clone, Default)]
-pub struct Overlaid(Arc<RwLock<HashSet<String>>>);
+pub struct Marks(Arc<RwLock<HashMap<String, Mark>>>);
 
-impl Overlaid {
-    pub fn has(&self, id: &str) -> bool {
-        self.0.read().unwrap_or_else(PoisonError::into_inner).contains(id)
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Mark {
+    /// Wand's overlay draws in it.
+    pub overlay: bool,
+    /// A map of its title follows the player.
+    pub live: bool,
+    /// A map of its title teleports the player.
+    pub teleport: bool,
+}
+
+impl Marks {
+    pub fn of(&self, id: &str) -> Mark {
+        self.0.read().unwrap_or_else(PoisonError::into_inner).get(id).copied().unwrap_or_default()
     }
 }
 
@@ -82,6 +95,11 @@ struct Map {
     /// CDN path.
     thumbnail: Option<String>,
     updated_at: Option<String>,
+    // Any value, as a game's.
+    #[serde(default)]
+    flags: serde_json::Value,
+    #[serde(default)]
+    supports_teleport: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -122,14 +140,18 @@ enum LocatorKind {
     Unknown,
 }
 
-/// The games, the ones the overlay draws in noted in `overlaid`.
-fn parse(json: &[u8], overlaid: &Overlaid) -> Result<Vec<Game>> {
+/// The games, with what else the catalog says of them in `marks`.
+fn parse(json: &[u8], marks: &Marks) -> Result<Vec<Game>> {
     let Catalog { games, titles, platforms, maps } = serde_json::from_slice(json).context("parse catalog")?;
-    let drawn = games.values().filter(|entry| entry.flags.as_u64().is_some_and(|flags| flags & OVERLAY_SUPPORTED != 0));
-    *overlaid.0.write().unwrap_or_else(PoisonError::into_inner) = drawn.map(|entry| entry.id.clone()).collect();
     let wand = crate::source();
     let mut maps_of: HashMap<String, Vec<MapOffer>> = HashMap::new();
+    // By title: a map follows the player, a map teleports (its `supportsTeleport`, else its flag).
+    let mut reach: HashMap<String, Mark> = HashMap::new();
     for map in maps {
+        let flags = map.flags.as_u64().unwrap_or_default();
+        let title = reach.entry(map.title_id.clone()).or_default();
+        title.live |= flags & LIVE_LOCATION != 0;
+        title.teleport |= map.supports_teleport.as_bool().unwrap_or(flags & TELEPORT != 0);
         maps_of.entry(map.title_id).or_default().push(MapOffer {
             id: Ref::new(&wand, &map.external_id),
             name: map.name,
@@ -137,6 +159,11 @@ fn parse(json: &[u8], overlaid: &Overlaid) -> Result<Vec<Game>> {
             revision: map.updated_at,
         });
     }
+    let marked = games.values().map(|entry| {
+        let overlay = entry.flags.as_u64().is_some_and(|flags| flags & OVERLAY_SUPPORTED != 0);
+        (entry.id.clone(), Mark { overlay, ..reach.get(&entry.title_id).copied().unwrap_or_default() })
+    });
+    *marks.0.write().unwrap_or_else(PoisonError::into_inner) = marked.filter(|(_, mark)| *mark != Mark::default()).collect();
     let standalone: HashMap<String, &StandaloneApp> =
         platforms.standalone.apps.iter().map(|app| (format!("standalone:{}", app.id).to_ascii_lowercase(), app)).collect();
     let containers = platforms.uwp["containers"].as_object().into_iter().flatten();
@@ -204,7 +231,7 @@ mod tests {
     use super::*;
 
     fn read(json: &[u8]) -> Result<Vec<Game>> {
-        parse(json, &Overlaid::default())
+        parse(json, &Marks::default())
     }
 
     #[test]
@@ -256,11 +283,24 @@ mod tests {
         let json = br#"{"games":{"k":{"id":"1739","titleId":"t","flags":772},"2":{"id":"2","titleId":"t","flags":4},
             "3":{"id":"3","titleId":"t"},"4":{"id":"4","titleId":"t","flags":"256"}},
             "titles":{},"platforms":{"standalone":{"apps":[]}}}"#;
-        let overlaid = Overlaid::default();
-        parse(json, &overlaid).unwrap();
-        let draws: Vec<bool> = ["1739", "2", "3", "4", "k"].iter().map(|id| overlaid.has(id)).collect();
+        let marks = Marks::default();
+        parse(json, &marks).unwrap();
+        let draws: Vec<bool> = ["1739", "2", "3", "4", "k"].iter().map(|id| marks.of(id).overlay).collect();
         assert_eq!(draws, [true, false, false, false, false]);
-        parse(br#"{"games":{},"titles":{},"platforms":{"standalone":{"apps":[]}}}"#, &overlaid).unwrap();
-        assert!(!overlaid.has("1739"), "a newer catalog replaces the set");
+        parse(br#"{"games":{},"titles":{},"platforms":{"standalone":{"apps":[]}}}"#, &marks).unwrap();
+        assert!(!marks.of("1739").overlay, "a newer catalog replaces the set");
+    }
+
+    #[test]
+    fn a_title_s_maps_say_whether_its_games_follow_and_teleport_the_player() {
+        let json = br#"{"games":{"1":{"id":"1","titleId":"a"},"2":{"id":"2","titleId":"b"},"3":{"id":"3","titleId":"c"}},
+            "titles":{},"platforms":{"standalone":{"apps":[]}},
+            "maps":[{"titleId":"a","externalId":"x","name":"A1","flags":1},{"titleId":"a","externalId":"y","name":"A2","flags":7},
+                {"titleId":"b","externalId":"z","name":"B","flags":7,"supportsTeleport":false},
+                {"titleId":"c","externalId":"w","name":"C","flags":"7"}]}"#;
+        let marks = Marks::default();
+        parse(json, &marks).unwrap();
+        let reach = |id| (marks.of(id).live, marks.of(id).teleport);
+        assert_eq!([reach("1"), reach("2"), reach("3")], [(true, true), (true, false), (false, false)]);
     }
 }

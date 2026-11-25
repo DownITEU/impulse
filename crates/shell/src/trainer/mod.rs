@@ -200,6 +200,13 @@ impl Trainers {
         cx.notify();
     }
 
+    /// The game's own overlay mode, IN-GAME or not; `None`: the OVERLAY tab's.
+    pub fn set_overlay_in_game(&mut self, game: &GameId, in_game: Option<bool>, cx: &mut Context<Self>) {
+        self.profiles.edit_game(game, |profile| profile.overlay_in_game = in_game);
+        cx.emit(TrainerEvent::Changed(game.clone()));
+        cx.notify();
+    }
+
     /// Whether a run's mods come back at the next one; what was kept goes either way.
     pub fn set_save_mods(&mut self, game: &GameId, on: bool, cx: &mut Context<Self>) {
         self.edit_trainer(

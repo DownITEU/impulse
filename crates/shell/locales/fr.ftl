@@ -23,6 +23,7 @@ failure-game-not-found = le jeu est introuvable
 failure-launch-failed = le launcher n'a pas pu lancer le jeu : voir le log
 failure-not-started = le jeu ne s'est pas lancé à temps : vérifiez son launcher, puis réessayez
 failure-not-running = le jeu n'a pas été lancé à temps : lancez-le vous-même, puis réessayez
+failure-external-launch = ce trainer ne fonctionne qu'avec un jeu que vous lancez vous-même : lancez-le, puis appuyez sur JOUER + TRAINER
 failure-game-exited = le jeu s'est fermé avant que le trainer n'y entre
 failure-refused = refusé
 failure-elevation = le jeu tourne en administrateur : acceptez la demande pour vous connecter
@@ -57,7 +58,10 @@ page-overlay = OVERLAY
 page-star = Favori
 page-folder = Ouvrir le dossier du jeu
 page-launcher = Ouvrir dans { $launcher }
-page-source = Source du jeu
+page-source = Options du jeu
+page-overlay-default = OVERLAY : COMME DANS LES PARAMÈTRES
+page-overlay-in-game = OVERLAY : INTÉGRÉ
+page-overlay-over = OVERLAY : PAR-DESSUS
 page-custom = PERSO
 page-live = ACTIF
 page-active = { $active ->
@@ -220,10 +224,13 @@ run-idle = LANCEZ LE JEU POUR UTILISER LES MODS
 run-unconfirmed-title = JEU MIS À JOUR
 run-unconfirmed-body = Le jeu est plus récent que le trainer. Certains mods risquent de ne pas fonctionner tant que le trainer n'aura pas été mis à jour. Jouer quand même ?
 run-unconfirmed-skip = TOUJOURS JOUER
-run-unconfirmed-cancel = ANNULER
+run-ask-cancel = ANNULER
 run-unconfirmed-play = JOUER QUAND MÊME
 run-unconfirmed-ask = DEMANDER APRÈS UNE MISE À JOUR
 run-unconfirmed-ask-hint = demander avant de lancer quand le jeu est plus récent que la version prise en charge par le trainer
+run-outside-title = LANCEZ LE JEU VOUS-MÊME
+run-outside-body = Ce trainer ne s'attache qu'à un jeu lancé en dehors d'Impulse, et le jeu n'est pas lancé. Lancez-le, attendez qu'il charge, puis appuyez sur JOUER + TRAINER.
+run-outside-start = LANCER LE JEU
 
 ## Map
 

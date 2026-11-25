@@ -16,7 +16,7 @@ use super::{Folders, Lead, Panels, Prefs, Settings, Shown};
 use crate::ui::{
     assets::Icon,
     dialog::dialog,
-    dropdown::{dropdown, trigger},
+    dropdown::{Marked, dropdown, trigger},
     key,
     text::t,
     theme::*,
@@ -144,7 +144,7 @@ impl SettingsView {
         let width = px(160.);
         let shown = trigger("language", names[current].clone()).w(width);
         let open = self.menu == Some(Menu::Language);
-        let language = dropdown(shown, Menu::Language, open_menu, open, names, current, width, cx, |view, at, _, cx| {
+        let language = dropdown(shown, Menu::Language, open_menu, open, names, Marked::chosen(&[current]), width, cx, |view, at, _, cx| {
             let tag = languages().nth(at).flatten().map(|ours| ours.tag.to_owned());
             view.edit_prefs(|prefs| prefs.language = tag, cx);
         });

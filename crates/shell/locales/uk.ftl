@@ -24,6 +24,7 @@ failure-game-not-found = гру не знайдено
 failure-launch-failed = лаунчер не зміг запустити гру: деталі в розділі «ЛОГ»
 failure-not-started = гра не запустилася вчасно: перевірте її лаунчер і спробуйте знову
 failure-not-running = гру не запустили вчасно: запустіть її самі й спробуйте знову
+failure-external-launch = цей трейнер працює лише з грою, запущеною вами: запустіть її, потім натисніть ГРА + ТРЕЙНЕР
 failure-game-exited = гра закрилася раніше, ніж трейнер під'єднався
 failure-refused = відмовлено
 failure-elevation = гру запущено від адміністратора: підтвердьте запит, щоб під'єднатися
@@ -60,7 +61,10 @@ page-overlay = ОВЕРЛЕЙ
 page-star = Обране
 page-folder = Відкрити папку гри
 page-launcher = Відкрити в { $launcher }
-page-source = Звідки гра
+page-source = Параметри гри
+page-overlay-default = ОВЕРЛЕЙ: ЯК У НАЛАШТУВАННЯХ
+page-overlay-in-game = ОВЕРЛЕЙ: У ГРІ
+page-overlay-over = ОВЕРЛЕЙ: ПОВЕРХ ГРИ
 page-custom = ВРУЧНУ
 page-live = У ГРІ
 page-active = { $active }/{ $total } АКТИВНО
@@ -225,10 +229,13 @@ run-idle = ЗАПУСТІТЬ ТРЕЙНЕР, ЩОБ КОРИСТУВАТИСЯ 
 run-unconfirmed-title = ГРУ ОНОВЛЕНО
 run-unconfirmed-body = Трейнер ще не підтримує цю версію гри. Деякі моди можуть не працювати, доки трейнер не оновлять. Однаково запустити?
 run-unconfirmed-skip = ЗАПУСКАТИ ЗАВЖДИ
-run-unconfirmed-cancel = СКАСУВАТИ
+run-ask-cancel = СКАСУВАТИ
 run-unconfirmed-play = ОДНАКОВО ЗАПУСТИТИ
 run-unconfirmed-ask = ПИТАТИ ПІСЛЯ ОНОВЛЕННЯ ГРИ
 run-unconfirmed-ask-hint = питати перед запуском, якщо версія гри новіша за ту, що підтримує трейнер
+run-outside-title = ЗАПУСТІТЬ ГРУ САМІ
+run-outside-body = Цей трейнер підключається лише до гри, запущеної поза Impulse, а гру не запущено. Запустіть її, дочекайтеся завантаження, потім натисніть ГРА + ТРЕЙНЕР.
+run-outside-start = ЗАПУСТИТИ ГРУ
 
 ## Map
 

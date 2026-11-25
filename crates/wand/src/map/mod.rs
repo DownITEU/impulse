@@ -13,8 +13,12 @@ use serde_json::value::RawValue;
 
 use crate::{session::Session, transport::Transport};
 
+mod archives;
 mod icons;
 mod parse;
+mod pmtiles;
+
+pub use archives::Archives;
 
 const DIR: &str = "maps";
 

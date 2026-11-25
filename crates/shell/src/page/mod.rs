@@ -16,7 +16,7 @@ use client::{
     storage::Paths,
 };
 use gpui_kit::{
-    AnyElement, App, Context, Div, Entity, IntoElement, KeystrokeEvent, Modifiers, Render, Window,
+    AnyElement, App, Context, Div, Entity, IntoElement, KeystrokeEvent, Modifiers, Render, ScrollHandle, Window,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div,
     prelude::*,
@@ -37,7 +37,7 @@ use crate::{
     plugins::{Plugins, PluginsView},
     remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
-    run::{Runs, Unconfirmed, session_panel},
+    run::{Ask, Runs, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
     sounds::{Cues, SoundsView},
     sources::Sources,
@@ -48,7 +48,7 @@ use crate::{
 };
 use disclaimer::Disclaimer;
 use header::{header, search_box};
-use hero::Hero;
+use hero::{Hero, banner, pinned};
 use signed_out::SignedOut;
 use status::status_bar;
 use update_notice::{Opened, UpdateNotice};
@@ -76,13 +76,15 @@ pub struct Page {
     layer: Entity<Layer>,
     // Drawn in place of the page while over a game.
     hud: Entity<Hud>,
-    unconfirmed: Entity<Unconfirmed>,
+    ask: Entity<Ask>,
     log: Entity<LogView>,
     maps: Entity<Maps>,
     map: Entity<MapView>,
     resources: Entity<Resources>,
     cheat_list: Entity<CheatList>,
     hero: Entity<Hero>,
+    /// The open game's pane: the hero's bar stays over it.
+    scroll: ScrollHandle,
     disclaimer: Entity<Disclaimer>,
     signed_out: Entity<SignedOut>,
     updates: Entity<Updates>,
@@ -160,13 +162,12 @@ impl Page {
             cx.observe(&runs, |_, _, cx| cx.notify()).detach();
             Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, starred, window, cx)
         });
-        let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, cx));
+        let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, &trainers, cx));
         let input = cx.new(|cx| Input::new(&runs, cx));
         let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, input.clone(), in_game.clone(), window, cx));
-        let unconfirmed = cx.new(|cx| Unconfirmed::new(runs.clone(), settings.clone(), cx));
-        cx.observe(&unconfirmed, |_, _, cx| cx.notify()).detach();
-        let hero =
-            cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), unconfirmed.clone(), layer.clone(), picker.clone(), cx));
+        let ask = cx.new(|cx| Ask::new(runs.clone(), settings.clone(), window, cx));
+        cx.observe(&ask, |_, _, cx| cx.notify()).detach();
+        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), ask.clone(), layer.clone(), picker.clone(), cx));
         let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), input, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         let cheat_list =
@@ -209,7 +210,7 @@ impl Page {
                 library,
                 trainers,
                 runs,
-                unconfirmed.clone(),
+                ask.clone(),
                 hotkeys,
                 maps.clone(),
                 map.clone(),
@@ -251,13 +252,14 @@ impl Page {
             _tray: tray,
             layer,
             hud,
-            unconfirmed,
+            ask,
             log,
             maps,
             map,
             resources,
             cheat_list,
             hero,
+            scroll: ScrollHandle::new(),
             disclaimer,
             signed_out,
             updates,
@@ -322,7 +324,17 @@ impl Page {
                 body.when(!wide, |body| body.flex_col()).when(wide, |body| body.items_start()).child(cheats).child(side)
             }
         };
-        v_flex().id("pane").flex_1().min_w_0().h_full().child(self.hero.clone()).child(body).overflow_y_scrollbar().into_any_element()
+        let banner = banner(&game, self.trainers.read(cx), cx);
+        let pane = v_flex().id("pane").size_full().overflow_y_scroll().track_scroll(&self.scroll).child(banner).child(body.flex_none());
+        div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .child(pane)
+            .child(pinned(&self.hero, &self.scroll))
+            .vertical_scrollbar(&self.scroll)
+            .into_any_element()
     }
 
     /// Ctrl+K, seen whatever has the focus (a key nobody binds reaches no element then); not over the game or a
@@ -353,7 +365,7 @@ impl Page {
             self.remote_view.as_ref().and_then(|view| shown(view, view.read(cx).is_open())),
             self.cheat_list.read(cx).editor().and_then(|editor| shown(editor, true)),
             shown(&self.picker, self.picker.read(cx).is_open()),
-            shown(&self.unconfirmed, self.unconfirmed.read(cx).is_open()),
+            shown(&self.ask, self.ask.read(cx).is_open()),
             shown(&self.disclaimer, self.disclaimer.read(cx).is_open(cx)),
             shown(&self.signed_out, self.signed_out.read(cx).is_open(cx)),
             shown(&self.update_notice, self.update_notice.read(cx).is_open(cx)),

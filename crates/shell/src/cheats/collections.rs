@@ -27,7 +27,7 @@ use crate::{
     ui::{
         assets::Icon,
         dialog::dialog,
-        dropdown::{close, picks},
+        dropdown::{Marked, close, picks},
         key,
         text::{t, tf},
         theme::*,
@@ -134,7 +134,7 @@ impl CheatList {
             .on_mouse_down_out(cx.listener(move |list, _, _, cx| close(list, open_menu, menu, cx)))
             .when(self.menu == Some(menu), |chip| {
                 let options = vec![t(cx, key::CHEATS_EDIT), t(cx, key::CHEATS_DELETE)];
-                let actions = picks(options, usize::MAX, open_menu, cx, move |list, pick, window, cx| match pick {
+                let actions = picks(options, Marked::default(), open_menu, cx, move |list, pick, window, cx| match pick {
                     0 => list.edit_collection(Some(at), window, cx),
                     _ => list.delete_collection(at, cx),
                 });

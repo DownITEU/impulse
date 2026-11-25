@@ -31,7 +31,7 @@ What the UI, a run and the sources share, in no source's terms: data and traits,
 - `Cheat::id` is unique in its trainer. `category` is its section's id; `category_name`, when the source has words for it, is what shows. `key` may be shared, or `None`: it then sets nothing.
 - `Kind::slots` is the hotkey slot count (toggle and button 1, number, slider and selection 2: decrease then increase, `Unknown` 0). `Cheat::hotkeys` is indexed by slot with `None` for unbound, and may be shorter than the slots: read a missing slot as unbound.
 - `Args::clamp` never panics: trainers send `min > max`. Do not replace it with `f64::clamp`.
-- Dropping a `Session` ends the run. `Live::events` ends with the session. `position` and `teleport` use the game's own coordinates and are valid only when the trainer says so.
+- Dropping a `Session` ends the run. `Live::events` ends with the session. `position` and `teleport` use the game's own coordinates and are valid only when the trainer says so; an axis `position` is not told is NaN.
 - `Group::id`, `Pin::id` and `Region::id` are stable across revisions: the user's state refers to them. A `revision` changes whenever its content does: staleness rests on it.
 - A pin description links to another pin with `PIN_LINK`. A source rewrites or drops its own link forms.
 - A `Frame` is valid: `axes` a permutation of 0, 1, 2, `scale` never zero.

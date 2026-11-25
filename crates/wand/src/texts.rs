@@ -2,9 +2,10 @@
 
 use model::Text;
 
-const FILES: [(&str, &str); 11] = [
+const FILES: [(&str, &str); 12] = [
     ("en", include_str!("../locales/en.ftl")),
     ("zh-CN", include_str!("../locales/zh-CN.ftl")),
+    ("zh-TW", include_str!("../locales/zh-TW.ftl")),
     ("fr", include_str!("../locales/fr.ftl")),
     ("de", include_str!("../locales/de.ftl")),
     ("es", include_str!("../locales/es.ftl")),
