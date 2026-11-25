@@ -13,7 +13,7 @@ Small Windows and I/O crates with no dependency on our other crates but `model` 
 - The mouse hook runs on every move: on only while asked (`set_mouse`, posted to the same thread without waiting, so the held keys stay). A later hook sees keys first.
 
 ## topmost
-- `Watch` (one thread: the foreground hook) and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `show`, `pass_through`, `exclusive`, ...). `raise` says whether the window took the foreground: a hooked press gives no right to it (a registered hotkey's did), so `take_input` sends an empty input first.
+- `Watch` (one thread: the foreground hook) and raw-HWND calls (`foreground`, `raise`, `lower`, `cloak`, `place`, `show`, `pass_through`, `exclusive`, ...). `window_of(pid)`: a process's largest visible unowned top-level window; `first_window_of(pid)`: its first visible one, front to back. `raise` says whether the window took the foreground: a hooked press gives no right to it (a registered hotkey's did), so `take_input` sends an empty input first.
 - `client_area(window)`: a window's client area as an `Area` (screen physical pixels, as `place`, `show` and `resize` take), for placing a layer inside a game's frame; data only, `None` for a gone window. `resize` keeps the z-order; `restore` says how the window was (`Away`) for `put_away`.
 - `post_input(window, message, wparam, lparam)`: posts only mouse messages; a wheel's client point becomes the screen one Win32 wants.
 - `layout(game)` (the `HKL` of `game`'s thread) and `key_state(Held)` (the held modifiers and Caps Lock as `GetKeyboardState` gives them): what the vendored GPUI's `keystroke_in` takes to make a keystroke of a key typed into the game.

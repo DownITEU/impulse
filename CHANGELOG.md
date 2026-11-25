@@ -19,6 +19,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 - Games whose own store's release has no trainer (most often GOG) are found again, as in 0.4.0, and can use another store's trainer. Only a game whose version file is gone stays out.
 - The search finds a game under the name of another edition on the same install (World War Z: Aftermath under World War Z).
 - A trainer that works only with a game you start yourself (007 First Light) says so at once when the game is not running, with START GAME to start it through its store, instead of waiting for it. Press LAUNCH + ATTACH once the game runs.
+- The in-game overlay waits for the game's own window before it goes in. In an Unreal game started from Impulse (Deep Rock Galactic), it no longer took a hidden window of the game's loading screen, which left its cursor stuck as a pointer.
 
 ## [0.5.0] - 2026-11-25
 
