@@ -24,6 +24,7 @@ failure-game-not-found = nie znaleziono gry
 failure-launch-failed = launcher nie mógł uruchomić gry: szczegóły w logu
 failure-not-started = gra nie uruchomiła się na czas: sprawdź jej launcher i spróbuj ponownie
 failure-not-running = gra nie została uruchomiona na czas: uruchom ją i spróbuj ponownie
+failure-external-launch = ten trainer działa tylko z grą uruchomioną przez ciebie: uruchom ją, potem naciśnij GRA + TRAINER
 failure-game-exited = gra została zamknięta, zanim trainer się do niej dostał
 failure-refused = odrzucono
 failure-elevation = gra działa jako administrator: zaakceptuj monit, aby się połączyć
@@ -225,10 +226,13 @@ run-idle = TRAINER WYŁ. · MODY DOSTĘPNE PO STARCIE
 run-unconfirmed-title = NOWA WERSJA GRY
 run-unconfirmed-body = Trainer nie obsługuje jeszcze tej wersji gry. Do czasu aktualizacji trainera mody mogą nie działać. Uruchomić mimo to?
 run-unconfirmed-skip = ZAWSZE URUCHAMIAJ
-run-unconfirmed-cancel = ANULUJ
+run-ask-cancel = ANULUJ
 run-unconfirmed-play = URUCHOM MIMO TO
 run-unconfirmed-ask = PYTAJ PO AKTUALIZACJI GRY
 run-unconfirmed-ask-hint = pytaj przed uruchomieniem, gdy wersja gry jest nowsza niż obsługiwana przez trainer
+run-outside-title = URUCHOM GRĘ SAM
+run-outside-body = Ten trainer łączy się tylko z grą uruchomioną poza Impulse, a gra nie jest uruchomiona. Uruchom ją, poczekaj, aż się wczyta, potem naciśnij GRA + TRAINER.
+run-outside-start = URUCHOM GRĘ
 
 ## Map
 

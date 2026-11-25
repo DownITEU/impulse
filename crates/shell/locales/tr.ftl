@@ -24,6 +24,7 @@ failure-game-not-found = oyun bulunamadı
 failure-launch-failed = başlatıcı oyunu başlatamadı, ayrıntılar logda
 failure-not-started = oyun zamanında başlamadı: başlatıcısını kontrol edip tekrar deneyin
 failure-not-running = oyun zamanında başlatılmadı: oyunu kendiniz başlatıp tekrar deneyin
+failure-external-launch = bu trainer yalnızca kendiniz başlattığınız bir oyunla çalışır: oyunu başlatın, sonra OYUN + TRAİNER düğmesine basın
 failure-game-exited = oyun, trainer bağlanmadan kapandı
 failure-refused = reddedildi
 failure-elevation = oyun yönetici olarak çalışıyor: bağlanmak için istemi onaylayın
@@ -203,10 +204,13 @@ run-idle = TRAİNER KAPALI · HİLELER İÇİN BAŞLAT
 run-unconfirmed-title = OYUN GÜNCELLENDİ
 run-unconfirmed-body = Oyunun sürümü trainerın desteklediği sürümden daha yeni. Trainer güncellenene kadar bazı hileler çalışmayabilir. Yine de başlatılsın mı?
 run-unconfirmed-skip = HER ZAMAN BAŞLAT
-run-unconfirmed-cancel = İPTAL
+run-ask-cancel = İPTAL
 run-unconfirmed-play = YİNE DE BAŞLAT
 run-unconfirmed-ask = OYUN GÜNCELLENİNCE SOR
 run-unconfirmed-ask-hint = oyunun sürümü trainerın desteklediğinden yeniyse başlatmadan önce sor
+run-outside-title = OYUNU KENDİNİZ BAŞLATIN
+run-outside-body = Bu trainer yalnızca Impulse dışında başlatılan bir oyuna bağlanır ve oyun çalışmıyor. Oyunu başlatın, yüklenmesini bekleyin, sonra OYUN + TRAİNER düğmesine basın.
+run-outside-start = OYUNU BAŞLAT
 
 ## Map
 

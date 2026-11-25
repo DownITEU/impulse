@@ -24,6 +24,7 @@ failure-game-not-found = gioco non trovato
 failure-launch-failed = il launcher non è riuscito ad avviare il gioco: i dettagli sono nel log
 failure-not-started = il gioco non si è avviato in tempo: controlla il suo launcher e riprova
 failure-not-running = il gioco non è stato avviato in tempo: avvialo tu e riprova
+failure-external-launch = questo trainer funziona solo con un gioco avviato da te: avvialo, poi premi GIOCA CON TRAINER
 failure-game-exited = il gioco si è chiuso prima che il trainer entrasse
 failure-refused = richiesta respinta
 failure-elevation = il gioco è in esecuzione come amministratore: accetta la richiesta per collegarti
@@ -209,10 +210,13 @@ run-idle = TRAINER FERMO · COMANDI DISPONIBILI DOPO L'AVVIO
 run-unconfirmed-title = GIOCO AGGIORNATO
 run-unconfirmed-body = Il gioco è più recente della versione supportata dal trainer. Le mod potrebbero non funzionare fino al prossimo aggiornamento del trainer. Giocare comunque?
 run-unconfirmed-skip = GIOCA SEMPRE
-run-unconfirmed-cancel = ANNULLA
+run-ask-cancel = ANNULLA
 run-unconfirmed-play = GIOCA COMUNQUE
 run-unconfirmed-ask = CHIEDI SE IL GIOCO SI AGGIORNA
 run-unconfirmed-ask-hint = chiedi prima di avviare quando il gioco è più recente della versione supportata dal trainer
+run-outside-title = AVVIA TU IL GIOCO
+run-outside-body = Questo trainer si collega solo a un gioco avviato fuori da Impulse, e il gioco non è in esecuzione. Avvialo, attendi che si carichi, poi premi GIOCA CON TRAINER.
+run-outside-start = AVVIA GIOCO
 
 ## Map
 

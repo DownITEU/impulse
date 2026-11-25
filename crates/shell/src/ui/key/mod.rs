@@ -32,6 +32,7 @@ pub const FAILURE_GAME_NOT_FOUND: Key = Key("failure-game-not-found");
 pub const FAILURE_LAUNCH_FAILED: Key = Key("failure-launch-failed");
 pub const FAILURE_NOT_STARTED: Key = Key("failure-not-started");
 pub const FAILURE_NOT_RUNNING: Key = Key("failure-not-running");
+pub const FAILURE_EXTERNAL_LAUNCH: Key = Key("failure-external-launch");
 pub const FAILURE_GAME_EXITED: Key = Key("failure-game-exited");
 pub const FAILURE_REFUSED: Key = Key("failure-refused");
 pub const FAILURE_ELEVATION: Key = Key("failure-elevation");

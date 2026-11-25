@@ -212,6 +212,7 @@ fn kind(kind: FailureKind) -> Key {
         FailureKind::LaunchFailed => key::FAILURE_LAUNCH_FAILED,
         FailureKind::NotStarted => key::FAILURE_NOT_STARTED,
         FailureKind::NotRunning => key::FAILURE_NOT_RUNNING,
+        FailureKind::ExternalLaunch => key::FAILURE_EXTERNAL_LAUNCH,
         FailureKind::GameExited => key::FAILURE_GAME_EXITED,
         FailureKind::Refused => key::FAILURE_REFUSED,
         FailureKind::Elevation => key::FAILURE_ELEVATION,

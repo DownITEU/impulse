@@ -18,6 +18,8 @@ pub enum FailureKind {
     NotStarted,
     /// The run waited for the user to start the game, and it did not show in time.
     NotRunning,
+    /// The trainer attaches only to a game the user started, and it is not running.
+    ExternalLaunch,
     GameExited,
     Refused,
     /// The game runs as administrator and the user did not let the app be one too.

@@ -37,7 +37,7 @@ use crate::{
     plugins::{Plugins, PluginsView},
     remote::{Remote, RemoteView, Serve},
     resources::{Resources, ResourcesEvent, ResourcesView},
-    run::{Runs, Unconfirmed, session_panel},
+    run::{Ask, Runs, session_panel},
     settings::{Folders, Looked, Panels, Settings, SettingsView, Tabs},
     sounds::{Cues, SoundsView},
     sources::Sources,
@@ -76,7 +76,7 @@ pub struct Page {
     layer: Entity<Layer>,
     // Drawn in place of the page while over a game.
     hud: Entity<Hud>,
-    unconfirmed: Entity<Unconfirmed>,
+    ask: Entity<Ask>,
     log: Entity<LogView>,
     maps: Entity<Maps>,
     map: Entity<MapView>,
@@ -163,10 +163,9 @@ impl Page {
         let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, cx));
         let input = cx.new(|cx| Input::new(&runs, cx));
         let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, input.clone(), in_game.clone(), window, cx));
-        let unconfirmed = cx.new(|cx| Unconfirmed::new(runs.clone(), settings.clone(), cx));
-        cx.observe(&unconfirmed, |_, _, cx| cx.notify()).detach();
-        let hero =
-            cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), unconfirmed.clone(), layer.clone(), picker.clone(), cx));
+        let ask = cx.new(|cx| Ask::new(runs.clone(), settings.clone(), window, cx));
+        cx.observe(&ask, |_, _, cx| cx.notify()).detach();
+        let hero = cx.new(|cx| Hero::new(library.clone(), trainers.clone(), runs.clone(), ask.clone(), layer.clone(), picker.clone(), cx));
         let hotkeys = cx.new(|cx| Hotkeys::new(&paths, &library, trainers.clone(), runs.clone(), input, window, cx));
         cx.observe(&hotkeys, |_, _, cx| cx.notify()).detach();
         let cheat_list =
@@ -209,7 +208,7 @@ impl Page {
                 library,
                 trainers,
                 runs,
-                unconfirmed.clone(),
+                ask.clone(),
                 hotkeys,
                 maps.clone(),
                 map.clone(),
@@ -251,7 +250,7 @@ impl Page {
             _tray: tray,
             layer,
             hud,
-            unconfirmed,
+            ask,
             log,
             maps,
             map,
@@ -353,7 +352,7 @@ impl Page {
             self.remote_view.as_ref().and_then(|view| shown(view, view.read(cx).is_open())),
             self.cheat_list.read(cx).editor().and_then(|editor| shown(editor, true)),
             shown(&self.picker, self.picker.read(cx).is_open()),
-            shown(&self.unconfirmed, self.unconfirmed.read(cx).is_open()),
+            shown(&self.ask, self.ask.read(cx).is_open()),
             shown(&self.disclaimer, self.disclaimer.read(cx).is_open(cx)),
             shown(&self.signed_out, self.signed_out.read(cx).is_open(cx)),
             shown(&self.update_notice, self.update_notice.read(cx).is_open(cx)),

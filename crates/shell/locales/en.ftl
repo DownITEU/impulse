@@ -24,6 +24,7 @@ failure-game-not-found = the game was not found
 failure-launch-failed = the launcher could not start the game: the log has the details
 failure-not-started = the game did not start in time: check its launcher, then try again
 failure-not-running = the game was not started in time: start it yourself, then try again
+failure-external-launch = this trainer works only with a game you start yourself: start it, then press LAUNCH + ATTACH
 failure-game-exited = the game closed before the trainer got in
 failure-refused = refused
 failure-elevation = the game runs as administrator: accept the prompt to attach
@@ -203,10 +204,13 @@ run-idle = TRAINER IDLE · CONTROLS UNLOCK AFTER LAUNCH
 run-unconfirmed-title = GAME UPDATED
 run-unconfirmed-body = This build is newer than the trainer supports, so some mods may not work until the trainer is updated. Play anyway?
 run-unconfirmed-skip = ALWAYS PLAY
-run-unconfirmed-cancel = CANCEL
+run-ask-cancel = CANCEL
 run-unconfirmed-play = PLAY ANYWAY
 run-unconfirmed-ask = ASK ON A GAME UPDATE
 run-unconfirmed-ask-hint = ask before a launch when the game's build is newer than the trainer supports
+run-outside-title = START THE GAME YOURSELF
+run-outside-body = This trainer attaches only to a game started outside Impulse, and the game is not running. Start it, wait until it loads, then press LAUNCH + ATTACH.
+run-outside-start = START GAME
 
 ## Map
 

@@ -43,14 +43,12 @@ pub async fn start(install: Installation, plan: Plan, mut stage: impl FnMut(Stag
     let process = match running {
         Some(_) if required => return Err(Failure::new(FailureKind::Restart)),
         Some(process) => process,
+        None if plan.launch == Launch::User => return Err(Failure::new(FailureKind::ExternalLaunch)),
         None => {
-            let mut started = false;
-            if plan.launch != Launch::User {
-                _ready = prepared.before_start(&install.origin, &rule.location).await?;
-                stage(Stage::Launching);
-                let (origin, location, app, arguments) = (install.origin, rule.location.clone(), install.app, plan.launch_arguments);
-                started = unblock(move || launchers::start(&origin, &location, app.as_deref(), arguments.as_deref())).await?;
-            }
+            _ready = prepared.before_start(&install.origin, &rule.location).await?;
+            stage(Stage::Launching);
+            let (origin, location, app, arguments) = (install.origin, rule.location.clone(), install.app, plan.launch_arguments);
+            let started = unblock(move || launchers::start(&origin, &location, app.as_deref(), arguments.as_deref())).await?;
             stage(Stage::WaitingForGame);
             let within = if started { plan.launch_within.unwrap_or(LAUNCHED_WITHIN) } else { STARTED_BY_USER_WITHIN };
             // Its timeout says who was to start the game.
@@ -62,6 +60,13 @@ pub async fn start(install: Installation, plan: Plan, mut stage: impl FnMut(Stag
 
     stage(Stage::Attaching);
     Ok((process.clone(), prepared.attach(process, install.build).await?))
+}
+
+/// The game alone through its launcher, as the user would start it (blocking): for a trainer that attaches only then.
+pub fn start_game(install: &Installation) -> Result<()> {
+    let started = launchers::start(&install.origin, &install.location, install.app.as_deref(), None)?;
+    let none = || Failure { detail: "no launcher here starts the game".into(), ..Failure::new(FailureKind::LaunchFailed) };
+    started.then_some(()).ok_or_else(none)
 }
 
 /// Counts a run that went live; the mods it starts with, when the game keeps them.
@@ -162,6 +167,16 @@ mod tests {
         let attached = start_of(of_me(&probe, origin, Launch::Start, Duration::from_secs(3)));
         assert_eq!(attached.kind, FailureKind::Refused);
         assert_eq!((probe.readied.load(Ordering::SeqCst), probe.attached.load(Ordering::SeqCst)), (0, 1));
+    }
+
+    #[test]
+    fn a_game_the_user_starts_is_not_waited_for_when_it_is_not_running() {
+        let probe = Arc::new(Probe::default());
+        let origin = Origin::Launcher(model::StoreId::parse("itch:0").unwrap());
+        let (install, mut plan) = of_me(&probe, origin, Launch::User, Duration::ZERO);
+        plan.target.image = Some("not-running-anywhere.exe".into());
+        assert_eq!(start_of((install, plan)).kind, FailureKind::ExternalLaunch);
+        assert_eq!((probe.readied.load(Ordering::SeqCst), probe.attached.load(Ordering::SeqCst)), (0, 0));
     }
 
     #[test]

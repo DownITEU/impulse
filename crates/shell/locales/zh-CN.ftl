@@ -24,6 +24,7 @@ failure-game-not-found = 没有找到游戏
 failure-launch-failed = 启动器没能启动游戏：详情见日志
 failure-not-started = 游戏没有按时启动：请检查它的启动器，然后重试
 failure-not-running = 没有及时启动游戏：请自行启动，然后重试
+failure-external-launch = 此修改器只适用于你自行启动的游戏：请先启动游戏，然后点击 启动 + 附加
 failure-game-exited = 修改器载入前游戏就关闭了
 failure-refused = 被拒绝
 failure-elevation = 游戏以管理员身份运行：接受弹窗后才能附加
@@ -202,10 +203,13 @@ run-idle = 修改器空闲 · 启动后才能操作
 run-unconfirmed-title = 游戏已更新
 run-unconfirmed-body = 这个版本比修改器支持的版本更新，在修改器更新之前，部分修改项可能无效。仍要启动吗？
 run-unconfirmed-skip = 总是启动
-run-unconfirmed-cancel = 取消
+run-ask-cancel = 取消
 run-unconfirmed-play = 仍然启动
 run-unconfirmed-ask = 游戏更新时询问
 run-unconfirmed-ask-hint = 游戏版本比修改器支持的版本更新时，启动前先询问
+run-outside-title = 请自行启动游戏
+run-outside-body = 此修改器只会附加到在 Impulse 之外启动的游戏，而游戏当前未运行。请启动游戏，等待加载完成，然后点击 启动 + 附加。
+run-outside-start = 启动游戏
 
 ## Map
 
