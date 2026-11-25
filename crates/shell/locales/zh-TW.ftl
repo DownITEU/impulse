@@ -24,6 +24,7 @@ failure-game-not-found = 找不到遊戲
 failure-launch-failed = 啟動器無法啟動遊戲：詳情請見日誌
 failure-not-started = 遊戲未在時限內啟動：請檢查啟動器後重試
 failure-not-running = 遊戲未在時限內啟動：請自行啟動後重試
+failure-external-launch = 此修改器僅適用於您自行啟動的遊戲：請先啟動遊戲，然後按下 啟動 + 附加
 failure-game-exited = 遊戲在修改器載入前就已關閉
 failure-refused = 遭到拒絕
 failure-elevation = 遊戲以系統管理員身分執行：請同意權限提示才能附加
@@ -55,7 +56,10 @@ page-overlay = 重疊介面
 page-star = 加入最愛
 page-folder = 開啟遊戲資料夾
 page-launcher = 在 { $launcher } 中開啟
-page-source = 遊戲來源
+page-source = 遊戲選項
+page-overlay-default = 重疊介面：依照設定
+page-overlay-in-game = 重疊介面：遊戲內嵌
+page-overlay-over = 重疊介面：覆蓋於遊戲上方
 page-custom = 自訂
 page-live = 執行中
 page-active = { $active }/{ $total } 已開啟
@@ -206,6 +210,9 @@ run-ask-cancel = 取消
 run-unconfirmed-play = 仍要遊玩
 run-unconfirmed-ask = 遊戲更新時詢問
 run-unconfirmed-ask-hint = 當遊戲版本比修改器支援的版本更新時，在啟動前先詢問
+run-outside-title = 請自行啟動遊戲
+run-outside-body = 此修改器只會附加到在 Impulse 之外啟動的遊戲，而遊戲目前未在執行。請啟動遊戲，等待載入完成，然後按下 啟動 + 附加。
+run-outside-start = 啟動遊戲
 
 ## Map
 
