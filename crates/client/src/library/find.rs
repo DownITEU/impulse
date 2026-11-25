@@ -11,8 +11,15 @@ pub struct Find {
     /// The record, into `Library::catalog`.
     pub at: usize,
     pub listed: bool,
-    /// Lower case: the name, then each of the title's other names, a line each.
+    /// Lower case: the name, then each of the title's other names and those of the titles its install stands for, a line
+    /// each.
     pub search: String,
+}
+
+impl Find {
+    fn name(&self) -> &str {
+        self.search.split('\n').next().unwrap_or_default()
+    }
 }
 
 impl Library {
@@ -20,10 +27,18 @@ impl Library {
     /// its first with a trainer. A title with a record of a listed install is that install's: the game stands for it.
     pub fn finds(&self) -> Vec<Find> {
         let listed: HashSet<&Ref> = self.games.iter().map(|game| &game.source.id).collect();
-        let installs: Vec<_> = self.games.iter().map(|game| one_install(game)).collect();
-        let held = self.catalog.iter().filter(|record| installs.iter().any(|same| same(record)));
-        let listed_titles: HashSet<&str> =
-            self.games.iter().map(|game| game.source.title_id.as_str()).chain(held.map(|record| record.title_id.as_str())).collect();
+        let installs: Vec<_> = self.games.iter().map(|game| (&game.source, one_install(game))).collect();
+        // The records each listed game's install stands for, by that game's record.
+        let mut held = HashMap::<&Ref, Vec<&model::Game>>::new();
+        for record in self.catalog.iter() {
+            for (source, same) in &installs {
+                if same(record) {
+                    held.entry(&source.id).or_default().push(record);
+                }
+            }
+        }
+        let held_titles = held.values().flatten().map(|record| record.title_id.as_str());
+        let listed_titles: HashSet<&str> = self.games.iter().map(|game| game.source.title_id.as_str()).chain(held_titles).collect();
         let steam = |at: usize| self.catalog[at].store_ids.iter().any(|id| id.steam_app().is_some());
         let mut titles = HashMap::<&str, usize>::new();
         let mut rows = Vec::new();
@@ -38,8 +53,18 @@ impl Library {
             }
         }
         rows.extend(titles.into_values().map(|at| (at, false)));
-        let mut finds: Vec<Find> = rows.into_iter().map(|(at, listed)| Find { at, listed, search: search(&self.catalog[at]) }).collect();
-        finds.sort_by(|a, b| by_name(&a.search, &b.search).then(a.at.cmp(&b.at)));
+        let find = |(at, listed): (usize, bool)| {
+            let record = &self.catalog[at];
+            let mut text = search(record);
+            // The other titles its install stands for have no row: their names find this one.
+            for other in held.get(&record.id).into_iter().flatten().filter(|other| other.title_id != record.title_id) {
+                text.push('\n');
+                text.push_str(&search(other));
+            }
+            Find { at, listed, search: text }
+        };
+        let mut finds: Vec<Find> = rows.into_iter().map(find).collect();
+        finds.sort_by(|a, b| by_name(a.name(), b.name()).then(a.at.cmp(&b.at)));
         finds
     }
 }
