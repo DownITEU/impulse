@@ -41,6 +41,9 @@ pub struct GameProfile {
     /// Seconds live: in all runs, and in the last one.
     pub played: u64,
     pub last: u64,
+    /// The overlay drawn inside this game (IN-GAME) or not (OVER THE GAME); `None`: the app's choice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overlay_in_game: Option<bool>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -66,7 +69,7 @@ impl TrainerProfile {
     }
 }
 
-static BLANK_GAME: GameProfile = GameProfile { favorite: false, sessions: 0, played: 0, last: 0 };
+static BLANK_GAME: GameProfile = GameProfile { favorite: false, sessions: 0, played: 0, last: 0, overlay_in_game: None };
 
 static BLANK_TRAINER: TrainerProfile = TrainerProfile {
     save_mods: false,
@@ -157,5 +160,15 @@ mod tests {
         assert!(back.game(&old).favorite && back.game(&new).sessions == 1);
         assert_eq!(back.trainer(&trainer).collections[0].mods["a"], 1.);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_game_keeps_its_own_overlay_mode_and_writes_none_without_one() {
+        let earlier: GameProfile = serde_json::from_str(r#"{"favorite":true}"#).unwrap();
+        assert_eq!(earlier.overlay_in_game, None);
+        assert!(!serde_json::to_string(&earlier).unwrap().contains("overlay"));
+        let over = GameProfile { overlay_in_game: Some(false), ..earlier };
+        let back: GameProfile = serde_json::from_str(&serde_json::to_string(&over).unwrap()).unwrap();
+        assert_eq!(back.overlay_in_game, Some(false));
     }
 }

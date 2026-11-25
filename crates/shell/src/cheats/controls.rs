@@ -19,7 +19,7 @@ use model::{Cheat, Kind};
 
 use super::{CheatList, Menu, Printed, number, open_menu};
 use crate::ui::{
-    dropdown::{dropdown, trigger},
+    dropdown::{Marked, dropdown, trigger},
     key,
     text::{t, tf},
     theme::*,
@@ -147,12 +147,22 @@ impl CheatList {
                     return trigger.into_any_element();
                 }
                 let menu = Menu::Cheat(index);
-                dropdown(trigger, menu, open_menu, self.menu == Some(menu), options, current, width, cx, move |list, option, _, cx| {
-                    // The menu is dropped when another game opens, so the open game is the one it was drawn for.
-                    if let Some(game) = list.selected(cx) {
-                        list.change_value(&game, index, |_, _| option as f64, cx);
-                    }
-                })
+                dropdown(
+                    trigger,
+                    menu,
+                    open_menu,
+                    self.menu == Some(menu),
+                    options,
+                    Marked::chosen(&[current]),
+                    width,
+                    cx,
+                    move |list, option, _, cx| {
+                        // The menu is dropped when another game opens, so the open game is the one it was drawn for.
+                        if let Some(game) = list.selected(cx) {
+                            list.change_value(&game, index, |_, _| option as f64, cx);
+                        }
+                    },
+                )
                 .into_any_element()
             }
             Kind::Unknown => div().into_any_element(),

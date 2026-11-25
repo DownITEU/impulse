@@ -7,12 +7,13 @@ use std::{rc::Rc, sync::Arc};
 use blocking::unblock;
 use client::{Registry, library::GameId};
 use futures::StreamExt;
-use gpui_kit::{Context, CursorStyle, Entity, EventEmitter, MirrorFrame, Task};
+use gpui_kit::{App, Context, CursorStyle, Entity, EventEmitter, MirrorFrame, Task};
 use model::{Canvas, CanvasEvent, Cursor, Failure, Layers, Rect, Texture};
 
 use crate::{
     run::{RunEvent, Runs},
     settings::Settings,
+    trainer::{TrainerEvent, Trainers},
 };
 
 /// The HUD's layer, the whole game's frame with the input, and the minimap window's.
@@ -30,7 +31,9 @@ pub(super) enum InGameEvent {
 pub struct InGame {
     registry: Arc<Registry>,
     runs: Entity<Runs>,
-    // The user's MODE: IN-GAME.
+    settings: Entity<Settings>,
+    trainers: Entity<Trainers>,
+    // IN-GAME is the live game's MODE: its own, else the OVERLAY tab's.
     wanted: bool,
     // Bumped whenever the canvas is dropped or asked for again: an answer or an event of an older one is ignored.
     generation: u64,
@@ -46,23 +49,46 @@ pub struct InGame {
 impl EventEmitter<InGameEvent> for InGame {}
 
 impl InGame {
-    pub fn new(registry: Arc<Registry>, runs: &Entity<Runs>, settings: &Entity<Settings>, cx: &mut Context<Self>) -> Self {
-        cx.observe(settings, |in_game, settings, cx| {
-            let on = settings.read(cx).prefs().overlay_in_game;
-            if on != in_game.wanted {
-                in_game.wanted = on;
-                in_game.enter(cx);
+    pub fn new(
+        registry: Arc<Registry>,
+        runs: &Entity<Runs>,
+        settings: &Entity<Settings>,
+        trainers: &Entity<Trainers>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        cx.observe(settings, |in_game, _, cx| in_game.rewant(cx)).detach();
+        cx.subscribe(trainers, |in_game, _, event: &TrainerEvent, cx| {
+            if matches!(event, TrainerEvent::Changed(game) if in_game.runs.read(cx).is_live(game)) {
+                in_game.rewant(cx);
             }
         })
         .detach();
         cx.subscribe(runs, |in_game, _, event: &RunEvent, cx| match event {
-            RunEvent::Live => in_game.enter(cx),
+            RunEvent::Live => {
+                in_game.wanted = in_game.wants(cx);
+                in_game.enter(cx);
+            }
             RunEvent::Pressed(_) => {}
             RunEvent::Starting | RunEvent::Failed | RunEvent::Stopping | RunEvent::Ended => in_game.leave(cx),
         })
         .detach();
+        let (runs, settings, trainers) = (runs.clone(), settings.clone(), trainers.clone());
         let wanted = settings.read(cx).prefs().overlay_in_game;
-        Self { registry, runs: runs.clone(), wanted, generation: 0, asking: false, layers: None, ready: false, size: None, reader: None }
+        let reader = None;
+        Self { registry, runs, settings, trainers, wanted, generation: 0, asking: false, layers: None, ready: false, size: None, reader }
+    }
+
+    fn wants(&self, cx: &App) -> bool {
+        let own = self.runs.read(cx).live().and_then(|game| self.trainers.read(cx).game_profile(game).overlay_in_game);
+        own.unwrap_or(self.settings.read(cx).prefs().overlay_in_game)
+    }
+
+    fn rewant(&mut self, cx: &mut Context<Self>) {
+        let on = self.wants(cx);
+        if on != self.wanted {
+            self.wanted = on;
+            self.enter(cx);
+        }
     }
 
     /// The overlay in the game answered: layers show from now on.

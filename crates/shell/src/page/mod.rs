@@ -160,7 +160,7 @@ impl Page {
             cx.observe(&runs, |_, _, cx| cx.notify()).detach();
             Sidebar::new(library.clone(), settings.clone(), picker.clone(), marks, starred, window, cx)
         });
-        let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, cx));
+        let in_game = cx.new(|cx| InGame::new(registry.clone(), &runs, &settings, &trainers, cx));
         let input = cx.new(|cx| Input::new(&runs, cx));
         let layer = cx.new(|cx| Layer::new(&paths, &runs, &settings, input.clone(), in_game.clone(), window, cx));
         let ask = cx.new(|cx| Ask::new(runs.clone(), settings.clone(), window, cx));

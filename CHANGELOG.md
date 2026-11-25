@@ -5,6 +5,10 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 
 ## [0.6.0] - 2026-11-25
 
+### Features
+
+- Each game has its own overlay mode in its ⋯ menu: AS IN SETTINGS, IN-GAME or OVER THE GAME. It changes at once, even while the game runs. For a game where the in-game overlay shows nothing (007 First Light), choose OVER THE GAME.
+
 ### Fixes
 
 - A number mod's field shows every decimal of its value (0.25, not 0.3), so clicking in and out of it no longer changes the value.

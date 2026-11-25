@@ -5,7 +5,7 @@ use gpui_kit::{
     Context, Div, Entity, IntoElement, ObjectFit, Render, SharedString, Stateful, Window, component::h_flex, div, img, linear_color_stop,
     linear_gradient, prelude::*, px, rgb,
 };
-use i18n::Arg;
+use i18n::{Arg, Key};
 
 use crate::{
     library::{GamePicker, Library, pick_source, source_options},
@@ -14,7 +14,7 @@ use crate::{
     trainer::{Trainers, title},
     ui::{
         assets::Icon,
-        dropdown::dropdown,
+        dropdown::{Marked, dropdown},
         key,
         text::{t, tf},
         theme::*,
@@ -64,7 +64,7 @@ impl Hero {
             TYPE_FIELD,
             0.14,
         ));
-        dropdown(trigger, (), open_menu, self.menu.is_some(), options, usize::MAX, px(220.), cx, |hero, at, window, cx| {
+        dropdown(trigger, (), open_menu, self.menu.is_some(), options, Marked::default(), px(220.), cx, |hero, at, window, cx| {
             let Some(game) = hero.library.read(cx).opened().cloned() else { return };
             match game.stores.get(at) {
                 Some((_, link)) => cx.open_url(link),
@@ -117,18 +117,41 @@ impl Hero {
                         .child(icon(Icon::External, 15., rgb(MUTED))),
                 )
             })
-            // A run holds its install.
-            .when(!self.runs.read(cx).holds(&game.id), |bar| {
-                let (options, current) = source_options(game, cx);
-                let more = icon_button("source", t(cx, key::PAGE_SOURCE)).child(icon(Icon::More, 15., rgb(MUTED)));
-                bar.child(dropdown(more, (), open_menu, self.menu.is_some(), options, current, px(200.), cx, |hero, at, window, cx| {
-                    if let Some(game) = hero.library.read(cx).opened().cloned() {
-                        pick_source(&hero.library, &hero.picker, &game, at, window, cx);
-                    }
-                }))
-            })
+            .child(self.more(game, cx))
+    }
+
+    /// `⋯`: the game's sources, unless a run holds its install, then its overlay's mode.
+    fn more(&self, game: &Game, cx: &Context<Self>) -> Stateful<Div> {
+        let (mut options, mut current) = (Vec::new(), Vec::new());
+        if !self.runs.read(cx).holds(&game.id) {
+            let source;
+            (options, source) = source_options(game, cx);
+            current.push(source);
+        }
+        let sources = options.len();
+        let mode = self.trainers.read(cx).game_profile(&game.id).overlay_in_game;
+        current.extend(OVERLAY_MODES.iter().position(|(choice, _)| *choice == mode).map(|at| sources + at));
+        options.extend(OVERLAY_MODES.map(|(_, caption)| t(cx, caption)));
+        let more = icon_button("source", t(cx, key::PAGE_SOURCE)).child(icon(Icon::More, 15., rgb(MUTED)));
+        let marked = Marked { chosen: &current, group: Some(sources) };
+        // The rows drawn are this game's, as they were then: a run may have started or another game opened since.
+        let id = game.id.clone();
+        dropdown(more, (), open_menu, self.menu.is_some(), options, marked, px(220.), cx, move |hero, at, window, cx| {
+            match at.checked_sub(sources) {
+                Some(mode) => hero.trainers.update(cx, |trainers, cx| trainers.set_overlay_in_game(&id, OVERLAY_MODES[mode].0, cx)),
+                None if hero.runs.read(cx).holds(&id) => {}
+                None => {
+                    let Some(game) = hero.library.read(cx).game(&id).cloned() else { return };
+                    pick_source(&hero.library, &hero.picker, &game, at, window, cx);
+                }
+            }
+        })
     }
 }
+
+/// The game's own overlay mode: the OVERLAY tab's, IN-GAME, OVER THE GAME.
+const OVERLAY_MODES: [(Option<bool>, Key); 3] =
+    [(None, key::PAGE_OVERLAY_DEFAULT), (Some(true), key::PAGE_OVERLAY_IN_GAME), (Some(false), key::PAGE_OVERLAY_OVER)];
 
 impl Render for Hero {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
