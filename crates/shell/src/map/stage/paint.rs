@@ -20,7 +20,7 @@ use super::{
     Stage, Walk,
     camera::{Camera, Pixel, extent},
     pins::{self, GROUP_RADIUS},
-    tiles::Key,
+    tiles::{BACKDROP, Key, STAND_INS},
 };
 use crate::{
     Load,
@@ -97,6 +97,16 @@ impl Stage {
             camera.keep_in(within, area);
         }
         let Some(camera) = self.camera else { return };
+        // Tiles load where a zoom ends and a followed player's last fix is: the views passed would only take loads.
+        let mut end = self.glide.map_or(camera, |glide| glide.end(camera, area, &spans));
+        if self.follow
+            && let Some(player) = player
+        {
+            end.center = player.at;
+        }
+        if let Some(within) = pyramid.bounds {
+            end.keep_in(within, area);
+        }
 
         // On the window, not the element: a drag goes on outside the map. The minimap only zooms.
         let view = cx.entity();
@@ -122,7 +132,7 @@ impl Stage {
             Bounds::new(center - point(px(side / 2.), px(side / 2.)), size(px(side), px(side)))
         };
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            self.paint_tiles(pyramid, &camera, window, cx);
+            self.paint_tiles(pyramid, &camera, &end, window, cx);
 
             let zoom = (camera.span / self.tile).log2() as f32;
             let shows = |(low, high): (f32, f32)| (low..=high).contains(&zoom);
@@ -274,21 +284,20 @@ impl Stage {
         }
     }
 
-    fn paint_tiles(&mut self, pyramid: &Tiles, camera: &Camera, window: &mut Window, cx: &mut Context<Self>) {
-        let (area, origin, now) = (self.size(), self.bounds.origin, Instant::now());
+    /// Draws `camera`'s tiles and loads `end`'s, the view it is on its way to.
+    fn paint_tiles(&mut self, pyramid: &Tiles, camera: &Camera, end: &Camera, window: &mut Window, cx: &mut Context<Self>) {
+        let (area, origin) = (self.size(), self.bounds.origin);
         let level = camera.level(self.tile, &(pyramid.min_zoom..=pyramid.max_zoom));
         let (columns, rows) = camera.tiles(level, area);
         let rect = |[left, top, right, bottom]: [f64; 4]| {
             let corner = |x: f64, y: f64| origin + point(px(x as f32), px(y as f32));
             Bounds::from_corners(corner(left, top), corner(right, bottom))
         };
-        let middle = ((columns.start() + columns.end()) / 2, (rows.start() + rows.end()) / 2);
-        let mut wanted = Vec::new();
         for row in rows {
             for column in columns.clone().filter(|column| pyramid.covers(level, *column, row)) {
                 let place = rect(camera.tile(level, column, row, area));
                 // A stand-in paints only its share of the tile: an ancestor's part scaled up, a descendant whole.
-                let exact = self.tiles.draw((level, column, row), |(from, column, row), image| {
+                self.tiles.draw((level, column, row), |(from, column, row), image| {
                     let whole = rect(camera.tile(from, column, row, area));
                     let part = place.intersect(&whole);
                     // Out to the padded image's edge, so `part` maps onto the real texels.
@@ -296,22 +305,41 @@ impl Stage {
                     let whole = whole.dilate(whole.size.width / texels as f32);
                     let _ = window.paint_image(part, whole, Corners::default(), image, 0, false);
                 });
-                if !exact && let Some(load) = self.tiles.wanted((level, column, row), pyramid.min_zoom, now) {
-                    // The middle of the view loads first.
-                    wanted.push((column.abs_diff(middle.0).pow(2) + row.abs_diff(middle.1).pow(2), load));
+            }
+        }
+        self.load_view(pyramid, end, cx);
+    }
+
+    /// Asks for what `camera` shows: its backdrop first, then its own tiles from the middle out. With every load
+    /// taken it only keeps what is loaded.
+    fn load_view(&mut self, pyramid: &Tiles, camera: &Camera, cx: &mut Context<Self>) {
+        let (area, now, free) = (self.size(), Instant::now(), !self.tiles.busy());
+        let level = camera.level(self.tile, &(pyramid.min_zoom..=pyramid.max_zoom));
+        let backdrop = level.saturating_sub(BACKDROP).max(pyramid.min_zoom);
+        // No higher than the view's own stand-ins reach: a backdrop's ancestor above them would never show.
+        let lowest = level.saturating_sub(STAND_INS).max(pyramid.min_zoom);
+        let mut wanted = std::mem::take(&mut self.wanted);
+        for level in std::iter::once(backdrop).chain((level > backdrop).then_some(level)) {
+            let (columns, rows) = camera.tiles(level, area);
+            let middle = ((columns.start() + columns.end()) / 2, (rows.start() + rows.end()) / 2);
+            for row in rows {
+                for column in columns.clone().filter(|column| pyramid.covers(level, *column, row)) {
+                    if let Some(load) = self.tiles.need((level, column, row), lowest, now)
+                        && free
+                    {
+                        let distance = column.abs_diff(middle.0).pow(2) + row.abs_diff(middle.1).pow(2);
+                        wanted.push((level != backdrop, distance, load));
+                    }
                 }
             }
         }
-        // Levels a zoom passes would take the load slots; the ancestors stand in until it ends.
-        if self.glide.is_some() {
-            return;
-        }
-        wanted.sort_by_key(|(distance, _)| *distance);
-        for (_, key) in wanted {
+        wanted.sort_unstable_by_key(|(view, distance, _)| (*view, *distance));
+        for (.., key) in wanted.drain(..) {
             if self.tiles.claim(key, now) {
                 self.load_tile(pyramid, key, cx);
             }
         }
+        self.wanted = wanted;
     }
 
     fn load_tile(&self, pyramid: &Tiles, key: Key, cx: &mut Context<Self>) {

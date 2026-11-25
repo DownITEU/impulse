@@ -67,7 +67,9 @@ impl Camera {
         let count = (1u32 << level) as f64;
         let (low, high) = (self.to_plane((0., 0.), size), self.to_plane(size, size));
         let index = |at: f64| (at.clamp(0., 1.) * count).min(count - 1.) as u32;
-        (index(low.x)..=index(high.x), index(low.y)..=index(high.y))
+        // The far edge is not in the view: a tile that only touches it shows nothing.
+        let last = |at: f64| ((at.clamp(0., 1.) * count).ceil() as u32).clamp(1, count as u32) - 1;
+        (index(low.x)..=last(high.x), index(low.y)..=last(high.y))
     }
 
     /// A tile's left, top, right and bottom in the view, on whole pixels so neighbours meet.
@@ -104,6 +106,12 @@ impl Glide {
         let part = if done { 1. } else { 1. - (-seconds / GLIDE).exp() };
         camera.zoom((left * part).exp(), self.pixel, size, spans);
         done
+    }
+
+    /// Where `camera` is once the glide is over.
+    pub fn end(self, mut camera: Camera, size: Pixel, spans: &RangeInclusive<f64>) -> Camera {
+        camera.zoom(self.span / camera.span, self.pixel, size, spans);
+        camera
     }
 }
 
@@ -142,11 +150,13 @@ mod tests {
         let mut camera = camera();
         let held = camera.to_plane((100., 50.), SIZE);
         let glide = Glide { span: 4096., pixel: (100., 50.) };
+        let end = glide.end(camera, SIZE, &SPANS);
         assert!(!glide.step(&mut camera, 0.07, SIZE, &SPANS));
         assert!(camera.span > 1024. && camera.span < 4096.);
         while !glide.step(&mut camera, 0.016, SIZE, &SPANS) {}
         let (x, y) = camera.to_view(held, SIZE);
         assert!((camera.span - 4096.).abs() < 1e-6 && (x - 100.).abs() < 1e-6 && (y - 50.).abs() < 1e-6);
+        assert!((end.span - camera.span).abs() < 1e-6 && (end.center.x - camera.center.x).abs() < 1e-9, "it ends where its steps do");
     }
 
     #[test]
@@ -181,5 +191,7 @@ mod tests {
         assert_eq!(camera.tile(2, 1, 1, SIZE), [144., 44., 400., 300.]);
         let corner = Camera { center: Point { x: 0., y: 1. }, span: 4096. };
         assert_eq!(corner.tiles(4, SIZE), (0..=1, 14..=15));
+        let edges = Camera { center: Point { x: 0.375, y: 0.375 }, span: 4096. };
+        assert_eq!(edges.tiles(2, (1024., 1024.)), (1..=1, 1..=1), "tiles that only touch the far edge are out");
     }
 }

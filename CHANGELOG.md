@@ -7,6 +7,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 
 ### Fixes
 
+- Map tiles load while you zoom, twice as many at once, and a blurry version of the view comes first, so zooming out or panning far no longer shows empty patches.
 - Games whose own store's release has no trainer (most often GOG) are found again, as in 0.4.0, and can use another store's trainer. Only a game whose version file is gone stays out.
 - The search finds a game under the name of another edition on the same install (World War Z: Aftermath under World War Z).
 

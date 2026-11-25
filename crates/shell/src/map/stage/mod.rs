@@ -90,8 +90,10 @@ pub struct Stage {
     bounds: Bounds<Pixels>,
     tile: f64,
     shown: Shown,
-    // A region ring's corners on the view, kept so a frame allocates none.
+    // A region ring's corners on the view and the tiles to load (backdrop or not, distance, tile), kept so a frame
+    // allocates none.
     corners: Vec<gpui_kit::Point<Pixels>>,
+    wanted: Vec<(bool, u32, tiles::Key)>,
     drag: Option<Drag>,
     layers_open: bool,
     follow: bool,
@@ -162,6 +164,7 @@ impl Stage {
             tile: 256.,
             shown,
             corners: Vec::new(),
+            wanted: Vec::new(),
             drag: None,
             layers_open: false,
             follow: false,

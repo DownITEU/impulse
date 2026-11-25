@@ -19,10 +19,15 @@ const KEPT: usize = 2;
 const FLOOR: usize = 64;
 // The minimap never zooms far: its view draws a handful.
 const SMALL: usize = 16;
-const AT_ONCE: usize = 6;
-// How many levels up a missing tile looks for a stand-in, and down (a zoom out just left those).
-const STAND_INS: u8 = 4;
+// A tile from the CDN takes about 100 ms: a view of some 50 fills in half a second.
+const AT_ONCE: usize = 12;
+/// How many levels up a missing tile looks for a stand-in.
+pub const STAND_INS: u8 = 4;
+// And down: a zoom out just left those.
 const BELOW: u8 = 2;
+/// Levels above the view's whose few tiles load first and stay while they cover it: a zoom out or a pan shows them
+/// at once. Within `STAND_INS`.
+pub const BACKDROP: u8 = 2;
 // A failed tile waits a second, doubling per failure up to about a minute; only a draw asks again.
 const BACKOFF: u32 = 6;
 
@@ -96,54 +101,61 @@ impl Tiles {
     }
 
     /// Paints the tile, else what stands in for it: a loaded ancestor, with the loaded tiles below it over that.
-    /// True when the tile itself was painted.
-    pub fn draw(&mut self, (level, column, row): Key, mut paint: impl FnMut(Key, Arc<RenderImage>)) -> bool {
+    pub fn draw(&mut self, (level, column, row): Key, mut paint: impl FnMut(Key, Arc<RenderImage>)) {
         if let Some(image) = self.touch((level, column, row)) {
-            paint((level, column, row), image);
-            return true;
+            paint((level, column, row), image.clone());
+            return;
         }
         let above = (1..=level.min(STAND_INS))
             .map(|up| (level - up, column >> up, row >> up))
-            .find_map(|key| self.touch(key).map(|image| (key, image)));
+            .find_map(|key| self.touch(key).map(|image| (key, image.clone())));
         if let Some((key, image)) = above {
             paint(key, image);
         }
         self.below((level, column, row), BELOW, &mut paint);
-        false
     }
 
     fn below(&mut self, (level, column, row): Key, depth: u8, paint: &mut impl FnMut(Key, Arc<RenderImage>)) {
         for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
             let child = (level + 1, column * 2 + x, row * 2 + y);
             match self.touch(child) {
-                Some(image) => paint(child, image),
+                Some(image) => paint(child, image.clone()),
                 None if depth > 1 => self.below(child, depth - 1, paint),
                 None => {}
             }
         }
     }
 
-    fn touch(&mut self, key: Key) -> Option<Arc<RenderImage>> {
+    fn touch(&mut self, key: Key) -> Option<&Arc<RenderImage>> {
         let Some(Slot::Ready(image, drawn)) = self.slots.get_mut(&key) else { return None };
         self.shown += usize::from(*drawn != self.frame);
         *drawn = self.frame;
-        Some(image.clone())
+        Some(image)
     }
 
-    /// What to load for a tile not drawn as itself: the tile, or for one the server lacks or that waits after a
-    /// failure, its nearest ancestor down to level `lowest`.
-    pub fn wanted(&self, (level, column, row): Key, lowest: u8, now: Instant) -> Option<Key> {
-        (0..=level.saturating_sub(lowest).min(STAND_INS))
+    /// A tile the view needs, or for one the server lacks or that waits after a failure its nearest ancestor down to
+    /// level `lowest`: kept as a drawn one when loaded, else returned to load.
+    pub fn need(&mut self, (level, column, row): Key, lowest: u8, now: Instant) -> Option<Key> {
+        let (key, ask) = (0..=level.saturating_sub(lowest).min(STAND_INS))
             .map(|up| (level - up, column >> up, row >> up))
             .map(|key| (key, self.ask(&key, now)))
-            .find(|(_, ask)| !matches!(ask, Ask::Parent))
-            .and_then(|(key, ask)| matches!(ask, Ask::Load(_)).then_some(key))
+            .find(|(_, ask)| !matches!(ask, Ask::Parent))?;
+        if matches!(ask, Ask::Load(_)) {
+            return Some(key);
+        }
+        self.touch(key);
+        None
+    }
+
+    /// Every load is taken: nothing more starts until one is back.
+    pub fn busy(&self) -> bool {
+        self.loading >= AT_ONCE
     }
 
     /// Whether the caller loads it now: it is not known yet, or its wait is over, and a load is free.
     pub fn claim(&mut self, key: Key, now: Instant) -> bool {
         let Ask::Load(tries) = self.ask(&key, now) else { return false };
-        if self.loading >= AT_ONCE {
+        if self.busy() {
             return false;
         }
         self.slots.insert(key, Slot::Loading(tries));
@@ -205,10 +217,14 @@ mod tests {
         tiles.loaded(key, image(), now);
     }
 
-    fn painted(tiles: &mut Tiles, key: Key) -> (bool, Vec<Key>) {
+    fn painted(tiles: &mut Tiles, key: Key) -> Vec<Key> {
         let mut keys = Vec::new();
-        let exact = tiles.draw(key, |key, _| keys.push(key));
-        (exact, keys)
+        tiles.draw(key, |key, _| keys.push(key));
+        keys
+    }
+
+    fn exact(tiles: &mut Tiles, key: Key) -> bool {
+        painted(tiles, key) == [key]
     }
 
     #[test]
@@ -216,21 +232,21 @@ mod tests {
         let (mut tiles, now) = (Tiles::default(), Instant::now());
         assert!(tiles.claim((2, 1, 0), now) && !tiles.claim((2, 1, 0), now));
         tiles.loaded((2, 1, 0), image(), now);
-        assert_eq!(painted(&mut tiles, (4, 6, 3)), (false, vec![(2, 1, 0)]));
-        assert_eq!(painted(&mut tiles, (4, 9, 3)), (false, vec![]));
-        assert_eq!(tiles.wanted((4, 6, 3), 0, now), Some((4, 6, 3)));
+        assert_eq!(painted(&mut tiles, (4, 6, 3)), [(2, 1, 0)]);
+        assert!(painted(&mut tiles, (4, 9, 3)).is_empty());
+        assert_eq!(tiles.need((4, 6, 3), 0, now), Some((4, 6, 3)));
         assert!(tiles.claim((4, 6, 3), now));
-        assert_eq!(tiles.wanted((4, 6, 3), 0, now), None, "on its way");
+        assert_eq!(tiles.need((4, 6, 3), 0, now), None, "on its way");
         tiles.loaded((4, 6, 3), Fetched::Absent, now);
         assert!(!tiles.claim((4, 6, 3), now), "an absent tile is not asked for again");
-        assert_eq!(tiles.wanted((4, 6, 3), 0, now), Some((3, 3, 1)), "its parent is asked for instead");
-        assert_eq!(tiles.wanted((4, 6, 3), 4, now), None, "but not below the lowest level");
+        assert_eq!(tiles.need((4, 6, 3), 0, now), Some((3, 3, 1)), "its parent is asked for instead");
+        assert_eq!(tiles.need((4, 6, 3), 4, now), None, "but not below the lowest level");
         // A zoom out: the tiles just left lie over the ancestor, two levels down at most.
         load(&mut tiles, (4, 7, 2));
         load(&mut tiles, (5, 12, 4));
         load(&mut tiles, (6, 24, 8));
-        assert_eq!(painted(&mut tiles, (3, 3, 1)), (false, vec![(2, 1, 0), (5, 12, 4), (4, 7, 2)]));
-        assert_eq!(painted(&mut tiles, (4, 7, 2)), (true, vec![(4, 7, 2)]));
+        assert_eq!(painted(&mut tiles, (3, 3, 1)), [(2, 1, 0), (5, 12, 4), (4, 7, 2)]);
+        assert_eq!(painted(&mut tiles, (4, 7, 2)), [(4, 7, 2)]);
     }
 
     #[test]
@@ -239,15 +255,15 @@ mod tests {
         let key = (3, 2, 2);
         assert!(tiles.claim(key, now));
         tiles.loaded(key, Fetched::Retry, now);
-        assert_eq!(tiles.wanted(key, 0, now), Some((2, 1, 1)), "its parent stands in meanwhile");
+        assert_eq!(tiles.need(key, 0, now), Some((2, 1, 1)), "its parent stands in meanwhile");
         let later = now + Duration::from_secs(1);
-        assert_eq!(tiles.wanted(key, 0, later), Some(key));
+        assert_eq!(tiles.need(key, 0, later), Some(key));
         assert!(tiles.claim(key, later));
         tiles.loaded(key, Fetched::Retry, later);
         assert!(!tiles.claim(key, later + Duration::from_secs(1)), "the second wait is longer");
         assert!(tiles.claim(key, later + Duration::from_secs(2)));
         tiles.loaded(key, image(), later);
-        assert!(painted(&mut tiles, key).0);
+        assert!(exact(&mut tiles, key));
     }
 
     #[test]
@@ -259,10 +275,25 @@ mod tests {
         (0..FLOOR as u32 + 10).for_each(|column| load(&mut tiles, (9, column, 0)));
         assert!(tiles.begin_frame().is_empty(), "just loaded, not drawn yet");
         // Drawn twice, counted once: three shown, the floor kept.
-        [0, 1, 2, 0].into_iter().for_each(|column| assert!(painted(&mut tiles, (9, column, 0)).0));
+        [0, 1, 2, 0].into_iter().for_each(|column| assert!(exact(&mut tiles, (9, column, 0))));
         assert_eq!(tiles.begin_frame().len(), 10);
-        assert!(painted(&mut tiles, (9, 0, 0)).0 && !painted(&mut tiles, (9, 3, 0)).0);
+        assert!(exact(&mut tiles, (9, 0, 0)) && !exact(&mut tiles, (9, 3, 0)));
         assert_eq!(tiles.clear().len(), FLOOR);
+    }
+
+    #[test]
+    fn a_tile_the_view_needs_stays_though_not_drawn() {
+        let (mut tiles, now) = (Tiles::default(), Instant::now());
+        (0..FLOOR as u32).for_each(|column| load(&mut tiles, (9, column, 0)));
+        // An absent tile's parent stands in for it: kept as well.
+        load(&mut tiles, (5, 0, 0));
+        assert!(tiles.claim((6, 0, 0), now));
+        tiles.loaded((6, 0, 0), Fetched::Absent, now);
+        tiles.begin_frame();
+        assert_eq!(tiles.need((9, 0, 0), 0, now), None, "loaded");
+        assert_eq!(tiles.need((6, 0, 0), 0, now), None, "its parent is loaded");
+        assert_eq!(tiles.begin_frame().len(), 1);
+        assert!(exact(&mut tiles, (9, 0, 0)) && exact(&mut tiles, (5, 0, 0)));
     }
 
     #[test]
@@ -272,11 +303,11 @@ mod tests {
         load(&mut tiles, (1, 0, 0));
         tiles.begin_frame();
         // Zoomed out: one ancestor stands in for the view, and its tiles arrive at once.
-        assert_eq!(painted(&mut tiles, (3, 3, 3)), (false, vec![(1, 0, 0)]));
+        assert_eq!(painted(&mut tiles, (3, 3, 3)), [(1, 0, 0)]);
         let arrived: Vec<Key> = (0..AT_ONCE as u32).map(|index| (3, index % 3, index / 3)).collect();
         arrived.iter().for_each(|key| load(&mut tiles, *key));
         tiles.begin_frame();
-        assert_eq!(painted(&mut tiles, (3, 3, 3)), (false, vec![(1, 0, 0)]));
-        assert!(arrived.iter().all(|key| painted(&mut tiles, *key).0));
+        assert_eq!(painted(&mut tiles, (3, 3, 3)), [(1, 0, 0)]);
+        assert!(arrived.iter().all(|key| exact(&mut tiles, *key)));
     }
 }
