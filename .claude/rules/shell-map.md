@@ -13,7 +13,7 @@ The map's model, the modal, the minimap and their parts: `Maps`, `MapView`, `Boa
 - `MapView`: the modal's window parts (`show`, `hide`, `set_docked`) and `linker`, the LINK A MAP dialog (`TitlePicker`) `Root` draws while open, over the map; the panel opens it for a game without maps, the toolbar's LINK A MAP for any game while a source has titles or one has none yet (`Titles::pending`: the picker asks it; not in a dock); UNLINK MAP stands beside LINK A MAP (toolbar and empty panel) while the open game has a link set by hand, and drops it (`Library::unlink`: the offers are gathered again, so a store-id match or nothing takes its place); emits `MapEvent::Close`. `map_panel` is the page's preview that opens it, `paneled` whether the page shows it.
 - `Minimap`: a mini `Stage` over the live board, one per window; `hide(window)` lets go of its tiles.
 - `LiveMap`: the live game's map for the minimap.
-- `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it.
+- `Tracker` (`run/`): one per live run whose trainer can place the player; `Runs` makes it. As Wand's: a fix needs the leaseholder's plane axes, a height not told is 0.
 - `bind_keys`.
 
 ## Rules

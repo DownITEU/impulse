@@ -1,6 +1,6 @@
 //! The player's position, through the variables Wand's maps use.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use futures::future;
 
 use super::{Outcome, Session};
@@ -8,15 +8,14 @@ use super::{Outcome, Session};
 const AXES: [&str; 3] = ["wm_coord_x", "wm_coord_y", "wm_coord_z"];
 
 impl Session {
-    /// In the game's own coordinates.
+    /// In the game's own coordinates; an axis the trainer never sent is NaN: some send no height, and which axis is
+    /// up is the map's to say.
     pub async fn position(&self) -> Result<[f64; 3]> {
         let _turn = self.coords.lock().await;
         self.signal("wm_coord_get").await?;
         let values = self.shared.values.lock().unwrap();
-        let mut position = [0.; 3];
-        for (axis, name) in position.iter_mut().zip(AXES) {
-            *axis = *values.get(name).with_context(|| format!("the trainer sent no {name}"))?;
-        }
+        let position = AXES.map(|name| values.get(name).copied().unwrap_or(f64::NAN));
+        ensure!(position.iter().any(|axis| !axis.is_nan()), "the trainer sent no position");
         Ok(position)
     }
 
