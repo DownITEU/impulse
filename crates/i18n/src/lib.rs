@@ -15,6 +15,7 @@ pub struct Language {
 
 pub const ENGLISH: Language = Language { tag: "en", name: "ENGLISH" };
 pub const CHINESE: Language = Language { tag: "zh-CN", name: "简体中文" };
+pub const CHINESE_TRADITIONAL: Language = Language { tag: "zh-TW", name: "繁體中文" };
 pub const FRENCH: Language = Language { tag: "fr", name: "FRANÇAIS" };
 pub const GERMAN: Language = Language { tag: "de", name: "DEUTSCH" };
 pub const SPANISH: Language = Language { tag: "es", name: "ESPAÑOL" };
@@ -25,7 +26,8 @@ pub const TURKISH: Language = Language { tag: "tr", name: "TÜRKÇE" };
 pub const RUSSIAN: Language = Language { tag: "ru", name: "РУССКИЙ" };
 pub const UKRAINIAN: Language = Language { tag: "uk", name: "УКРАЇНСЬКА" };
 
-pub const LANGUAGES: &[Language] = &[ENGLISH, CHINESE, FRENCH, GERMAN, SPANISH, ITALIAN, PORTUGUESE, POLISH, TURKISH, RUSSIAN, UKRAINIAN];
+pub const LANGUAGES: &[Language] =
+    &[ENGLISH, CHINESE, CHINESE_TRADITIONAL, FRENCH, GERMAN, SPANISH, ITALIAN, PORTUGUESE, POLISH, TURKISH, RUSSIAN, UKRAINIAN];
 
 impl Language {
     /// Written in Cyrillic: the UI's Latin font has no letters for it.
@@ -35,22 +37,30 @@ impl Language {
 
     /// Written in han: the UI's Latin font has none of the characters.
     pub fn is_cjk(&self) -> bool {
-        matches!(self.tag, "zh-CN")
+        matches!(self.tag, "zh-CN" | "zh-TW")
     }
 
     pub fn find(tag: &str) -> Option<Self> {
         LANGUAGES.iter().copied().find(|language| language.tag == tag)
     }
 
-    /// The first of the system's preferences we ship, matched by language alone; else English.
+    /// The first of the system's preferences we ship, matched by tag, script or language; else English.
     pub fn system() -> Self {
         sys_locale::get_locales().find_map(|tag| closest(&tag)).unwrap_or(ENGLISH)
     }
 }
 
 fn closest(tag: &str) -> Option<Language> {
-    let language = |tag: &str| tag.split(['-', '_']).next().unwrap_or_default().to_ascii_lowercase();
-    LANGUAGES.iter().copied().find(|ours| language(ours.tag) == language(tag))
+    let mut parts = tag.split(['-', '_']);
+    let language = parts.next().unwrap_or_default().to_ascii_lowercase();
+    let normalized = tag.replace('_', "-");
+    if let Some(exact) = LANGUAGES.iter().copied().find(|ours| ours.tag.eq_ignore_ascii_case(&normalized)) {
+        return Some(exact);
+    }
+    if language == "zh" && parts.any(|part| matches!(part.to_ascii_lowercase().as_str(), "hant" | "tw" | "hk" | "mo")) {
+        return Some(CHINESE_TRADITIONAL);
+    }
+    LANGUAGES.iter().copied().find(|ours| ours.tag.split('-').next().unwrap_or_default().eq_ignore_ascii_case(&language))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

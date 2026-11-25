@@ -9,7 +9,8 @@ use std::{
 
 use gpui_kit::{App, Global, SharedString};
 use i18n::{
-    Arg, CHINESE, Catalog, ENGLISH, FRENCH, GERMAN, ITALIAN, Key, Language, POLISH, PORTUGUESE, RUSSIAN, SPANISH, TURKISH, UKRAINIAN,
+    Arg, CHINESE, CHINESE_TRADITIONAL, Catalog, ENGLISH, FRENCH, GERMAN, ITALIAN, Key, Language, POLISH, PORTUGUESE, RUSSIAN, SPANISH,
+    TURKISH, UKRAINIAN,
 };
 use model::{Failure, FailureKind, Files, Locale, SourceId, Text};
 use rustc_hash::{FxHashMap, FxHasher};
@@ -21,6 +22,7 @@ static FILES: LazyLock<Files> = LazyLock::new(|| {
     [
         (ENGLISH, include_str!("../../locales/en.ftl")),
         (CHINESE, include_str!("../../locales/zh-CN.ftl")),
+        (CHINESE_TRADITIONAL, include_str!("../../locales/zh-TW.ftl")),
         (FRENCH, include_str!("../../locales/fr.ftl")),
         (GERMAN, include_str!("../../locales/de.ftl")),
         (SPANISH, include_str!("../../locales/es.ftl")),
@@ -228,13 +230,17 @@ fn kind(kind: FailureKind) -> Key {
 
 #[cfg(test)]
 mod tests {
-    use i18n::{Arg, ENGLISH, FRENCH, GERMAN, ITALIAN, POLISH, PORTUGUESE, RUSSIAN, SPANISH, TURKISH, UKRAINIAN};
+    use i18n::{
+        Arg, CHINESE, CHINESE_TRADITIONAL, ENGLISH, FRENCH, GERMAN, ITALIAN, POLISH, PORTUGUESE, RUSSIAN, SPANISH, TURKISH, UKRAINIAN,
+    };
 
     use super::{Texts, key};
 
     #[test]
     fn a_number_takes_the_language_marks() {
         assert_eq!(Texts::new(ENGLISH, &[]).digits("3,645 1.5"), "3,645 1.5");
+        assert_eq!(Texts::new(CHINESE, &[]).digits("3,645 1.5"), "3,645 1.5");
+        assert_eq!(Texts::new(CHINESE_TRADITIONAL, &[]).digits("3,645 1.5"), "3,645 1.5");
         assert_eq!(Texts::new(FRENCH, &[]).digits("3,645 1.5"), "3\u{a0}645 1,5");
         assert_eq!(Texts::new(GERMAN, &[]).digits("3,645 1.5"), "3.645 1,5");
         assert_eq!(Texts::new(SPANISH, &[]).digits("3,645 1.5"), "3.645 1,5");

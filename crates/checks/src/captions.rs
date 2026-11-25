@@ -44,6 +44,7 @@ const NAMES: &[&str] = &[
     "{REPO}/issues/new?template=bug_report.yml&version={VERSION}",
     "Exo 2",
     "Microsoft YaHei UI",
+    "Microsoft JhengHei UI",
     "JetBrains Mono",
     "Dialog",
     "Conflict",

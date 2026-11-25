@@ -10,6 +10,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 - Each game has its own overlay mode in its ⋯ menu: AS IN SETTINGS, IN-GAME or OVER THE GAME. It changes at once, even while the game runs. For a game where the in-game overlay shows nothing (007 First Light), choose OVER THE GAME.
 - A slider mod's value is a field beside its slider: type a value, then press Enter or click away. It takes any value as precise as the slider's step (any whole number when the step is whole) and stays within its limits; the phone panel's field does the same. (#34)
 - The run's button and the game's actions stay at the top of the page while it scrolls, so STOP is always in reach. (#33; thanks @GhostInq)
+- Traditional Chinese (Settings, APP, LANGUAGE). (#31; thanks @toby0622)
 
 ### Fixes
 
