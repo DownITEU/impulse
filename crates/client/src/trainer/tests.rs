@@ -3,7 +3,7 @@ use std::{fs, sync::Arc, time::Duration};
 use futures::future::BoxFuture;
 use model::{Args, Attach, Cheat, Failure, FailureKind, Kind, Launch, Pick, Plan, Ref, Runner, Target, Trainer};
 
-use super::{PINNED, Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, step};
+use super::{PINNED, Sheet, Shelf, Span, Step, TOP_TICK, Values, changes, round_to, settle, step};
 use crate::{
     Load,
     library::{GameId, Stamp},
@@ -89,6 +89,21 @@ fn wheel_moves_a_coarse_step() {
     assert_eq!(span.nudge(5., true), 10.);
     assert_eq!(span.nudge(10., true), 10.);
     assert_eq!(span.nudge(5., false), 0.);
+}
+
+#[test]
+fn a_typed_value_settles_as_its_control_sets_it() {
+    let selection = cheat("c", Kind::Selection, Args { options: vec!["A".into(), "B".into()], ..Args::default() });
+    assert_eq!([0.6, 2., -1.].map(|value| settle(&selection, value)), [Some(1.), None, None]);
+    assert_eq!(settle(&cheat("d", Kind::Slider, Args::default()), 250.), Some(100.));
+    let slider = cheat("s", Kind::Slider, Args { min: Some(1.), max: Some(5.), step: Some(0.5), ..Args::default() });
+    assert_eq!([2.2, 2.34, 9., 0.].map(|value| settle(&slider, value)), [Some(2.2), Some(2.3), Some(5.), Some(1.)]);
+    // Halves away from zero, as the phone panel's.
+    let signed = cheat("h", Kind::Slider, Args { min: Some(-5.), max: Some(5.), step: Some(0.1), ..Args::default() });
+    assert_eq!([1.15, -1.15].map(|value| settle(&signed, value)), [Some(1.2), Some(-1.2)]);
+    let coarse = cheat("r", Kind::Slider, Args { min: Some(0.), max: Some(1000.), step: Some(20.), ..Args::default() });
+    assert_eq!([150., 150.4, -5.].map(|value| settle(&coarse, value)), [Some(150.), Some(150.), Some(0.)]);
+    assert_eq!(settle(&cheat("e", Kind::Toggle, Args::default()), f64::NAN), None);
 }
 
 struct Idle;

@@ -143,19 +143,6 @@ impl Control {
     }
 }
 
-/// A device's `value` for `cheat`, as the window's control could set it; `None` when it cannot be one.
-pub fn settle(cheat: &Cheat, value: f64) -> Option<f64> {
-    let args = &cheat.args;
-    match cheat.kind {
-        _ if !value.is_finite() => None,
-        Kind::Toggle => Some(if value == 0. { 0. } else { 1. }),
-        Kind::Number => Some(args.clamp(value)),
-        Kind::Slider => Some(Span::of(args).snap(value)),
-        Kind::Selection => Some(value.round()).filter(|at| (0. ..args.options.len() as f64).contains(at)),
-        Kind::Button | Kind::Unknown => None,
-    }
-}
-
 #[derive(Serialize, Clone, PartialEq, Debug)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 pub struct Collection {

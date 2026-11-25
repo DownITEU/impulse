@@ -27,9 +27,9 @@ pub struct Row {
 pub struct Printed {
     pub game: GameId,
     pub rows: Vec<Row>,
-    /// The number cheats' text fields, by cheat index.
+    /// The number and slider cheats' text fields, by cheat index.
     pub inputs: HashMap<usize, Entity<InputState>>,
-    /// What the fields of numbers without a button send on Enter or blur.
+    /// What the fields without a button send on Enter or blur.
     pub typed: Vec<Subscription>,
     /// The control column's least width: the widest control here, so the caps sit next to it. A longer button text widens
     /// its own row instead of running over the caps.
@@ -44,7 +44,7 @@ impl Printed {
             .cheats
             .iter()
             .enumerate()
-            .filter(|(_, cheat)| cheat.kind == Kind::Number)
+            .filter(|(_, cheat)| matches!(cheat.kind, Kind::Number | Kind::Slider))
             .map(|(index, _)| {
                 let input = cx.new(|cx| {
                     InputState::new(window, cx)
@@ -85,13 +85,20 @@ impl Printed {
             input.update(cx, |input, cx| input.set_value(number(value), window, cx));
         }
     }
+
+    /// Every field follows the sheet's `values` (a reset, a collection set at rest).
+    pub fn refill(&self, values: &[f64], window: &mut Window, cx: &mut App) {
+        for &index in self.inputs.keys() {
+            self.put(index, values[index], window, cx);
+        }
+    }
 }
 
 /// What `CheatList::control` draws for the cheat, across.
 fn control_width(cheat: &Cheat) -> f32 {
     match cheat.kind {
         Kind::Toggle => 70.,
-        Kind::Slider => 134.,
+        Kind::Slider => 156.,
         Kind::Number => 140.,
         Kind::Button => 100.,
         Kind::Selection => 112.,

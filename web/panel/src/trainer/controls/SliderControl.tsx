@@ -3,7 +3,7 @@ import { useT } from '@/i18n/texts';
 
 import { NumberField } from './NumberField';
 import { SliderTrack } from './SliderTrack';
-import { clampToStep, decimalPlaces } from './step';
+import { clampToPrecision, decimalPlaces } from './step';
 import { useDraft } from './use-draft';
 
 type SliderControlProps = {
@@ -51,7 +51,7 @@ export const SliderControl = ({ name, control, value, disabled, onSet }: SliderC
                     digits={digits}
                     disabled={disabled}
                     className="min-w-0 w-full bg-transparent text-center tabular-nums outline-none disabled:opacity-50"
-                    onCommit={(next) => end(clampToStep(next, min, max, step))}
+                    onCommit={(next) => end(clampToPrecision(next, min, max, step))}
                 />
             </div>
         </div>

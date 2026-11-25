@@ -236,8 +236,25 @@ impl Span {
     }
 
     /// Steps count from `min`, not from zero.
-    pub(crate) fn snap(self, value: f64) -> f64 {
+    fn snap(self, value: f64) -> f64 {
         (self.min + ((value - self.min) / self.step).round() * self.step).clamp(self.min, self.max)
+    }
+}
+
+/// A typed or a device's `value` for `cheat`, as its control could set it; `None` when it cannot be one.
+pub fn settle(cheat: &Cheat, value: f64) -> Option<f64> {
+    let args = &cheat.args;
+    match cheat.kind {
+        _ if !value.is_finite() => None,
+        Kind::Toggle => Some(if value == 0. { 0. } else { 1. }),
+        Kind::Number => Some(args.clamp(value)),
+        // Any value as precise as the step, not only its multiples: an integer step takes any integer.
+        Kind::Slider => {
+            let span = Span::of(args);
+            Some(round_to(value, args, span.step).clamp(span.min, span.max))
+        }
+        Kind::Selection => Some(value.round()).filter(|at| (0. ..args.options.len() as f64).contains(at)),
+        Kind::Button | Kind::Unknown => None,
     }
 }
 

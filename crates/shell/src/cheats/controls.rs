@@ -2,10 +2,11 @@
 
 use client::{
     library::GameId,
-    trainer::{Sheet, Span, TOP_TICK},
+    trainer::{Sheet, Span, TOP_TICK, settle},
 };
 use gpui_kit::{
-    AnyElement, App, Context, Div, Entity, IntoElement, MouseButton, MouseMoveEvent, ScrollEvent, SharedString, Stateful, Window,
+    AnyElement, App, Context, Div, Entity, IntoElement, MouseButton, MouseMoveEvent, MouseUpEvent, ScrollEvent, SharedString, Stateful,
+    Window,
     component::{
         h_flex,
         input::{Input, InputEvent, InputState},
@@ -51,7 +52,7 @@ impl CheatList {
         }
     }
 
-    /// A number without a button takes its typed value on Enter or blur.
+    /// A field without a button takes its typed value on Enter or blur.
     pub(super) fn follow_fields(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(printed) = self.printed.as_mut() else { return };
         let game = &printed.game;
@@ -69,15 +70,16 @@ impl CheatList {
             .collect();
     }
 
-    /// The typed value within the cheat's limits; `Set` then shows it, else the field shows the value again.
+    /// The typed value as the control sets it; `Set` then shows it, else the field shows the value again.
     fn typed(&mut self, game: &GameId, index: usize, input: &Entity<InputState>, window: &mut Window, cx: &mut Context<Self>) {
         let running = self.is_running(cx);
         let Some((cheat, now)) = self.current(game, index, cx) else { return };
         if cheat.args.button {
             return;
         }
-        match field_value(input, cheat, cx) {
-            Some(value) if running && value != now => self.set_value(index, value, cx),
+        match field_value(input, cheat, now, cx) {
+            // Compared as printed: a text that prints as the value sends nothing.
+            Some(value) if running && number(value) != number(now) => self.set_value(index, value, cx),
             _ => input.update(cx, |input, cx| input.set_value(number(now), window, cx)),
         }
     }
@@ -107,13 +109,13 @@ impl CheatList {
                 })
                 .into_any_element(),
             Kind::Slider => h_flex()
-                .gap(px(5.))
+                .gap(px(6.))
                 .child(self.ticks(&printed.game, sheet, index, running, live, cx))
-                .child(mono(number(value), TYPE_FIELD).w(px(38.)).flex().justify_end().text_color(value_color))
+                .when_some(printed.inputs.get(&index), |control, input| control.child(field(input, running, 60.).text_color(value_color)))
                 .into_any_element(),
             Kind::Number if cheat.args.button => h_flex()
                 .gap(px(8.))
-                .when_some(printed.inputs.get(&index), |control, input| control.child(field(input, running)))
+                .when_some(printed.inputs.get(&index), |control, input| control.child(field(input, running, 72.)))
                 .child(self.press(&printed.game, index, key::CHEATS_SET, key::CHEATS_SET_DONE, running, cx))
                 .into_any_element(),
             Kind::Number => {
@@ -131,7 +133,9 @@ impl CheatList {
                 h_flex()
                     .gap(px(8.))
                     .child(nudge("decrease", "−", -step))
-                    .when_some(printed.inputs.get(&index), |control, input| control.child(field(input, running).text_color(value_color)))
+                    .when_some(printed.inputs.get(&index), |control, input| {
+                        control.child(field(input, running, 72.).text_color(value_color))
+                    })
                     .child(nudge("increase", "+", step))
                     .into_any_element()
             }
@@ -179,9 +183,9 @@ impl CheatList {
                 }
                 // A cheat with a text field takes its value from it; a button cheat sends its own and
                 // keeps no state. A control drawn for another game does nothing.
-                let Some((cheat, _)) = list.current(&game, index, cx) else { return };
+                let Some((cheat, now)) = list.current(&game, index, cx) else { return };
                 let input = list.printed.as_ref().filter(|printed| printed.game == game).and_then(|printed| printed.inputs.get(&index));
-                let typed = input.and_then(|input| field_value(input, cheat, cx));
+                let typed = input.and_then(|input| field_value(input, cheat, now, cx));
                 let button = cheat.kind == Kind::Button;
                 if let Some(value) = typed {
                     list.set_value(index, value, cx);
@@ -202,15 +206,20 @@ impl CheatList {
         let lit = if live { accent(cx) } else { TICK_IDLE };
         let level = span.tick(value);
         let wheel = game.clone();
+        let release = |list: &mut Self, _: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>| list.sliding = None;
         h_flex()
             .when(running, |ticks| {
-                ticks.cursor_pointer().on_scroll(cx.listener(move |list, event: &ScrollEvent, window, cx| {
-                    let up = event.delta.pixel_delta(window.line_height()).y > px(0.);
-                    // From the live value: two notches before a render each move the slider.
-                    list.change_value(&wheel, index, |_, now| span.nudge(now, up), cx);
-                    // Keeps the pane from scrolling under the slider.
-                    cx.stop_propagation();
-                }))
+                ticks
+                    .cursor_pointer()
+                    .on_scroll(cx.listener(move |list, event: &ScrollEvent, window, cx| {
+                        let up = event.delta.pixel_delta(window.line_height()).y > px(0.);
+                        // From the live value: two notches before a render each move the slider.
+                        list.change_value(&wheel, index, |_, now| span.nudge(now, up), cx);
+                        // Keeps the pane from scrolling under the slider.
+                        cx.stop_propagation();
+                    }))
+                    .on_mouse_up(MouseButton::Left, cx.listener(release))
+                    .on_mouse_up_out(MouseButton::Left, cx.listener(release))
             })
             .children((0..=TOP_TICK).map(|tick| {
                 let (pressed, dragged) = (game.clone(), game.clone());
@@ -221,11 +230,12 @@ impl CheatList {
                         cell.on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |list, _, _, cx| {
+                                list.sliding = Some(index);
                                 list.change_value(&pressed, index, |_, _| span.value(tick), cx);
                             }),
                         )
                         .on_mouse_move(cx.listener(move |list, event: &MouseMoveEvent, _, cx| {
-                            if event.pressed_button == Some(MouseButton::Left) {
+                            if event.pressed_button == Some(MouseButton::Left) && list.sliding == Some(index) {
                                 list.change_value(&dragged, index, |_, _| span.value(tick), cx);
                             }
                         }))
@@ -280,13 +290,19 @@ impl CheatList {
     }
 }
 
-fn field_value(input: &Entity<InputState>, cheat: &Cheat, cx: &App) -> Option<f64> {
-    input.read(cx).value().trim().parse().ok().map(|value| cheat.args.clamp(value))
+/// The value the field's text means: an untouched one is the value itself, even off the step.
+fn field_value(input: &Entity<InputState>, cheat: &Cheat, now: f64, cx: &App) -> Option<f64> {
+    let text = input.read(cx).value();
+    let text = text.trim();
+    if text == number(now) {
+        return Some(now);
+    }
+    text.parse().ok().and_then(|value| settle(cheat, value))
 }
 
-fn field(input: &Entity<InputState>, running: bool) -> Div {
+fn field(input: &Entity<InputState>, running: bool, width: f32) -> Div {
     value_box("")
-        .w(px(72.))
+        .w(px(width))
         .child(Input::new(input).appearance(false).disabled(!running).px(px(8.)).text_center().font_family(MONO).text_size(px(TYPE_FIELD)))
 }
 

@@ -2,10 +2,10 @@
 //! that device.
 
 use client::{
-    api::{self, Command},
+    api::Command,
     library::GameId,
     profile::Collection,
-    trainer::Sheet,
+    trainer::{Sheet, settle},
 };
 use gpui_kit::{App, Context};
 use i18n::Key;
@@ -64,7 +64,7 @@ impl Remote {
             }
             Command::Set { sheet, cheat, value } => {
                 let (game, index, cheat) = self.cheat(sheet, cheat, cx)?;
-                let value = api::settle(cheat, value).ok_or(CHANGED)?;
+                let value = settle(cheat, value).ok_or(CHANGED)?;
                 self.live(&game, cx)?;
                 self.runs.update(cx, |runs, cx| runs.set(index, value, cx));
             }

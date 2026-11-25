@@ -45,6 +45,8 @@ pub struct CheatList {
     // The press-only button showing its confirmation.
     flashed: Option<(usize, Task<()>)>,
     editor: Option<Entity<CollectionEditor>>,
+    // The slider pressed on its ticks: a drag begun elsewhere (selecting its field's text) moves none.
+    sliding: Option<usize>,
 }
 
 impl EventEmitter<EditorClosed> for CheatList {}
@@ -75,17 +77,16 @@ impl CheatList {
         cx.subscribe_in(&trainers, window, Self::trainer_changed).detach();
         // Categories are worded in the user's language.
         cx.observe_global_in::<Texts>(window, |list, window, cx| list.print(window, cx)).detach();
-        cx.subscribe(&runs, |list, _, event: &RunEvent, cx| {
-            if let RunEvent::Pressed(index) = event
-                && list.is_running(cx)
-            {
-                list.flash(*index, cx);
-            }
+        cx.subscribe(&runs, |list, _, event: &RunEvent, cx| match event {
+            RunEvent::Pressed(index) if list.is_running(cx) => list.flash(*index, cx),
+            // The ticks stop listening with the run: a drag under way would outlive it.
+            RunEvent::Ended => list.sliding = None,
+            _ => {}
         })
         .detach();
         let (filter, typed) = widgets::filter_input(key::CHEATS_FILTER, window, cx);
         typed.detach();
-        Self { library, trainers, runs, hotkeys, picker, printed: None, filter, menu: None, flashed: None, editor: None }
+        Self { library, trainers, runs, hotkeys, picker, printed: None, filter, menu: None, flashed: None, editor: None, sliding: None }
     }
 
     /// The collection being named, drawn over the window.
@@ -154,15 +155,23 @@ impl CheatList {
                     printed.put(*index, *value, window, cx);
                 }
             }
-            // A device may have deleted a collection: an open menu's index would mean another.
-            TrainerEvent::Changed(_) if matches!(self.menu, Some(Menu::Collection(_))) => self.menu = None,
-            TrainerEvent::Changed(_) => {}
+            TrainerEvent::Changed(game) => {
+                // A device may have deleted a collection: an open menu's index would mean another.
+                if matches!(self.menu, Some(Menu::Collection(_))) {
+                    self.menu = None;
+                }
+                if let Some(printed) = self.printed.as_ref().filter(|printed| printed.game == *game)
+                    && let Some(values) = trainers.read(cx).sheet(game).map(|sheet| sheet.values.clone())
+                {
+                    printed.refill(&values, window, cx);
+                }
+            }
         }
     }
 
     /// The open menu, flash and editor are keyed by index, which means another cheat in another trainer.
     fn drop_state(&mut self) {
-        (self.menu, self.flashed, self.editor) = (None, None, None);
+        (self.menu, self.flashed, self.editor, self.sliding) = (None, None, None, None);
     }
 
     fn flash(&mut self, index: usize, cx: &mut Context<Self>) {
