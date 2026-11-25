@@ -12,15 +12,15 @@ use anyhow::{Context, Result, anyhow};
 use host::Load;
 use model::{Canvas, Failure, FailureKind, Process, Ref};
 
-use crate::{catalog::Overlaid, folder::Setting, install::PUBLISHERS};
+use crate::{catalog::Marks, folder::Setting, install::PUBLISHERS};
 
 // Two first `enter`s into one game must not both load the DLL.
 static LOADING: Mutex<()> = Mutex::new(());
 
 /// Blocking. `Unsupported` for a game Wand does not draw in, `Refused` while Wand's own host runs.
-pub fn enter(overlaid: &Overlaid, folder: &Setting, game: &Ref, process: &Process) -> Result<Canvas> {
+pub fn enter(marks: &Marks, folder: &Setting, game: &Ref, process: &Process) -> Result<Canvas> {
     let unsupported = || Failure::new(FailureKind::Unsupported);
-    if !overlaid.has(game.id()) {
+    if !marks.of(game.id()).overlay {
         return Err(anyhow!("Wand's overlay does not draw in {game}").context(unsupported()));
     }
     host::start()?;
@@ -63,9 +63,9 @@ mod tests {
         let process = agent::of(pid).expect("the game runs");
         let data_dir = PathBuf::from(env::var_os("LOCALAPPDATA").unwrap()).join("Impulse");
         let game = Ref::new(&crate::source(), "1739");
-        let overlaid = Overlaid::default();
-        crate::catalog::cached(&data_dir, &overlaid).expect("Impulse's catalog");
-        let open = || enter(&overlaid, &Setting::load(&data_dir), &game, &process).unwrap();
+        let marks = Marks::default();
+        crate::catalog::cached(&data_dir, &marks).expect("Impulse's catalog");
+        let open = || enter(&marks, &Setting::load(&data_dir), &game, &process).unwrap();
         let until_ready_and_closed = |canvas: Canvas, within| {
             let Canvas { layers, mut events } = canvas;
             let (tx, rx) = mpsc::channel();
