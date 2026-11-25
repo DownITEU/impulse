@@ -3,6 +3,12 @@
 This file is the source of truth for release notes: the release workflow publishes the newest section and the app shows it.
 The newest entry must match the version in `Cargo.toml`. A `-pre` build reads the section of its version.
 
+## [0.6.0] - 2026-11-25
+
+### Fixes
+
+- Games whose own store's release has no trainer (most often GOG) are found again, as in 0.4.0, and can use another store's trainer. Only a game whose version file is gone stays out.
+
 ## [0.5.0] - 2026-11-25
 
 ### Features
