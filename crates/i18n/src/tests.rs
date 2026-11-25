@@ -52,6 +52,16 @@ fn the_pseudo_locale_stretches_the_message_but_not_its_arguments() {
 fn a_system_tag_matches_ours_by_language() {
     assert_eq!(closest("en-GB"), Some(ENGLISH));
     assert_eq!(closest("EN_us"), Some(ENGLISH));
+    assert_eq!(closest("zh"), Some(CHINESE));
+    assert_eq!(closest("zh-CN"), Some(CHINESE));
+    assert_eq!(closest("zh-Hans"), Some(CHINESE));
+    assert_eq!(closest("zh-SG"), Some(CHINESE));
+    assert_eq!(closest("zh-TW"), Some(CHINESE_TRADITIONAL));
+    assert_eq!(closest("zh_TW"), Some(CHINESE_TRADITIONAL));
+    assert_eq!(closest("zh-Hant"), Some(CHINESE_TRADITIONAL));
+    assert_eq!(closest("zh-Hant-TW"), Some(CHINESE_TRADITIONAL));
+    assert_eq!(closest("zh-HK"), Some(CHINESE_TRADITIONAL));
+    assert_eq!(closest("zh-MO"), Some(CHINESE_TRADITIONAL));
     assert_eq!(closest("fr-CA"), Some(FRENCH));
     assert_eq!(closest("de-AT"), Some(GERMAN));
     assert_eq!(closest("es-MX"), Some(SPANISH));
@@ -68,6 +78,8 @@ fn a_system_tag_matches_ours_by_language() {
 fn only_the_cyrillic_languages_need_another_font() {
     let cyrillic: Vec<_> = LANGUAGES.iter().filter(|language| language.is_cyrillic()).map(|language| language.tag).collect();
     assert_eq!(cyrillic, ["ru", "uk"]);
+    let cjk: Vec<_> = LANGUAGES.iter().filter(|language| language.is_cjk()).map(|language| language.tag).collect();
+    assert_eq!(cjk, ["zh-CN", "zh-TW"]);
 }
 
 #[test]
