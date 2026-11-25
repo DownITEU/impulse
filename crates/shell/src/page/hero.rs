@@ -1,9 +1,10 @@
-//! The open game's hero: its art and title, the run's button and the game's actions.
+//! The open game's hero: its art and title (`banner`), and the bar of the run's button and the game's actions, which
+//! stays over the pane while the page scrolls (`pinned`).
 
 use client::library::{Game, Support};
 use gpui_kit::{
-    Context, Div, Entity, IntoElement, ObjectFit, Render, SharedString, Stateful, Window, component::h_flex, div, img, linear_color_stop,
-    linear_gradient, prelude::*, px, rgb,
+    App, Context, Div, Entity, IntoElement, ObjectFit, Render, ScrollHandle, SharedString, Stateful, Window, component::h_flex, div, img,
+    linear_color_stop, linear_gradient, prelude::*, px, rgb,
 };
 use i18n::{Arg, Key};
 
@@ -22,6 +23,12 @@ use crate::{
     },
 };
 
+// The bar's inset from the pane's edges, and its buttons' height: the banner leaves it this room.
+const INSET: f32 = 16.;
+const SIDE: f32 = 24.;
+const BUTTONS: f32 = 38.;
+
+/// The bar over the banner: the run's button and the game's actions.
 pub struct Hero {
     library: Entity<Library>,
     trainers: Entity<Trainers>,
@@ -156,36 +163,57 @@ const OVERLAY_MODES: [(Option<bool>, Key); 3] =
 impl Render for Hero {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(game) = self.library.read(cx).opened().cloned() else { return div() };
-        let has_trainer = game.support != Support::NoTrainer;
-        let cover = || div().absolute().top_0().left_0().size_full();
-        let art = move |url: String| img(url).size_full().object_fit(ObjectFit::Cover).grayscale(!has_trainer);
-        div()
-            .relative()
-            .min_h(px(230.))
-            .flex_none()
-            .flex()
-            .flex_col()
-            .justify_between()
-            .gap(px(20.))
-            .px(px(24.))
-            .pt(px(16.))
-            .pb(px(22.))
-            .overflow_hidden()
-            .border_b_1()
-            .border_color(line(0.07))
-            .when_some(game.hero.clone(), |hero, url| {
-                // Not every Steam app has hero art; the title thumbnail always exists.
-                let spare = game.thumbnail.clone();
-                hero.child(cover().child(art(url).with_fallback(move || match spare.clone() {
-                    Some(url) => art(url).into_any_element(),
-                    None => div().into_any_element(),
-                })))
-            })
-            .child(cover().bg(linear_gradient(90., linear_color_stop(alpha(BG, 0.94), 0.), linear_color_stop(alpha(BG, 0.15), 0.8))))
-            .child(cover().bg(linear_gradient(180., linear_color_stop(alpha(BG, 0.), 0.4), linear_color_stop(rgb(BG), 1.))))
-            .child(self.actions(&game, cx))
-            .child(title(self.trainers.read(cx), &game, TYPE_HERO, cx).relative())
+        self.actions(&game, cx)
     }
+}
+
+/// The open game's art and title, with room at the top for the bar the page pins over it.
+pub fn banner(game: &Game, trainers: &Trainers, cx: &App) -> Div {
+    let has_trainer = game.support != Support::NoTrainer;
+    let cover = || div().absolute().top_0().left_0().size_full();
+    let art = move |url: String| img(url).size_full().object_fit(ObjectFit::Cover).grayscale(!has_trainer);
+    div()
+        .relative()
+        .min_h(px(230.))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .justify_between()
+        .gap(px(20.))
+        .px(px(SIDE))
+        .pt(px(INSET))
+        .pb(px(22.))
+        .overflow_hidden()
+        .border_b_1()
+        .border_color(line(0.07))
+        .when_some(game.hero.clone(), |hero, url| {
+            // Not every Steam app has hero art; the title thumbnail always exists.
+            let spare = game.thumbnail.clone();
+            hero.child(cover().child(art(url).with_fallback(move || match spare.clone() {
+                Some(url) => art(url).into_any_element(),
+                None => div().into_any_element(),
+            })))
+        })
+        .child(cover().bg(linear_gradient(90., linear_color_stop(alpha(BG, 0.94), 0.), linear_color_stop(alpha(BG, 0.15), 0.8))))
+        .child(cover().bg(linear_gradient(180., linear_color_stop(alpha(BG, 0.), 0.4), linear_color_stop(rgb(BG), 1.))))
+        .child(div().h(px(BUTTONS)))
+        .child(title(trainers, game, TYPE_HERO, cx).relative())
+}
+
+/// `hero`'s bar over the pane `scroll` scrolls, where the banner leaves it room; once the banner has gone from under it,
+/// a strip of its own that the pane scrolls beneath (`banner` is the pane's first child).
+pub fn pinned(hero: &Entity<Hero>, scroll: &ScrollHandle) -> Div {
+    let strip = px(INSET * 2. + BUTTONS);
+    let alone = scroll.bounds_for_item(0).is_some_and(|banner| banner.size.height + scroll.offset().y < strip);
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .px(px(SIDE))
+        .py(px(INSET))
+        .when(alone, |bar| bar.bg(rgb(BG)).border_b_1().border_color(line(0.07)).block_mouse_except_scroll())
+        .child(hero.clone())
 }
 
 fn open_menu(hero: &mut Hero) -> &mut Option<()> {

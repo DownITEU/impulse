@@ -16,7 +16,7 @@ use client::{
     storage::Paths,
 };
 use gpui_kit::{
-    AnyElement, App, Context, Div, Entity, IntoElement, KeystrokeEvent, Modifiers, Render, Window,
+    AnyElement, App, Context, Div, Entity, IntoElement, KeystrokeEvent, Modifiers, Render, ScrollHandle, Window,
     component::{h_flex, scroll::ScrollableElement, v_flex},
     div,
     prelude::*,
@@ -48,7 +48,7 @@ use crate::{
 };
 use disclaimer::Disclaimer;
 use header::{header, search_box};
-use hero::Hero;
+use hero::{Hero, banner, pinned};
 use signed_out::SignedOut;
 use status::status_bar;
 use update_notice::{Opened, UpdateNotice};
@@ -83,6 +83,8 @@ pub struct Page {
     resources: Entity<Resources>,
     cheat_list: Entity<CheatList>,
     hero: Entity<Hero>,
+    /// The open game's pane: the hero's bar stays over it.
+    scroll: ScrollHandle,
     disclaimer: Entity<Disclaimer>,
     signed_out: Entity<SignedOut>,
     updates: Entity<Updates>,
@@ -257,6 +259,7 @@ impl Page {
             resources,
             cheat_list,
             hero,
+            scroll: ScrollHandle::new(),
             disclaimer,
             signed_out,
             updates,
@@ -321,7 +324,17 @@ impl Page {
                 body.when(!wide, |body| body.flex_col()).when(wide, |body| body.items_start()).child(cheats).child(side)
             }
         };
-        v_flex().id("pane").flex_1().min_w_0().h_full().child(self.hero.clone()).child(body).overflow_y_scrollbar().into_any_element()
+        let banner = banner(&game, self.trainers.read(cx), cx);
+        let pane = v_flex().id("pane").size_full().overflow_y_scroll().track_scroll(&self.scroll).child(banner).child(body.flex_none());
+        div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .child(pane)
+            .child(pinned(&self.hero, &self.scroll))
+            .vertical_scrollbar(&self.scroll)
+            .into_any_element()
     }
 
     /// Ctrl+K, seen whatever has the focus (a key nobody binds reaches no element then); not over the game or a
