@@ -5,11 +5,12 @@ use std::{
     f64::consts::PI,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use model::{Frame, Group, Level, Point};
 use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 
+use super::archives;
 use crate::catalog::ART_CDN;
 
 const STORAGE_CDN: &str = "https://storage-cdn.wemod.com";
@@ -53,11 +54,14 @@ struct TileSource {
     #[serde(rename = "type")]
     kind: Option<String>,
     url_template: Option<String>,
+    /// A PMTiles archive's.
+    url: Option<String>,
     scheme: Option<String>,
     tile_size: Option<u32>,
     min_zoom: Option<u8>,
     max_zoom: Option<u8>,
-    fallback: Option<Box<TileSource>>,
+    /// Read only when used: a broken one must not lose a map its archive can show.
+    fallback: Option<Box<RawValue>>,
 }
 
 #[derive(Deserialize)]
@@ -286,24 +290,35 @@ fn features<'a, P: Deserialize<'a>>(collection: Collection<'a>) -> impl Iterator
     collection.features.into_iter().filter_map(|feature| serde_json::from_str(feature.get()).ok())
 }
 
+/// An archive's xyz fallback first: its tiles cost one request each, no directory.
 fn tiles(source: Option<TileSource>) -> Result<model::Tiles> {
-    let source = match source {
-        Some(source) if source.kind.as_deref() == Some("pmtiles") => source.fallback.map(|fallback| *fallback),
-        other => other,
-    };
-    match source {
-        Some(TileSource { kind: Some(kind), url_template: Some(template), scheme, tile_size, min_zoom, max_zoom, .. }) if kind == "xyz" => {
-            let max_zoom = max_zoom.unwrap_or_default().min(model::Tiles::MAX_ZOOM);
-            Ok(model::Tiles {
-                template,
-                flipped: scheme.as_deref() == Some("tms"),
-                size: tile_size.unwrap_or(256),
-                min_zoom: min_zoom.unwrap_or_default().min(max_zoom),
-                max_zoom,
-                bounds: None,
-            })
+    let tiles = source.and_then(|source| {
+        if source.kind.as_deref() != Some("pmtiles") {
+            return xyz(source);
         }
-        _ => bail!("unsupported tile source"),
+        let fallback = source.fallback.and_then(|fallback| serde_json::from_str(fallback.get()).ok()).and_then(xyz);
+        fallback.or_else(|| {
+            let template = archives::template(source.url.as_deref()?)?;
+            Some(levels(template, false, source.tile_size, source.min_zoom, source.max_zoom))
+        })
+    });
+    tiles.context("unsupported tile source")
+}
+
+fn xyz(source: TileSource) -> Option<model::Tiles> {
+    let template = source.url_template.filter(|_| source.kind.as_deref() == Some("xyz"))?;
+    Some(levels(template, source.scheme.as_deref() == Some("tms"), source.tile_size, source.min_zoom, source.max_zoom))
+}
+
+fn levels(template: String, flipped: bool, size: Option<u32>, min_zoom: Option<u8>, max_zoom: Option<u8>) -> model::Tiles {
+    let max_zoom = max_zoom.unwrap_or_default().min(model::Tiles::MAX_ZOOM);
+    model::Tiles {
+        template,
+        flipped,
+        size: size.unwrap_or(256),
+        min_zoom: min_zoom.unwrap_or_default().min(max_zoom),
+        max_zoom,
+        bounds: None,
     }
 }
 

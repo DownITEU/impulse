@@ -10,6 +10,7 @@ The newest entry must match the version in `Cargo.toml`. A `-pre` build reads th
 - A number mod's field shows every decimal of its value (0.25, not 0.3), so clicking in and out of it no longer changes the value.
 - The map follows the player and offers teleport wherever Wand's does: the game's maps decide it, not only the trainer's own flags.
 - A trainer that reports the player's position without a height is placed on the map with height 0, as in Wand, instead of not at all.
+- Maps stored in a single archive file (Phantom Blade Zero) show instead of "unsupported tile source".
 - Map tiles load while you zoom, twice as many at once, and a blurry version of the view comes first, so zooming out or panning far no longer shows empty patches.
 - Games whose own store's release has no trainer (most often GOG) are found again, as in 0.4.0, and can use another store's trainer. Only a game whose version file is gone stays out.
 - The search finds a game under the name of another edition on the same install (World War Z: Aftermath under World War Z).

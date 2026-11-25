@@ -93,7 +93,7 @@ fn swapped_axes_reach_the_frame_and_the_pin_position() {
 }
 
 #[test]
-fn reads_tms_and_the_pmtiles_fallback() {
+fn reads_tms_the_pmtiles_fallback_and_an_archive_of_the_maps_cdn() {
     let tiles = |source| parse(&response(source, Value::Null)).unwrap().0.tile_sets.remove(0).tiles;
     let tms = json!({"type": "xyz", "urlTemplate": "u/{z}/{x}/{y}.webp", "scheme": "tms", "tileSize": 512, "minZoom": 1, "maxZoom": 6});
     let want = model::Tiles { template: "u/{z}/{x}/{y}.webp".into(), flipped: true, size: 512, min_zoom: 1, max_zoom: 6, bounds: None };
@@ -102,6 +102,11 @@ fn reads_tms_and_the_pmtiles_fallback() {
     let want =
         model::Tiles { template: "https://cdn/{z}/{y}/{x}.webp".into(), flipped: false, size: 256, min_zoom: 1, max_zoom: 8, bounds: None };
     assert_eq!(tiles(pmtiles), want);
+    let uuid = "00000000-0000-4000-8000-000000000001";
+    let url = format!("https://maps-cdn.wemod.com/maps/{uuid}/map.pmtiles");
+    let archive = json!({"type": "pmtiles", "url": url, "minZoom": 0, "maxZoom": 7, "fallback": {"type": "xyz", "urlTemplate": 123}});
+    let template = format!("wand:pmtiles/{uuid}/{{z}}/{{x}}/{{y}}");
+    assert_eq!(tiles(archive), model::Tiles { template, flipped: false, size: 256, min_zoom: 0, max_zoom: 7, bounds: None });
     let deep = json!({"type": "xyz", "urlTemplate": "u", "minZoom": 40, "maxZoom": 60});
     let deep = tiles(deep);
     assert_eq!((deep.min_zoom, deep.max_zoom), (model::Tiles::MAX_ZOOM, model::Tiles::MAX_ZOOM));

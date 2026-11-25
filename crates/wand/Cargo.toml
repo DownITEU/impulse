@@ -16,6 +16,7 @@ model.workspace = true
 anyhow.workspace = true
 blocking.workspace = true
 bytes.workspace = true
+flate2.workspace = true
 form_urlencoded.workspace = true
 futures.workspace = true
 h2.workspace = true

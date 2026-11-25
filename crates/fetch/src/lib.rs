@@ -2,7 +2,7 @@
 
 use std::{sync::LazyLock, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use ureq::Agent;
 
 mod guarded;
@@ -65,6 +65,45 @@ pub fn get(url: &str, etag: Option<&str>) -> Result<Response> {
     Ok(Response { status, etag, body, edge })
 }
 
+/// Blocking GET of `len` bytes from `from`: a 206 starting there (shorter only at the file's end). A server that
+/// ignores the range is an error, its body unread; another status (a redirect too: none is followed) comes back with
+/// no body.
+pub fn range(url: &str, from: u64, len: u64) -> Result<Response> {
+    ensure!(len > 0 && len <= MAX_BODY, "GET {url}: a range of {len} bytes");
+    let last = from.checked_add(len - 1).with_context(|| format!("GET {url}: a range past the end"))?;
+    // Offsets count the stored bytes: an encoded answer would shift them.
+    let request = AGENT.get(url).config().max_redirects(0).build();
+    let request = request.header("Range", format!("bytes={from}-{last}")).header("Accept-Encoding", "identity");
+    let mut response = request.call().with_context(|| format!("GET {url}"))?;
+    let (status, headers) = (response.status().as_u16(), response.headers());
+    let (etag, edge) = (etag_of(headers), edge_of(status, headers));
+    if status != 206 {
+        ensure!(status >= 300, "GET {url}: the server ignores ranges");
+        return Ok(Response { status, etag, body: Vec::new(), edge });
+    }
+    let span = headers.get("content-range").and_then(|v| v.to_str().ok()).and_then(content_range);
+    // All that was asked, or less only up to the file's end.
+    let whole = |&(first, end, size): &(u64, u64, Option<u64>)| {
+        first == from && first <= end && (end == last || end < last && size == Some(end + 1))
+    };
+    let Some((first, end, _)) = span.filter(whole) else { bail!("GET {url}: a range other than {from}-{last}") };
+    let body = response.body_mut().with_config().limit(len).read_to_vec().with_context(|| format!("read {url}"))?;
+    ensure!(body.len() as u64 == end - first + 1, "GET {url}: {} bytes of {from}-{end}", body.len());
+    Ok(Response { status, etag, body, edge })
+}
+
+/// `bytes <first>-<last>/<size>`, the size past `last`; `None` when the server does not know it (`*`).
+fn content_range(value: &str) -> Option<(u64, u64, Option<u64>)> {
+    let (span, size) = value.strip_prefix("bytes ")?.split_once('/')?;
+    let (first, last) = span.split_once('-')?;
+    let last = last.parse().ok()?;
+    let size = match size {
+        "*" => None,
+        size => Some(size.parse().ok().filter(|size| *size > last)?),
+    };
+    Some((first.parse().ok()?, last, size))
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -78,15 +117,61 @@ mod tests {
     /// GitHub answers a conditional request with a 304 that names an encoding and sends no body.
     #[test]
     fn a_not_modified_answer_that_names_an_encoding_has_no_body() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}/feed", listener.local_addr().unwrap());
-        let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let _ = stream.read(&mut [0; 1024]);
-            stream.write_all(b"HTTP/1.1 304 Not Modified\r\nETag: \"x\"\r\nContent-Encoding: gzip\r\nConnection: close\r\n\r\n").unwrap();
-        });
+        let (url, server) = serve(b"HTTP/1.1 304 Not Modified\r\nETag: \"x\"\r\nContent-Encoding: gzip\r\nConnection: close\r\n\r\n");
         let response = get(&url, Some("x")).unwrap();
         server.join().unwrap();
         assert_eq!((response.status, response.etag.as_deref(), response.body.len()), (304, Some("x"), 0));
+    }
+
+    /// Serves one request with `answer`, giving back what was asked.
+    fn serve(answer: &'static [u8]) -> (String, thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/file", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut asked = [0; 1024];
+            let read = stream.read(&mut asked).unwrap();
+            stream.write_all(answer).unwrap();
+            String::from_utf8_lossy(&asked[..read]).to_lowercase()
+        });
+        (url, server)
+    }
+
+    #[test]
+    fn a_range_is_its_bytes_and_a_server_that_ignores_it_an_error() {
+        let (url, server) =
+            serve(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 10-13/100\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd");
+        let response = range(&url, 10, 4).unwrap();
+        let asked = server.join().unwrap();
+        assert!(asked.contains("range: bytes=10-13") && asked.contains("accept-encoding: identity"), "{asked}");
+        assert_eq!((response.status, response.body.as_slice()), (206, &b"abcd"[..]));
+
+        let (url, server) = serve(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd");
+        assert!(range(&url, 10, 4).is_err());
+        server.join().unwrap();
+
+        let (url, server) =
+            serve(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-3/100\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd");
+        assert!(range(&url, 10, 4).is_err(), "another range than asked");
+        server.join().unwrap();
+
+        let (url, server) =
+            serve(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 10-11/100\r\nContent-Length: 2\r\nConnection: close\r\n\r\nab");
+        assert!(range(&url, 10, 4).is_err(), "short before the end");
+        server.join().unwrap();
+
+        let (url, server) =
+            serve(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 10-13/12\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd");
+        assert!(range(&url, 10, 4).is_err(), "a size before its end");
+        server.join().unwrap();
+
+        let (url, server) =
+            serve(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 10-11/12\r\nContent-Length: 2\r\nConnection: close\r\n\r\nab");
+        assert_eq!(range(&url, 10, 4).unwrap().body, b"ab", "short at the end");
+        server.join().unwrap();
+
+        let (url, server) = serve(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        assert_eq!(range(&url, 0, 4).unwrap().status, 404);
+        server.join().unwrap();
     }
 }

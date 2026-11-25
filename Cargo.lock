@@ -8365,6 +8365,7 @@ dependencies = [
  "bytes",
  "disk",
  "fetch",
+ "flate2",
  "form_urlencoded",
  "futures",
  "h2",

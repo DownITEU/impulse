@@ -45,6 +45,7 @@ pub struct Wand {
     folder: Arc<Setting>,
     host: Host,
     marks: catalog::Marks,
+    archives: map::Archives,
     // The hotkeys the user changed in Wand, read when a trainer first needs them.
     hotkeys: Shared<BoxFuture<'static, Arc<store::Custom>>>,
 }
@@ -66,6 +67,7 @@ impl Wand {
             session: Mutex::new((connect(&transport, &data_dir, false), false)),
             host: Host::new(data_dir.clone(), folder.clone()),
             marks: catalog::Marks::default(),
+            archives: map::Archives::default(),
             transport,
             folder,
             data_dir,
@@ -238,6 +240,13 @@ impl model::Maps for Wand {
                 send(&tx, Snapshot::Fresh(Ok(map)));
             }
         })
+    }
+}
+
+/// The tiles of the maps kept in PMTiles archives.
+impl model::Downloads for Wand {
+    fn download(&self, url: &str) -> Result<Vec<u8>, Failure> {
+        self.archives.tile(url)
     }
 }
 
